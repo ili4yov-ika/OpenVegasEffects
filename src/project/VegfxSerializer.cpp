@@ -10,13 +10,13 @@
 #include "composition/KeyFrame.h"
 #include "composition/TextStyle.h"
 #include <QFile>
+#include <QSaveFile>
 #include <QFileInfo>
 #include <QDir>
 #include <QDirIterator>
 #include <QHash>
 #include <QSet>
 #include <QCryptographicHash>
-#include <QTextStream>
 #include <QUuid>
 #include <algorithm>
 #include <functional>
@@ -1142,7 +1142,7 @@ void readEmbeddedCompositions(const QDomElement& compositionAsset,
 
 } // namespace
 
-core::Result VegfxSerializer::loadFromFile(const QString& filePath,
+static core::Result loadProjectImpl(const QString& filePath,
                                            composition::Composition* composition,
                                            media::MediaManager* media, QByteArray* screenLayout)
 {
@@ -1223,7 +1223,11 @@ core::Result VegfxSerializer::loadFromFile(const QString& filePath,
                 media->registerMissingFile(filename);
                 OV_LOG_WARN(
                     QStringLiteral("VEGFX media not found on this system: %1").arg(filename));
-            } else if (tag == QStringLiteral("MediaAsset")) {
+            }
+            if (media::MediaAsset* asset = media->assetByFilePathForEdit(filename)) {
+                asset->setLabelColor(QColor(a.attribute(QStringLiteral("OpenVegasLabelColor"))));
+            }
+            if (tag == QStringLiteral("MediaAsset")) {
                 // Trimmer in/out points are serialized on MediaAsset as
                 // <InPoint>/<OutPoint> (frames).
                 if (media::MediaAsset* asset = media->assetByFilePathForEdit(filename)) {
@@ -1604,6 +1608,23 @@ core::Result VegfxSerializer::loadFromFile(const QString& filePath,
     return core::Result::ok();
 }
 
+core::Result VegfxSerializer::loadFromFile(const QString& filePath,
+                                          composition::Composition* composition,
+                                          media::MediaManager* media, QByteArray* screenLayout)
+{
+    if (!composition || !media)
+        return core::Result::fail(core::ResultStatus::InvalidArgument, QStringLiteral("Null model pointers"));
+    composition::Composition stagedComposition;
+    media::MediaManager stagedMedia;
+    QByteArray stagedLayout;
+    const core::Result result = loadProjectImpl(filePath, &stagedComposition, &stagedMedia, &stagedLayout);
+    if (result.isFailure()) return result;
+    media->replaceProjectAssets(std::move(stagedMedia));
+    *composition = std::move(stagedComposition);
+    if (screenLayout) *screenLayout = std::move(stagedLayout);
+    return result;
+}
+
 core::Result VegfxSerializer::saveToFile(const QString& filePath,
                                          const composition::Composition& composition,
                                          const media::MediaManager& media,
@@ -1899,6 +1920,8 @@ core::Result VegfxSerializer::saveToFile(const QString& filePath,
         const QString tagName =
             mediaAsset ? QStringLiteral("MediaAsset") : QStringLiteral("ImageAsset");
         QDomElement m = doc.createElement(tagName);
+        if (recorded.labelColor().isValid())
+            m.setAttribute(QStringLiteral("OpenVegasLabelColor"), recorded.labelColor().name(QColor::HexArgb));
         m.setAttribute(QStringLiteral("Version"), mediaAsset ? QStringLiteral("10")
                                                              : QStringLiteral("3"));
         const QString name = recorded.isValid() ? recorded.fileName()
@@ -2094,14 +2117,20 @@ core::Result VegfxSerializer::saveToFile(const QString& filePath,
         };
         relativiseIds(root);
     }
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly)) {
         return core::Result::fail(core::ResultStatus::OperationFailed,
                                   QStringLiteral("Cannot open file for writing: %1").arg(filePath));
     }
-    QTextStream out(&file);
-    out << doc.toString(1);
-    file.close();
+    const QByteArray xml = doc.toByteArray(1);
+    if (file.write(xml) != xml.size()) {
+        file.cancelWriting();
+        return core::Result::fail(core::ResultStatus::OperationFailed,
+                                  QStringLiteral("Cannot write project: %1").arg(filePath));
+    }
+    if (!file.commit())
+        return core::Result::fail(core::ResultStatus::OperationFailed,
+                                  QStringLiteral("Cannot commit project: %1").arg(filePath));
     return core::Result::ok();
 }
 

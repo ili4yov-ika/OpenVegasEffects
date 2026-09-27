@@ -2,6 +2,7 @@
 
 #include <QSize>
 #include <QString>
+#include <QColor>
 
 #include "core/Identifier.h"
 
@@ -35,6 +36,8 @@ public:
     MediaKind kind() const { return m_kind; }
     double durationSeconds() const { return m_durationSeconds; }
     QSize frameSize() const { return m_frameSize; }
+    QColor labelColor() const { return m_labelColor; }
+    void setLabelColor(const QColor& color) { m_labelColor = color; }
 
     // Trimmer in/out points, in frames. Mirrors MediaAsset::SetTrimmerInPoint /
     // TrimmerInPoint (serialized as <InPoint>/<OutPoint> in .vegfx).
@@ -57,6 +60,7 @@ private:
     MediaKind m_kind = MediaKind::Video;
     double m_durationSeconds = 0.0;
     QSize m_frameSize;
+    QColor m_labelColor; // Invalid color means no label.
     int m_trimInPoint = 0;
     int m_trimOutPoint = 0;
 };

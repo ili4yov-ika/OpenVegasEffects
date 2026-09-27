@@ -23,6 +23,7 @@
 #include "plugin/EffectRender.h"
 #include "render/RenderManager.h"
 #include "project/VegfxSerializer.h"
+#include "app/ProjectDefaults.h"
 #include "composition/MotionTracker.h"
 #include <QTemporaryDir>
 #include <QtTest>
@@ -748,6 +749,101 @@ private slots:
         QVERIFY(composite);
         QSignalSpy compositeSpy(&mediaPanel, &ui::MediaPanel::newCompositeShotRequested);
         composite->click(); QCOMPARE(compositeSpy.count(), 1);
+    }
+
+    void mediaLabelsUndoAndOfflineRoundTrip() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString first = temp.filePath("a.png"), second = temp.filePath("b.png");
+        QImage image(8, 8, QImage::Format_ARGB32); image.fill(Qt::white);
+        QVERIFY(image.save(first)); QVERIFY(image.save(second));
+        media::MediaManager manager;
+        QVERIFY(manager.importFile(first).isSuccess()); QVERIFY(manager.importFile(second).isSuccess());
+        const auto firstId = manager.assetByFilePath(first).id(), secondId = manager.assetByFilePath(second).id();
+        QUndoStack undo;
+        auto mediaPanel = std::make_unique<ui::MediaPanel>();
+        mediaPanel->setMediaManager(&manager); mediaPanel->setUndoStack(&undo);
+        QSignalSpy modified(mediaPanel.get(), &ui::MediaPanel::mediaMetadataModified);
+        auto* list = mediaPanel->findChild<QListWidget*>("listView");
+        list->setCurrentRow(1);
+        mediaPanel->setMediaLabel(secondId, QColor(20, 40, 60, 128));
+        QCOMPARE(mediaPanel->selectedFilePath(), second);
+        QCOMPARE(list->currentItem()->data(Qt::UserRole + 2).value<QColor>(), QColor(20, 40, 60, 128));
+        QCOMPARE(undo.count(), 1);
+        mediaPanel->resize(420, 280); mediaPanel->show();
+        QTest::mouseClick(mediaPanel->findChild<QToolButton*>("toolButtonMediaOptions"), Qt::LeftButton);
+        QTRY_VERIFY(list->visualItemRect(list->currentItem()).height() < 32);
+        QVERIFY(mediaPanel->grab().save(testArtifactPath(QStringLiteral("media-labels.png"))));
+        mediaPanel->setMediaLabel(secondId, QColor(20, 40, 60, 128)); QCOMPARE(undo.count(), 1);
+        manager.removeAsset(firstId); // Asset index changes; Undo must still address b.png.
+        undo.undo(); QVERIFY(!manager.assetById(secondId).labelColor().isValid());
+        undo.redo(); QCOMPARE(manager.assetById(secondId).labelColor(), QColor(20, 40, 60, 128));
+        mediaPanel->setMediaLabel(secondId, QColor());
+        QVERIFY(!manager.assetById(secondId).labelColor().isValid());
+        undo.undo(); QCOMPARE(manager.assetById(secondId).labelColor(), QColor(20, 40, 60, 128));
+        QVERIFY(modified.count() >= 4);
+
+        const QString missing = temp.filePath("missing.wav");
+        manager.registerMissingFile(missing);
+        manager.assetByFilePathForEdit(missing)->setLabelColor(Qt::green);
+        composition::Composition scene;
+        scene.addClip("Image", secondId, 0, 1);
+        const QString project = temp.filePath("labels.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(project, scene, manager).isSuccess());
+        QVERIFY(QFile::remove(second));
+        media::MediaManager loaded;
+        composition::Composition restored;
+        QVERIFY(project::VegfxSerializer::loadFromFile(project, &restored, &loaded).isSuccess());
+        QCOMPARE(loaded.assetByFilePath(second).labelColor(), QColor(20, 40, 60, 128));
+        QCOMPARE(loaded.assetByFilePath(missing).labelColor(), QColor(Qt::green));
+        mediaPanel->setMediaManager(&loaded);
+        undo.undo(); // Commands belonging to the outgoing manager are ignored.
+        QCOMPARE(loaded.assetByFilePath(second).labelColor(), QColor(20, 40, 60, 128));
+        mediaPanel.reset(); undo.redo(); // Closing the panel is safe.
+    }
+
+    void projectDefaultsUseStableTemplateAndEditorDuration() {
+        const QSettings::Format format = QSettings::IniFormat;
+        QSettings settings(format, QSettings::UserScope, app::Settings::organizationName(), app::Settings::applicationName());
+        const QStringList keys{"Options/DefaultTemplateId", "Options/DefaultTemplate", "Options/EditorDefaultDuration", "Options/CompositeShotDefaultDuration"};
+        QMap<QString, QVariant> saved; for (const auto& key : keys) saved[key] = settings.value(key);
+        const auto restore = qScopeGuard([&] { for (const auto& key : keys) { if (saved[key].isValid()) settings.setValue(key, saved[key]); else settings.remove(key); } });
+        settings.setValue(keys[0], "fullhd60"); settings.setValue(keys[1], "4K UHD @ 30 fps");
+        settings.setValue(keys[2], "00:02:03.500"); settings.setValue(keys[3], "00:00:17.250"); settings.sync();
+        composition::Composition scene; app::applyNewProjectDefaults(scene);
+        QCOMPARE(scene.width(), 1920); QCOMPARE(scene.height(), 1080); QCOMPARE(scene.fpsNumerator(), 60);
+        QCOMPARE(scene.durationSeconds(), 17.25); QCOMPARE(scene.editorSequence().frameCount, 7410LL);
+        QCOMPARE(scene.editorSequence().fps, 60.0);
+        QTemporaryDir temp; media::MediaManager media;
+        QVERIFY(project::VegfxSerializer::saveToFile(temp.filePath("defaults.vegfx"), scene, media).isSuccess());
+        composition::Composition loaded;
+        QVERIFY(project::VegfxSerializer::loadFromFile(temp.filePath("defaults.vegfx"), &loaded, &media).isSuccess());
+        QCOMPARE(loaded.editorSequence().frameCount, 7410LL); QCOMPARE(loaded.editorSequence().fps, 60.0);
+        settings.remove(keys[0]); settings.setValue(keys[1], "4K UHD @ 30 fps"); settings.sync();
+        app::applyNewProjectDefaults(scene); QCOMPARE(scene.width(), 3840); QCOMPARE(scene.height(), 2160);
+        settings.setValue(keys[2], "invalid"); settings.setValue(keys[1], "unknown"); settings.sync();
+        app::applyNewProjectDefaults(scene); QCOMPARE(scene.width(), 1920); QCOMPARE(scene.editorSequence().frameCount, 9000LL);
+        // Existing projects retain their own settings when preferences change.
+        QCOMPARE(loaded.fpsNumerator(), 60); QCOMPARE(loaded.editorSequence().frameCount, 7410LL);
+    }
+    void failedProjectLoadPreservesCurrentState() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString path = temp.filePath("image.png");
+        QImage image(8, 8, QImage::Format_ARGB32); image.fill(Qt::red); QVERIFY(image.save(path));
+        media::MediaManager manager; QVERIFY(manager.importFile(path).isSuccess());
+        manager.assetByFilePathForEdit(path)->setLabelColor(Qt::cyan);
+        composition::Composition scene; scene.setName("Current"); scene.setDurationSeconds(42);
+        scene.addClip("Layer", manager.assetByFilePath(path).id(), 0, 2);
+        const auto layerId = scene.layers().first().id;
+        QByteArray layout("current workspace");
+        QFile broken(temp.filePath("broken.vegfx")); QVERIFY(broken.open(QIODevice::WriteOnly));
+        broken.write("<VegasEffectsProject><Project>"); broken.close();
+        QVERIFY(project::VegfxSerializer::loadFromFile(broken.fileName(), &scene, &manager, &layout).isFailure());
+        QCOMPARE(scene.name(), QStringLiteral("Current")); QCOMPARE(scene.durationSeconds(), 42.0);
+        QCOMPARE(scene.layers().first().id, layerId);
+        QCOMPARE(manager.assets().size(), 1); QCOMPARE(manager.assetByFilePath(path).labelColor(), QColor(Qt::cyan));
+        QCOMPARE(layout, QByteArray("current workspace"));
+        QVERIFY(project::VegfxSerializer::loadFromFile(temp.filePath("absent.vegfx"), &scene, &manager, &layout).isFailure());
+        QCOMPARE(layout, QByteArray("current workspace")); QCOMPARE(scene.layers().first().id, layerId);
     }
     void metersAndViewerToggle() {
         ui::AudioMetersPanel meters;

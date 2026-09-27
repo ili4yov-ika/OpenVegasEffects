@@ -20,6 +20,11 @@ public:
     // enableHighDpiScaling(). main() sets the same pair on the application.
     static QString organizationName() { return QStringLiteral("OpenVegas"); }
     static QString applicationName() { return QStringLiteral("OpenVegasEffects"); }
+    static QSettings optionSettings()
+    {
+        return QSettings(QSettings::IniFormat, QSettings::UserScope,
+                         organizationName(), applicationName());
+    }
 
     // An empty path selects the standard per-user ini for the current
     // organization/application names.
@@ -64,6 +69,7 @@ public:
     // Durations edited on Preferences > General. Values are stored as the
     // reference's hh:mm:ss.zzz strings and exposed as seconds to the model.
     static double compositeShotDefaultDurationSeconds();
+    static double editorDefaultDurationSeconds();
     static double planeDefaultDurationSeconds();
 
     // Viewer quality button (toolButtonPlaybackQuality, 141320cf8). The

@@ -173,6 +173,21 @@ private slots:
                                    + QStringLiteral("/options-export.png")));
     }
 
+    void templateSelectionSurvivesChangedDisplayText() {
+        {
+            ui::OptionsDialog dialog;
+            auto* combo = dialog.findChild<QComboBox*>("comboBoxTemplate"); QVERIFY(combo);
+            combo->setCurrentIndex(combo->findData(QStringLiteral("uhd30")));
+            QTest::mouseClick(dialog.findChild<QPushButton*>("btnOK"), Qt::LeftButton);
+        }
+        auto settings = app::Settings::optionSettings();
+        QCOMPARE(settings.value("Options/DefaultTemplateId").toString(), QStringLiteral("uhd30"));
+        settings.setValue("Options/DefaultTemplate", "display text from another language"); settings.sync();
+        ui::OptionsDialog reopened;
+        QCOMPARE(reopened.findChild<QComboBox*>("comboBoxTemplate")->currentData().toString(), QStringLiteral("uhd30"));
+        QMetaObject::invokeMethod(&reopened, "reject", Qt::DirectConnection);
+    }
+
 private:
     std::unique_ptr<QTemporaryDir> m_settingsRoot;
 };

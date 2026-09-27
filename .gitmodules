@@ -1,0 +1,3 @@
+[submodule "thirdparty/openfx"]
+	path = thirdparty/openfx
+	url = https://github.com/AcademySoftwareFoundation/openfx.git

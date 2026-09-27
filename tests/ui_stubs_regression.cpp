@@ -5,6 +5,7 @@
 #include <QTemporaryDir>
 #include <QWheelEvent>
 #include <QPushButton>
+#include <QTimer>
 #include "media/PcmWave.h"
 #include "ui/VoiceoverDialog.h"
 #include "ui/Theme.h"
@@ -76,9 +77,9 @@ private slots:
                 QPoint(), QPoint(0, 120), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
             QApplication::sendEvent(&combo, &event);
         };
-        QSettings().setValue("Options/EnableWheelScrollMenus", false);
+        openvegas::app::Settings::optionSettings().setValue("Options/EnableWheelScrollMenus", false);
         wheel(); QCOMPARE(combo.currentIndex(), 1);
-        QSettings().setValue("Options/EnableWheelScrollMenus", true);
+        openvegas::app::Settings::optionSettings().setValue("Options/EnableWheelScrollMenus", true);
         wheel(); QCOMPARE(combo.currentIndex(), 0);
     }
     void exportNamesRemoveOnlyKnownSourceExtension() {
@@ -99,6 +100,21 @@ private slots:
         panel.setOutputName("bad/name:*?");
         const QString sanitised = QFileInfo(panel.outputPath()).fileName();
         QVERIFY(sanitised.startsWith("bad_name___-"));
+    }
+    void colorPickerUsesOptionsIniStore() {
+        auto settings = openvegas::app::Settings::optionSettings();
+        QCOMPARE(settings.format(), QSettings::IniFormat);
+        settings.setValue("Options/UseNativeColorPicker", false); settings.sync();
+        bool inspected = false;
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QColorDialog*>(QApplication::activeModalWidget());
+            if (dialog) {
+                inspected = dialog->testOption(QColorDialog::DontUseNativeDialog);
+                dialog->reject();
+            }
+        });
+        const QColor result = openvegas::ui::interfaceColor(Qt::red, nullptr);
+        QVERIFY(inspected); QVERIFY(!result.isValid());
     }
     void moviePresetExportsSingleFrameAsImage() {
         openvegas::ui::ExportPanel panel;

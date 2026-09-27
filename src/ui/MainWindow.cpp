@@ -49,6 +49,7 @@
 #include "app/Settings.h"
 #include "core/Identifier.h"
 #include <QUndoCommand>
+#include "app/ProjectDefaults.h"
 #include <QUndoStack>
 
 #include "core/Log.h"
@@ -320,7 +321,7 @@ MainWindow::MainWindow(app::AppMain* owner, QWidget* parent)
         if (!m_playing && m_audio) m_audio->stop();
     });
     connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
-        if (state != Qt::ApplicationActive && QSettings().value(
+        if (state != Qt::ApplicationActive && app::Settings::optionSettings().value(
                 QStringLiteral("Options/CloseMediaOnInactive"), false).toBool()) {
             stopPlayback();
             m_audioScrubTimer.stop();
@@ -558,6 +559,7 @@ void MainWindow::buildUi()
     //   Right : Effects (4) + Controls (2) + Layout (2055) + Track (1024)
     //   Bottom: Editor/Trimmer timeline
     m_mediaPanel = new MediaPanel(this);
+    m_mediaPanel->setUndoStack(m_undoStack);
     addDockWidget(Qt::LeftDockWidgetArea, m_mediaPanel);
 
     // Native dock tabs share one bottom row and retain Qt's drag/split targets.
@@ -773,7 +775,7 @@ void MainWindow::configureMenus()
     connect(m_ui->actionRecordVoiceover, &QAction::triggered, this, [this] {
         if (!m_composition || !m_mediaManager) return;
         QString path = QFileDialog::getSaveFileName(this, tr("Record Voiceover"),
-            QDir(QSettings().value(QStringLiteral("Options/VoiceoverPath"),
+            QDir(app::Settings::optionSettings().value(QStringLiteral("Options/VoiceoverPath"),
                 QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).toString())
                 .filePath(QStringLiteral("Voiceover.wav")), tr("WAV audio (*.wav)"));
         if (path.isEmpty()) return;
@@ -782,7 +784,7 @@ void MainWindow::configureMenus()
         stopPlayback();
         VoiceoverDialog dialog(path, this);
         dialog.recordingStarted = [this] {
-            if (m_audio) m_audio->setMuted(QSettings().value(
+            if (m_audio) m_audio->setMuted(app::Settings::optionSettings().value(
                 QStringLiteral("Options/Voiceover/MuteOutput"), true).toBool());
             beginPlayback();
         };
@@ -794,7 +796,7 @@ void MainWindow::configureMenus()
         m_playbackTime = startTime;
         m_timeline->setPlayheadPosition(startTime);
         if (saved) {
-            QSettings().setValue(QStringLiteral("Options/VoiceoverPath"), QFileInfo(path).absolutePath());
+            app::Settings::optionSettings().setValue(QStringLiteral("Options/VoiceoverPath"), QFileInfo(path).absolutePath());
             const core::Result imported = m_mediaManager->importFile(path);
             if (imported.isFailure()) {
                 QMessageBox::warning(this, tr("Record Voiceover"), imported.message());
@@ -1666,7 +1668,7 @@ void MainWindow::wireSignals()
         if (m_playing && m_audio) m_audio->seek(t);
         if (!m_playing) {
             requestRenderFrame();
-            if (m_audio && QSettings().value(QStringLiteral("Options/PlayAudioOnScrub"), true).toBool()) {
+            if (m_audio && app::Settings::optionSettings().value(QStringLiteral("Options/PlayAudioOnScrub"), true).toBool()) {
                 const double clipStart = prepareAudioSource();
                 if (clipStart >= 0.0) {
                     m_audio->play(t - clipStart);
@@ -1792,6 +1794,10 @@ void MainWindow::wireSignals()
     // Drop media files onto the Project Media panel to import them.
     connect(m_mediaPanel, &MediaPanel::importRequested, this, &MainWindow::importFiles);
     connect(m_mediaPanel, &MediaPanel::importCommandRequested, this, &MainWindow::onImportMedia);
+    connect(m_mediaPanel, &MediaPanel::mediaMetadataModified, this, [this] {
+        m_projectModified = true;
+        updateWindowTitle();
+    });
     connect(m_mediaPanel, &MediaPanel::newCompositeShotRequested,
             this, &MainWindow::makeCompositeShotFromSelection);
 
@@ -1879,6 +1885,12 @@ void MainWindow::bindModel(std::shared_ptr<composition::Composition> composition
         const media::MediaAsset oldAsset = m_mediaManager->assetByFilePath(oldPath);
         if (!oldAsset.id().isValid() || m_mediaManager->importFile(newPath).isFailure()) return;
         const media::MediaAsset newAsset = m_mediaManager->assetByFilePath(newPath);
+        if (newAsset.id() == oldAsset.id()) return;
+        if (auto* relinked = m_mediaManager->assetByIdForEdit(newAsset.id())) {
+            relinked->setLabelColor(oldAsset.labelColor());
+            relinked->setTrimInPoint(oldAsset.trimInPoint());
+            relinked->setTrimOutPoint(oldAsset.trimOutPoint());
+        }
         for (int layerIndex = 0; layerIndex < m_composition->layers().size(); ++layerIndex) {
             composition::Layer& layer = m_composition->layerRef(layerIndex);
             for (composition::Clip& clip : layer.clips)
@@ -3008,7 +3020,7 @@ void MainWindow::onOptions()
 void MainWindow::applyInterfacePreferences()
 {
     QPixmapCache::setCacheLimit(qMax(0, app::Settings().thumbnailCacheSizeMb()) * 1024);
-    const QSettings settings;
+    const QSettings settings = app::Settings::optionSettings();
     menuBar()->setNativeMenuBar(settings.value(QStringLiteral("Options/UseNativeMenuBar"), true).toBool());
     if (auto* toolbar = findChild<QToolBar*>(QStringLiteral("widgetQuickActions")))
         toolbar->setVisible(settings.value(QStringLiteral("Options/ShowMenuBarQuickActions"), true).toBool());
@@ -3037,7 +3049,7 @@ void MainWindow::writeAutoSave()
     const QString backup = projectFile.dir().filePath(
         projectFile.completeBaseName() + QStringLiteral(".autosave.vegfx"));
     project::ProjectSaveOptions options;
-    const QSettings settings;
+    const QSettings settings = app::Settings::optionSettings();
     options.useRelativePaths = settings.value(QStringLiteral("Options/UseRelativePaths"), false).toBool();
     if (settings.value(QStringLiteral("Options/IncludeScreenLayout"), false).toBool())
         options.screenLayout = saveState(kLayoutStateVersion);
@@ -3548,7 +3560,7 @@ bool MainWindow::onSaveProjectAs()
 bool MainWindow::doSaveProject(const QString& path)
 {
     project::ProjectSaveOptions options;
-    const QSettings settings;
+    const QSettings settings = app::Settings::optionSettings();
     options.useRelativePaths = settings.value(QStringLiteral("Options/UseRelativePaths"), false).toBool();
     if (settings.value(QStringLiteral("Options/IncludeScreenLayout"), false).toBool())
         options.screenLayout = saveState(kLayoutStateVersion);
@@ -3579,9 +3591,10 @@ void MainWindow::onNewProject()
     }
     stopPlayback();
     if (m_rootComposition != m_composition) activateComposition(m_rootComposition);
+    m_undoStack->clear();
     m_rootComposition->clear();
     m_rootComposition->setName(QStringLiteral("Untitled"));
-    m_rootComposition->setDurationSeconds(app::Settings::compositeShotDefaultDurationSeconds());
+    app::applyNewProjectDefaults(*m_rootComposition);
     m_openCompositions = {m_rootComposition};
     m_mediaManager->clear();
     // Nothing left to read frames from; let the open files go.
@@ -3592,7 +3605,9 @@ void MainWindow::onNewProject()
     rebuildCompositionTabs();
     refreshAfterModelChange();
     if (m_timeline) m_timeline->showTimelinePage();
-    if (QSettings().value(QStringLiteral("Options/Prompts/ShowProjectSettings"), true).toBool())
+    const QSettings newProjectSettings(QSettings::IniFormat, QSettings::UserScope,
+                                       app::Settings::organizationName(), app::Settings::applicationName());
+    if (newProjectSettings.value(QStringLiteral("Options/Prompts/ShowProjectSettings"), true).toBool())
         m_timeline->editCompositionProperties();
 }
 
@@ -3636,6 +3651,7 @@ bool MainWindow::openProjectFile(const QString& path)
     m_currentFilePath = path;
     m_projectModified = false;
     m_composition = m_rootComposition;
+    m_undoStack->clear();
     if (m_renderManager) m_renderManager->setComposition(m_composition);
     resetCompositionTabs();
     refreshAfterModelChange();

@@ -13,6 +13,12 @@
 namespace openvegas {
 namespace media {
 
+MediaAsset* MediaManager::assetByIdForEdit(const core::Identifier& id)
+{
+    for (auto& asset : m_assets) if (asset.id() == id) return &asset;
+    return nullptr;
+}
+
 namespace {
 const QStringList kVideoExtensions = {QStringLiteral("mp4"), QStringLiteral("mov"), QStringLiteral("avi"),
                                       QStringLiteral("mkv"), QStringLiteral("mxf"), QStringLiteral("webm")};
@@ -217,6 +223,17 @@ void MediaManager::clear()
     // The frame cache and the pending requests are keyed by asset id, so they
     // would otherwise outlive the assets they belong to.
     clearVideoFrames();
+}
+
+void MediaManager::replaceProjectAssets(MediaManager&& staged)
+{
+    if (&staged == this) return;
+    QMutexLocker lock(&m_videoMutex);
+    m_assets = std::move(staged.m_assets);
+    m_models = std::move(staged.m_models);
+    m_modelSettings = std::move(staged.m_modelSettings);
+    m_videoFrames.clear(); m_videoFrameOrder.clear(); m_videoFrameBytes = 0;
+    m_lastVideoFrames.clear(); m_videoRequests.clear();
 }
 
 // Frames are keyed by asset and source frame, so a scrub back and forth

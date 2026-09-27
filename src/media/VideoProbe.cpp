@@ -5,6 +5,7 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QSettings>
+#include "app/Settings.h"
 #include <QThread>
 
 #include <cstring>
@@ -218,7 +219,7 @@ bool VideoDecoder::open()
     if (!media) {
         return false;
     }
-    const QSettings settings;
+    const QSettings settings = app::Settings::optionSettings();
     const bool hardware = settings.value(QStringLiteral("Options/UseHardwareDecoding"), true).toBool();
     const QByteArray acceleration = api.version.startsWith(QLatin1String("4."))
         ? (hardware ? QByteArray(":hw-dec") : QByteArray(":no-hw-dec"))

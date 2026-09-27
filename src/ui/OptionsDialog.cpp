@@ -1,4 +1,5 @@
 #include "ui/OptionsDialog.h"
+#include "app/ProjectDefaults.h"
 
 #include "ui_OptionsDialog.h"
 #include "ui/Theme.h"
@@ -359,9 +360,9 @@ QWidget* OptionsDialog::buildGeneralPage()
 
     m_template = new QComboBox(page);
     m_template->setObjectName(QStringLiteral("comboBoxTemplate"));
-    m_template->addItem(tr("1080p Full HD @ 30 fps"));
-    m_template->addItem(tr("1080p Full HD @ 60 fps"));
-    m_template->addItem(tr("4K UHD @ 30 fps"));
+    m_template->addItem(tr("1080p Full HD @ 30 fps"), QStringLiteral("fullhd30"));
+    m_template->addItem(tr("1080p Full HD @ 60 fps"), QStringLiteral("fullhd60"));
+    m_template->addItem(tr("4K UHD @ 30 fps"), QStringLiteral("uhd30"));
     form->addRow(tr("Default Template:"), m_template);
 
     m_shotDuration = new QTimeEdit(page);
@@ -1256,6 +1257,7 @@ bool OptionsDialog::saveSettings()
     QSettings s = optionSettings();
     s.setValue(kMaxUndo, m_maxUndo->value());
     s.setValue(kDefaultTemplate, m_template->currentText());
+    s.setValue(QStringLiteral("Options/DefaultTemplateId"), m_template->currentData());
     s.setValue(kShotDuration, m_shotDuration->time().toString(QStringLiteral("hh:mm:ss.zzz")));
     s.setValue(kEditorDuration, m_editorDuration->time().toString(QStringLiteral("hh:mm:ss.zzz")));
     s.setValue(kPlaneDuration, m_planeDuration->time().toString(QStringLiteral("hh:mm:ss.zzz")));
@@ -1352,8 +1354,7 @@ void OptionsDialog::loadSettings()
 {
     const QSettings s = optionSettings();
     m_maxUndo->setValue(s.value(kMaxUndo, 30).toInt());
-    m_template->setCurrentIndex(qMax(0, m_template->findText(
-        s.value(kDefaultTemplate).toString())));
+    m_template->setCurrentIndex(qMax(0, m_template->findData(app::defaultProjectTemplateId(s))));
     const QTime t = QTime::fromString(
         s.value(kShotDuration, QStringLiteral("00:00:30.000")).toString(),
         QStringLiteral("hh:mm:ss.zzz"));

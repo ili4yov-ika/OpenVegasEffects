@@ -225,6 +225,7 @@ add_executable(OpenVegasEffects WIN32
     src/app/UserDataPaths.h
     src/app/UserDataPaths.cpp
     src/app/Settings.h
+    src/app/ProjectDefaults.h
     src/app/Settings.cpp
     src/app/Translations.h
     src/app/Translations.cpp

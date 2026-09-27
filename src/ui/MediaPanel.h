@@ -3,6 +3,7 @@
 #include <QDockWidget>
 
 #include <QVector>
+#include <QPointer>
 #include <QStringList>
 
 #include "media/MediaManager.h"
@@ -13,6 +14,7 @@ class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QToolButton;
+class QUndoStack;
 
 namespace openvegas {
 namespace ui {
@@ -28,6 +30,8 @@ public:
     explicit MediaPanel(QWidget* parent = nullptr);
 
     void setMediaManager(media::MediaManager* manager);
+    void setUndoStack(QUndoStack* stack);
+    void setMediaLabel(const core::Identifier& id, const QColor& color);
     void refresh();
     QString selectedFilePath() const;
 
@@ -36,6 +40,7 @@ signals:
     void importRequested(const QStringList& paths);
     void importCommandRequested();
     void mediaRemoved(const QString& filePath);
+    void mediaMetadataModified();
     void relinkRequested(const QString& oldPath, const QString& newPath);
     void newCompositeShotRequested();
 
@@ -56,6 +61,8 @@ private:
     enum class ArrangeMode { Name, Type };
 
     media::MediaManager* m_manager = nullptr;
+    quint64 m_managerEpoch = 0;
+    QPointer<QUndoStack> m_undoStack;
     QLineEdit* m_search = nullptr;
     QListWidget* m_list = nullptr;
     QToolButton* m_removeButton = nullptr;

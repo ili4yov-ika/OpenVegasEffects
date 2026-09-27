@@ -54,6 +54,7 @@ INCLUDEPATH += $$UI_DIR
 HEADERS += \
     src/app/AppMain.h \
     src/app/Settings.h \
+    src/app/ProjectDefaults.h \
     src/app/Translations.h \
     src/app/UserDataPaths.h \
     src/cache/CacheDB.h \

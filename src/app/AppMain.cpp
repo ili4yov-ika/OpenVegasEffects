@@ -1,4 +1,5 @@
 #include "app/AppMain.h"
+#include "app/ProjectDefaults.h"
 
 #include <QFileInfo>
 #include <QCoreApplication>
@@ -196,9 +197,7 @@ void AppMain::initializeProject()
 {
     m_composition = std::make_shared<composition::Composition>();
     m_composition->setName(QStringLiteral("Untitled"));
-    m_composition->setSize(1920, 1080);
-    m_composition->setFrameRate(30, 1);
-    m_composition->setDurationSeconds(Settings::compositeShotDefaultDurationSeconds());
+    applyNewProjectDefaults(*m_composition);
 
     m_mediaManager = std::make_shared<media::MediaManager>();
 

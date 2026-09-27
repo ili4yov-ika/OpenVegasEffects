@@ -29,6 +29,7 @@ public:
     // Mutable lookup used to set per-asset state (e.g. trimmer points) after
     // import. Returns nullptr when no asset matches the path.
     MediaAsset* assetByFilePathForEdit(const QString& filePath);
+    MediaAsset* assetByIdForEdit(const core::Identifier& id);
 
     core::Result importFile(const QString& filePath);
     // Keep an offline project's asset in Media so Relink Media can recover it.
@@ -42,6 +43,8 @@ public:
 
     void removeAsset(const core::Identifier& id);
     void clear();
+    // Commit a successfully parsed project; the staged manager is exclusively owned by the loader.
+    void replaceProjectAssets(MediaManager&& staged);
 
     QStringList supportedImportExtensions() const { return m_supportedExtensions; }
 

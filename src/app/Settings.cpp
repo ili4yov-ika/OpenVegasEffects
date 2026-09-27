@@ -152,6 +152,11 @@ double Settings::planeDefaultDurationSeconds()
                           QTime(0, 0, 30));
 }
 
+double Settings::editorDefaultDurationSeconds()
+{
+    return durationOption(QStringLiteral("Options/EditorDefaultDuration"), QTime(0, 5, 0));
+}
+
 QString Settings::playbackQualityProfile()
 {
     return readOption(QStringLiteral("Options/Profiles/PlaybackQualityProfile"),

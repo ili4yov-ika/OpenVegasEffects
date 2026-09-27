@@ -18,7 +18,7 @@ public:
         if (event->type() != QEvent::Wheel) return false;
         const auto* combo = qobject_cast<QComboBox*>(target);
         if (combo && !combo->view()->isVisible()
-            && !QSettings().value(QStringLiteral("Options/EnableWheelScrollMenus"), false).toBool()) {
+            && !app::Settings::optionSettings().value(QStringLiteral("Options/EnableWheelScrollMenus"), false).toBool()) {
             event->ignore(); return true;
         }
         return false;

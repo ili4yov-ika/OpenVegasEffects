@@ -1,4 +1,5 @@
 #include "ui/VoiceoverDialog.h"
+#include "app/Settings.h"
 #include "media/PcmWave.h"
 #include <QDialogButtonBox>
 #include <QLabel>
@@ -26,12 +27,12 @@ VoiceoverDialog::VoiceoverDialog(const QString& path, QWidget* parent)
     auto* gain = new QSlider(Qt::Horizontal, this);
     gain->setObjectName(QStringLiteral("voiceoverInputVolume"));
     gain->setRange(0, 100);
-    gain->setValue(qBound(0, QSettings().value(QStringLiteral("Options/VoiceoverVolume"), 100).toInt(), 100));
+    gain->setValue(qBound(0, app::Settings::optionSettings().value(QStringLiteral("Options/VoiceoverVolume"), 100).toInt(), 100));
     gainLabel->setText(tr("Input volume: %1%").arg(gain->value()));
     layout->addWidget(gainLabel); layout->addWidget(gain);
     connect(gain, &QSlider::valueChanged, this, [this, gainLabel](int value) {
         gainLabel->setText(tr("Input volume: %1%").arg(value));
-        QSettings().setValue(QStringLiteral("Options/VoiceoverVolume"), value);
+        app::Settings::optionSettings().setValue(QStringLiteral("Options/VoiceoverVolume"), value);
         if (m_source) m_source->setVolume(value / 100.0);
     });
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
@@ -58,7 +59,7 @@ VoiceoverDialog::VoiceoverDialog(const QString& path, QWidget* parent)
 VoiceoverDialog::~VoiceoverDialog() { stopCapture(); }
 void VoiceoverDialog::start()
 {
-    const QSettings settings;
+    const QSettings settings = app::Settings::optionSettings();
     if (!media::vlcInstance()) { m_status->setText(media::vlcDescription()); return; }
     m_format.setSampleFormat(media::PcmFormat::Int16);
     m_format.setChannelCount(settings.value(QStringLiteral("Options/Voiceover/Channels"), 1).toInt());
@@ -83,7 +84,7 @@ void VoiceoverDialog::capture()
     m_stop->setEnabled(true);
     m_status->setText(tr("Recording: %1 seconds").arg(0));
     if (recordingStarted) recordingStarted();
-    const QString device = QSettings().value(QStringLiteral("Options/Voiceover/Device"), "default").toString();
+    const QString device = app::Settings::optionSettings().value(QStringLiteral("Options/Voiceover/Device"), "default").toString();
     if (!m_source->start(device, m_format, &m_pcm)) {
         stopCapture();
         m_status->setText(tr("Audio input device is unavailable."));

@@ -18,17 +18,41 @@
 #include <QMenu>
 #include <QMimeData>
 #include <QPixmap>
+#include <QPointer>
+#include <QSettings>
+#include <QUndoStack>
+#include <QUndoCommand>
+#include <QPainter>
+#include "ui/Theme.h"
+#include "app/Settings.h"
 #include <QSet>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <functional>
 
 namespace openvegas {
 namespace ui {
 
 namespace {
+class MediaLabelCommand : public QUndoCommand
+{
+public:
+    MediaLabelCommand(std::function<void(const QColor&)> apply,
+                      QColor before, QColor after, const QString& text)
+        : QUndoCommand(text), m_apply(std::move(apply)),
+          m_before(before), m_after(after) {}
+    void undo() override { apply(m_before); }
+    void redo() override { apply(m_after); }
+private:
+    void apply(const QColor& color) {
+        m_apply(color);
+    }
+    std::function<void(const QColor&)> m_apply;
+    QColor m_before, m_after;
+};
 QString kindText(media::MediaKind kind)
 {
     switch (kind) {
@@ -97,13 +121,14 @@ MediaPanel::MediaPanel(QWidget* parent)
     connect(m_removeButton, &QToolButton::clicked, this, &MediaPanel::removeSelected);
 
     auto* viewModes = new QButtonGroup(this);
+    m_list->setIconSize(QSize(12, 16));
     viewModes->setExclusive(true);
     viewModes->addButton(form.toolButtonMediaOptions);
     viewModes->addButton(form.toolButtonMediaThumbnails);
     connect(form.toolButtonMediaOptions, &QToolButton::clicked, this, [this] {
         m_thumbnailMode = false;
         m_list->setViewMode(QListView::ListMode);
-        m_list->setIconSize(QSize(72, 48));
+        m_list->setIconSize(QSize(12, 16));
         rebuildList();
     });
     connect(form.toolButtonMediaThumbnails, &QToolButton::clicked, this, [this] {
@@ -176,8 +201,27 @@ MediaPanel::MediaPanel(QWidget* parent)
 
 void MediaPanel::setMediaManager(media::MediaManager* manager)
 {
+    if (m_manager != manager) ++m_managerEpoch;
     m_manager = manager;
     refresh();
+}
+
+void MediaPanel::setUndoStack(QUndoStack* stack) { m_undoStack = stack; }
+
+void MediaPanel::setMediaLabel(const core::Identifier& id, const QColor& color)
+{
+    if (!m_manager) return;
+    auto* asset = m_manager->assetByIdForEdit(id);
+    if (!asset || asset->labelColor() == color) return;
+    auto apply = [panel = QPointer<MediaPanel>(this), epoch = m_managerEpoch, id](const QColor& next) {
+        if (!panel || panel->m_managerEpoch != epoch || !panel->m_manager) return;
+        auto* target = panel->m_manager->assetByIdForEdit(id);
+        if (!target) return;
+        target->setLabelColor(next); panel->refresh(); emit panel->mediaMetadataModified();
+    };
+    auto* command = new MediaLabelCommand(std::move(apply), asset->labelColor(), color, tr("Set Media Label"));
+    if (m_undoStack) m_undoStack->push(command);
+    else { command->redo(); delete command; }
 }
 
 void MediaPanel::refresh()
@@ -232,6 +276,7 @@ void MediaPanel::rebuildList()
     }
 
     const QString filter = m_search ? m_search->text().trimmed().toLower() : QString();
+    const QString selectedPath = selectedFilePath();
     m_list->clear();
 
     const QVector<media::MediaAsset> assets = m_manager->assets();
@@ -281,6 +326,7 @@ void MediaPanel::rebuildList()
         item->setData(Qt::UserRole, i);
         item->setToolTip(asset.filePath());
         item->setData(Qt::UserRole + 1, asset.filePath()); // MIME payload on drag
+        item->setData(Qt::UserRole + 2, asset.labelColor());
         if (!QFileInfo::exists(asset.filePath())) item->setForeground(QColor(210, 80, 70));
         if (m_thumbnailMode && asset.kind() == media::MediaKind::Image) {
             const QFileInfo info(asset.filePath());
@@ -297,6 +343,15 @@ void MediaPanel::rebuildList()
             }
             if (!thumbnail.isNull()) item->setIcon(QIcon(thumbnail));
         }
+        if (asset.labelColor().isValid()) {
+            const QSize iconSize = m_thumbnailMode ? QSize(72, 48) : QSize(12, 16);
+            QPixmap icon(iconSize); icon.fill(Qt::transparent);
+            QPainter painter(&icon);
+            if (!item->icon().isNull()) painter.drawPixmap(0, 0, item->icon().pixmap(72, 48));
+            painter.fillRect(QRect(0, 0, 4, icon.height()), asset.labelColor());
+            painter.end(); item->setIcon(QIcon(icon));
+        }
+        if (asset.filePath() == selectedPath) m_list->setCurrentItem(item);
     }
     for (const QString& folder : m_virtualFolders) {
         auto* header = new QListWidgetItem(folder, m_list);
@@ -322,8 +377,32 @@ void MediaPanel::showContextMenu(const QPoint& position)
     QListWidgetItem* item = m_list->itemAt(position);
     if (!item || !item->data(Qt::UserRole + 1).isValid()) return;
     const QString oldPath = item->data(Qt::UserRole + 1).toString();
+    const auto asset = m_manager->assetByFilePath(oldPath);
+    if (!asset.isValid()) return;
     QMenu menu(this);
     QAction* relink = menu.addAction(tr("Relink Media..."));
+    QMenu* labels = menu.addMenu(tr("Media Label"));
+    const char* names[] = {"Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "Pink"};
+    const char* colors[] = {"#c94b4b", "#d9823b", "#d1b849", "#55a868", "#4aa6a6", "#4f78b8", "#8662b0", "#b95f8a"};
+    const QSettings settings(QSettings::IniFormat, QSettings::UserScope,
+                             app::Settings::organizationName(), app::Settings::applicationName());
+    for (int i = 0; i < 8; ++i) {
+        const QString key = QStringLiteral("Options/Labels/%1/").arg(i + 1);
+        QColor color(settings.value(key + "Color", colors[i]).toString());
+        if (!color.isValid()) color = QColor(colors[i]);
+        QPixmap swatch(12, 12); swatch.fill(color);
+        QAction* action = labels->addAction(QIcon(swatch), settings.value(key + "Name",
+            QCoreApplication::translate("openvegas::ui::OptionsDialog", names[i])).toString());
+        action->setCheckable(true); action->setChecked(color == asset.labelColor());
+        connect(action, &QAction::triggered, this, [this, id = asset.id(), color] { setMediaLabel(id, color); });
+    }
+    labels->addSeparator();
+    connect(labels->addAction(tr("No Label")), &QAction::triggered, this,
+            [this, id = asset.id()] { setMediaLabel(id, QColor()); });
+    connect(labels->addAction(tr("Custom color…")), &QAction::triggered, this, [this, asset] {
+        const QColor color = interfaceColor(asset.labelColor().isValid() ? asset.labelColor() : QColor(Qt::white), this, tr("Media Label"));
+        if (color.isValid()) setMediaLabel(asset.id(), color);
+    });
     QAction* chosen = menu.exec(m_list->viewport()->mapToGlobal(position));
     if (chosen != relink) return;
     const QString newPath = QFileDialog::getOpenFileName(this, tr("Relink Media"),

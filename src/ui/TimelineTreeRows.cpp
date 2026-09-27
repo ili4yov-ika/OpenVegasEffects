@@ -78,7 +78,7 @@ void TimelineWidget::rebuildTree()
             QMenu menu(this);
             const char* names[] = {"Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "Pink"};
             const char* colors[] = {"#c94b4b", "#d9823b", "#d1b849", "#55a868", "#4aa6a6", "#4f78b8", "#8662b0", "#b95f8a"};
-            const QSettings settings;
+            const QSettings settings = app::Settings::optionSettings();
             for (int n = 0; n < 8; ++n) {
                 const QString prefix = QStringLiteral("Options/Labels/%1/").arg(n + 1);
                 auto* action = menu.addAction(settings.value(prefix + "Name",

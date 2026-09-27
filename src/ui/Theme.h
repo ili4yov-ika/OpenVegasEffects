@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QColorDialog>
 #include <QSettings>
+#include "app/Settings.h"
 #include <QString>
 
 class QApplication;
@@ -76,7 +77,7 @@ void applyTheme(QApplication* app);
 inline QColor interfaceColor(const QColor& initial, QWidget* parent,
                              const QString& title = QString())
 {
-    const auto flags = QSettings().value(QStringLiteral("Options/UseNativeColorPicker"), true).toBool()
+    const auto flags = app::Settings::optionSettings().value(QStringLiteral("Options/UseNativeColorPicker"), true).toBool()
         ? QColorDialog::ColorDialogOptions() : QColorDialog::ColorDialogOptions(QColorDialog::DontUseNativeDialog);
     return QColorDialog::getColor(initial, parent, title, flags);
 }

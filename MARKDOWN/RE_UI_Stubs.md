@@ -1,6 +1,6 @@
 # RE_UI_Stubs — аудит заглушек интерфейса
 
-Обновлено: 2026-09-27. Объект проверки: `src/ui`, потребители настроек в `src/app`,
+Обновлено: 2026-09-28. Объект проверки: `src/ui`, потребители настроек в `src/app`,
 `src/media`, `src/project` и `src/render`; оригинал сопоставлен через подключённый
 Ghidra MCP. Этот документ заменяет аудит 2026-09-14: старые номера строк и утверждения
 о неработающем звуке больше не соответствовали коду.
@@ -120,7 +120,7 @@ Turbo Rendering, подключение Media Cache DB к медиапайпла
 | Viewer `m_texts`, `m_textDraft`, `m_textPlaceView` | Удалён мёртвый рисующий путь. Текст создаётся и редактируется через реальные слои композиции и TextRender |
 
 Изменение палитры Options не перекрашивает ранее размеченные слои: меню применяет новый
-цвет только к выбранному слою. Метки медиа в MediaPanel пока не реализованы.
+цвет только к выбранному слою/медиа. MediaPanel использует ту же палитру, произвольный цвет и No Label; старые метки не перекрашиваются при изменении палитры.
 
 ### Запись WAV
 
@@ -183,7 +183,6 @@ Native render pipeline, lens model и Fisheye/Scale/Motion Blur пока не в
 
 | Группа | Настройки/элементы без полного потребителя | Что требуется |
 |---|---|---|
-| General | `DefaultTemplate`, `EditorDefaultDuration` | Применение шаблона и отдельного редакторского sequence при создании |
 | Waveforms | `AudioWaveforms`, `LogWaveform` | Построение и отображение waveform с выбором линейной/логарифмической шкалы |
 | Analytics | `Options/Analytics` | Отдельная политика аналитики; Debug/PrintAnalytics реализует только локальное журналирование действий |
 | Proxies | `ProxyDirectoryPath`, `ProxyQuality`, `PreviewMode`, `PreferIntegratedGPU` | Создание/выбор прокси и согласование его с оригинальным источником |
@@ -197,7 +196,6 @@ Native render pipeline, lens model и Fisheye/Scale/Motion Blur пока не в
 | Export | `TimeFormat` | Применение к представлению времени export tasks, а не произвольное изменение имён файлов |
 | Debug | `HardwareDecodingIndicator`, `EffectPresetCreation` | Достоверный статус используемого декодера и отдельный debug-путь создания presets; обычные пользовательские presets уже работают |
 | Models | Строки `Models`/nodeNames | Сохранение связи треугольников с узлами, затем per-node visibility/transform/selection; сейчас mesh плоский и строка выбирает весь слой |
-| Labels | Метки медиа | Хранение метки в MediaAsset и редактор в MediaPanel |
 
 Перечисленные опции могут сохраняться в INI, но это не делает их реализованными.
 Чеклист верхнего уровня остаётся незавершённым. Само наличие строки или widget-name в
@@ -213,8 +211,8 @@ Ghidra не является достаточным основанием счи�
 | 2 | Proxy/pre-render/cache | Созданный файл реально выбирается для preview; cache hit не повторяет декодирование; инвалидируются изменения медиа/параметров и применяется TTL |
 | 2 | Render/GPU/3D options | Проверяется используемый backend и результат, включая fallback при отсутствии поддержки; XML-константы и сохранение флажка не закрывают пункт |
 | 2 | Thumbnail cache | Изменение лимита меняет фактическую удерживаемую память/eviction при множестве миниатюр |
-| 3 | Template/Editor duration/Export time | New использует параметры выбранного шаблона и editor sequence; переключение TimeFormat меняет именно представление export tasks |
-| 3 | Models/Media labels | Действие адресует конкретный node/asset, меняет модель, проходит Undo и save/load |
+| 3 | Export time | Переключение TimeFormat меняет именно представление export tasks |
+| 3 | Models | Действие адресует конкретный node, меняет модель, проходит Undo и save/load; метки медиа уже проверены отдельно |
 
 ### 4.2 Повторная live-проверка Ghidra и границы миграции
 
@@ -235,9 +233,43 @@ Vlc4Adapter проверяет ABI, адаптирует parser/callback structs
 AudioCapture использует DirectShow/qtsound/PulseAudio; новая запись сохраняет
 WAV через прежний атомарный путь. Физическая запись микрофона не проверена.
 
+### 4.3 Закрытые потребители 2026-09-28
+
+- Media labels: меню Media использует восемь имён/цветов Options, Custom color
+  и No Label. Цветная полоса сохраняется в режиме списка и миниатюр; offline
+  media сохраняет также красное предупреждение. Undo/Redo адресует asset ID,
+  не текущий индекс; смена менеджера и закрытие панели делают старую команду
+  безопасной. Успешный New/Open очищает историю исходящего проекта.
+- ImageAsset и MediaAsset сохраняют RGBA метку в собственном атрибуте
+  OpenVegasLabelColor. Недоступные файлы получают метку после registerMissingFile;
+  Relink переносит её и trimmer points. Это расширение OpenVegas; native формат
+  меток asset не восстановлен. Live Ghidra подтверждает имена Labels
+  (1412cf384), Set Clip Label (1412deb38), Set Layer Label (1412dfcb0),
+  но эти строки не доказывают формат сериализации метки медиа.
+- DefaultTemplate: три шаблона UI реально задают size/fps нового проекта.
+  Постоянные ID fullhd30/fullhd60/uhd30 хранятся в DefaultTemplateId;
+  старое отображаемое имя читается при миграции. Смена языка не сбрасывает ID.
+- EditorDefaultDuration применяется к frameCount/outPoint EditorSequence
+  независимо от CompositeShotDefaultDuration. Новый проект и первый запуск
+  используют общий helper; открытые проекты сохраняют собственные параметры.
+  Отдельный полноценный native editor timeline этим изменением не реализован.
+- Settings::optionSettings объединяет соответствующие потребители с INI,
+  который записывает OptionsDialog. На Windows прежний QSettings() читал
+  реестр: исправлены палитра timeline/media, native color picker, wheel menus,
+  Voiceover, scrub/inactive audio, hardware/thread decoder options, quick actions,
+  свойства нового проекта и флаги сохранения/автосохранения.
+- Загрузка .vegfx разбирает композицию/медиа/раскладку во временные объекты
+  и заменяет текущие данные только при успехе. Save использует QSaveFile,
+  проверяет write/commit и не обрезает существующий проект до завершения записи.
+  Это защита от ошибок I/O; полное сохранение всех неизвестных native полей
+  остаётся открытым пунктом основного чеклиста.
+
 ## 5. Проверки
 
+Этап 2026-09-28: CMake/MSVC Debug и qmake/MSVC Debug собраны; после правок сериализации 6/6 CTest прошли. Затем отдельно проверены компактные строки Media с метками и снимок панели.
+
 - После миграции CMake/MSVC Debug и qmake/MSVC Debug с Qt 6.9.3 собраны без Qt Multimedia. qmake staging проверен: обе DLL, 366 plugin files и лицензии скопированы, включая путь VLC с пробелами. CMake install перенёс runtime в bin/vlc; NSIS inventory проверен на настоящем runtime. NSIS compile проверен на небольшом fixture, пакет без VLC отвергается. Инсталляция на чистую ОС не выполнялась.
+- Дополнительные регрессии: mediaLabelsUndoAndOfflineRoundTrip (RGBA/offline/index shift/No Label/manager change/panel destruction), projectDefaultsUseStableTemplateAndEditorDuration, failedProjectLoadPreservesCurrentState, templateSelectionSurvivesChangedDisplayText и colorPickerUsesOptionsIniStore.
 - `audio_regression`: реальный VLC player и PCM мастер-выхода, сумма двух источников с gain, взаимная компенсация, mute/unmute, отложенный клип, sourceStart/speed на неоднородном сигнале, seek и отсутствие сигналов после stop.
 - `ui_stubs_regression`: структура WAV и содержимое PCM, неполный sample frame,
   пустой/неподдерживаемый PCM, Cancel с существующим файлом, прокрутка QComboBox,
@@ -247,7 +279,7 @@ WAV через прежний атомарный путь. Физическая 
   относительных путей и layout round-trip.
 - После миграции повторно прошли все шесть CTest-наборов: Text, Timeline, Options, UI Stubs, Audio и Translations (6/6); после дополнений 360 отдельно прошли Timeline/Translations и тест миграции настроек.
 - `tools/validate_translations.py`: новые сообщения переведены на ru/ja/zh_CN;
-  при повторном аудите проверено по 997 актуальных сообщений, пустых и unfinished нет.
+  при повторном аудите проверено по 1001 актуальному сообщению, пустых и unfinished нет.
 - Для актуализации аудита проверены string/xref/decompile связи, реальные потребители
   ключей и Settings getter, отсутствие обращения `CacheDB::put/get` вне реализации CacheDB,
   новый master mixer AudioPlayer и отдельный экспортный `amix`.
