@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>openvegas::ui::MediaPanel</class>
+ <widget class="QDockWidget" name="mediaPanel">
+  <property name="windowTitle"><string>Media</string></property>
+  <widget class="QWidget" name="mediaContentWidget">
+   <layout class="QVBoxLayout" name="mediaLayout">
+    <property name="spacing"><number>3</number></property>
+    <property name="leftMargin"><number>5</number></property>
+    <property name="topMargin"><number>5</number></property>
+    <property name="rightMargin"><number>5</number></property>
+    <property name="bottomMargin"><number>3</number></property>
+    <item>
+     <layout class="QHBoxLayout" name="mediaHeaderRow">
+      <property name="spacing"><number>3</number></property>
+      <item><widget class="QToolButton" name="toolButtonImport">
+       <property name="text"><string>Import</string></property><property name="toolTip"><string>Import Media</string></property>
+       <property name="autoRaise"><bool>true</bool></property><property name="toolButtonStyle"><enum>Qt::ToolButtonTextBesideIcon</enum></property>
+       <property name="maximumSize"><size><width>90</width><height>24</height></size></property>
+      </widget></item>
+      <item><widget class="QToolButton" name="MediaPanelNewFolderButton">
+       <property name="text"><string>New</string></property><property name="toolTip"><string>Create New Folder</string></property>
+       <property name="autoRaise"><bool>true</bool></property><property name="toolButtonStyle"><enum>Qt::ToolButtonTextBesideIcon</enum></property>
+       <property name="maximumSize"><size><width>80</width><height>24</height></size></property>
+      </widget></item>
+      <item><spacer name="mediaHeaderSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>10</width><height>20</height></size></property></spacer></item>
+      <item><widget class="QToolButton" name="toolButtonMediaOptions">
+       <property name="toolTip"><string>List view</string></property><property name="autoRaise"><bool>true</bool></property>
+       <property name="checkable"><bool>true</bool></property><property name="checked"><bool>true</bool></property>
+       <property name="minimumSize"><size><width>24</width><height>24</height></size></property><property name="maximumSize"><size><width>24</width><height>24</height></size></property>
+      </widget></item>
+      <item><widget class="QToolButton" name="toolButtonMediaThumbnails">
+       <property name="toolTip"><string>Thumbnail view</string></property><property name="autoRaise"><bool>true</bool></property><property name="checkable"><bool>true</bool></property>
+       <property name="minimumSize"><size><width>24</width><height>24</height></size></property><property name="maximumSize"><size><width>24</width><height>24</height></size></property>
+      </widget></item>
+     </layout>
+    </item>
+    <item><widget class="QLineEdit" name="media-panel-search">
+     <property name="placeholderText"><string>Search in Project Media</string></property><property name="clearButtonEnabled"><bool>true</bool></property>
+     <property name="maximumSize"><size><width>16777215</width><height>24</height></size></property>
+    </widget></item>
+    <item>
+     <layout class="QHBoxLayout" name="mediaSortRow">
+      <property name="spacing"><number>3</number></property>
+      <item><widget class="QToolButton" name="mediaArrangeButton">
+       <property name="text"><string>Arrange By: Name</string></property><property name="autoRaise"><bool>true</bool></property>
+       <property name="popupMode"><enum>QToolButton::InstantPopup</enum></property><property name="toolButtonStyle"><enum>Qt::ToolButtonTextBesideIcon</enum></property>
+       <property name="maximumSize"><size><width>150</width><height>24</height></size></property>
+      </widget></item>
+      <item><widget class="QToolButton" name="mediaGroupButton">
+       <property name="text"><string>Group By: Folder</string></property><property name="autoRaise"><bool>true</bool></property>
+       <property name="popupMode"><enum>QToolButton::InstantPopup</enum></property><property name="toolButtonStyle"><enum>Qt::ToolButtonTextBesideIcon</enum></property>
+       <property name="maximumSize"><size><width>145</width><height>24</height></size></property>
+      </widget></item>
+      <item><spacer name="mediaSortSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>5</width><height>20</height></size></property></spacer></item>
+     </layout>
+    </item>
+    <item><widget class="QListWidget" name="listView">
+     <property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property><property name="dragEnabled"><bool>true</bool></property>
+     <property name="dragDropMode"><enum>QAbstractItemView::DragDrop</enum></property><property name="defaultDropAction"><enum>Qt::CopyAction</enum></property>
+     <property name="acceptDrops"><bool>true</bool></property><property name="contextMenuPolicy"><enum>Qt::CustomContextMenu</enum></property><property name="spacing"><number>1</number></property>
+    </widget></item>
+    <item>
+     <layout class="QHBoxLayout" name="mediaBottomRow">
+      <property name="spacing"><number>3</number></property>
+      <item><widget class="QToolButton" name="MediaPanelFolderButton">
+       <property name="text"><string>Folder</string></property><property name="toolTip"><string>Create New Folder</string></property><property name="autoRaise"><bool>true</bool></property>
+       <property name="toolButtonStyle"><enum>Qt::ToolButtonTextBesideIcon</enum></property>
+      </widget></item>
+      <item><widget class="QToolButton" name="MediaPanelCompositeShotButton">
+       <property name="text"><string>Composite Shot</string></property><property name="toolTip"><string>Create Composite Shot</string></property><property name="autoRaise"><bool>true</bool></property>
+       <property name="toolButtonStyle"><enum>Qt::ToolButtonTextBesideIcon</enum></property>
+      </widget></item>
+      <item><widget class="QToolButton" name="MediaPanelTrashButton">
+       <property name="text"><string>Remove</string></property><property name="toolTip"><string>Remove selected asset from the project</string></property><property name="autoRaise"><bool>true</bool></property>
+       <property name="toolButtonStyle"><enum>Qt::ToolButtonTextBesideIcon</enum></property>
+      </widget></item>
+      <item><spacer name="mediaBottomSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>10</width><height>20</height></size></property></spacer></item>
+      <item><widget class="QLabel" name="media-panel-count"><property name="text"><string notr="true"></string></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

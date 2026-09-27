@@ -1,0 +1,2 @@
+/kdenlive
+# Keep openfx/ and vst3sdk/ tracked when vendored (do not ignore).

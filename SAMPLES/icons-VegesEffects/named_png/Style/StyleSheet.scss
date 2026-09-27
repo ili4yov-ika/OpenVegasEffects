@@ -1,0 +1,85 @@
+$qrcName: Common.qrc
+$fontFamily: "Segoe UI, Trebuchet MS, Droid Sans Fallback"
+$menuFontFamily: "Lucida Grande, Segoe UI, Trebuchet MS, Droid Sans Fallback"
+$iconSize: 16
+$focus: rgb(18,176,255)
+$selection-0: rgb(86,104,115)
+$progress-complete: rgb(48,140,48)
+$splitter: 4
+$spacer: 4
+
+$slider-grooveHeight: 10
+$slider-grooveRadius: 5
+$slider-handleHeight: 6
+$slider-handleRadius: 3
+$slider-handleMargin: 2
+
+$padding-timelineButton: 2
+$padding-tiny: 3
+$padding-small: 6
+$padding-large: 12
+
+$lineHeight-minusOne: 21
+$lineHeight-default: 22
+$lineHeight-tab: 24
+$lineHeight-large: 32
+
+$fontSize-tiny: 10
+$fontSize-small: 11
+$fontSize-default: 12
+$fontSize-large: 16
+$invalidInput: rgb(255,0,0)
+
+$timelineColor-audio: rgb(0,66,52)
+$timelineColor-video: rgb(43,63,97)
+$timelineColor-selection: rgb(86,104,115)
+
+$fill-panel-0: rgb(34,34,34)
+$fill-panel-2: rgb(17,17,17)
+$fill-panel+1: rgb(51,51,51)
+$fill-panel+2: rgb(68,68,68)
+$fill-panel+3: rgb(85,85,85)
+$fill-panel-transparent-2: rgba(17,17,17,204)
+$fill-panel-1: rgb(27,27,27)
+$fill-panel-transparent-1: rgba(27,27,27,204)
+$fill-lighten: rgba(255,255,255,31)
+$fill-darken: rgba(0,0,0,31)
+
+$iconColor-default: rgb(221,221,221)
+$iconColor-hover: rgb(255,255,255)
+$iconColor-selection: rgb(255,255,255)
+$iconColor-disabled: rgba(221,221,221,115)
+
+$buttonColor-addon: rgb(48,140,48)
+$buttonColor-hoverAddon: rgb(56,166,56)
+$buttonColor-default: rgb(44,44,44)
+$buttonColor-hover: rgb(73,73,73)
+$buttonColor-disabled: rgba(44,44,44,115)
+$buttonColor-hoverTransparent: rgba(73,73,73,115)
+$buttonColor-selection: rgb(86,104,115)
+
+$buttonSize-large: 24
+
+$audioColor-clipped: rgb(167,33,33)
+$audioColor-warning: rgb(183,167,37)
+$audioColor-safeDark: rgb(183,167,37)
+$audioColor-safeLight: rgb(47,125,75)
+$audioColor-waveformDarkMode: rgba(255,255,255,31)
+$audioColor-waveformLightMode: rgba(0,0,0,15)
+
+$textColor-default: rgb(204,204,204)
+$textColor-disabled: rgb(102,102,102)
+$textColor-darker: rgb(175,175,175)
+$textColor-hover: rgb(223,223,223)
+$textColor-selection: rgb(18,176,255)
+$colorDifference: 0.038
+$lineColor: rgb(27,27,27)
+$selection-transparent-0: rgba(86,104,115,115)
+$selection-1: rgb(79,82,84)
+$selection-transparent-1: rgba(79,82,84,115)
+$selection-very-transparent: rgba(79,82,84,31)
+
+
+$sharedFolder: /c/FXHomeProjects/git/git/fxhome-interface-style/shared
+$productFolder: /c/FXHomeProjects/git/git/fxhome-interface-style/vegas-effects
+

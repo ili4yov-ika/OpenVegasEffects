@@ -1,0 +1,28 @@
+Source: openvegas
+Section: video
+Priority: optional
+Maintainer: OpenVegas contributors <maintainer@example.com>
+Build-Depends: cmake (>= 3.16),
+               qt6-base-dev,
+               qt6-svg-dev,
+               debhelper (>= 12),
+               pkg-config
+Standards-Version: 4.5.0
+Homepage: https://github.com/ili4yov-ika/OpenVegas
+
+Package: openvegas
+Architecture: amd64
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         libqt6core6 (>= 6.8.0),
+         libqt6gui6 (>= 6.8.0),
+         libqt6widgets6 (>= 6.8.0),
+         libqt6svg6 (>= 6.8.0)
+Description: Open-source nonlinear video editor (VEGAS Pro–like)
+ OpenVegas — открытый кроссплатформенный видеоредактор (NLE),
+ ориентированный на workspace VEGAS Pro 22. Лицензия GNU GPL.
+ .
+ Основные возможности (MVP):
+  - Оболочка UI: media bin, preview, timeline, Master Bus
+  - Открытие проектов .veg (VegReader v0)
+  - Диалоги Welcome, Properties, Preferences, Trimmer

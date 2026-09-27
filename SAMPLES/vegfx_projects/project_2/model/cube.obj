@@ -1,0 +1,20 @@
+# Test cube with two materials and two named groups.
+mtllib cube.mtl
+o Cube
+v -1 -1 -1
+v  1 -1 -1
+v  1  1 -1
+v -1  1 -1
+v -1 -1  1
+v  1 -1  1
+v  1  1  1
+v -1  1  1
+usemtl Body
+f 1 2 3 4
+f 5 8 7 6
+f 1 5 6 2
+f 3 7 8 4
+o Sides
+usemtl Trim
+f 1 4 8 5
+f 2 6 7 3

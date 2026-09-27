@@ -1,0 +1,255 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "windows-msvc-debug",
+            "displayName": "Windows MSVC Debug (Ninja, Qt msvc2022_64)",
+            "description": "Debug build for Windows using MSVC v143 + Qt msvc2022_64. Run from a VS x64 developer prompt, or let the IDE supply the environment.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/Windows_MSVC-x64",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "toolset": {
+                "value": "host=x64",
+                "strategy": "external"
+            },
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_PREFIX_PATH": "C:/Qt/6.9.3/msvc2022_64",
+                "CMAKE_MAKE_PROGRAM": "C:/Qt/Tools/Ninja/ninja.exe",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-msvc-release",
+            "displayName": "Windows MSVC Release (Ninja, Qt msvc2022_64)",
+            "description": "Release build for Windows using MSVC v143 + Qt msvc2022_64.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/Windows_MSVC-x64-Release",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "toolset": {
+                "value": "host=x64",
+                "strategy": "external"
+            },
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_PREFIX_PATH": "C:/Qt/6.9.3/msvc2022_64",
+                "CMAKE_MAKE_PROGRAM": "C:/Qt/Tools/Ninja/ninja.exe",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-mingw-debug",
+            "displayName": "Windows MinGW Debug (Ninja, Qt mingw_64)",
+            "description": "Debug build for Windows using MinGW GCC + Qt mingw_64.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/Windows_MinGW-x64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_PREFIX_PATH": "C:/Qt/6.9.3/mingw_64",
+                "CMAKE_CXX_COMPILER": "C:/Qt/Tools/mingw1310_64/bin/g++.exe",
+                "CMAKE_MAKE_PROGRAM": "C:/Qt/Tools/Ninja/ninja.exe",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-mingw-release",
+            "displayName": "Windows MinGW Release (Ninja, Qt mingw_64)",
+            "description": "Release build for Windows using MinGW GCC + Qt mingw_64.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/Windows_MinGW-x64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_PREFIX_PATH": "C:/Qt/6.9.3/mingw_64",
+                "CMAKE_CXX_COMPILER": "C:/Qt/Tools/mingw1310_64/bin/g++.exe",
+                "CMAKE_MAKE_PROGRAM": "C:/Qt/Tools/Ninja/ninja.exe"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "linux-debug",
+            "displayName": "Linux Debug (Ninja, system Qt)",
+            "description": "Debug build for Linux using Ninja and system-installed Qt 6.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "linux-release",
+            "displayName": "Linux Release (Ninja, system Qt)",
+            "description": "Release build for Linux using Ninja and system-installed Qt 6.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "macos-debug",
+            "displayName": "macOS Debug (Ninja, Qt via CMAKE_PREFIX_PATH)",
+            "description": "Debug build for macOS using Ninja. Set CMAKE_PREFIX_PATH to your Qt 6 dir.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/macos",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "macos-release",
+            "displayName": "macOS Release (Ninja, Qt via CMAKE_PREFIX_PATH)",
+            "description": "Release build for macOS using Ninja. Set CMAKE_PREFIX_PATH to your Qt 6 dir.",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/macos",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "Visual Studio Community 2022 Release - x86_amd64",
+            "displayName": "Visual Studio Community 2022 Release - x86_amd64",
+            "description": "Использование компиляторов для Visual Studio 17 2022 (архитектура x86_x64).",
+            "generator": "Visual Studio 17 2022",
+            "toolset": "host=x86",
+            "architecture": "x64",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "windows-msvc-debug",
+            "configurePreset": "windows-msvc-debug",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-msvc-release",
+            "configurePreset": "windows-msvc-release",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-mingw-debug",
+            "configurePreset": "windows-mingw-debug",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-mingw-release",
+            "configurePreset": "windows-mingw-release",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux-debug",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "linux-release",
+            "configurePreset": "linux-release",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "macos-debug",
+            "configurePreset": "macos-debug",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "macos-release",
+            "configurePreset": "macos-release",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "Visual Studio Community 2022 Release - x86_amd64-debug",
+            "displayName": "Visual Studio Community 2022 Release - x86_amd64 - Debug",
+            "configurePreset": "Visual Studio Community 2022 Release - x86_amd64",
+            "configuration": "Debug"
+        }
+    ]
+}

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Learn</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 16px;
+    background: #222; color: #d8d8d8;
+    font-family: "Segoe UI", "Trebuchet MS", sans-serif; font-size: 13px;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 12px; color: #fff; }
+  p  { line-height: 1.5; color: #a8a8a8; }
+  ul { list-style: none; margin: 16px 0 0; padding: 0; }
+  li { margin: 0 0 6px; }
+  a  { color: #12b0ff; text-decoration: none; cursor: pointer; }
+  a:hover { text-decoration: underline; }
+  .note {
+    margin-top: 20px; padding-top: 12px;
+    border-top: 1px solid #1b1b1b; color: #6e6e6e; font-size: 12px;
+  }
+</style>
+</head>
+<body>
+  <h1>Learn</h1>
+  <p>Go online to explore amazing tutorials and unlock your creative potential.</p>
+
+  <ul>
+    <li><a onclick="host.openTutorials()">Browse tutorials</a></li>
+    <li><a onclick="host.showCommand('Create New Composite Shot')">Create a composite shot</a></li>
+    <li><a onclick="host.showCommand('Import Media')">Import your first clip</a></li>
+  </ul>
+
+  <p class="note">
+    This page is served from the application's own resources. The reference
+    application renders its Home / Learn surfaces through Qt WebEngine and
+    talks to them over Qt WebChannel; this port keeps the same two-way bridge
+    so real lesson content can be dropped in later.
+  </p>
+
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <script>
+    var host = {
+      openTutorials: function () {},
+      showCommand: function () {}
+    };
+    new QWebChannel(qt.webChannelTransport, function (channel) {
+      host = channel.objects.host;
+    });
+  </script>
+</body>
+</html>

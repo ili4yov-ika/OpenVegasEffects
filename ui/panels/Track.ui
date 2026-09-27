@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Track panel - right dock, tab group Effects | Controls | Layout | Track
+    (objName "TrackPanel").
+
+    Static-layout capture of src/ui/TrackPanel.cpp (constructor + buildToolbar).
+    Object names are the reference ones; rows and the blend combos are rebuilt
+    at runtime from the composition.
+
+    Nothing is wired: the form is not added to CMakeLists.txt / the .pro and
+    is not loaded anywhere. See ui/panels/README.md for the seam.
+-->
+<ui version="4.0">
+ <class>openvegas::ui::TrackPanel</class>
+ <widget class="QDockWidget" name="TrackPanel">
+  <property name="windowTitle">
+   <string>Track</string>
+  </property>
+  <widget class="QWidget" name="trackContentWidget">
+   <layout class="QVBoxLayout" name="trackLayout">
+    <property name="spacing"><number>2</number></property>
+    <property name="leftMargin"><number>0</number></property>
+    <property name="topMargin"><number>0</number></property>
+    <property name="rightMargin"><number>0</number></property>
+    <property name="bottomMargin"><number>0</number></property>
+    <item>
+     <widget class="QWidget" name="widgetLayerHeader">
+      <layout class="QHBoxLayout" name="layerHeaderRow">
+       <property name="spacing"><number>3</number></property>
+       <property name="leftMargin"><number>4</number></property>
+       <property name="topMargin"><number>2</number></property>
+       <property name="rightMargin"><number>4</number></property>
+       <property name="bottomMargin"><number>2</number></property>
+       <item>
+        <widget class="QToolButton" name="toolButtonNewLayer">
+         <property name="text"><string notr="true">+</string></property>
+         <property name="toolTip"><string>Insert a new layer.</string></property>
+         <property name="autoRaise"><bool>true</bool></property>
+         <property name="popupMode">
+          <enum>QToolButton::InstantPopup</enum>
+         </property>
+         <property name="minimumWidth"><number>26</number></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButtonMoveLayerUp">
+         <property name="text"><string notr="true">&#x2191;</string></property>
+         <property name="toolTip"><string>Move layer up</string></property>
+         <property name="autoRaise"><bool>true</bool></property>
+         <property name="minimumWidth"><number>26</number></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButtonMoveLayerDown">
+         <property name="text"><string notr="true">&#x2193;</string></property>
+         <property name="toolTip"><string>Move layer down</string></property>
+         <property name="autoRaise"><bool>true</bool></property>
+         <property name="minimumWidth"><number>26</number></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButtonRemoveLayer">
+         <property name="text"><string notr="true">&#x2212;</string></property>
+         <property name="toolTip"><string>Remove layer</string></property>
+         <property name="autoRaise"><bool>true</bool></property>
+         <property name="minimumWidth"><number>26</number></property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="layerHeaderSpacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size><width>10</width><height>20</height></size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <!-- Layer rows: Name / Visible / Muted / Blend / Opacity. -->
+     <widget class="QTreeWidget" name="composition-layers-header">
+      <property name="selectionMode">
+       <enum>QAbstractItemView::SingleSelection</enum>
+      </property>
+      <column>
+       <property name="text"><string>Name</string></property>
+      </column>
+      <column>
+       <property name="text"><string>Visible</string></property>
+      </column>
+      <column>
+       <property name="text"><string>Muted</string></property>
+      </column>
+      <column>
+       <property name="text"><string>Blend</string></property>
+      </column>
+      <column>
+       <property name="text"><string>Opacity</string></property>
+      </column>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

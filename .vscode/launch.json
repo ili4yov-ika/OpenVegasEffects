@@ -1,0 +1,67 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "OpenVegas Effects (MSVC Debug)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Windows_MSVC-x64/OpenVegasEffects.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build/Windows_MSVC-x64",
+      "environment": [
+        {
+          "name": "PATH",
+          "value": "C:/Qt/6.9.3/msvc2022_64/bin;${env:PATH}"
+        },
+        {
+          "name": "QT_PLUGIN_PATH",
+          "value": "C:/Qt/6.9.3/msvc2022_64/plugins"
+        },
+        {
+          "name": "QT_QPA_PLATFORM_PLUGIN_PATH",
+          "value": "C:/Qt/6.9.3/msvc2022_64/plugins/platforms"
+        }
+      ],
+      "console": "integratedTerminal",
+      "preLaunchTask": "CMake: Configure + Build (MSVC Debug)",
+      "symbolSearchPath": "${workspaceFolder}/build/Windows_MSVC-x64",
+      "visualizerFile": "${workspaceFolder}/.vscode/qt6.natvis",
+      "sourceFileMap": {}
+    },
+    {
+      "name": "OpenVegas Effects (MSVC RelWithDebInfo)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Windows_MSVC-x64-Release/OpenVegasEffects.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build/Windows_MSVC-x64-Release",
+      "environment": [
+        {
+          "name": "PATH",
+          "value": "C:/Qt/6.9.3/msvc2022_64/bin;${env:PATH}"
+        },
+        {
+          "name": "QT_PLUGIN_PATH",
+          "value": "C:/Qt/6.9.3/msvc2022_64/plugins"
+        },
+        {
+          "name": "QT_QPA_PLATFORM_PLUGIN_PATH",
+          "value": "C:/Qt/6.9.3/msvc2022_64/plugins/platforms"
+        }
+      ],
+      "console": "integratedTerminal",
+      "preLaunchTask": "CMake: Configure + Build (MSVC Release)",
+      "symbolSearchPath": "${workspaceFolder}/build/Windows_MSVC-x64-Release",
+      "visualizerFile": "${workspaceFolder}/.vscode/qt6.natvis",
+      "sourceFileMap": {}
+    },
+    {
+      "name": "OpenVegas Effects (MSVC Debug, attach)",
+      "type": "cppvsdbg",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
+    }
+  ]
+}

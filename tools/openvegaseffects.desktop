@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=0.1
+Type=Application
+Name=OpenVegas Effects
+Name[ru]=OpenVegas
+Comment=Open-source video effects editor
+Comment[ru]=Открытый редактор видеоэффектов
+Comment[en]=Open-source video FX editor
+Exec=OpenVegasEffects %F
+Icon=openvegaseffects
+Terminal=false
+Categories=AudioVideo;Video;AudioVideoEditing;
+MimeType=application/x-vegas-project;video/mp4;video/x-msvideo;video/quicktime;audio/wav;audio/mpeg;
+StartupNotify=true

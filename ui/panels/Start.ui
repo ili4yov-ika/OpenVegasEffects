@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Start panel - bottom dock, tabbed with Timeline (objName "StartPanel",
+    root "StartPanelWidget", sidebar "ProjectSideBarWidget").
+
+    Static-layout capture of src/ui/StartPanel.cpp (constructor + the
+    makeActionButton helper). Object names are the reference ones; recent
+    projects list is rebuilt at runtime.
+
+    Nothing is wired: the form is not added to CMakeLists.txt / the .pro and
+    is not loaded anywhere. See ui/panels/README.md for the seam.
+-->
+<ui version="4.0">
+ <class>openvegas::ui::StartPanel</class>
+ <widget class="QDockWidget" name="StartPanel">
+  <property name="windowTitle">
+   <string>Start</string>
+  </property>
+  <widget class="QWidget" name="StartPanelWidget">
+   <layout class="QHBoxLayout" name="rootLayout">
+    <property name="spacing"><number>12</number></property>
+    <property name="leftMargin"><number>8</number></property>
+    <property name="topMargin"><number>8</number></property>
+    <property name="rightMargin"><number>8</number></property>
+    <property name="bottomMargin"><number>8</number></property>
+    <item>
+     <!-- Project entry points. -->
+     <layout class="QVBoxLayout" name="actions">
+      <property name="spacing"><number>6</number></property>
+      <item>
+       <widget class="QToolButton" name="toolButtonNewComp">
+        <property name="text"><string>New Composite Shot</string></property>
+        <property name="toolTip"><string>Create New Composite Shot</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextOnly</enum>
+        </property>
+        <property name="minimumHeight"><number>46</number></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="toolButtonNewCompsFromMedia">
+        <property name="text"><string>New Composite Shots
+From Footage</string></property>
+        <property name="toolTip"><string>Make Composite Shots</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextOnly</enum>
+        </property>
+        <property name="minimumHeight"><number>46</number></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="AddMedia">
+        <property name="text"><string>Import File</string></property>
+        <property name="toolTip"><string>Import File</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextOnly</enum>
+        </property>
+        <property name="minimumHeight"><number>46</number></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="toolButtonEditScreen">
+        <property name="text"><string>Edit Screen</string></property>
+        <property name="toolTip"><string>Go to the Edit Screen</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextOnly</enum>
+        </property>
+        <property name="minimumHeight"><number>46</number></property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="actionsSpacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size><width>20</width><height>40</height></size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <!-- Recent projects. -->
+     <widget class="QWidget" name="ProjectSideBarWidget">
+      <layout class="QVBoxLayout" name="recent">
+       <property name="spacing"><number>4</number></property>
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
+       <item>
+        <layout class="QHBoxLayout" name="recentHeader">
+         <property name="spacing"><number>6</number></property>
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <item>
+          <widget class="QLabel" name="recentLabel">
+           <property name="text"><string>Jump back in</string></property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="recentHeaderSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size><width>10</width><height>20</height></size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QToolButton" name="toolButtonNew">
+           <property name="text"><string>Create New</string></property>
+           <property name="toolTip"><string>Create a new project</string></property>
+           <property name="autoRaise"><bool>true</bool></property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="toolButtonOpen">
+           <property name="text"><string>Open</string></property>
+           <property name="toolTip"><string>Open an existing project</string></property>
+           <property name="autoRaise"><bool>true</bool></property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="toolButtonClearRecents">
+           <property name="text"><string>Clear Recents</string></property>
+           <property name="autoRaise"><bool>true</bool></property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QListWidget" name="listViewRecentProjects">
+         <property name="selectionMode">
+          <enum>QAbstractItemView::SingleSelection</enum>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <!-- Learning strip. -->
+     <layout class="QVBoxLayout" name="learn">
+      <property name="spacing"><number>4</number></property>
+      <item>
+       <widget class="QLabel" name="labelStart">
+        <property name="text">
+         <string>&lt;a href="tutorials"&gt;Go online to explore amazing tutorials and unlock your creative potential&lt;/a&gt;</string>
+        </property>
+        <property name="textFormat">
+         <enum>Qt::RichText</enum>
+        </property>
+        <property name="wordWrap"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="learnSpacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size><width>20</width><height>40</height></size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

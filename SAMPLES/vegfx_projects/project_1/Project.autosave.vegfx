@@ -1,0 +1,775 @@
+<VegasEffectsProject AppEdition="5000" AppVersion="1.0.0.0" CurrentScreen="2" Version="0">
+ <Project Version="7">
+  <ID>5509e284-60ad-4834-b27f-3f448200ea27</ID>
+  <Name>Облога</Name>
+  <ProjectSettings Version="9">
+   <BPC>1000</BPC>
+   <AntialiasingMode>0</AntialiasingMode>
+   <ReflectionMapSize>512</ReflectionMapSize>
+   <ModelTextureMaxSize>4096</ModelTextureMaxSize>
+   <ShadowMapSize>2048</ShadowMapSize>
+  </ProjectSettings>
+  <AssetList Version="7">
+   <Assets>
+    <CompositionAsset Version="19">
+     <ID>ce5943ba-c452-4ff0-a12f-3bb72a4af3f1</ID>
+     <Name>Облога</Name>
+     <CTI>0</CTI>
+     <In>0</In>
+     <Out>15376</Out>
+     <IsPrimary>1</IsPrimary>
+     <AudioVideoSettings>
+      <FrameCount>15376</FrameCount>
+      <FrameRate>60.000</FrameRate>
+      <Width>1080</Width>
+      <Height>1920</Height>
+     </AudioVideoSettings>
+     <Layers>
+      <TextLayer OpenVegasKind="Text" OpenVegasMuted="0" Version="13">
+       <TextBox Version="1">
+        <MinX>0</MinX>
+        <MinY>0</MinY>
+        <MaxX>1080</MaxX>
+        <MaxY>68</MaxY>
+        <Tokens>
+         <Tk Ch="68" Tp="0"/>
+         <Tk Ch="97" Tp="0"/>
+         <Tk Ch="102" Tp="0"/>
+         <Tk Ch="116" Tp="0"/>
+         <Tk Ch="32" Tp="0"/>
+         <Tk Ch="80" Tp="0"/>
+         <Tk Ch="117" Tp="0"/>
+         <Tk Ch="110" Tp="0"/>
+         <Tk Ch="107" Tp="0"/>
+         <Tk Ch="32" Tp="0"/>
+         <Tk Ch="120" Tp="0"/>
+         <Tk Ch="32" Tp="0"/>
+         <Tk Ch="79" Tp="0"/>
+         <Tk Ch="116" Tp="0"/>
+         <Tk Ch="116" Tp="0"/>
+         <Tk Ch="97" Tp="0"/>
+         <Tk Ch="119" Tp="0"/>
+         <Tk Ch="97" Tp="0"/>
+         <Tk Ch="110" Tp="0"/>
+         <Tk Ch="32" Tp="0"/>
+        </Tokens>
+       </TextBox>
+       <OpenVegasTextStyle Version="1">
+        <Value>Daft Punk x Ottawan </Value>
+        <Value>68</Value>
+        <Value></Value>
+        <Value>Regular</Value>
+        <Value>#ffffff</Value>
+        <Value>0.00</Value>
+        <Value>#000000</Value>
+        <Value>Over Fill</Value>
+        <Value>100.00</Value>
+        <Value>100.00</Value>
+        <Value>100.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>None</Value>
+        <Value>false</Value>
+        <Value>false</Value>
+        <Value>None</Value>
+        <Value>Center</Value>
+        <Value>Middle</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>#000000</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>true</Value>
+        <Value>[]</Value>
+        <Value>false</Value>
+        <Value>Point</Value>
+        <Value>640.00</Value>
+        <Value>360.00</Value>
+       </OpenVegasTextStyle>
+       <OpenVegasEffects Version="1">
+        <Effect Enabled="1" Name="Text" PluginID="text">
+         <Parameters>
+          <Value Index="0">Daft Punk x Ottawan </Value>
+          <Value Index="1">68</Value>
+         </Parameters>
+         <Animations/>
+        </Effect>
+       </OpenVegasEffects>
+       <LayerBase OpenVegasLabelColor="#30353e" OpenVegasLocked="0" Version="2">
+        <ID>ac462278-fc4e-435b-b73b-33df2b127516</ID>
+        <Name>New Text</Name>
+        <StartFrame>0</StartFrame>
+        <EndFrame>1800</EndFrame>
+        <BlendMode>0</BlendMode>
+        <Visible>1</Visible>
+        <PropertyManager Version="7">
+         <Prop>
+          <Name>opacity</Name>
+          <Static>
+           <fl>100.0000</fl>
+          </Static>
+          <Animation>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="0.0000" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="316.6667" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>30.0000</fl>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="633.3333" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>100.0000</fl>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="34366.6667" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="308.3333" Y="0.0000"/>
+            <TInPt X="-16866.6667" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>100.0000</fl>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="34983.3333" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>30.0000</fl>
+            </Vl>
+           </Key>
+          </Animation>
+         </Prop>
+         <Prop>
+          <Name>anchorPoint</Name>
+          <Static>
+           <p3 X="0.0000" Y="0.0000" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>position</Name>
+          <Static>
+           <p3 X="0.0000" Y="-56.6667" Z="0"/>
+          </Static>
+          <Animation>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="0.0000" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="316.6667" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <p3 X="0.0000" Y="-170.0000" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="633.3333" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <p3 X="0.0000" Y="-56.6667" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="34366.6667" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="308.3333" Y="0.0000"/>
+            <TInPt X="-16866.6667" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <p3 X="0.0000" Y="-56.6667" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="34983.3333" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <p3 X="0.0000" Y="-170.0000" Z="0"/>
+            </Vl>
+           </Key>
+          </Animation>
+         </Prop>
+         <Prop>
+          <Name>scale</Name>
+          <Static>
+           <sc X="100.0000" Y="100.0000" Z="0"/>
+          </Static>
+          <Animation>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="0.0000" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="316.6667" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <sc X="80.0000" Y="80.0000" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="633.3333" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <sc X="100.0000" Y="100.0000" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="34400.0000" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="291.6667" Y="0.0000"/>
+            <TInPt X="-16883.3333" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <sc X="100.0000" Y="100.0000" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="34983.3333" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <sc X="80.0000" Y="80.0000" Z="0"/>
+            </Vl>
+           </Key>
+          </Animation>
+         </Prop>
+         <Prop>
+          <Name>rotationZ</Name>
+          <Static>
+           <fl>0.0000</fl>
+          </Static>
+         </Prop>
+        </PropertyManager>
+       </LayerBase>
+      </TextLayer>
+      <TextLayer OpenVegasKind="Text" OpenVegasMuted="0" Version="13">
+       <TextBox Version="1">
+        <MinX>0</MinX>
+        <MinY>0</MinY>
+        <MaxX>1080</MaxX>
+        <MaxY>117</MaxY>
+        <Tokens>
+         <Tk Ch="86" Tp="0"/>
+         <Tk Ch="101" Tp="0"/>
+         <Tk Ch="114" Tp="0"/>
+         <Tk Ch="121" Tp="0"/>
+         <Tk Ch="32" Tp="0"/>
+         <Tk Ch="68" Tp="0"/>
+         <Tk Ch="46" Tp="0"/>
+         <Tk Ch="73" Tp="0"/>
+         <Tk Ch="46" Tp="0"/>
+         <Tk Ch="83" Tp="0"/>
+         <Tk Ch="46" Tp="0"/>
+         <Tk Ch="67" Tp="0"/>
+         <Tk Ch="46" Tp="0"/>
+         <Tk Ch="79" Tp="0"/>
+        </Tokens>
+       </TextBox>
+       <OpenVegasTextStyle Version="1">
+        <Value>Very D.I.S.C.O</Value>
+        <Value>117</Value>
+        <Value></Value>
+        <Value>Regular</Value>
+        <Value>#ffffff</Value>
+        <Value>0.00</Value>
+        <Value>#000000</Value>
+        <Value>Over Fill</Value>
+        <Value>100.00</Value>
+        <Value>100.00</Value>
+        <Value>100.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>None</Value>
+        <Value>false</Value>
+        <Value>false</Value>
+        <Value>None</Value>
+        <Value>Center</Value>
+        <Value>Middle</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>#000000</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>0.00</Value>
+        <Value>true</Value>
+        <Value>[]</Value>
+        <Value>false</Value>
+        <Value>Point</Value>
+        <Value>640.00</Value>
+        <Value>360.00</Value>
+       </OpenVegasTextStyle>
+       <OpenVegasEffects Version="1">
+        <Effect Enabled="1" Name="Text" PluginID="text">
+         <Parameters>
+          <Value Index="0">Very D.I.S.C.O</Value>
+          <Value Index="1">117</Value>
+         </Parameters>
+         <Animations/>
+        </Effect>
+       </OpenVegasEffects>
+       <LayerBase OpenVegasLabelColor="#30353e" OpenVegasLocked="0" Version="2">
+        <ID>9bb9a70d-613b-4214-99cf-1741c9030770</ID>
+        <Name>New Text 2</Name>
+        <StartFrame>0</StartFrame>
+        <EndFrame>1800</EndFrame>
+        <BlendMode>0</BlendMode>
+        <Visible>1</Visible>
+        <PropertyManager Version="7">
+         <Prop>
+          <Name>opacity</Name>
+          <Static>
+           <fl>100.0000</fl>
+          </Static>
+          <Animation>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="0.0000" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="325.0000" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>20.0000</fl>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="650.0000" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>100.0000</fl>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="29300.0000" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="350.0000" Y="0.0000"/>
+            <TInPt X="-14325.0000" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>100.0000</fl>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="30000.0000" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>20.0000</fl>
+            </Vl>
+           </Key>
+          </Animation>
+         </Prop>
+         <Prop>
+          <Name>anchorPoint</Name>
+          <Static>
+           <p3 X="0.0000" Y="0.0000" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>position</Name>
+          <Static>
+           <p3 X="0.0000" Y="-188.8070" Z="0"/>
+          </Static>
+          <Animation>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="0.0000" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="325.0000" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <p3 X="0.0000" Y="-270.0000" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="650.0000" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <p3 X="0.0000" Y="-188.8070" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="29300.0000" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="350.0000" Y="0.0000"/>
+            <TInPt X="-14325.0000" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <p3 X="0.0000" Y="-188.8070" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="30000.0000" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <p3 X="0.0000" Y="-270.0000" Z="0"/>
+            </Vl>
+           </Key>
+          </Animation>
+         </Prop>
+         <Prop>
+          <Name>scale</Name>
+          <Static>
+           <sc X="100.0000" Y="100.0000" Z="0"/>
+          </Static>
+          <Animation>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="0.0000" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="325.0000" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <sc X="80.0000" Y="80.0000" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="650.0000" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <sc X="100.0000" Y="100.0000" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Manual Bezier" STp="2" Ti="29300.0000" Tp="6" V="5">
+            <TLk>0</TLk>
+            <InInf>0.5000</InInf>
+            <OuInf>0.5000</OuInf>
+            <TOuPt X="350.0000" Y="0.0000"/>
+            <TInPt X="-14325.0000" Y="0.0000"/>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <sc X="100.0000" Y="100.0000" Z="0"/>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="30000.0000" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <sc X="80.0000" Y="80.0000" Z="0"/>
+            </Vl>
+           </Key>
+          </Animation>
+         </Prop>
+         <Prop>
+          <Name>rotationZ</Name>
+          <Static>
+           <fl>0.0000</fl>
+          </Static>
+         </Prop>
+        </PropertyManager>
+       </LayerBase>
+      </TextLayer>
+      <AssetLayer OpenVegasKind="Media" OpenVegasMuted="0" Version="17">
+       <AssetID>6ece8e8f-9214-9d2a-fbc9-f9332ce2a4b8</AssetID>
+       <LayerBase OpenVegasLabelColor="#30353e" OpenVegasLocked="0" Version="2">
+        <ID>04bb8845-7c66-4804-93ba-4435eb4676c8</ID>
+        <Name>1_облога-круг.png</Name>
+        <StartFrame>0</StartFrame>
+        <EndFrame>1800</EndFrame>
+        <BlendMode>0</BlendMode>
+        <Visible>1</Visible>
+        <PropertyManager Version="7">
+         <Prop>
+          <Name>opacity</Name>
+          <Static>
+           <fl>100.0000</fl>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>anchorPoint</Name>
+          <Static>
+           <p3 X="0.0000" Y="0.0000" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>position</Name>
+          <Static>
+           <p3 X="0.0000" Y="440.0950" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>scale</Name>
+          <Static>
+           <sc X="80.0000" Y="80.0000" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>rotationZ</Name>
+          <Static>
+           <fl>0.0000</fl>
+          </Static>
+          <Animation>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="0.0000" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>0.0000</fl>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="15000.0000" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>180.0000</fl>
+            </Vl>
+           </Key>
+           <Key OpenVegasTemporal="Linear" STp="2" Ti="29933.3333" Tp="1" V="5">
+            <TLk>0</TLk>
+            <SLk>0</SLk>
+            <Vl V="4">
+             <fl>360.0000</fl>
+            </Vl>
+           </Key>
+          </Animation>
+         </Prop>
+        </PropertyManager>
+       </LayerBase>
+      </AssetLayer>
+      <AssetLayer OpenVegasKind="Media" OpenVegasMuted="0" Version="17">
+       <AssetID>2af87c81-0eb5-3fc3-5c5d-fecc1c672a06</AssetID>
+       <LayerBase OpenVegasLabelColor="#30353e" OpenVegasLocked="0" Version="2">
+        <ID>2255aa9b-431a-4d4e-9a41-9cfbd85ee44d</ID>
+        <Name>фон.png</Name>
+        <StartFrame>0</StartFrame>
+        <EndFrame>1800</EndFrame>
+        <BlendMode>0</BlendMode>
+        <Visible>1</Visible>
+        <PropertyManager Version="7">
+         <Prop>
+          <Name>opacity</Name>
+          <Static>
+           <fl>100.0000</fl>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>anchorPoint</Name>
+          <Static>
+           <p3 X="0.0000" Y="0.0000" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>position</Name>
+          <Static>
+           <p3 X="0.0000" Y="0.0000" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>scale</Name>
+          <Static>
+           <sc X="100.0000" Y="100.0000" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>rotationZ</Name>
+          <Static>
+           <fl>0.0000</fl>
+          </Static>
+         </Prop>
+        </PropertyManager>
+       </LayerBase>
+      </AssetLayer>
+      <AssetLayer OpenVegasKind="Media" OpenVegasMuted="0" Version="17">
+       <AssetID>c97aa9da-d198-d7b8-4096-ccddd316c032</AssetID>
+       <LayerBase OpenVegasLabelColor="#30353e" OpenVegasLocked="0" Version="2">
+        <ID>6a4f0ae9-8e19-471b-81a0-2adcbd20d7d4</ID>
+        <Name>ika copyleft - Very D.I.S.C.O.mp3</Name>
+        <StartFrame>0</StartFrame>
+        <EndFrame>1800</EndFrame>
+        <BlendMode>0</BlendMode>
+        <Visible>1</Visible>
+        <PropertyManager Version="7">
+         <Prop>
+          <Name>opacity</Name>
+          <Static>
+           <fl>100.0000</fl>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>anchorPoint</Name>
+          <Static>
+           <p3 X="0.0000" Y="0.0000" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>position</Name>
+          <Static>
+           <p3 X="0.0000" Y="0.0000" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>scale</Name>
+          <Static>
+           <sc X="100.0000" Y="100.0000" Z="0"/>
+          </Static>
+         </Prop>
+         <Prop>
+          <Name>rotationZ</Name>
+          <Static>
+           <fl>0.0000</fl>
+          </Static>
+         </Prop>
+        </PropertyManager>
+       </LayerBase>
+      </AssetLayer>
+     </Layers>
+    </CompositionAsset>
+    <ImageAsset Version="3">
+     <ID>6ece8e8f-9214-9d2a-fbc9-f9332ce2a4b8</ID>
+     <Name>2_облога-круг.png</Name>
+     <ParentFolderID>00000000-0000-0000-0000-000000000000</ParentFolderID>
+     <IsHidden>0</IsHidden>
+     <Filename>D:/Devs/Cpp/OpenVegas_Effects/SAMPLES/vegfx_projects/project_1/Облоги/2_облога-круг.png</Filename>
+     <PAR>0</PAR>
+     <OverrideAlpha>0</OverrideAlpha>
+     <AlphaMode>0</AlphaMode>
+     <Instances/>
+    </ImageAsset>
+    <MediaAsset Version="10">
+     <ID>c97aa9da-d198-d7b8-4096-ccddd316c032</ID>
+     <Name>ika copyleft - Very D.I.S.C.O.mp3</Name>
+     <ParentFolderID>00000000-0000-0000-0000-000000000000</ParentFolderID>
+     <IsHidden>0</IsHidden>
+     <MediaPathType>0</MediaPathType>
+     <Filename>D:/Devs/Cpp/OpenVegas_Effects/SAMPLES/vegfx_projects/project_1/ika copyleft - Very D.I.S.C.O.mp3</Filename>
+     <IsImageSequence>0</IsImageSequence>
+     <HWAccelerate>1</HWAccelerate>
+     <MergedAudioFilename></MergedAudioFilename>
+     <MergedAudioOffset>0</MergedAudioOffset>
+     <VideoIdx>0</VideoIdx>
+     <AudioIdx>0</AudioIdx>
+     <OverrideFrameRate>0</OverrideFrameRate>
+     <FrameRate>60</FrameRate>
+     <OverridePAR>0</OverridePAR>
+     <PAR>0</PAR>
+     <OverrideAlpha>0</OverrideAlpha>
+     <AlphaMode>0</AlphaMode>
+     <OverrideColorLevels>0</OverrideColorLevels>
+     <ColorLevels>0</ColorLevels>
+     <OverrideColorSpace>0</OverrideColorSpace>
+     <ColorSpace>0</ColorSpace>
+     <InPoint>0</InPoint>
+     <OutPoint>8740</OutPoint>
+     <Instances/>
+    </MediaAsset>
+    <ImageAsset Version="3">
+     <ID>2af87c81-0eb5-3fc3-5c5d-fecc1c672a06</ID>
+     <Name>фон.png</Name>
+     <ParentFolderID>00000000-0000-0000-0000-000000000000</ParentFolderID>
+     <IsHidden>0</IsHidden>
+     <Filename>D:/Devs/Cpp/OpenVegas_Effects/SAMPLES/vegfx_projects/project_1/фон.png</Filename>
+     <PAR>0</PAR>
+     <OverrideAlpha>0</OverrideAlpha>
+     <AlphaMode>0</AlphaMode>
+     <Instances/>
+    </ImageAsset>
+   </Assets>
+  </AssetList>
+  <EditorSequence Version="5">
+   <ID>f14f9e78-b56f-49e6-b0c9-c4fec27eee6d</ID>
+   <Name>Editor</Name>
+   <CTI>0</CTI>
+   <InPoint>0</InPoint>
+   <OutPoint>17982</OutPoint>
+   <TimelineZoom>0.879643</TimelineZoom>
+   <TimelineTimeFormat>1000</TimelineTimeFormat>
+   <TimelineSnapMode>1000</TimelineSnapMode>
+   <TimelineScrollSyncMode>0</TimelineScrollSyncMode>
+   <TimelineValueGraph>false</TimelineValueGraph>
+   <TimelineGraphAutoZoom>true</TimelineGraphAutoZoom>
+   <VideoPreviewSize>1002</VideoPreviewSize>
+   <AudioPreviewSize>1002</AudioPreviewSize>
+   <PreviewMode>1002</PreviewMode>
+   <AudioVideoSettings Version="1">
+    <FrameCount>17982</FrameCount>
+    <AudioSampleRate>48000</AudioSampleRate>
+    <Width>1920</Width>
+    <Height>1080</Height>
+    <PAR>0</PAR>
+    <PARCustom>0</PARCustom>
+    <FrameRate>59.940</FrameRate>
+   </AudioVideoSettings>
+   <RenderSettings Version="1">
+    <MotionBlurEnabled>1</MotionBlurEnabled>
+    <ShutterAngle>180.000</ShutterAngle>
+    <ShutterPhase>-90.000</ShutterPhase>
+    <MaxNumOfSamples>20</MaxNumOfSamples>
+    <UseAdaptiveSamples>1</UseAdaptiveSamples>
+   </RenderSettings>
+   <Video>
+    <VideoTrack Version="3">
+     <ID>b63db3b8-17dc-4201-891d-2b2cca9b3afb</ID>
+     <Name>Video 1</Name>
+     <Visible>1</Visible>
+     <Locked>0</Locked>
+     <Objects/>
+    </VideoTrack>
+   </Video>
+   <Audio>
+    <AudioTrack Version="3">
+     <ID>5fa7fbfa-b751-47cf-88cc-25663215992d</ID>
+     <Name>Audio 1</Name>
+     <Muted>0</Muted>
+     <Solo>0</Solo>
+     <Locked>0</Locked>
+     <PropertyManager Version="7">
+      <Prop>
+       <Name>audioLevel</Name>
+       <Default>
+        <fl>0.000</fl>
+       </Default>
+      </Prop>
+      <Prop>
+       <Name>stereoBalance</Name>
+       <Default>
+        <fl>0.000</fl>
+       </Default>
+      </Prop>
+     </PropertyManager>
+     <Objects/>
+    </AudioTrack>
+   </Audio>
+   <AudioMaster>
+    <AudioTrack Version="3">
+     <ID>178748ea-26c4-4562-bb28-4ae71f7884ec</ID>
+     <Name>Master</Name>
+     <Muted>0</Muted>
+     <Solo>0</Solo>
+     <Locked>0</Locked>
+     <PropertyManager Version="7">
+      <Prop>
+       <Name>audioLevel</Name>
+       <Default>
+        <fl>0.000</fl>
+       </Default>
+      </Prop>
+      <Prop>
+       <Name>stereoBalance</Name>
+       <Default>
+        <fl>0.000</fl>
+       </Default>
+      </Prop>
+     </PropertyManager>
+     <Objects/>
+    </AudioTrack>
+   </AudioMaster>
+  </EditorSequence>
+ </Project>
+</VegasEffectsProject>

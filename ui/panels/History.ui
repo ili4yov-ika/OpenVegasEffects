@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    History panel - right dock, tab group with Library/History (objName
+    "HistoryPanel", root "HistoryWidget").
+
+    Static-layout capture of src/ui/HistoryPanel.cpp (constructor).
+    Object names are the reference ones; entries are driven by the undo stack.
+
+    Nothing is wired: the form is not added to CMakeLists.txt / the .pro and
+    is not loaded anywhere. See ui/panels/README.md for the seam.
+-->
+<ui version="4.0">
+ <class>openvegas::ui::HistoryPanel</class>
+ <widget class="QDockWidget" name="HistoryPanel">
+  <property name="windowTitle">
+   <string>History</string>
+  </property>
+  <widget class="QWidget" name="HistoryWidget">
+   <layout class="QVBoxLayout" name="historyLayout">
+    <property name="spacing"><number>2</number></property>
+    <property name="leftMargin"><number>2</number></property>
+    <property name="topMargin"><number>2</number></property>
+    <property name="rightMargin"><number>2</number></property>
+    <property name="bottomMargin"><number>2</number></property>
+    <item>
+     <layout class="QHBoxLayout" name="historyToolbar">
+      <property name="spacing"><number>1</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QToolButton" name="toolButtonUndo">
+        <property name="toolTip"><string>Undo</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="toolButtonRedo">
+        <property name="toolTip"><string>Redo</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="historyToolbarSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size><width>10</width><height>20</height></size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QToolButton" name="toolButtonClear">
+        <property name="text"><string>Clear</string></property>
+        <property name="toolTip"><string>Clear History</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextBesideIcon</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QListWidget" name="listViewHistory">
+      <property name="selectionMode">
+       <enum>QAbstractItemView::SingleSelection</enum>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    360 Viewer panel - tab in the default Viewer dock group (objName "Preview360VideoPanel",
+    root "Preview360VideoPanelWidget", view widget "360-viewer").
+
+    Static-layout capture of src/ui/Preview360VideoPanel.cpp (constructor).
+    Object names are the reference ones; the frame is painted by the promoted
+    Preview360VideoWidget (custom OpenGL widget).
+
+    Connected through setupUi() in the corresponding panel constructor;
+    the form is included in both CMake and qmake. See ui/panels/README.md.
+-->
+<ui version="4.0">
+ <class>openvegas::ui::Preview360VideoPanel</class>
+ <widget class="QDockWidget" name="Preview360VideoPanel">
+  <property name="windowTitle">
+   <string>360 Viewer</string>
+  </property>
+  <widget class="QWidget" name="Preview360VideoPanelWidget">
+   <layout class="QVBoxLayout" name="outerLayout">
+    <property name="spacing"><number>0</number></property>
+    <property name="leftMargin"><number>0</number></property>
+    <property name="topMargin"><number>5</number></property>
+    <property name="rightMargin"><number>0</number></property>
+    <property name="bottomMargin"><number>0</number></property>
+    <item>
+     <widget class="QWidget" name="viewer360">
+      <property name="special-style" stdset="0">
+       <string notr="true">360-viewer</string>
+      </property>
+      <layout class="QVBoxLayout" name="viewerLayout">
+       <property name="spacing"><number>0</number></property>
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <property name="spacing"><number>0</number></property>
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+         <item>
+          <widget class="QComboBox" name="comboBoxCurrentView">
+           <property name="focusPolicy">
+            <enum>Qt::NoFocus</enum>
+           </property>
+           <property name="toolTip"><string>Change 360 view used below</string></property>
+           <item><property name="text"><string>Front</string></property></item>
+           <item><property name="text"><string>Back</string></property></item>
+           <item><property name="text"><string>Left</string></property></item>
+           <item><property name="text"><string>Right</string></property></item>
+           <item><property name="text"><string>Top</string></property></item>
+           <item><property name="text"><string>Bottom</string></property></item>
+           <item><property name="text"><string>Custom</string></property></item>
+          </widget>
+         </item>
+         <item>
+          <spacer name="viewToolbarSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size><width>10</width><height>20</height></size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QToolButton" name="toolButtonProperties">
+           <property name="text"><string>Properties</string></property>
+           <property name="toolTip"><string>Display properties for this view</string></property>
+           <property name="autoRaise"><bool>true</bool></property>
+           <property name="focusPolicy">
+            <enum>Qt::NoFocus</enum>
+           </property>
+           <property name="icon-image" stdset="0">
+            <string notr="true">cog-properties-information</string>
+           </property>
+           <property name="no-background" stdset="0">
+            <bool>false</bool>
+           </property>
+           <property name="icon-only" stdset="0">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <!-- Canvas; promoted to Preview360VideoWidget when wired. -->
+        <widget class="QWidget" name="glWidget">
+         <property name="minimumSize">
+          <size><width>160</width><height>120</height></size>
+         </property>
+         <property name="cursor">
+          <cursorShape>OpenHandCursor</cursorShape>
+         </property>
+         <property name="stop-playback" stdset="0">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

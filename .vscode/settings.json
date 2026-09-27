@@ -1,0 +1,59 @@
+{
+  "cmake.useCMakePresets": "always",
+  "cmake.useVsDeveloperEnvironment": "always",
+  "cmake.buildTask": false,
+  "cmake.debugConfig": {
+    "type": "cppvsdbg",
+    "console": "integratedTerminal",
+    "environment": [
+      {
+        "name": "PATH",
+        "value": "C:/Qt/6.9.3/msvc2022_64/bin;${env:PATH}"
+      },
+      {
+        "name": "QT_PLUGIN_PATH",
+        "value": "C:/Qt/6.9.3/msvc2022_64/plugins"
+      }
+    ]
+  },
+  "cmake.launchBehavior": "reuseTerminal",
+  "cmake.configureOnOpen": false,
+  "cmake.automaticReconfigure": false,
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/Windows_MSVC-x64/compile_commands.json",
+  "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
+  "C_Cpp.default.cppStandard": "c++17",
+  "files.associations": {
+    "*.pro": "qmake",
+    "*.pri": "qmake",
+    "*.qrc": "xml",
+    "*.ui": "xml",
+    "*.vegfx": "xml",
+    "*.vegfxcs": "xml"
+  },
+  "files.exclude": {
+    "build/**": true,
+    "build/Windows_MSVC-x64/**": true,
+    "build/Windows_MSVC-x64-Release/**": true,
+    "build-pro/**": true,
+    "SAMPLES/VEGAS_Effects/**": true
+  },
+  "search.exclude": {
+    "build/**": true,
+    "build/Windows_MSVC-x64/**": true,
+    "build/Windows_MSVC-x64-Release/**": true,
+    "build-pro/**": true,
+    "SAMPLES/**": true
+  },
+  "terminal.integrated.env.windows": {
+    "QT_PLUGIN_PATH": "C:/Qt/6.9.3/msvc2022_64/plugins"
+  },
+  "[cpp]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+  },
+  "[c]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+  }
+}

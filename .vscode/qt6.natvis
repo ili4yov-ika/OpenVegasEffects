@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debugger visualizers for Qt 6 core types (cppvsdbg / Visual Studio).
+     Referenced from .vscode/launch.json via "visualizerFile". -->
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <Type Name="QString">
+    <DisplayString>{d.ptr,sub}</DisplayString>
+    <StringView>d.ptr,sub</StringView>
+    <Expand>
+      <Item Name="[size]" ExcludeView="simple">d.size</Item>
+      <ArrayItems>
+        <Size>d.size</Size>
+        <ValuePointer>d.ptr</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="QByteArray">
+    <DisplayString>{d.ptr,sb}</DisplayString>
+    <StringView>d.ptr,sb</StringView>
+    <Expand>
+      <Item Name="[size]" ExcludeView="simple">d.size</Item>
+      <ArrayItems>
+        <Size>d.size</Size>
+        <ValuePointer>d.ptr</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="QChar">
+    <DisplayString>{ucs,c}</DisplayString>
+  </Type>
+
+  <Type Name="QLatin1String">
+    <DisplayString>{m_data,[m_size]s}</DisplayString>
+  </Type>
+
+  <Type Name="QList&lt;*&gt;">
+    <DisplayString>{{ size = {d.size} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]" ExcludeView="simple">d.size</Item>
+      <ArrayItems>
+        <Size>d.size</Size>
+        <ValuePointer>d.ptr</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="QVarLengthArray&lt;*&gt;">
+    <DisplayString>{{ size = {s} }}</DisplayString>
+    <Expand>
+      <ArrayItems>
+        <Size>s</Size>
+        <ValuePointer>ptr</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+
+  <Type Name="QPoint">
+    <DisplayString>({xp}, {yp})</DisplayString>
+  </Type>
+  <Type Name="QPointF">
+    <DisplayString>({xp}, {yp})</DisplayString>
+  </Type>
+  <Type Name="QSize">
+    <DisplayString>({wd} x {ht})</DisplayString>
+  </Type>
+  <Type Name="QSizeF">
+    <DisplayString>({wd} x {ht})</DisplayString>
+  </Type>
+  <Type Name="QRect">
+    <DisplayString>({x1}, {y1}) {x2 - x1 + 1} x {y2 - y1 + 1}</DisplayString>
+  </Type>
+  <Type Name="QRectF">
+    <DisplayString>({xp}, {yp}) {w} x {h}</DisplayString>
+  </Type>
+
+  <Type Name="QFlags&lt;*&gt;">
+    <DisplayString>{($T1)i}</DisplayString>
+  </Type>
+
+  <Type Name="QSharedPointer&lt;*&gt;">
+    <DisplayString Condition="value == 0">(null)</DisplayString>
+    <DisplayString>{*value}</DisplayString>
+    <Expand>
+      <Item Name="[ptr]">value</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="QPointer&lt;*&gt;">
+    <DisplayString Condition="wp.d == 0 || wp.value == 0">(null)</DisplayString>
+    <DisplayString>{($T1*)wp.value}</DisplayString>
+  </Type>
+
+</AutoVisualizer>

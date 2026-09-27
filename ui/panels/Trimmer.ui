@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Trimmer panel - the "Trimmer" tab of the central stackedWidgetScreens
+    (objectName "trimmer-panel"; root widget, not a dock).
+
+    Static-layout capture of src/ui/TrimmerPanel.cpp (constructor). Object
+    names are the reference ones; the strip (TrimmerWidget "trimmer-frame")
+    is painted and the source list is populated at runtime.
+
+    Nothing is wired: the form is not added to CMakeLists.txt / the .pro and
+    is not loaded anywhere. See ui/panels/README.md for the seam.
+-->
+<ui version="4.0">
+ <class>openvegas::ui::TrimmerPanel</class>
+ <widget class="QWidget" name="trimmer-panel">
+  <property name="windowTitle">
+   <string>Trimmer</string>
+  </property>
+  <property name="acceptDrops"><bool>true</bool></property>
+  <layout class="QVBoxLayout" name="trimmerLayout">
+   <property name="spacing"><number>2</number></property>
+   <property name="leftMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+   <item>
+    <widget class="QWidget" name="trimmer-toolbar-top">
+     <layout class="QHBoxLayout" name="topBar">
+      <property name="spacing"><number>6</number></property>
+      <property name="leftMargin"><number>4</number></property>
+      <property name="topMargin"><number>2</number></property>
+      <property name="rightMargin"><number>4</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QToolButton" name="trimmerSetIn">
+        <property name="text"><string>In</string></property>
+        <property name="toolTip"><string>Set Trimmer In Point (I)</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="trimmerSetOut">
+        <property name="text"><string>Out</string></property>
+        <property name="toolTip"><string>Set Trimmer Out Point (O)</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="trimmerPosition">
+        <property name="text">
+         <string notr="true">00:00:00:00</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="topBarSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size><width>10</width><height>20</height></size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QToolButton" name="trimmerInsert">
+        <property name="text"><string>Insert</string></property>
+        <property name="toolTip"><string>Insert trimmer clip (B)</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="trimmerOverlay">
+        <property name="text"><string>Overlay</string></property>
+        <property name="toolTip"><string>Overlay trimmer clip (N)</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <!-- Clip strip; painted by TrimmerWidget::paintEvent. -->
+    <widget class="QFrame" name="trimmer-in-out">
+     <layout class="QVBoxLayout" name="inOutLayout">
+      <property name="spacing"><number>0</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QWidget" name="trimmer-frame">
+        <property name="minimumSize">
+         <size><width>0</width><height>64</height></size>
+        </property>
+        <property name="focusPolicy">
+         <enum>Qt::StrongFocus</enum>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="trimmer-toolbar-bottom">
+     <layout class="QHBoxLayout" name="bottomBar">
+      <property name="spacing"><number>6</number></property>
+      <property name="leftMargin"><number>4</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>4</number></property>
+      <property name="bottomMargin"><number>2</number></property>
+      <item>
+       <widget class="QSlider" name="TrimmerSlider">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="minimum">
+         <number>0</number>
+        </property>
+        <property name="maximum">
+         <number>1000</number>
+        </property>
+        <property name="value">
+         <number>0</number>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="trimmerRange">
+        <property name="text">
+         <string notr="true"></string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QListWidget" name="trimmerSourceList">
+     <property name="maximumSize">
+      <size><width>16777215</width><height>90</height></size>
+     </property>
+     <property name="selectionMode">
+      <enum>QAbstractItemView::SingleSelection</enum>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

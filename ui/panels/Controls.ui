@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Controls panel (EffectInspector) - right dock, front of the tab group
+    Effects | Controls (objName "controlsPanel").
+
+    Static-layout capture of src/ui/EffectInspector.cpp (constructor up to the
+    tree). Object names are the reference ones; the tree content, the pin and
+    collapse/expand behaviour are dynamic.
+
+    Nothing is wired: the form is not added to CMakeLists.txt / the .pro and
+    is not loaded anywhere. See ui/panels/README.md for the seam.
+-->
+<ui version="4.0">
+ <class>openvegas::ui::EffectInspector</class>
+ <widget class="QDockWidget" name="controlsPanel">
+  <property name="windowTitle">
+   <string>Controls</string>
+  </property>
+  <widget class="QWidget" name="ControlsPanelWidget">
+   <property name="styleSheet">
+    <string notr="true">QWidget#ControlsPanelWidget { background:#222; } QWidget#ControlsPanelWidget QTreeWidget { background:#222; border:0; } QWidget#ControlsPanelWidget QTreeWidget::item { min-height:22px; padding:0 2px; border-bottom:1px solid #292929; }</string>
+   </property>
+   <layout class="QVBoxLayout" name="controlsRootLayout">
+    <property name="spacing"><number>0</number></property>
+    <property name="leftMargin"><number>0</number></property>
+    <property name="topMargin"><number>0</number></property>
+    <property name="rightMargin"><number>0</number></property>
+    <property name="bottomMargin"><number>0</number></property>
+    <item>
+     <!-- Selection title + pin. -->
+     <widget class="QWidget" name="selectionRow">
+      <layout class="QHBoxLayout" name="selectionLayout">
+       <property name="spacing"><number>0</number></property>
+       <property name="leftMargin"><number>7</number></property>
+       <property name="topMargin"><number>3</number></property>
+       <property name="rightMargin"><number>4</number></property>
+       <property name="bottomMargin"><number>1</number></property>
+       <item>
+        <widget class="QLabel" name="controlsSelectionTitle">
+         <property name="text"><string>No layer selected</string></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="controlsPin">
+         <property name="toolTip"><string>Keep showing the current layer</string></property>
+         <property name="autoRaise"><bool>true</bool></property>
+         <property name="checkable"><bool>true</bool></property>
+         <property name="minimumSize"><size><width>20</width><height>20</height></size></property>
+         <property name="maximumSize"><size><width>20</width><height>20</height></size></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <!-- Clock glyph + bold timecode. -->
+     <widget class="QWidget" name="timeRow">
+      <layout class="QHBoxLayout" name="timeLayout">
+       <property name="spacing"><number>5</number></property>
+       <property name="leftMargin"><number>7</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>4</number></property>
+       <property name="bottomMargin"><number>2</number></property>
+       <item>
+        <widget class="QLabel" name="clockIcon">
+         <property name="text"><string notr="true"></string></property>
+         <property name="minimumSize"><size><width>14</width><height>14</height></size></property>
+         <property name="maximumSize"><size><width>14</width><height>14</height></size></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="controlsCurrentTime">
+         <property name="text"><string notr="true">00;00;00;00</string></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <!-- Filter glyph + search + collapse/expand. -->
+     <widget class="QWidget" name="searchRow">
+      <layout class="QHBoxLayout" name="searchLayout">
+       <property name="spacing"><number>4</number></property>
+       <property name="leftMargin"><number>7</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>4</number></property>
+       <property name="bottomMargin"><number>3</number></property>
+       <item>
+        <widget class="QLabel" name="filterIcon">
+         <property name="text"><string notr="true"></string></property>
+         <property name="minimumSize"><size><width>13</width><height>13</height></size></property>
+         <property name="maximumSize"><size><width>13</width><height>13</height></size></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="controlsSearch">
+         <property name="placeholderText"><string>Search in Controls</string></property>
+         <property name="frame"><bool>false</bool></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="controlsCollapseAll">
+         <property name="toolTip"><string>Collapse all sections</string></property>
+         <property name="autoRaise"><bool>true</bool></property>
+         <property name="minimumSize"><size><width>20</width><height>20</height></size></property>
+         <property name="maximumSize"><size><width>20</width><height>20</height></size></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="controlsExpandAll">
+         <property name="toolTip"><string>Expand all sections</string></property>
+         <property name="autoRaise"><bool>true</bool></property>
+         <property name="minimumSize"><size><width>20</width><height>20</height></size></property>
+         <property name="maximumSize"><size><width>20</width><height>20</height></size></property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <!-- Section/parameter tree; rows are built per composition layer. -->
+     <widget class="QTreeWidget" name="controlsTree">
+      <property name="columnCount"><number>2</number></property>
+      <property name="headerHidden"><bool>true</bool></property>
+      <property name="rootIsDecorated"><bool>true</bool></property>
+      <property name="indentation"><number>14</number></property>
+      <property name="uniformRowHeights"><bool>false</bool></property>
+      <property name="selectionMode">
+       <enum>QAbstractItemView::SingleSelection</enum>
+      </property>
+      <property name="horizontalScrollBarPolicy">
+       <enum>Qt::ScrollBarAlwaysOff</enum>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

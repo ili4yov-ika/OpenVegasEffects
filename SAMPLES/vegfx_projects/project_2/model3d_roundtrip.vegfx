@@ -1,0 +1,134 @@
+<VegasEffectsProject AppEdition="5000" AppVersion="1.0.0.0" CurrentScreen="2" Version="0">
+ <Project Version="7">
+  <ID>07acd5c8-c737-4c6f-a610-46c37668f93a</ID>
+  <Name>Untitled</Name>
+  <ProjectSettings Version="9">
+   <BPC>1000</BPC>
+   <AntialiasingMode>0</AntialiasingMode>
+   <ReflectionMapSize>512</ReflectionMapSize>
+   <ModelTextureMaxSize>4096</ModelTextureMaxSize>
+   <ShadowMapSize>2048</ShadowMapSize>
+  </ProjectSettings>
+  <AssetList Version="7">
+   <Assets>
+    <CompositionAsset Version="19">
+     <ID>194632f5-5f2b-40f9-9034-6836650676eb</ID>
+     <Name>Untitled</Name>
+     <CTI>0</CTI>
+     <In>0</In>
+     <Out>300</Out>
+     <IsPrimary>1</IsPrimary>
+     <AudioVideoSettings>
+      <FrameCount>300</FrameCount>
+      <FrameRate>30.000</FrameRate>
+      <Width>1920</Width>
+      <Height>1080</Height>
+     </AudioVideoSettings>
+     <Layers>
+      <Model3DLayer OpenVegasAnchorZ="0" OpenVegasDimension="3D" OpenVegasKind="Model" OpenVegasModelPath="C:/Users/Admin/AppData/Local/Temp/claude/d--Devs-Cpp-OpenVegas-Effects/6f18ab15-fa2b-4a83-82c4-3325e78722d2/scratchpad/model/cube.obj" OpenVegasOrientationX="0" OpenVegasOrientationY="0" OpenVegasOrientationZ="0" OpenVegasPositionZ="0" OpenVegasRotationX="30" OpenVegasRotationY="50" OpenVegasScaleZ="100" Version="17">
+       <LayerBase Version="2">
+        <ID>e2f111a3-0be1-450f-a34d-f86c468a986e</ID>
+        <Name>cube.obj</Name>
+        <StartFrame>0</StartFrame>
+        <EndFrame>0</EndFrame>
+        <BlendMode>0</BlendMode>
+        <Visible>1</Visible>
+        <PropertyManager Version="7">
+         <Prop>
+          <Name>opacity</Name>
+          <Default>
+           <fl>100</fl>
+          </Default>
+         </Prop>
+        </PropertyManager>
+       </LayerBase>
+      </Model3DLayer>
+     </Layers>
+    </CompositionAsset>
+    <MediaAsset Version="10">
+     <ID>3cd8ff5d-0ee3-eb28-c6fd-3d86f76393aa</ID>
+     <Name>cube.obj</Name>
+     <ParentFolderID>00000000-0000-0000-0000-000000000000</ParentFolderID>
+     <IsHidden>0</IsHidden>
+     <MediaPathType>0</MediaPathType>
+     <Filename>C:/Users/Admin/AppData/Local/Temp/claude/d--Devs-Cpp-OpenVegas-Effects/6f18ab15-fa2b-4a83-82c4-3325e78722d2/scratchpad/model/cube.obj</Filename>
+     <IsImageSequence>0</IsImageSequence>
+     <HWAccelerate>1</HWAccelerate>
+     <MergedAudioFilename></MergedAudioFilename>
+     <MergedAudioOffset>0</MergedAudioOffset>
+     <VideoIdx>0</VideoIdx>
+     <AudioIdx>-1</AudioIdx>
+     <OverrideFrameRate>0</OverrideFrameRate>
+     <FrameRate>30</FrameRate>
+     <OverridePAR>0</OverridePAR>
+     <PAR>0</PAR>
+     <OverrideAlpha>0</OverrideAlpha>
+     <AlphaMode>0</AlphaMode>
+     <OverrideColorLevels>0</OverrideColorLevels>
+     <ColorLevels>0</ColorLevels>
+     <OverrideColorSpace>0</OverrideColorSpace>
+     <ColorSpace>0</ColorSpace>
+     <InPoint>0</InPoint>
+     <OutPoint>0</OutPoint>
+     <Instances/>
+    </MediaAsset>
+   </Assets>
+  </AssetList>
+  <EditorSequence Version="5">
+   <ID>4f9ccf74-c544-45dc-9d88-a23796010d67</ID>
+   <Name>Editor</Name>
+   <CTI>0</CTI>
+   <InPoint>0</InPoint>
+   <OutPoint>300</OutPoint>
+   <TimelineZoom>0</TimelineZoom>
+   <TimelineTimeFormat>1000</TimelineTimeFormat>
+   <TimelineSnapMode>1000</TimelineSnapMode>
+   <TimelineScrollSyncMode>0</TimelineScrollSyncMode>
+   <VideoPreviewSize>1002</VideoPreviewSize>
+   <AudioPreviewSize>1002</AudioPreviewSize>
+   <PreviewMode>1002</PreviewMode>
+   <AudioVideoSettings Version="1">
+    <FrameCount>300</FrameCount>
+    <AudioSampleRate>48000</AudioSampleRate>
+    <Width>1920</Width>
+    <Height>1080</Height>
+    <PAR>0</PAR>
+    <PARCustom>0</PARCustom>
+    <FrameRate>30.000</FrameRate>
+   </AudioVideoSettings>
+   <RenderSettings Version="1">
+    <MotionBlurEnabled>1</MotionBlurEnabled>
+    <ShutterAngle>180.000</ShutterAngle>
+    <ShutterPhase>-90.000</ShutterPhase>
+    <MaxNumOfSamples>20</MaxNumOfSamples>
+    <UseAdaptiveSamples>1</UseAdaptiveSamples>
+   </RenderSettings>
+   <Video/>
+   <Audio/>
+   <AudioMaster>
+    <AudioTrack Version="3">
+     <ID>29dfba1d-f3fe-480a-9d52-4b5abb5ccdb6</ID>
+     <Name>Master</Name>
+     <Muted>0</Muted>
+     <Solo>0</Solo>
+     <Locked>0</Locked>
+     <PropertyManager Version="7">
+      <Prop>
+       <Name>audioLevel</Name>
+       <Default>
+        <fl>0.000</fl>
+       </Default>
+      </Prop>
+      <Prop>
+       <Name>stereoBalance</Name>
+       <Default>
+        <fl>0.000</fl>
+       </Default>
+      </Prop>
+     </PropertyManager>
+     <Objects/>
+    </AudioTrack>
+   </AudioMaster>
+  </EditorSequence>
+ </Project>
+</VegasEffectsProject>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>openvegas::ui::ExportPanel</class>
+ <widget class="QWidget" name="ExportPanel">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>420</width><height>300</height></rect>
+  </property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="leftMargin"><number>4</number></property>
+   <property name="topMargin"><number>4</number></property>
+   <property name="rightMargin"><number>4</number></property>
+   <property name="bottomMargin"><number>4</number></property>
+   <property name="spacing"><number>6</number></property>
+   <item>
+    <layout class="QFormLayout" name="formLayout">
+     <item row="0" column="0">
+      <widget class="QLabel" name="labelDirectory">
+       <property name="text"><string>Directory</string></property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <layout class="QHBoxLayout" name="directoryRow">
+       <item>
+        <widget class="QLineEdit" name="lineEditExportDirectory">
+         <property name="placeholderText"><string>Export directory</string></property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="toolButtonExportDirectory">
+         <property name="text"><string>...</string></property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="labelPreset">
+       <property name="text"><string>Preset</string></property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QComboBox" name="comboBoxPreset">
+       <item><property name="text"><string notr="true">H.264 (.mp4)</string></property></item>
+       <item><property name="text"><string notr="true">PNG (.png)</string></property></item>
+       <item><property name="text"><string notr="true">JPEG (.jpg)</string></property></item>
+       <item><property name="text"><string notr="true">OpenEXR (.exr)</string></property></item>
+       <item><property name="text"><string notr="true">ProRes (.mov)</string></property></item>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="buttonRow">
+     <item>
+      <widget class="QPushButton" name="pushButtonExportFrame">
+       <property name="text"><string>Export Frame</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButtonExportContents">
+       <property name="text"><string>Export Contents</string></property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="buttonSpacer">
+       <property name="orientation"><enum>Qt::Horizontal</enum></property>
+       <property name="sizeHint" stdset="0">
+        <size><width>40</width><height>20</height></size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QPlainTextEdit" name="plainTextProgress">
+     <property name="readOnly"><bool>true</bool></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

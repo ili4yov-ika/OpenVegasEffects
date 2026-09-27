@@ -1,0 +1,75 @@
+/*****************************************************************************
+ * Copyright (C) 2025 VLC authors and VideoLAN
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * ( at your option ) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
+ *****************************************************************************/
+import QtQuick
+import QtQuick.Window
+
+import VLC.Widgets
+import VLC.Util
+
+ImageExt {
+    id: root
+
+    textureProviderItem: textureProviderIndirection
+
+    // NOTE: Unlike `sourceClipRect`, `textureSubRect` acts as viewport for the texture,
+    //       thus faster. No manipulations are done either to the image or the texture.
+    //       Prefer using `textureSubRect` if the rectangle is not static, and prefer using
+    //       `sourceClipRect` otherwise to save system and video  memory. As a reminder,
+    //       implicit size reflects the texture size.
+    // WARNING: Using this property may be incompatible with certain filling modes.
+    property alias textureSubRect: textureProviderIndirection.textureSubRect
+
+    property alias textureProviderIndirection: textureProviderIndirection
+
+    // NOTE: Target is by default the texture provider `ImageExt` provides, but it can be
+    //       set to any texture provider. For example, `ShaderEffectSource` can be displayed
+    //       rounded this way.
+    property alias targetTextureProvider: textureProviderIndirection.source
+    targetTextureProvider: unboundTextureProviderItem ?? sourceTextureProviderItem
+
+    // No need to load images in this case:
+    loadImages: (targetTextureProvider === root.sourceTextureProviderItem)
+
+    /// <debug>
+    readonly property QtObject _sourceWindow: (targetTextureProvider?.Window.window ?? null)
+    function _onWindowChanged() {
+        console.assert((_sourceWindow && root.Window.window) ? (_sourceWindow === root.Window.window) : true)
+    }
+    on_SourceWindowChanged: {
+        _onWindowChanged()
+    }
+    Window.onWindowChanged: {
+        _onWindowChanged()
+    }
+    /// </debug>
+
+    TextureProviderIndirection {
+        id: textureProviderIndirection
+
+        readonly property bool sourceNeedsTiling: (root.fillMode === Image.Tile ||
+                                                   root.fillMode === Image.TileVertically ||
+                                                   root.fillMode === Image.TileHorizontally)
+
+        detachAtlasTextures: sourceNeedsTiling
+
+        horizontalWrapMode: sourceNeedsTiling ? TextureProviderIndirection.Repeat : TextureProviderIndirection.ClampToEdge
+        verticalWrapMode: sourceNeedsTiling ? TextureProviderIndirection.Repeat : TextureProviderIndirection.ClampToEdge
+
+        textureSubRect: sourceNeedsTiling ? Qt.rect(0, 0, root.paintedWidth, root.paintedHeight) : undefined
+    }
+}

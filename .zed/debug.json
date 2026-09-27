@@ -1,0 +1,71 @@
+[
+  {
+    "label": "OpenVegas Effects (MSVC Debug)",
+    "adapter": "CodeLLDB",
+    "request": "launch",
+    "program": "$ZED_WORKTREE_ROOT/build/Windows_MSVC-x64/OpenVegasEffects.exe",
+    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MSVC-x64",
+    "args": [],
+    "env": {
+      "PATH": "C:/Qt/6.9.3/msvc2022_64/bin",
+      "QT_PLUGIN_PATH": "C:/Qt/6.9.3/msvc2022_64/plugins",
+      "QT_QPA_PLATFORM_PLUGIN_PATH": "C:/Qt/6.9.3/msvc2022_64/plugins/platforms"
+    },
+    "stopOnEntry": false,
+    "build": "CMake: Configure + Build (MSVC Debug)"
+  },
+  {
+    "label": "OpenVegas Effects (MSVC RelWithDebInfo)",
+    "adapter": "CodeLLDB",
+    "request": "launch",
+    "program": "$ZED_WORKTREE_ROOT/build/Windows_MSVC-x64-Release/OpenVegasEffects.exe",
+    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MSVC-x64-Release",
+    "args": [],
+    "env": {
+      "PATH": "C:/Qt/6.9.3/msvc2022_64/bin",
+      "QT_PLUGIN_PATH": "C:/Qt/6.9.3/msvc2022_64/plugins",
+      "QT_QPA_PLATFORM_PLUGIN_PATH": "C:/Qt/6.9.3/msvc2022_64/plugins/platforms"
+    },
+    "stopOnEntry": false,
+    "build": "CMake: Configure + Build (MSVC Release)"
+  },
+  {
+    "label": "OpenVegasEffects (CMake MinGW Debug)",
+    "adapter": "GDB",
+    "request": "launch",
+    "program": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64/OpenVegasEffects.exe",
+    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64",
+    "env": {
+      "PATH": "C:/Qt/6.9.3/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin",
+      "QT_PLUGIN_PATH": "C:/Qt/6.9.3/mingw_64/plugins"
+    },
+    "gdb_path": "C:/Qt/Tools/mingw1310_64/bin/gdb.exe",
+    "build": "CMake: Configure + Build (MinGW Debug)"
+  },
+  {
+    "label": "OpenVegas Effects (CMake MinGW Release)",
+    "adapter": "GDB",
+    "request": "launch",
+    "program": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64/OpenVegasEffects.exe",
+    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64",
+    "env": {
+      "PATH": "C:/Qt/6.9.3/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin",
+      "QT_PLUGIN_PATH": "C:/Qt/6.9.3/mingw_64/plugins"
+    },
+    "gdb_path": "C:/Qt/Tools/mingw1310_64/bin/gdb.exe",
+    "build": "CMake: Configure + Build (MinGW Release)"
+  },
+  {
+    "label": "OpenVegas Effects (qmake MinGW Debug)",
+    "adapter": "GDB",
+    "request": "launch",
+    "program": "$ZED_WORKTREE_ROOT/build-pro/debug/OpenVegasEffects.exe",
+    "cwd": "$ZED_WORKTREE_ROOT/build-pro/debug",
+    "env": {
+      "PATH": "C:/Qt/6.9.3/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin",
+      "QT_PLUGIN_PATH": "C:/Qt/6.9.3/mingw_64/plugins"
+    },
+    "gdb_path": "C:/Qt/Tools/mingw1310_64/bin/gdb.exe",
+    "build": "qmake: Configure + Build (MinGW Debug)"
+  }
+]

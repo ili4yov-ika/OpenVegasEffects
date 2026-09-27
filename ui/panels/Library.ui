@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Library panel - right dock, tab group with Library/History (objName
+    "library").
+
+    Static-layout capture of src/ui/LibraryPanel.cpp (constructor). Object
+    names are the reference ones; the list is filled from disk at runtime.
+
+    Nothing is wired: the form is not added to CMakeLists.txt / the .pro and
+    is not loaded anywhere. See ui/panels/README.md for the seam.
+-->
+<ui version="4.0">
+ <class>openvegas::ui::LibraryPanel</class>
+ <widget class="QDockWidget" name="library">
+  <property name="windowTitle">
+   <string>Library</string>
+  </property>
+  <widget class="QWidget" name="libraryContentWidget">
+   <layout class="QVBoxLayout" name="libraryLayout">
+    <property name="spacing"><number>3</number></property>
+    <property name="leftMargin"><number>4</number></property>
+    <property name="topMargin"><number>4</number></property>
+    <property name="rightMargin"><number>4</number></property>
+    <property name="bottomMargin"><number>4</number></property>
+    <item>
+     <layout class="QHBoxLayout" name="libraryHeader">
+      <property name="spacing"><number>6</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QLabel" name="libraryStatus">
+        <property name="text"><string>Loading Library...</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="toolButtonReloadLibrary">
+        <property name="text"><string>Reload</string></property>
+        <property name="toolTip"><string>Reload library</string></property>
+        <property name="autoRaise"><bool>true</bool></property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QListWidget" name="libraryList">
+      <property name="selectionMode">
+       <enum>QAbstractItemView::SingleSelection</enum>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,6 @@
+openvegas (0.1.0-1) unstable; urgency=low
+
+  * Первый релиз OpenVegas (адаптация упаковки)
+  * MVP оболочка и VegReader v0
+
+ -- OpenVegas contributors <maintainer@example.com>  Wed, 29 Jul 2026 04:00:00 +0000

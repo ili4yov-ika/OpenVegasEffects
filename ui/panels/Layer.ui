@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Layer panel - selected layer viewer and editor in the default Viewer dock group.
+
+    Static-layout capture of src/ui/LayerPanel.cpp (constructor: stacked
+    pageLayer with breadcrumb + preview + form editor; pageNoLayer placeholder).
+    Object names are the reference ones; all field values are bound at runtime.
+
+    Connected through setupUi() in the corresponding panel constructor;
+    the form is included in both CMake and qmake. See ui/panels/README.md.
+-->
+<ui version="4.0">
+ <class>openvegas::ui::LayerPanel</class>
+ <widget class="QDockWidget" name="LayerPanel">
+  <property name="windowTitle">
+   <string>Layer</string>
+  </property>
+  <widget class="QWidget" name="LayerPanelWidget">
+   <layout class="QVBoxLayout" name="layerOuterLayout">
+    <property name="spacing"><number>0</number></property>
+    <property name="leftMargin"><number>0</number></property>
+    <property name="topMargin"><number>4</number></property>
+    <property name="rightMargin"><number>0</number></property>
+    <property name="bottomMargin"><number>0</number></property>
+    <item>
+     <widget class="QStackedWidget" name="stackedWidget">
+      <widget class="QWidget" name="pageLayer">
+       <layout class="QVBoxLayout" name="pageLayerLayout">
+        <property name="spacing"><number>6</number></property>
+        <property name="leftMargin"><number>8</number></property>
+        <property name="topMargin"><number>4</number></property>
+        <property name="rightMargin"><number>8</number></property>
+        <property name="bottomMargin"><number>8</number></property>
+        <item>
+         <widget class="QWidget" name="widgetToolbar">
+          <layout class="QVBoxLayout" name="toolbarLayout">
+           <property name="spacing"><number>0</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <item>
+            <widget class="QLabel" name="labelBreadCrumbTrail">
+             <property name="text">
+              <string notr="true"></string>
+             </property>
+             <property name="textInteractionFlags">
+              <set>Qt::TextSelectableByMouse</set>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="layerPreview">
+          <property name="minimumSize"><size><width>160</width><height>120</height></size></property>
+          <property name="alignment"><set>Qt::AlignCenter</set></property>
+          <property name="sizePolicy"><sizepolicy hsizetype="Expanding" vsizetype="Expanding"><horstretch>0</horstretch><verstretch>1</verstretch></sizepolicy></property>
+          <property name="text"><string notr="true"></string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QScrollArea" name="widgetPlayback">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
+          </property>
+          <property name="widgetResizable">
+           <bool>true</bool>
+          </property>
+          <property name="horizontalScrollBarPolicy">
+           <enum>Qt::ScrollBarAlwaysOff</enum>
+          </property>
+          <widget class="QWidget" name="layerPropertiesWidget">
+           <layout class="QFormLayout" name="form">
+            <property name="spacing"><number>6</number></property>
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>4</number></property>
+            <property name="rightMargin"><number>4</number></property>
+            <property name="bottomMargin"><number>4</number></property>
+            <property name="fieldGrowthPolicy">
+             <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+            </property>
+            <item row="0" column="0">
+             <widget class="QLabel" name="labelType">
+              <property name="text"><string>Type</string></property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QLabel" name="layerType">
+              <property name="text">
+               <string notr="true"></string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="labelName">
+              <property name="text"><string>Name</string></property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QLineEdit" name="layerName"/>
+            </item>
+            <item row="2" column="1">
+             <widget class="QCheckBox" name="layerVisible">
+              <property name="text"><string>Visible</string></property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QCheckBox" name="layerMuted">
+              <property name="text"><string>Muted</string></property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QCheckBox" name="layerLocked">
+              <property name="text"><string>Locked</string></property>
+             </widget>
+            </item>
+            <item row="5" column="0">
+             <widget class="QLabel" name="labelBlend">
+              <property name="text"><string>Blend</string></property>
+             </widget>
+            </item>
+            <item row="5" column="1">
+             <widget class="QComboBox" name="layerBlendMode"/>
+            </item>
+            <item row="6" column="0">
+             <widget class="QLabel" name="labelOpacity">
+              <property name="text"><string>Opacity</string></property>
+             </widget>
+            </item>
+            <item row="6" column="1">
+             <widget class="QDoubleSpinBox" name="layerOpacity">
+              <property name="decimals"><number>1</number></property>
+              <property name="maximum"><double>100.000000000000000</double></property>
+              <property name="suffix"><string>%</string></property>
+             </widget>
+            </item>
+            <item row="7" column="0">
+             <widget class="QLabel" name="labelDimension">
+              <property name="text"><string>Dimension</string></property>
+             </widget>
+            </item>
+            <item row="7" column="1">
+             <widget class="QComboBox" name="layerDimension">
+              <item><property name="text"><string>2D</string></property></item>
+              <item><property name="text"><string>3D</string></property></item>
+             </widget>
+            </item>
+            <item row="8" column="0">
+             <widget class="QLabel" name="labelParent">
+              <property name="text"><string>Parent</string></property>
+             </widget>
+            </item>
+            <item row="8" column="1">
+             <widget class="QComboBox" name="layerParent"/>
+            </item>
+            <item row="9" column="0">
+             <widget class="QLabel" name="labelLabel">
+              <property name="text"><string>Label</string></property>
+             </widget>
+            </item>
+            <item row="9" column="1">
+             <widget class="QPushButton" name="layerLabelColor">
+              <property name="text">
+               <string notr="true"></string>
+              </property>
+             </widget>
+            </item>
+            <item row="10" column="0">
+             <widget class="QLabel" name="planeColorLabel">
+              <property name="text"><string>Plane color</string></property>
+             </widget>
+            </item>
+            <item row="10" column="1">
+             <widget class="QPushButton" name="layerPlaneColor">
+              <property name="text">
+               <string notr="true"></string>
+              </property>
+             </widget>
+            </item>
+            <item row="12" column="0"><widget class="QLabel" name="cameraFovLabel"><property name="text"><string>Field of view</string></property></widget></item>
+            <item row="12" column="1"><widget class="QDoubleSpinBox" name="layerCameraFov"><property name="minimum"><double>20.000000000000000</double></property><property name="maximum"><double>140.000000000000000</double></property><property name="value"><double>39.600000000000001</double></property><property name="suffix"><string notr="true">°</string></property></widget></item>
+            <item row="11" column="0">
+             <widget class="QLabel" name="labelId">
+              <property name="text"><string>Layer ID</string></property>
+             </widget>
+            </item>
+            <item row="11" column="1">
+             <widget class="QLabel" name="layerID">
+              <property name="text">
+               <string notr="true"></string>
+              </property>
+              <property name="textInteractionFlags">
+               <set>Qt::TextSelectableByMouse</set>
+              </property>
+              <property name="wordWrap"><bool>true</bool></property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="pageNoLayer">
+       <layout class="QVBoxLayout" name="emptyLayout">
+        <item>
+         <widget class="QLabel" name="dummyWidget">
+          <property name="text">
+           <string notr="true"></string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+          <property name="wordWrap"><bool>true</bool></property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

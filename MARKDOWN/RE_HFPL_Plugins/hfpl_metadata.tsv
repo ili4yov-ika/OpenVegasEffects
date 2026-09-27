@@ -1,0 +1,322 @@
+file	folder	type	magicOk	major	minor	i0	i1	i2	i3	guid	identifier	name	category	vendor
+360AnimatedLasers.hfpl	2D	0	1	5	0	1	0	0	0	32D18279-7E7C-4C18-8E11A07FACA3A082	com.FXHOME.HitFilm.360AnimatedLasers	360? Animated Lasers {2?? GoPro Hero VR equirectangular equidistant}	360? Video	FXhome
+360Blur.hfpl	2D	0	1	5	0	1	0	0	0	2B8B274C-A04F-44CF-B6412B34CD09CD9D	com.FXHOME.HitFilm.360Blur	360? Blur {360? 2?? equirectangular equidistant}	360? Video	FXhome
+360Bulge.hfpl	2D	0	1	5	0	1	0	0	0	9173ED6E-C2A0-4F49-B105E7E660837303	com.FXHOME.HitFilm.360Bulge	360? Bulge {360? 2?? equirectangular equidistant}	360? Video	FXhome
+360ChannelBlur.hfpl	2D	0	1	5	0	1	0	0	0	6EF73CE2-8224-4D6B-BB6D9EEA7D7574CB	com.FXHOME.HitFilm.360ChannelBlur	360? Channel Blur {360? 2?? equirectangular equidistant}	360? Video	FXhome
+360FisheyeConverter.hfpl	2D	0	1	5	0	1	0	0	0	3EEBA54C-D2DC-4EA2-A57F0F7F259E76DD	com.FXHOME.HitFilm.360FisheyeConverter	360? Fisheye Converter {360? 2?? equirectangular equidistant samsung gear}	360? Video	FXhome
+360FractalNoise.hfpl	2D	0	1	5	0	1	0	0	0	6D213D95-4DA7-4AAC-BD18031130D25F1D	com.FXHOME.HitFilm.360FractalNoise	360? Fractal Noise {texture blob clouds energy fluid smoke 2?? GoPro Hero VR equirectangular equidistant}	360? Video	FXhome
+360Glow.hfpl	2D	0	1	5	0	1	0	0	0	3E67931D-3491-482B-B04B41747906E6A3	com.FXHOME.HitFilm.360Glow	360? Glow {360? 2?? equirectangular equidistant}	360? Video	FXhome
+360GlowDarks.hfpl	2D	0	1	5	0	1	0	0	0	917E7C20-5C8C-40F7-99072900D9C7610F	com.FXHOME.HitFilm.360GlowDarks	360? Glow Darks {360? 2?? equirectangular equidistant}	360? Video	FXhome
+360LightsaberV2Auto.hfpl	2D	0	1	5	0	1	0	0	0	AECA01AA-202D-43D3-90DC4104D849F23F	com.FXHOME.HitFilm.360LightswordAuto	360? Lightsword (2-Point Auto) {star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi neon 2?? GoPro Hero VR equirectangular equidistant}	360? Video	FXhome
+360LightsaberV2Glow.hfpl	2D	0	1	5	0	1	0	0	0	FE03D4A4-586B-4F55-B3F8490204715FC6	com.FXHOME.HitFilm.360LightswordGlow	360? Lightsword (Glow Only) {star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi neon 2?? GoPro Hero VR equirectangular equidistant}	360? Video	FXhome
+360LightsaberV2Manual.hfpl	2D	0	1	5	0	1	0	0	0	B5EA5AD7-8828-43AF-B9CE786452DC86A4	com.FXHOME.HitFilm.360LightswordManual	360? Lightsword (4-Point Manual) {star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi neon 2?? GoPro Hero VR equirectangular equidistant}	360? Video	FXhome
+360LightsaberV2Path.hfpl	2D	0	1	5	0	1	0	0	0	B1F99CD0-948C-48D8-97B953CE60AB2FB9	com.FXHOME.HitFilm.360LightswordPath	360? Neon Path {lightsword ultra star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi 2?? GoPro Hero VR equirectangular equidistant}	360? Video	FXhome
+360Magnify.hfpl	2D	0	1	5	0	1	0	0	0	7CD73E36-5DD0-47FE-93DD02E952F02251	com.FXHOME.HitFilm.360Magnify	360? Magnify {360? 2?? equirectangular equidistant}	360? Video	FXhome
+360Text.hfpl	2D	0	1	5	0	1	1	0	0	F602991B-89CD-48C3-9C4C982C3F49FB24	com.FXHOME.HitFilm.360Text	360? Text {2?? GoPro Hero VR equirectangular equidistant}	360? Video	FXhome
+360Twirl.hfpl	2D	0	1	5	0	1	0	0	0	88FD6130-FB10-4734-A09FBE493C26AD29	com.FXHOME.HitFilm.360Twirl	360? Twirl {360? 2?? equirectangular equidistant}	360? Video	FXhome
+360Unsharpen.hfpl	2D	0	1	5	0	1	0	0	0	3DEB7353-9E37-4431-80C179B1A0D29BCF	com.FXHOME.HitFilm.360Unsharpen	360? Unsharpen {360? 2?? equirectangular equidistant}	360? Video	FXhome
+3DExtrusion.hfpl	2D	0	1	5	0	1	2	0	0	1A09EB7D-B1DB-40ED-9F6C12A6B866471E	com.FXHOME.HitFilm.3DExtrusion	3D Extrusion {shape object}	Generate	FXhome
+4PointRamp.hfpl	2D	0	1	5	0	1	2	0	0	49B32290-8416-4711-94D1313F36D7E345	com.FXHOME.HitFilm.4PointColorGradient	4-Point Color Gradient {colour}	Gradients & Fills	FXhome
+ActionCamCrop.hfpl	2D	0	1	5	0	1	0	0	0	C6CFBA31-BA39-4495-94F959C1219B5BC6	com.FXHOME.HitFilm.ActionCamCrop	Action Cam Crop {GoPro Hero}	Warp	FXhome
+AlphaBrightnessContrast.hfpl	2D	0	1	5	0	1	2	0	0	1AA7D535-80DF-43B7-81C08B7B90A88DDF	com.FXHOME.HitFilm.AlphaBrightnessContrast	Alpha Brightness & Contrast	Keying|Matte Enhancement	FXhome
+AnamorphicLensFlare.hfpl	2D	0	1	5	0	1	2	0	0	4F1E909F-16DC-4431-8F55A42C785BA0B5	com.FXHOME.HitFilm.AnamorphicLensFlare	Anamorphic Lens Flare {light}	Lights & Flares	FXhome
+AngleBlur.hfpl	2D	0	1	5	0	1	2	0	0	B1195F5F-C851-4B2D-BE2F6F737B58B119	com.FXHOME.HitFilm.AngleBlur	Angle Blur	Blurs	FXhome
+AnimatedLasers.hfpl	2D	0	1	5	0	1	2	0	0	422E5F09-CF3D-4C0E-83EBCF831277CA2E	com.FXHOME.HitFilm.AnimatedLasers	Animated Lasers {star wars trek scifi sci-fi lazer}	Generate	FXhome
+AtomicParticle.hfpl	2D	0	1	5	0	1	3	0	0	0EBE37B8-05A7-4B7D-A3CE43C5586A8F71	com.FXHOME.HitFilm.AtomicParticle	Atomic Particle {form array grid fractal 3D model}	Particles & Simulation	FXhome
+AudioSpectrum.hfpl	2D	0	1	5	0	1	2	0	0	A35DEE61-42FD-44A0-9111F72A9C0A998F	com.FXHOME.HitFilm.AudioSpectrum	Audio Spectrum	Generate	FXhome
+AudioWaveform.hfpl	2D	0	1	5	0	1	2	0	0	5BEA7778-A49D-43C3-ADB94833883E4F34	com.FXHOME.HitFilm.AudioWaveform	Audio Waveform	Generate	FXhome
+AutoColor.hfpl	2D	0	1	5	0	1	2	0	0	41E229A8-3812-4114-878971C669B03AC1	com.FXHOME.HitFilm.AutoColor	Auto Color	Color Correction	FXhome
+AutoContrast.hfpl	2D	0	1	5	0	1	2	0	0	6A69709F-96EF-4094-B0F3013C0F2D2A6E	com.FXHOME.HitFilm.AutoContrast	Auto Contrast	Color Correction	FXhome
+AutoLevels.hfpl	2D	0	1	5	0	1	2	0	0	DDF5AACA-BB45-4F11-B55495E6AAC55A41	com.FXHOME.HitFilm.AutoLevels	Auto Levels	Color Correction	FXhome
+AutoLightFlares.hfpl	2D	0	1	5	0	1	2	0	0	ECBCD194-A44A-4D75-83536307DAE34052	com.FXHOME.HitFilm.AutoLightFlares	Auto Light Flares {lens}	Lights & Flares	FXhome
+AutomatedLightsword.hfpl	2D	0	1	5	0	1	2	0	0	565CAF1C-5256-4467-A39FB69046D49A71	com.FXHOME.HitFilm.AutomatedLightsaber	Lightsword (2-Point Auto) {star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi neon}	Generate	FXhome
+AutomaticStabilizer.hfpl	2D	0	1	5	0	1	0	0	0	46D16EF0-EB25-42A8-B10864F073334B73	com.FXHOME.HitFilm.AutomaticStabilizer	Auto Stabilizer	Video Clean-up	FXhome
+AutoVolumetrics.hfpl	2D	0	1	5	0	1	2	0	0	5FBC7912-0B72-4AD6-8304F34E744876C4	com.FXHOME.HitFilm.AutoVolumetrics	Auto Volumetrics {light rays god shafts}	Generate	FXhome
+BezierWarp.hfpl	2D	0	1	5	0	1	2	0	0	514EACC3-244C-497E-84BCC4B1939CC5A7	com.FXHOME.HitFilm.BezierWarp	Bezier Warp	Warp	FXhome
+BilateralBlur.hfpl	2D	0	1	5	0	1	2	0	0	9B676CE3-3FAF-495C-B68CFD23E60D37F4	com.FXHOME.HitFilm.BilateralBlur	Bilateral Blur	Blurs	FXhome
+BleachBypass.hfpl	2D	0	1	5	0	1	2	0	0	6E1D49CD-8CDC-4F99-BE23E0678E2A9A2C	com.FXHOME.HitFilm.BleachBypass	Bleach Bypass {war}	Color Grading	FXhome
+BlockDisplacement.hfpl	2D	0	1	5	0	1	0	0	0	48B4152C-EF17-4A4F-8ACDBF89EC6B6195	com.FXHOME.HitFilm.BlockDisplacement	Block Displacement	Distort	FXhome
+BloodSplat.hfpl	2D	0	1	5	0	1	2	0	0	92718EE0-CFD6-4BA4-82036939B8D3790D	com.FXHOME.HitFilm.BloodSpray	Blood Spray {liquid water}	Particles & Simulation	FXhome
+BoxBlur.hfpl	2D	0	1	5	0	1	2	0	0	69EDFE14-D1F9-451C-85A010F865E88DD3	com.FXHOME.HitFilm.Blur	Blur	Blurs	FXhome
+BrightnessContrast.hfpl	2D	0	1	5	0	1	2	0	0	5A7F5517-84D0-446E-AA52ADACE07F4A58	com.FXHOME.HitFilm.BrightnessContrast	Brightness & Contrast	Color Correction	FXhome
+Bulge.hfpl	2D	0	1	5	0	1	2	0	0	E33C2635-D03B-4F34-A99B66CBA314A4E7	com.FXHOME.HitFilm.Bulge	Bulge	Distort	FXhome
+Cartoon.hfpl	2D	0	1	5	0	1	2	0	0	3A7876CD-075F-450C-B035D3D934CC7F31	com.FXHOME.HitFilm.Cartoon	Cartoon	Stylize	FXhome
+Caustics.hfpl	2D	0	1	5	0	1	2	0	0	935C053A-04A2-48DB-B1EEEF03531D87F5	com.FXHOME.HitFilm.Caustics	Caustics {water surface ripple refraction}	Generate	FXhome
+CenterWipe.hfpl	2D	0	1	5	0	1	0	0	0	832CB1FF-A301-4E3E-945D764C5B200FCD	com.FXHOME.HitFilm.CenterWipeAnimation	Center Wipe	Animation	FXhome
+ChannelBlur.hfpl	2D	0	1	5	0	1	3	0	0	8BA3318E-19D0-47A0-9D3C2C5F944B76A8	com.FXHOME.HitFilm.ChannelBlur	Channel Blur	Channel	FXhome
+ChannelMixer.hfpl	2D	0	1	5	0	1	2	0	0	0CBCFB67-4ED3-477A-92F941C3A45C0110	com.FXHOME.HitFilm.ChannelMixer	Channel Mixer	Channel	FXhome
+ChannelSwapper.hfpl	2D	0	1	5	0	1	2	0	0	51947275-B0BA-40B5-BB7791708AE11675	com.FXHOME.HitFilm.ChannelSwapper	Channel Swapper	Channel	FXhome
+ChromaBlur.hfpl	2D	0	1	5	0	1	2	0	0	E6B63260-58F5-4E77-BD53534834668B2F	com.FXHOME.HitFilm.ChromaBlur	Chroma UV Blur	Keying	FXhome
+ChromaKey.hfpl	2D	0	1	5	0	2	2	0	0	D470E981-B977-4C5C-B8E16FF60FEBA583	com.FXHOME.HitFilm.ChromaKey	Chroma Key {greenscreen green screen bluescreen}	Keying	FXhome
+ChromaticAberration.hfpl	2D	0	1	5	0	1	0	0	0	29646992-3DEC-44D8-8C55C53FAB139EC9	com.FXHOME.HitFilm.ChromaticAberration	Chromatic Aberration	Channel	FXhome
+Chromenator.hfpl	2D	0	1	5	0	1	2	0	0	BF291310-6ECE-41F3-9BC051F0D8845A78	com.FXHOME.HitFilm.Chromenator	Chromenator {liquid metal}	Distort	FXhome
+CineStyle.hfpl	2D	0	1	5	0	1	2	0	0	F58D6728-138D-4B86-AC864FC6E770D569	com.FXHOME.HitFilm.CineStyle	Cine Style	Color Grading	FXhome
+ClassicCineStyle.hfpl	2D	0	1	5	0	1	2	0	0	A055495E-5050-4642-8D04965F791F89D7	com.FXHOME.HitFilm.ClassicCineStyle	Classic Cine Style	Color Grading	FXhome
+Clone.hfpl	2D	0	1	5	0	1	0	0	0	563BF1C1-14A9-4BFF-AA94C78D6EB19EF6	com.FXHOME.HitFilm.Clone	Clone	Generate	FXhome
+CloneStamp.hfpl	2D	0	1	5	0	1	2	0	0	9215B094-C865-4620-8D778A3575D24FD0	com.FXHOME.HitFilm.CloneStamp	Clone Stamp	Video Clean-up	FXhome
+Clouds.hfpl	2D	0	1	5	0	1	2	0	0	D2EDD732-A726-4D67-ADA0F595A3F8B8AE	com.FXHOME.HitFilm.Clouds	Clouds {texture}	Generate	FXhome
+ColorAdjustment.hfpl	2D	0	1	5	0	1	2	0	0	800C858C-8FAE-4D36-8F04D371ADC68C05	com.FXHOME.HitFilm.ColorAdjustment	Color Adjustment {colour}	Color Correction	FXhome
+Colorama.hfpl	2D	0	1	5	0	1	2	0	0	64CEC1FB-41E1-4F48-809138F335490B3F	com.FXHOME.HitFilm.Colorama	Color Cycle {colour}	Color Grading	FXhome
+ColorBalance.hfpl	2D	0	1	5	0	1	2	0	0	4FC75B02-CC9A-4315-9F99D187711A3777	com.FXHOME.HitFilm.ColorBalance	Color Balance {colour}	Color Correction	FXhome
+ColorConverter.hfpl	2D	0	1	5	0	1	2	0	0	3CF99270-695A-47D8-877CC37963E017C9	com.FXHOME.HitFilm.ColorConverter	Color Space Converter {colour}	Channel	FXhome
+ColorCorrection.hfpl	2D	0	1	5	0	1	2	0	0	B72DC2E8-34BD-4BA2-A18F0FF908EFF1EE	com.FXHOME.HitFilm.ColorCorrection	Color Correction Wheels {colour}	Color Correction	FXhome
+ColorDifferenceKey.hfpl	2D	0	1	5	0	1	2	0	0	879186EC-6D8D-4327-A763302520661085	com.FXHOME.HitFilm.ColorDifferenceKey	Color Difference Key {colour greenscreen green screen blue bluescreen}	Keying	FXhome
+ColorMap.hfpl	2D	0	1	5	0	1	2	0	0	5456D814-2838-4949-90A54150D03AF33A	com.FXHOME.HitFilm.ColorMap	Color Map {colour}	Color Grading	FXhome
+ColorPhase.hfpl	2D	0	1	5	0	1	2	0	0	83E4FE8C-2978-4E8A-B32183021DE68F47	com.FXHOME.HitFilm.ColorPhase	Color Phase {colour}	Color Grading	FXhome
+ColorTemperature.hfpl	2D	0	1	5	0	1	2	0	0	DF3BBDED-3FB4-4047-9D072B9488E9A84D	com.FXHOME.HitFilm.ColorTemperature	Color Temperature {colour}	Color Correction	FXhome
+ColorVibrance.hfpl	2D	0	1	5	0	1	2	0	0	1A733CD3-8A27-4E10-9B5CD39EE9801199	com.FXHOME.HitFilm.ColorVibrance	Color Vibrance {colour}	Color Grading	FXhome
+Cosmos.hfpl	2D	0	1	5	0	1	2	0	0	18D697B0-EB43-4111-AC76F70DEC905C82	com.FXHOME.HitFilm.Cosmos	Cosmos {stars space fly constellation telescope}	Generate	FXhome
+CreditsTextCrawl.hfpl	2D	0	1	5	0	1	2	1	0	4E1F53D7-1397-4A8B-AC055964D2D8DD31	com.FXHOME.HitFilm.CreditsTextCrawl	End Credits Crawl {titles scroll}	Generate	FXhome
+Crop.hfpl	2D	0	1	5	0	1	0	0	0	CBDE9456-19D4-400F-A02E1AB5C11845D9	com.FXHOME.HitFilm.Crop	Crop & Pan {pan zoom Ken Burns}	Video Clean-up	FXhome
+CrushBlacksWhites.hfpl	2D	0	1	5	0	1	2	0	0	7CE70E33-1738-48A8-938426EB2E0BEBBF	com.FXHOME.HitFilm.CrushBlacksWhites	Crush Blacks & Whites {clip}	Color Correction	FXhome
+CrushBlacksWhitesAlpha.hfpl	2D	0	1	5	0	1	2	0	0	7429896D-73CA-47EB-8EA16D7BFE09C469	com.FXHOME.HitFilm.CrushBlacksWhitesAlpha	Crush Blacks & Whites Alpha {clip}	Keying|Matte Enhancement	FXhome
+CustomGray.hfpl	2D	0	1	5	0	1	2	0	0	E068FD0A-01EB-4FB3-887B26C5D07475C7	com.FXHOME.HitFilm.CustomGray	Custom Gray {grey}	Color Correction	FXhome
+DayForNight.hfpl	2D	0	1	5	0	1	2	0	0	6413AC00-D5CA-4362-93CF3F85BA01E534	com.FXHOME.HitFilm.DayForNight	Day For Night	Color Grading	FXhome
+Dehaze.hfpl	2D	0	1	5	0	1	0	0	0	DD855775-BCBE-45CC-A1E953A7B59D9924	com.FXHOME.HitFilm.Dehaze	Dehaze	Color Correction	FXhome
+Deinterlace.hfpl	2D	0	1	5	0	1	2	0	0	4E43E4AE-C72B-4A00-A2325D9C836D8690	com.FXHOME.HitFilm.Deinterlace	Deinterlace	Video Clean-up	FXhome
+Demult.hfpl	2D	0	1	5	0	1	2	0	0	EB446A21-462E-4EF7-B2E0D0557C38CF3C	com.FXHOME.HitFilm.Demult	Demult {stock}	Keying	FXhome
+Denoise.hfpl	2D	0	1	5	0	1	2	0	0	68A11AEE-9F3E-4827-9BB3BB1A7F8EACD6	com.FXHOME.HitFilm.Denoise	Denoise {grain removal}	Video Clean-up	FXhome
+DepthMask.hfpl	2D	0	1	5	0	1	0	0	0	0A774E71-5032-4FFE-B865261812F18D35	com.FXHOME.HitFilm.DepthToMatte	Depth Mask	Depth	FXhome
+DepthMatte.hfpl	2D	0	1	5	0	1	0	0	0	1C485CD3-C1EF-40FC-B25D9189CC575953	com.FXHOME.HitFilm.DepthToMatte	Depth Matte	Depth	FXhome
+Derez.hfpl	2D	0	1	5	0	1	2	0	0	64BC004F-EBEF-490F-B69B8296787C2610	com.FXHOME.HitFilm.Derez	Derez (VGHS) {VGHS Freddie Wong freddiew Video Game High School}	Distort	FXhome
+DifferenceKey.hfpl	2D	0	1	5	0	1	2	0	0	B861AFE7-9838-446C-A02BC1267AE70AEF	com.FXHOME.HitFilm.DifferenceKey	Difference Key	Keying	FXhome
+Diffuse.hfpl	2D	0	1	5	0	1	2	0	0	197451EB-5829-44D4-930EE5CBF424EFBF	com.FXHOME.HitFilm.Diffuse	Diffuse {blur soft focus}	Blurs	FXhome
+DisplacementMap.hfpl	2D	0	1	5	0	1	2	0	0	69EDFE14-D1F9-451C-3DA2BC3F8A024BA1	com.FXHOME.HitFilm.DisplacementMap	Displacement	Distort	FXhome
+DistanceField.hfpl	2D	0	1	5	0	1	0	0	0	49F80878-6F76-465D-A3936A8B11A956C0	com.FXHOME.HitFilm.DistanceField	Distance Field	Generate	FXhome
+DotMatrix.hfpl	2D	0	1	5	0	1	0	0	0	E5AD4652-DC13-42DE-87B1A16320E785F0	com.FXHOME.HitFilm.DotMatrix	Dot Matrix	Grunge	FXhome
+DropShadow.hfpl	2D	0	1	5	0	1	2	0	0	268DA79F-AFAB-4556-BDE9B52D277A567C	com.FXHOME.HitFilm.DropShadow	Drop Shadow	Generate	FXhome
+DuoTone.hfpl	2D	0	1	5	0	1	2	0	0	EDF90A69-99B8-4BCB-B4B3604E11C95749	com.FXHOME.HitFilm.DuoTone	Duo Tone	Color Grading	FXhome
+Echo.hfpl	2D	0	1	5	0	1	2	0	0	3F2D00DE-B7A8-4867-84E6503CCBCFF812	com.FXHOME.HitFilm.Echo	Echo	Temporal	FXhome
+EdgeDistortion.hfpl	2D	0	1	5	0	1	0	0	0	2C7970F2-B789-4CB4-BC71AB9CCFCE83DA	com.FXHOME.HitFilm.EdgeDistortion	Edge Distortion {edge, distortion, hand, drawn, sketch, boil}	Stylize	FXhome
+Electro.hfpl	2D	0	1	5	0	1	2	0	0	07C3765C-BECD-4781-B3DE547CF064B258	com.FXHOME.HitFilm.Electro	Electro {circuit tron matrix electricity brain digital computer}	Generate	FXhome
+Emboss.hfpl	2D	0	1	5	0	1	2	0	0	8BBF57D6-2A84-459F-9B9317C60CD66B2A	com.FXHOME.HitFilm.Emboss	Emboss	Stylize	FXhome
+EnergyDistortion.hfpl	2D	0	1	5	0	1	0	0	0	8E2BDAE5-4727-400C-B5F2D43D89E9E6A0	com.FXHOME.HitFilm.EnergyDistortion	Energy Distortion {displacement}	Distort	FXhome
+EnvironmentMapTransform.hfpl	2D	0	1	5	0	1	2	0	0	C2A119FA-FE0B-465E-AF151F69F75473AB	com.FXHOME.HitFilm.EnvironmentMapTransform	360? Video Transform {Environment Map Transform}	360? Video	FXhome
+EnvironmentMapViewer.hfpl	2D	0	1	5	0	1	3	0	0	EE0440AB-1217-44CA-8AF3317B99484CBC	com.FXHOME.HitFilm.EnvironmentMapViewer	360? Viewer {video wrap around wraparound Environment Map equirectangular equidistant}	360? Video	FXhome
+ErodeWhite.hfpl	2D	0	1	5	0	1	2	0	0	DCD4DA7A-4FB5-4F9F-8F7C6F212AC7B35C	com.FXHOME.HitFilm.ErodeWhite	Erode White	Keying|Matte Enhancement	FXhome
+Evaporate.hfpl	2D	0	1	5	0	1	0	0	0	2A6AF792-9422-4759-B9F91EE664C1F1E6	com.FXHOME.HitFilm.EvaporateAnimation	Evaporate	Animation	FXhome
+Exposure.hfpl	2D	0	1	5	0	1	2	0	0	FE824DE9-F570-4DD0-B54944EEA4F84836	com.FXHOME.HitFilm.Exposure	Exposure	Color Correction	FXhome
+ExposurePro.hfpl	2D	0	1	5	0	1	0	0	0	A2BA53F7-1686-4FB9-880C204582D888DB	com.FXHOME.HitFilm.ExposurePro	Exposure Pro	Color Correction	FXhome
+Fill.hfpl	2D	0	1	5	0	1	2	0	0	08CF3DA2-59FB-4A57-ACB231F34CEFD493	com.FXHOME.HitFilm.Fill	Fill Color {colour}	Gradients & Fills	FXhome
+FilmDamage.hfpl	2D	0	1	5	0	1	2	0	0	9DE1D3DE-5228-4A3C-80AB02FC37AF85E8	com.FXHOME.HitFilm.FilmDamage	Film Damage {old archive stock}	Grunge	FXhome
+FilmGrain.hfpl	2D	0	1	5	0	1	2	0	0	9C1D5BA7-2EF8-47AB-A403722CF14B9176	com.FXHOME.HitFilm.FilmGrain	Film Grain {old archive stock noise}	Grunge	FXhome
+FindEdges.hfpl	2D	0	1	5	0	1	2	0	0	AE161C78-210E-4562-BA9F464B07C82D10	com.FXHOME.HitFilm.FindEdges	Find Edges	Stylize	FXhome
+FisheyeWarp.hfpl	2D	0	1	5	0	1	2	0	0	DB8CBE4C-4BD7-4102-9522553E08534900	com.FXHOME.HitFilm.FisheyeWarp	Spherical Warp	Warp	FXhome
+FisheyeWarp2.hfpl	2D	0	1	5	0	2	1	0	0	0B3B3E09-3549-434C-AFAA62C90B317508	com.FXHOME.HitFilm.FisheyeWarp2	Action Cam Lens Distort {Fisheye Warp Optics Compensation GoPro Hero}	Warp	FXhome
+Flame.hfpl	2D	0	1	5	0	1	2	0	0	B6C1EE37-D8F7-4A14-A015ABE79F43797C	com.FXHOME.HitFilm.Fire	Fire {flame}	Particles & Simulation	FXhome
+Flicker.hfpl	2D	0	1	5	0	1	2	0	0	32AEB8BD-18AD-4BBC-A88F9AB72C139801	com.FXHOME.HitFilm.Flicker	Flicker {flash}	Grunge	FXhome
+FluidDistortion.hfpl	2D	0	1	5	0	1	0	0	0	8E82120B-8FA9-4AFB-ABDB26A717F89679	com.FXHOME.HitFilm.FluidDistortion	Fluid Distortion {displacement}	Distort	FXhome
+FlyEye.hfpl	2D	0	1	5	0	1	2	0	0	89C15DC9-F505-4118-8BFC6C1E531BD19F	com.FXHOME.HitFilm.InsectVision	Insect Vision {fly}	Distort	FXhome
+ForceMotionBlur.hfpl	2D	0	1	5	0	1	2	0	0	4BB98437-39A6-4B74-A38E3AF25D499DD6	com.FXHOME.HitFilm.MotionTrails	Motion Trails {smallville flash superman}	Temporal	FXhome
+FractalNoise.hfpl	2D	0	1	5	0	1	2	0	0	967178B4-4620-4E47-913998C12AB1A143	com.FXHOME.HitFilm.FractalNoise	Fractal Noise {texture blob clouds energy fluid smoke}	Generate	FXhome
+FrameBlendedRetiming.hfpl	2D	0	1	5	0	1	2	0	0	DE4EF7EB-4566-446F-9504B75FB08375F7	com.FXHOME.HitFilm.Speed	Speed {time retiming}	Temporal	FXhome
+FreezeFrame.hfpl	2D	0	1	5	0	1	2	0	0	5BF24834-2565-41C1-84CF419804DD1496	com.FXHOME.HitFilm.Stutter	Stutter	Grunge	FXhome
+Gamma.hfpl	2D	0	1	5	0	1	2	0	0	59BD54B1-EF43-4DBB-B1B3F9A64E5E34B3	com.FXHOME.HitFilm.Gamma	Gamma	Color Correction	FXhome
+Gleam.hfpl	2D	0	1	5	0	1	2	0	0	5081B3D2-CEDD-4742-997B137A19C71C98	com.FXHOME.HitFilm.Gleam	Gleam {light rays shafts god}	Lights & Flares	FXhome
+Glint.hfpl	2D	0	1	5	0	1	2	0	0	7C385991-1E14-45B9-BB69BC1EF50E9984	com.FXHOME.HitFilm.Glint	Light Streaks {highlights sparkles}	Lights & Flares	FXhome
+Glow.hfpl	2D	0	1	5	0	1	2	0	0	69EDFE14-D1F9-451C-BEC435ADEDCB4E26	com.FXHOME.HitFilm.Glow	Glow	Lights & Flares	FXhome
+GlowDarks.hfpl	2D	0	1	5	0	1	2	0	0	2943624A-78F1-43BA-A2885BA59C5344C1	com.FXHOME.HitFilm.GlowDarks	Glow Darks	Stylize	FXhome
+GlowImproved.hfpl	2D	0	1	5	0	1	0	0	0	4F408AAB-4614-4F85-81DA69549EF7AAD6	com.FXHOME.HitFilm.GlowImproved	Super Glow	Lights & Flares	FXhome
+GoProLensReframe.hfpl	2D	0	1	5	0	1	0	0	0	A7916959-942D-4122-A4A27E8CBFDE0D5F	com.FXHOME.HitFilm.GoProLensReframe	GoPro Lens Reframe {360 GoPro Go Pro Overcapture Lens Reframe}	Warp	FXhome
+GradingTransfer.hfpl	2D	0	1	5	0	1	2	0	0	E2D92E92-8E31-407B-B1A07154AAFD096A	com.FXHOME.HitFilm.GradingTransfer	Grading Transfer {match}	Color Grading	FXhome
+Grain.hfpl	2D	0	1	5	0	1	2	0	0	5120161D-4161-4C6A-A55D3320A868FB39	com.FXHOME.HitFilm.Grain	Grain {noise}	Grunge	FXhome
+GrainRemoval.hfpl	2D	0	1	5	0	1	2	0	0	C106CFE3-C736-415E-B9CB875579CA9F85	com.FXHOME.HitFilm.GrainRemoval	Grain Removal {denoise}	Video Clean-up	FXhome
+Grid.hfpl	2D	0	1	5	0	1	2	0	0	D3813722-0456-42EC-B8FB82B88D186A17	com.FXHOME.HitFilm.Grid	Grid {texture}	Generate	FXhome
+HalfTone.hfpl	2D	0	1	5	0	1	2	0	0	3C0C9BE7-1FB4-4294-A7C90A847D538A33	com.FXHOME.HitFilm.HalfTone	Half Tone {half-tone}	Grunge	FXhome
+HalfToneColor.hfpl	2D	0	1	5	0	1	2	0	0	22891492-73A8-4368-8C07006E277C2FBE	com.FXHOME.HitFilm.HalfToneColor	Half Tone Color {colour half-tone}	Grunge	FXhome
+HeatDistortion.hfpl	2D	0	1	5	0	1	2	0	0	B45D1C8E-9198-4A14-8F941686D10BF12B	com.FXHOME.HitFilm.HeatDistortion	Heat Distortion {displacement}	Distort	FXhome
+HighpassSharpen.hfpl	2D	0	1	5	0	1	2	0	0	4BE96F67-DF90-460A-A5A221EC8D02CDDB	com.FXHOME.HitFilm.HighpassSharpen	Highpass Sharpen	Sharpen	FXhome
+Histogram.hfpl	2D	0	1	5	0	1	0	0	0	3E417825-69C1-46AD-83C975B2ED382FAD	com.FXHOME.HitFilm.Histogram	Histogram {scopes}	Scopes	FXhome
+Hotspots.hfpl	2D	0	1	5	0	1	2	0	0	BD0772CD-B71A-44BD-853240E06941C918	com.FXHOME.HitFilm.Hotspots	Hotspots	Color Correction	FXhome
+HSL.hfpl	2D	0	1	5	0	1	2	0	0	AF949313-4B4D-4576-949A9220E490B18D	com.FXHOME.HitFilm.HSL	Hue, Saturation & Lightness {HSL}	Color Correction	FXhome
+HueColorize.hfpl	2D	0	1	5	0	1	2	0	0	564BB76E-BDAB-4962-AFA35AC5585A57AB	com.FXHOME.HitFilm.HueColorize	Hue Colorize {colorise}	Color Grading	FXhome
+HueKey.hfpl	2D	0	1	5	0	1	2	0	0	A19E35FE-4D3D-4A85-9CC02F9BFD7FBFDC	com.FXHOME.HitFilm.HueKey	Hue & RGB Key {red green blue}	Keying	FXhome
+HueShift.hfpl	2D	0	1	5	0	1	2	0	0	D291D933-FD02-4138-A34BA222D53FFEBE	com.FXHOME.HitFilm.HueShift	Hue Shift	Color Grading	FXhome
+Hyperdrive.hfpl	2D	0	1	5	0	1	2	0	0	F3CF392C-3180-43D3-BB7A14C91AE0FC95	com.FXHOME.HitFilm.Hyperdrive	Hyperdrive {star wars trek scifi sci-fi warp speed light}	Generate	FXhome
+InnerGlow.hfpl	2D	0	1	5	0	1	0	0	0	DC6C41E0-3961-49E1-AEC8D7348E6A4086	com.FXHOME.HitFilm.InnerGlow	Inner Glow	Lights & Flares	FXhome
+Invert.hfpl	2D	0	1	5	0	1	2	0	0	846382E5-F35E-4A2A-A55F820B96DF3B5E	com.FXHOME.HitFilm.Invert	Invert	Color Grading	FXhome
+InvertAlpha.hfpl	2D	0	1	5	0	1	2	0	0	595353DD-C91D-4B03-8F2D5525E0304F92	com.FXHOME.HitFilm.InvertAlpha	Invert Alpha	Keying|Matte Enhancement	FXhome
+JitterFrames.hfpl	2D	0	1	5	0	1	2	0	0	FD09A939-3126-44BE-BCB15A4539A052D1	com.FXHOME.HitFilm.Jitter	Jitter	Grunge	FXhome
+LeaveColor.hfpl	2D	0	1	5	0	1	2	0	0	B18B0175-9C6D-4C50-82EEF0DDD118368B	com.FXHOME.HitFilm.LeaveColor	Leave Color {colour}	Stylize	FXhome
+LensBlur.hfpl	2D	0	1	5	0	1	2	0	0	4C98216A-063B-425C-8DA661D4F811B4E3	com.FXHOME.HitFilm.LensBlur	Lens Blur {bokeh depth of field}	Blurs	FXhome
+LensDirt.hfpl	2D	0	1	5	0	1	2	0	0	CFF65243-4DDA-4FF3-90D1882E213F759C	com.FXHOME.HitFilm.LensDirt	Lens Dirt {flare light}	Grunge	FXhome
+LensDistort.hfpl	2D	0	1	5	0	1	2	0	0	1AB94C1C-ACEA-41C0-8BB7695E81F52F7D	com.FXHOME.HitFilm.LensDistort	Lens Distort	Warp	FXhome
+Letterbox.hfpl	2D	0	1	5	0	1	2	0	0	C123EF43-454D-457C-BDA06189319263F8	com.FXHOME.HitFilm.Letterbox	Letterbox {black bars}	Generate	FXhome
+Levels.hfpl	2D	0	1	5	0	1	3	0	0	69EDFE14-D1F9-451C-85A000F865E88DD2	com.FXHOME.HitFilm.Levels	Levels Histogram	Color Correction	FXhome
+LightFlares.hfpl	2D	0	1	5	0	1	2	0	0	49568243-073C-46D0-8ECE070EF0E38AF5	com.FXHOME.HitFilm.LightFlares	Light Flares {lens}	Lights & Flares	FXhome
+LightFlaresV2.hfpl	2D	0	1	5	0	2	0	0	0	35CDBF0B-C8EC-43B3-A6A4DC708873D825	com.FXHOME.HitFilm.LightFlaresV2	Custom Light Flares {lens flares}	Lights & Flares	FXhome
+LightLeak.hfpl	2D	0	1	5	0	1	2	0	0	7F37C392-BA6B-49B1-A47EB7BADD825EE7	com.FXHOME.HitFilm.LightLeak	Light Leak	Lights & Flares	FXhome
+Lightning.hfpl	2D	0	1	5	0	1	2	0	0	51F48409-5E47-4193-97062467B9F60A8A	com.FXHOME.HitFilm.Lightning	Lightning & Electricity {flash tesla}	Particles & Simulation	FXhome
+LightRays.hfpl	2D	0	1	5	0	1	2	0	0	E310E60F-E3B7-4D93-B8E82017DF6FDEE8	com.FXHOME.HitFilm.LightRays	Light Rays {shafts god}	Lights & Flares	FXhome
+LightsaberV2Auto.hfpl	2D	0	1	5	0	2	0	0	0	FD03A572-5A3D-4310-BA0548283187A743	com.FXHOME.HitFilm.LightswordV2Auto	Lightsword Ultra (2-Point Auto) {star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi neon}	Generate	FXhome
+LightsaberV2Glow.hfpl	2D	0	1	5	0	2	0	0	0	92AD8694-5D67-4DEB-A8A6887A036FF878	com.FXHOME.HitFilm.LightswordV2Glow	Lightsword Ultra (Glow Only) {star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi neon}	Generate	FXhome
+LightsaberV2Manual.hfpl	2D	0	1	5	0	2	0	0	0	FE49343B-D25C-426A-A2C27ADB2C632323	com.FXHOME.HitFilm.LightswordV2Manual	Lightsword Ultra (4-Point Manual) {star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi neon}	Generate	FXhome
+LightsaberV2Path.hfpl	2D	0	1	5	0	2	0	0	0	F93F5859-FA53-4E6B-BE4DF785E3DB3ABD	com.FXHOME.HitFilm.LightswordV2Path	Neon Path {lightsword ultra star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi}	Generate	FXhome
+LightswordGlow.hfpl	2D	0	1	5	0	1	2	0	0	6271EA67-745B-4BE4-9CD9AEE4E3F7E00D	com.FXHOME.HitFilm.LightsaberGlow	Lightsword (Glow Only) {star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi neon}	Generate	FXhome
+LightWrap.hfpl	2D	0	1	5	0	1	2	0	0	6308B018-CECB-438A-A88A3AD284C4FC56	com.FXHOME.HitFilm.LightWrap	Light Wrap {spill}	Keying|Matte Enhancement	FXhome
+LinearWipe.hfpl	2D	0	1	5	0	1	0	0	0	3478BB4B-3939-4015-950CE5D6CAE844A9	com.FXHOME.HitFilm.LinearWipeAnimation	Linear Wipe	Animation	FXhome
+LuminanceKey.hfpl	2D	0	1	5	0	1	2	0	0	E1FEE0CB-C0DE-43BF-88BBC8E254BE6B9A	com.FXHOME.HitFilm.LuminanceKey	Luminance Key	Keying	FXhome
+LUT.hfpl	2D	0	1	5	0	1	2	0	0	50FF6E7F-8B37-43F6-A39A866D9F2CB338	com.FXHOME.HitFilm.LUT	LUT {look up table cube}	Color Grading	FXhome
+Magnify.hfpl	2D	0	1	5	0	1	2	0	0	C09DABBF-97CC-46BD-A30EF7D437401BBD	com.FXHOME.HitFilm.Magnify	Magnify	Distort	FXhome
+ManualLightsword.hfpl	2D	0	1	5	0	1	2	0	0	EA8D0C00-C96D-433E-BA0A9E3563CDE54D	com.FXHOME.HitFilm.ManualLightsaber	Lightsword (4-Point Manual) {star wars lightsabre lightsaber lasersword laser jedi sci-fi scifi neon}	Generate	FXhome
+MatteCleaner.hfpl	2D	0	1	5	0	1	2	0	0	693CF23D-9E81-4D44-9BF09400BDBE37B0	com.FXHOME.HitFilm.MatteCleaner	Matte Cleaner	Keying|Matte Enhancement	FXhome
+Mosaic.hfpl	2D	0	1	5	0	1	2	0	0	0D0201C7-6014-4F3F-BE24EBE367F2AD1B	com.FXHOME.HitFilm.Mosaic	Mosaic	Distort	FXhome
+MotionBlur.hfpl	2D	0	1	5	0	1	2	0	0	B487D597-CB38-4C89-A54C9AB9F2B7CCBA	com.FXHOME.HitFilm.MotionBlur	Motion Blur	Blurs	FXhome
+MotionLock.hfpl	2D	0	1	5	0	1	0	0	0	4B89B2A7-86FE-44BC-926A8B2E2A123847	com.FXHOME.HitFilm.MotionLock	Motion Lock	Video Clean-up	FXhome
+NeonGlow.hfpl	2D	0	1	5	0	1	2	0	0	6949013F-839D-48C3-B933D46310DB133C	com.FXHOME.HitFilm.NeonGlow	Neon Glow {lightsaber lightsabre}	Lights & Flares	FXhome
+Noise.hfpl	2D	0	1	5	0	1	2	0	0	23D0F855-52C4-44B0-BA851E96AE2AA014	com.FXHOME.HitFilm.Noise	Noise {grain}	Grunge	FXhome
+OilPainting.hfpl	2D	0	1	5	0	1	2	0	0	6DE5BBD9-6815-481E-9389D1AE397AF46D	com.FXHOME.HitFilm.OilPainting	Oil Painting	Stylize	FXhome
+OuterGlow.hfpl	2D	0	1	5	0	1	0	0	0	9F608C96-8F6C-45FE-B0335B405E6FB666	com.FXHOME.HitFilm.OuterGlow	Outer Glow	Lights & Flares	FXhome
+PageCurl.hfpl	2D	0	1	5	0	1	1	0	0	41D69079-D036-43EC-99B1B7A396586D1E	com.FXHOME.HitFilm.PageCurl	Page Curl {paper, fold, roll, book, turn}	Warp	FXhome
+Parallax.hfpl	2D	0	1	5	0	1	2	0	0	2F50B339-A853-475F-AD2323B004E1491E	com.FXHOME.HitFilm.Parallax	Parallax	Scene	FXhome
+PencilSketch.hfpl	2D	0	1	5	0	1	0	0	0	3F5D6D96-5A61-44A9-B9EC304056521BE6	com.FXHOME.HitFilm.PencilSketch	Pencil Sketch	Stylize	FXhome
+PerspectiveWarp.hfpl	2D	0	1	5	0	1	2	0	0	EFEA79D4-54E8-489E-9C3C821EEBD8BF52	com.FXHOME.HitFilm.PerspectiveWarp	Perspective Warp	Warp	FXhome
+Photorama.hfpl	2D	0	1	5	0	1	2	0	0	3CFAB341-859E-4FF0-8BE4067BABE46F93	com.FXHOME.HitFilm.Photorama	Photorama	Stylize	FXhome
+Pinwheel.hfpl	2D	0	1	5	0	1	0	0	0	363D933A-0A2D-4EB7-BDEE4A008EFF119F	com.FXHOME.HitFilm.Pinwheel	Pinwheel	Animation	FXhome
+PiP.hfpl	2D	0	1	5	0	1	0	0	0	CD0E79EE-4D2C-4A02-AFE96E4D05FD8D17	com.FXHOME.HitFilm.PiP	PiP	Generate	FXhome
+PixelSort.hfpl	2D	0	1	5	0	1	0	0	0	9B77C666-BB37-48E8-8E02344F932865F8	com.FXHOME.HitFilm.PixelSort	Pixel Sort	Grunge	FXhome
+PolarWarp.hfpl	2D	0	1	5	0	1	2	0	0	5E50BEA4-19F8-4EB3-97E9E767B47FF968	com.FXHOME.HitFilm.PolarWarp	Polar Warp	Warp	FXhome
+PondRipple.hfpl	2D	0	1	5	0	1	2	0	0	309C3113-59C0-4A3C-A6CE457E7D9EDC9C	com.FXHOME.HitFilm.PondRipple	Pond Ripple {water displacement}	Generate	FXhome
+Portal.hfpl	2D	0	1	5	0	1	2	0	0	81E3AFDC-2591-4528-B8F2CA81B9A104D3	com.FXHOME.HitFilm.DimensionRift	Dimension Rift {portal gun wormhole}	Generate	FXhome
+Posterize.hfpl	2D	0	1	5	0	1	2	0	0	CC9456C8-28F9-4942-B9D4A9C1F26B4BF5	com.FXHOME.HitFilm.Posterize	Posterize	Stylize	FXhome
+Projector.hfpl	2D	0	1	5	0	1	2	0	0	BF506808-3BB6-424E-985A0A5AF0C054DF	com.FXHOME.HitFilm.Projector	Projector {camera projection}	Scene	FXhome
+ProSkinRetouch.hfpl	2D	0	1	5	0	1	2	0	0	6154CA5E-9B35-4988-8FF9A89556229EC1	com.FXHOME.HitFilm.ProSkinRetouch	Pro Skin Retouch	Color Correction	FXhome
+PulpScifiTitleCrawl.hfpl	2D	0	1	5	0	1	2	1	0	C6212A3C-719A-4493-96CDD1FDE17DF145	com.FXHOME.HitFilm.StarWarsTextCrawl	Pulp Sci-fi Title Crawl {star wars flash gordon scifi sci-fi titles credits scroll}	Generate	FXhome
+Puppet.hfpl	2D	0	1	5	0	2	0	0	0	6518A6F8-AB46-452A-9614A077C7D41801	com.FXHOME.HitFilm.Puppet	Puppet	Distort	FXhome
+QuadWarp.hfpl	2D	0	1	5	0	2	2	0	0	65E96F64-7F4A-4141-A02A76EB1FB42996	com.FXHOME.HitFilm.QuadWarp	Quad Warp {corner pin}	Warp	FXhome
+RadialBlur.hfpl	2D	0	1	5	0	1	2	0	0	457C7786-74C9-4897-81A7B5F722CBE9A4	com.FXHOME.HitFilm.RadialBlur	Radial Blur	Blurs	FXhome
+RadialGradient.hfpl	2D	0	1	5	0	1	2	0	0	804EC7E8-5ABB-4589-B9B49472B1921DAE	com.FXHOME.HitFilm.RadialGradient	Radial Gradient	Gradients & Fills	FXhome
+RadialReveal.hfpl	2D	0	1	5	0	1	0	0	0	62376BBB-A382-4680-825BFDF2C9EE0BBB	com.FXHOME.HitFilm.RadialRevealAnimation	Radial Reveal	Animation	FXhome
+RadioWaves.hfpl	2D	0	1	5	0	1	2	0	0	A1215291-CDA5-476C-81DE00010434C9D9	com.FXHOME.HitFilm.RadioWaves	Radio Waves	Generate	FXhome
+RainOnGlass.hfpl	2D	0	1	5	0	1	2	0	0	A2F76168-EDB4-45AE-95BF35AD2CC7E2A2	com.FXHOME.HitFilm.RainOnGlass	Rain On Glass {water window lens}	Particles & Simulation	FXhome
+Ramp.hfpl	2D	0	1	5	0	1	2	0	0	69EDFE14-D1F9-451C-430A018F65A8372D	com.FXHOME.HitFilm.ColorGradient	Color Gradient {colour}	Gradients & Fills	FXhome
+Reflection.hfpl	2D	0	1	5	0	1	2	0	0	60BD3C2F-47B4-4EE0-B5F1487F1276511A	com.FXHOME.HitFilm.Reflection	Reflection	Generate	FXhome
+RemoveFringe.hfpl	2D	0	1	5	0	1	2	0	0	DD3AECA9-197C-46B6-BD4469231E1C95F9	com.FXHOME.HitFilm.RemoveFringe	Remove Color Matting {colour}	Keying|Matte Enhancement	FXhome
+RemoveStockBackground.hfpl	2D	0	1	5	0	1	2	0	0	4000CE2A-33A3-4EFB-A48F9067A21B762D	com.FXHOME.HitFilm.RemoveStockBackground	Remove Stock Background {clear black white}	Keying	FXhome
+Reverse.hfpl	2D	0	1	5	0	1	2	0	0	DCE39229-189C-4ABF-9E29745247FE5BEA	com.FXHOME.HitFilm.Reverse	Time Reverse	Temporal	FXhome
+RollingShutter.hfpl	2D	0	1	5	0	1	2	0	0	214A263D-89A9-479F-B6143E2B6E076380	com.FXHOME.HitFilm.RollingShutter	Rolling Shutter {jello dslr correction}	Video Clean-up	FXhome
+RoughEdges.hfpl	2D	0	1	5	0	1	0	0	0	5D4DA0EF-7DD2-413B-B72D9C7E05A18036	com.FXHOME.HitFilm.RoughEdges	Rough Edges {roughen, edge}	Stylize	FXhome
+ScanLines.hfpl	2D	0	1	5	0	1	2	0	0	C5124FED-8FDD-4E14-AA3FD13BBBBBC114	com.FXHOME.HitFilm.ScanLines	Scan Lines {TV monitor analogue CRT television}	Grunge	FXhome
+SetMatte.hfpl	2D	0	1	5	0	1	2	0	0	10DED6C2-FF84-40FE-8BD94127BFB44F16	com.FXHOME.HitFilm.SetMatte	Set Matte	Keying|Matte Enhancement	FXhome
+ShadowHighlight.hfpl	2D	0	1	5	0	1	2	0	0	644D8351-2729-46CC-A503E4681B3393AC	com.FXHOME.HitFilm.ShadowsHighlights	Shadows & Highlights	Color Grading	FXhome
+Shake.hfpl	2D	0	1	5	0	2	2	0	0	4EE6AF04-5836-447D-871A4D473253EA16	com.FXHOME.HitFilm.Shake	Shake {wobble}	Grunge	FXhome
+Sharpen.hfpl	2D	0	1	5	0	1	2	0	0	69EDFE14-D1F9-451C-43A010F8658A73D2	com.FXHOME.HitFilm.Sharpen	Sharpen	Sharpen	FXhome
+Shatter.hfpl	2D	0	1	5	0	1	3	0	0	0CDD2428-2A28-4A7F-9B78CFCA2FC72B0C	com.FXHOME.HitFilm.Shatter	Shatter {glass}	Particles & Simulation	FXhome
+SmokeDistortion.hfpl	2D	0	1	5	0	1	0	0	0	4E06F7F5-69DF-4E1A-A6E935CF0314AC8A	com.FXHOME.HitFilm.SmokeDistortion	Smoke Distortion {displacement}	Distort	FXhome
+Solarize.hfpl	2D	0	1	5	0	1	2	0	0	41E60767-A1C7-47F0-99EA47BB29DAF40B	com.FXHOME.HitFilm.Solarize	Solarize	Stylize	FXhome
+Sphere.hfpl	2D	0	1	5	0	1	2	0	0	F9F6F48F-9E00-48E7-9E5E8BB571E82CAF	com.FXHOME.HitFilm.Sphere	Sphere {planet moon orb}	Generate	FXhome
+SpillSuppressor.hfpl	2D	0	1	5	0	1	2	0	0	420D31A1-1EBE-4EDF-BF0FBAD61A89C0CB	com.FXHOME.HitFilm.SpillRemoval	Spill Removal {replacement}	Keying|Matte Enhancement	FXhome
+SplitScreenMasking.hfpl	2D	0	1	5	0	1	2	0	0	882D3075-CDC3-4E16-B0E5BD24156F7E1C	com.FXHOME.HitFilm.SplitScreenMasking	Split Screen Masking {split-screen}	Generate	FXhome
+Stroke.hfpl	2D	0	1	5	0	1	0	0	0	2A42B047-3A8F-48B9-8D8D75996E72FF94	com.FXHOME.HitFilm.Stroke	Stroke	Generate	FXhome
+SurfaceRayTrace.hfpl	2D	0	1	5	0	1	0	0	0	D89D300A-C067-41F7-875392F00F9AEBC1	com.FXHOME.HitFilm.SurfaceStudio	Surface Studio	Scene	FXhome
+Text.hfpl	2D	0	1	5	0	1	1	0	0	D551F457-116B-4B1F-9EB33AAD9EEDD687	com.FXHOME.HitFilm.Text	Text	Generate	FXhome
+ThreeStripColor.hfpl	2D	0	1	5	0	1	2	0	0	49B4F272-3CB6-460D-97B85E7BEAAB4955	com.FXHOME.HitFilm.ThreeStripColor	Three Strip Color {colour}	Color Grading	FXhome
+Threshold.hfpl	2D	0	1	5	0	1	2	0	0	0B15FD93-D597-4356-9D2FA0609FC189CF	com.FXHOME.HitFilm.Threshold	Threshold	Stylize	FXhome
+Tiles.hfpl	2D	0	1	5	0	1	2	0	0	DE57A417-1739-44E6-B4B600FD4303E94F	com.FXHOME.HitFilm.Tiles	Tile {Tiles}	Generate	FXhome
+Timecode.hfpl	2D	0	1	5	0	1	2	0	0	03E70685-0A85-46FA-9610BB44BC74CF41	com.FXHOME.HitFilm.Timecode	Timecode	Generate	FXhome
+TimeDisplace.hfpl	2D	0	1	5	0	1	2	0	0	DEDC4757-DAAA-4B7D-8E115A465DC2266E	com.FXHOME.HitFilm.TimeDispalcement	Time Displacement	Temporal	FXhome
+TimeWarp.hfpl	2D	0	1	5	0	1	2	0	0	CBEB1644-66EB-46F2-BC87AE15ACBB3788	com.FXHOME.HitFilm.ChannelTimeShift	Channel Time Shift	Channel	FXhome
+Tint.hfpl	2D	0	1	5	0	1	2	0	0	A1D3D96C-632A-45C3-81B701E0E31F9A72	com.FXHOME.HitFilm.Tint	Tint	Stylize	FXhome
+ToneColoring.hfpl	2D	0	1	5	0	1	2	0	0	56888E9B-853E-4D9C-9AA7FFEFC4566734	com.FXHOME.HitFilm.ToneColoring	Tone Coloring {shift color}	Color Correction	FXhome
+TVDamage.hfpl	2D	0	1	5	0	1	2	0	0	EEFDE0FA-9FC9-4F6F-A7179379030139A0	com.FXHOME.HitFilm.TVDamage	TV Damage {outer limits television old analogue CRT television}	Grunge	FXhome
+Twirl.hfpl	2D	0	1	5	0	1	2	0	0	73FF2E7F-A1CE-4771-947945A21EF527A8	com.FXHOME.HitFilm.Twirl	Twirl	Distort	FXhome
+TwoStripColor.hfpl	2D	0	1	5	0	1	2	0	0	DCDD3BED-467D-4CA5-BB8FADAC8CC61B58	com.FXHOME.HitFilm.TwoStripColor	Two Strip Color {colour}	Color Grading	FXhome
+Unsharpen.hfpl	2D	0	1	5	0	1	2	0	0	9346DC33-D1AB-4715-837A8FEC47A34983	com.FXHOME.HitFilm.Unsharpen	Unsharpen	Sharpen	FXhome
+Vectorscope.hfpl	2D	0	1	5	0	1	0	0	0	D8437AD8-0942-4108-9A587E79DB6F617C	com.FXHOME.HitFilm.Scopes.Vectorscope	Vectorscope {scopes}	Scopes	FXhome
+VectorStroke.hfpl	2D	0	1	5	0	1	2	0	0	FA40B770-CC21-454F-B2EC522E6D598D37	com.FXHOME.HitFilm.VectorStroke	Vector Stroke	Generate	FXhome
+VerticalVideo.hfpl	2D	0	1	5	0	1	0	0	0	98999A97-53CF-499C-9BCF48014ADBEA08	com.FXHOME.HitFilm.VerticalVideo	Vertical Video {landscape portrait phone}	Generate	FXhome
+Vibrance.hfpl	2D	0	1	5	0	1	2	0	0	F70A0B8A-B823-44EA-BA86603D7DBAF326	com.FXHOME.HitFilm.Vibrance	Vibrance	Color Grading	FXhome
+Vignette.hfpl	2D	0	1	5	0	1	2	0	0	91C6E9A0-4AB8-4605-BE90EAF391EE1F38	com.FXHOME.HitFilm.Vignette	Vignette	Color Grading	FXhome
+VignetteExposure.hfpl	2D	0	1	5	0	1	2	0	0	B1909810-528B-4EC7-A3A6D0607B2B53A4	com.FXHOME.HitFilm.VignetteExposure	Vignette Exposure	Color Grading	FXhome
+WarpVortex.hfpl	2D	0	1	5	0	1	2	0	0	8AB5D641-B1AB-4898-BBA8F0061A47C6AE	com.FXHOME.HitFilm.VortexDisplacementWarp	Vortex Displacement Warp {black hole}	Warp	FXhome
+WaterCaustics.hfpl	2D	0	1	5	0	1	2	0	0	885CE435-EE9C-4896-87DC9BE1CD3BF31F	com.FXHOME.HitFilm.WaterCaustics	Water Caustics {ripple beach river flow waves prism refraction}	Generate	FXhome
+Waveform.hfpl	2D	0	1	5	0	1	0	0	0	CDE6FB0A-BF41-4524-A6BC3BB8DAC569D6	com.FXHOME.HitFilm.Scopes.Waveform	Waveform {scopes}	Scopes	FXhome
+WaveformParade.hfpl	2D	0	1	5	0	1	0	0	0	A1D9BADE-2622-440A-A89FA4AE84141001	com.FXHOME.HitFilm.Scopes.WaveformParade	Parade {waveform scopes}	Scopes	FXhome
+Waves.hfpl	2D	0	1	5	0	1	2	0	0	35AAE5FC-3AE5-4E22-9E0A0DF6D35372D1	com.FXHOME.HitFilm.Waves	Waves	Distort	FXhome
+WhiteBalance.hfpl	2D	0	1	5	0	1	2	0	0	0B86EF82-D59F-47A5-841BC8DBB958CE3E	com.FXHOME.HitFilm.WhiteBalance	White Balance	Color Correction	FXhome
+Wireframe.hfpl	2D	0	1	5	0	1	2	0	0	9AE57801-51BF-49AD-A3D8B5DFD953696F	com.FXHOME.HitFilm.Wireframe	Wireframe {wire frame}	Generate	FXhome
+WireRemoval.hfpl	2D	0	1	5	0	1	0	0	0	6CC938C0-5E1F-409E-88FC7918FAF87F65	com.FXHOME.HitFilm.WireRemoval	Wire Removal	Video Clean-up	FXhome
+WitnessProtection.hfpl	2D	0	1	5	0	1	2	0	0	01FB7397-2E46-495A-B90BFEDBE8CDAB8E	com.FXHOME.HitFilm.WitnessProtection	Witness Protection {mosaic blur}	Distort	FXhome
+YUVColorCorrection.hfpl	2D	0	1	5	0	1	2	0	0	58662073-711A-4B96-BFFFC54953D5F694	com.FXHOME.HitFilm.YUVColorCorrection	YUV Color Correction {colour Wheels}	Color Correction	FXhome
+YUVColorTransform.hfpl	2D	0	1	5	0	1	0	0	0	C490A343-3483-4F40-B61C95C4888BC2B4	com.FXHOME.HitFilm.YUVColorTransform	YUV Color Transform {colour Wheels}	Color Correction	FXhome
+ZoomBlur.hfpl	2D	0	1	5	0	1	2	0	0	6FDBDED4-D779-4B3C-A8995A050BFA9899	com.FXHOME.HitFilm.ZoomBlur	Zoom Blur	Blurs	FXhome
+AudioEcho.hfpl	Audio	3	1	5	0	1	0	0	0	EAD3799D-0098-486F-A56904F73EA201BE	com.FXHOME.HitFilm.AudioEcho	Echo	Audio	FXhome
+AudioReverse.hfpl	Audio	3	1	5	0	1	0	0	0	5ECB9EAB-D6C4-4CE3-8A72CE45E66EB680	com.FXHOME.HitFilm.AudioReverse	Audio Reverse {speed}	Audio	FXhome
+Balance.hfpl	Audio	3	1	5	0	1	0	0	0	00DA2989-7F0F-405A-957154CAE7B89B1F	com.FXHOME.HitFilm.AudioBalance	Balance	Audio	FXhome
+Cathedral.hfpl	Audio	3	1	5	0	1	0	0	0	9360D150-6667-45CC-94D5D06E0121F74F	com.FXHOME.HitFilm.AudioCathedral	Cathedral	Audio	FXhome
+ChannelLevels.hfpl	Audio	3	1	5	0	1	0	0	0	A27EB2CF-5FB8-485B-945A5F06DDA15317	com.FXHOME.HitFilm.AudioChannelLevels	Channel Levels	Audio	FXhome
+Compressor.hfpl	Audio	3	1	5	0	1	0	0	0	5BA616B6-F51F-46EE-8CF6FEADCFCB07FD	com.FXHOME.HitFilm.AudioCompressor	Compressor {audio hard limiter}	Audio	FXhome
+DopplerShift.hfpl	Audio	3	1	5	0	1	0	0	0	8456AE4A-E917-4590-ABE5D75B15ABC93D	com.FXHOME.HitFilm.AudioDopplerShift	Doppler Shift	Audio	FXhome
+Equaliser.hfpl	Audio	3	1	5	0	1	0	0	0	7885940E-43FF-4BDF-A46D06DCF72ECD3E	com.FXHOME.HitFilm.AudioEqualiser	Equalizer	Audio	FXhome
+LargeRoom.hfpl	Audio	3	1	5	0	1	0	0	0	85A8BC4F-F212-4902-BF0FA716DD9C7D40	com.FXHOME.HitFilm.AudioLargeRoom	Large Room	Audio	FXhome
+MediumRoom.hfpl	Audio	3	1	5	0	1	0	0	0	B70C76C0-1619-4ABE-A72052024EDCD598	com.FXHOME.HitFilm.AudioMediumRoom	Medium Room	Audio	FXhome
+NoiseReduction.hfpl	Audio	3	1	5	0	1	0	0	0	C5B4667A-A8C1-4E82-92FC29ACF3091F30	com.FXHOME.HitFilm.AudioNoiseReduction	Noise Reduction	Audio	FXhome
+Pitch.hfpl	Audio	3	1	5	0	1	0	0	0	FA0EDDBE-DE07-4C15-87B8510CC35166DC	com.FXHOME.HitFilm.AudioPitch	Pitch	Audio	FXhome
+ShortwaveRadio.hfpl	Audio	3	1	5	0	1	0	0	0	314BCBC6-488F-4A49-A0A540804C9A97A9	com.FXHOME.HitFilm.AudioShortwaveRadio	Shortwave Radio	Audio	FXhome
+SmallRoom.hfpl	Audio	3	1	5	0	1	0	0	0	4836E287-407A-47F6-97D1A5E69B72C49C	com.FXHOME.HitFilm.AudioSmallRoom	Small Room	Audio	FXhome
+Telephone.hfpl	Audio	3	1	5	0	1	0	0	0	842EE54C-D422-4BDE-A82BBC26EE9A0F17	com.FXHOME.HitFilm.AudioTelephone	Telephone	Audio	FXhome
+Tone.hfpl	Audio	3	1	5	0	1	0	0	0	0B226108-0CF9-4FF3-B911C98A7EA5C3CD	com.FXHOME.HitFilm.AudioTone	Tone	Audio	FXhome
+CrossFade.hfpl	AudioTransitions	2	1	5	0	1	0	0	0	D4F0D0A6-5A27-4C55-A81FD970D6E35BD3	com.FXHOME.HitFilm.AudioCrossFade	Cross Fade	Transitions - Audio	FXhome
+Fade.hfpl	AudioTransitions	2	1	5	0	1	0	0	0	E1E8EDEC-74DA-46EB-B4C3F6BCACC4A2F3	com.FXHOME.HitFilm.AudioFade	Fade	Transitions - Audio	FXhome
+Acceleration.hfpl	Behavior	5	1	5	0	1	0	1	0	F5D00BED-4C2F-4609-AEDD7DF755BF5AFA	com.FXHOME.HitFilm.Acceleration	Acceleration	Behavior	FXhome
+AttractTo.hfpl	Behavior	5	1	5	0	1	0	0	0	BE61D0C8-6D07-42F0-81B199382BED2484	com.FXHOME.HitFilm.AttractTo	Attract To	Behavior	FXhome
+CentralSpiral.hfpl	Behavior	5	1	5	0	1	0	0	0	321B9222-0FF9-4245-AF5F9BB343C6B81A	com.FXHOME.HitFilm.CentralSpiral	Central Spiral	Behavior	FXhome
+CinemaStyle.hfpl	Behavior	5	1	5	0	1	0	0	0	B64BB6DE-44F3-494F-8C63611D9129D98C	com.FXHOME.HitFilm.CinemaStyle	Cinema Style	Behavior	FXhome
+DoomoDesigns.hfpl	Behavior	5	1	5	0	1	0	0	0	45333BA9-EAB2-42AB-9F1056CDE24608B6	com.FXHOME.HitFilm.DoomoDesigns	Doomo Designs	Behavior	FXhome
+DownDirInsert.hfpl	Behavior	5	1	5	0	1	0	0	0	5F1894A1-791D-445D-86B4A2C043DE439C	com.FXHOME.HitFilm.DownDirInsert	Down Dir Insert	Behavior	FXhome
+DownInsert.hfpl	Behavior	5	1	5	0	1	0	0	0	E0378924-93FA-4885-9CFB35FB3ABA8937	com.FXHOME.HitFilm.DownInsert	Down Insert	Behavior	FXhome
+DownRoll.hfpl	Behavior	5	1	5	0	1	0	0	0	FA5DF7A7-574D-45BF-967FF9787B7B416A	com.FXHOME.HitFilm.DownRoll	Down Roll	Behavior	FXhome
+Drag.hfpl	Behavior	5	1	5	0	1	0	0	0	9B978A6F-437B-43A2-A1B8D6D57662E548	com.FXHOME.HitFilm.Drag	Drag	Behavior	FXhome
+Drop.hfpl	Behavior	5	1	5	0	1	0	0	0	4A0C3DC4-3B52-4C06-9D2CC7B9C7469AC9	com.FXHOME.HitFilm.Drop	Drop	Behavior	FXhome
+DropInByChar.hfpl	Behavior	5	1	5	0	1	0	0	0	53674F1B-5F64-4323-ABBAA21702F5E121	com.FXHOME.HitFilm.DropInByChar	Drop In By Character	Behavior	FXhome
+Expansion.hfpl	Behavior	5	1	5	0	1	0	0	0	C7B3103F-F939-44A1-A2BC7AEBEEE773A0	com.FXHOME.HitFilm.Expansion	Expansion	Behavior	FXhome
+FadeBehavior.hfpl	Behavior	5	1	5	0	1	0	0	0	54057DD1-F7E3-4245-AD51DD0B85F203F5	com.FXHOME.HitFilm.AnimationFade	Fade	Behavior	FXhome
+FlyInFadeOut.hfpl	Behavior	5	1	5	0	1	0	0	0	F6795DE8-DD19-42EA-A05F2980003AA35D	com.FXHOME.HitFilm.FlyInFadeOut	Fly In and Fade Out	Behavior	FXhome
+FlyInFlyOut.hfpl	Behavior	5	1	5	0	1	0	0	0	E3A7E4CA-7D25-419A-B9E83EF3397535BF	com.FXHOME.HitFilm.FlyInFlyOut	Fly In and Fly Out	Behavior	FXhome
+FlyToZoomIn.hfpl	Behavior	5	1	5	0	1	0	0	0	0BDFB593-E79D-46B0-82BD5088D668948F	com.FXHOME.HitFilm.FlyToZoomIn	Fly To Zoom In	Behavior	FXhome
+Follow.hfpl	Behavior	5	1	5	0	1	0	0	0	7BA11C08-6D42-4F08-A8CDA617A2637419	com.FXHOME.HitFilm.Follow	Follow	Behavior	FXhome
+Gravity.hfpl	Behavior	5	1	5	0	1	0	0	0	8F5B451C-49BC-4F31-BC75D27EF99E4F0B	com.FXHOME.HitFilm.Gravity	Gravity	Behavior	FXhome
+LeftDirInsert.hfpl	Behavior	5	1	5	0	1	0	0	0	FDAA6023-9BF5-405F-B78DA1298A3E39FA	com.FXHOME.HitFilm.LeftDirInsert	Left Dir Insert	Behavior	FXhome
+LeftRoll.hfpl	Behavior	5	1	5	0	1	0	0	0	53C7029E-3A2A-4D1E-A589AE182B8CE351	com.FXHOME.HitFilm.LeftRoll	Left Roll	Behavior	FXhome
+MotionTrack.hfpl	Behavior	5	1	5	0	1	0	0	0	F869A296-33EB-48F7-9E33C0490E5E8CE8	com.FXHOME.HitFilm.MotionTrack	Motion Track	Behavior	FXhome
+PositionMix.hfpl	Behavior	5	1	5	0	1	0	0	0	F4B11908-0D5F-4812-BD9F0140693E6590	com.FXHOME.HitFilm.PositionMix	Mix Parent Position	Behavior	FXhome
+Push.hfpl	Behavior	5	1	5	0	1	0	0	0	99C0B4AC-E15F-4C23-94DFBF4FE1DA8DC9	com.FXHOME.HitFilm.PushAnimation	Push	Behavior	FXhome
+Random.hfpl	Behavior	5	1	5	0	1	0	0	0	4CF4596A-26C2-4B92-9941CD8E0C07388F	com.FXHOME.HitFilm.Random	Randomized Insert	Behavior	FXhome
+Random2.hfpl	Behavior	5	1	5	0	1	0	0	0	6038A96D-30D3-4DAC-B38F58E55C740413	com.FXHOME.HitFilm.Random2	Randomized Reveal	Behavior	FXhome
+RepelFrom.hfpl	Behavior	5	1	5	0	1	0	0	0	2883AB5E-1EF7-4558-8F89EDEE136ECF14	com.FXHOME.HitFilm.RepelFrom	Repel From	Behavior	FXhome
+RichTick.hfpl	Behavior	5	1	5	0	1	0	0	0	8E3AEB1A-ECC4-40E7-A58F7356C6FA1681	com.FXHOME.HitFilm.RichTick	Rich Tick	Behavior	FXhome
+RightDirInsert.hfpl	Behavior	5	1	5	0	1	0	0	0	6489B59B-A797-4656-B0FA55DBAEE601A6	com.FXHOME.HitFilm.RightDirInsert	Right Dir Insert	Behavior	FXhome
+RightRoll.hfpl	Behavior	5	1	5	0	1	0	0	0	CCD969CA-A3EC-4BCA-A81D32A4A9E9B2E0	com.FXHOME.HitFilm.RightRoll	Right Roll	Behavior	FXhome
+RotateByLayer.hfpl	Behavior	5	1	5	0	1	0	0	0	B8D8CD16-EFA9-40C0-BC5C8A64CFECECC4	com.FXHOME.HitFilm.RotateByLayer	Rotate By Layer	Behavior	FXhome
+ShuffleIn.hfpl	Behavior	5	1	5	0	1	0	0	0	1FA2760F-DC24-4827-8DB10E54801F10B0	com.FXHOME.HitFilm.ShuffleIn	Shuffle In	Behavior	FXhome
+StretchAndZoomIn.hfpl	Behavior	5	1	5	0	1	0	0	0	887AEA1D-B2B2-44A1-8EE47FB285DA8AA7	com.FXHOME.HitFilm.StretchAndZoomIn	Fly In	Behavior	FXhome
+StringFade.hfpl	Behavior	5	1	5	0	1	0	0	0	3FFE5BF8-4B19-4C04-AF58CEE9C20AB9C1	com.FXHOME.HitFilm.StringFade	String Fade	Behavior	FXhome
+Throw.hfpl	Behavior	5	1	5	0	1	0	0	0	C561C23F-C5B7-4E22-8D7DF554AE4E486C	com.FXHOME.HitFilm.Throw	Throw	Behavior	FXhome
+TinyZoom.hfpl	Behavior	5	1	5	0	1	0	0	0	EC49A76D-C245-40EA-A0CF319191FFC36E	com.FXHOME.HitFilm.TinyZoom	Tiny Zoom	Behavior	FXhome
+TwirlBehavior.hfpl	Behavior	5	1	5	0	1	0	0	0	3EEA4534-4F90-4829-9F62571012A25DC7	com.FXHOME.HitFilm.TwirlAnimation	Twirl	Behavior	FXhome
+Typewriter.hfpl	Behavior	5	1	5	0	1	0	0	0	3B6FF0C5-FF88-4045-B5BBBF7590CAF80B	com.FXHOME.HitFilm.Typewriter	Typewriter	Behavior	FXhome
+UpDirInsert.hfpl	Behavior	5	1	5	0	1	0	0	0	80B4C274-B0B0-40D9-8874EEAAFAA247BC	com.FXHOME.HitFilm.UpDirInsert	Up Dir Insert	Behavior	FXhome
+UpInsert.hfpl	Behavior	5	1	5	0	1	0	0	0	32597075-6191-4A0D-8DFFC22BDB65F16C	com.FXHOME.HitFilm.UpInsert	Up Insert	Behavior	FXhome
+UpRoll.hfpl	Behavior	5	1	5	0	1	0	0	0	369FE34A-26F1-4384-AF6AABF07C224131	com.FXHOME.HitFilm.UpRoll	Up Roll	Behavior	FXhome
+WavyStyle.hfpl	Behavior	5	1	5	0	1	0	0	0	333E3A37-EDFD-4824-837D619A4B6A7327	com.FXHOME.HitFilm.WavyStyle	Wavy Style	Behavior	FXhome
+ZoomIn.hfpl	Behavior	5	1	5	0	1	0	0	0	FAB2DCE3-4AB9-4A01-B964FDB58E4DD31A	com.FXHOME.HitFilm.ZoomIn	Zoom In	Behavior	FXhome
+ZoomOut.hfpl	Behavior	5	1	5	0	1	0	0	0	991D0321-24EE-423D-87CA8F23D2A4690B	com.FXHOME.HitFilm.ZoomOut	Zoom Out	Behavior	FXhome
+BendGeometry.hfpl	Geometry	4	1	5	0	1	0	0	0	F315DB80-8242-49EE-9CFC10D459C9CB14	com.FXHOME.HitFilm.BendGeometry	Bend	Geometry	FXhome
+Bevel.hfpl	Geometry	4	1	5	0	1	0	0	0	554CE7D1-2ECE-4D2E-BB45CAE637F61825	com.FXHOME.HitFilm.Bevel	Bevel	Geometry	FXhome
+Extrude.hfpl	Geometry	4	1	5	0	1	0	0	0	78CB0067-16ED-433C-9E48B9AB81CF5534	com.FXHOME.HitFilm.Extrude	Extrude	Geometry	FXhome
+RotateGeometry.hfpl	Geometry	4	1	5	0	1	0	0	0	AAF54442-8135-47AF-AEC909D88DF87931	com.FXHOME.HitFilm.RotateGeometry	Rotate	Geometry	FXhome
+AdditiveDissolve.hfpl	VideoTransitions	1	1	5	0	1	0	0	0	0A4C6215-BEA8-40EB-824A1C42AE00B3A9	com.FXHOME.HitFilm.AdditiveDissolve	Additive Dissolve	Transitions - Video|Dissolve	FXhome
+ClockWipe.hfpl	VideoTransitions	1	1	5	0	1	1	0	0	602501B2-8643-4D63-B8EC9A6A9818ED12	com.FXHOME.HitFilm.ClockWipe	Clock Wipe	Transitions - Video|Wipe	FXhome
+CrossDissolve.hfpl	VideoTransitions	1	1	5	0	1	0	0	0	E24BF6AB-9513-4138-B233E7E689D79E52	com.FXHOME.HitFilm.CrossDissolve	Cross Dissolve	Transitions - Video|Dissolve	FXhome
+CrossZoom.hfpl	VideoTransitions	1	1	5	0	1	1	0	0	3A2A846C-53BF-42DC-9EE475B7D8ECB8B4	com.FXHOME.HitFilm.CrossZoom	Cross Zoom	Transitions - Video|Zoom	FXhome
+DitherDissolve.hfpl	VideoTransitions	1	1	5	0	1	0	0	0	9092CE38-7F41-4B1F-8B91497601A3BB29	com.FXHOME.HitFilm.DitherDissolve	Dither Dissolve	Transitions - Video|Dissolve	FXhome
+FadeTransition.hfpl	VideoTransitions	1	1	5	0	1	0	0	0	DF54D72A-9C09-4B7B-8A3E987FDEA7C7B2	com.FXHOME.HitFilm.FadeToColor	Fade to Color {colour}	Transitions - Video	FXhome
+Iris.hfpl	VideoTransitions	1	1	5	0	1	0	0	0	FD71E37D-7E86-49C2-86817434AF3CE604	com.FXHOME.HitFilm.Iris	Iris	Transitions - Video	FXhome
+LightLeakTransition.hfpl	VideoTransitions	1	1	5	0	1	0	0	0	B6FFCF47-B3D6-4717-959BFE941E156FA6	com.FXHOME.HitFilm.LightLeakTransition	Light Leak	Transitions - Video|Dissolve	FXhome
+LinearWipeTransition.hfpl	VideoTransitions	1	1	5	0	1	0	0	0	DC4A2A0C-A2AF-467D-8C48E42FF6F316DB	com.FXHOME.HitFilm.LinearWipe	Linear Wipe	Transitions - Video|Wipe	FXhome
+PageTurnTransition.hfpl	VideoTransitions	1	1	5	0	1	0	0	0	C490F1D9-02DC-4D61-9A1BA3E969EAA031	com.FXHOME.HitFilm.PageTurn	Page Turn {paper, curl, roll, fold, book}	Transitions - Video	FXhome
+PushTransition.hfpl	VideoTransitions	1	1	5	0	1	1	0	0	3A98A255-9297-4C10-AFA876CF45789F8C	com.FXHOME.HitFilm.PushTransition	Push	Transitions - Video|Motion	FXhome
+RadialWipe.hfpl	VideoTransitions	1	1	5	0	1	1	0	0	8F823DD2-AE1A-4B64-8EAC87DE2B1C175F	com.FXHOME.HitFilm.RadialWipe	Radial Wipe	Transitions - Video|Wipe	FXhome
+SlideTransition.hfpl	VideoTransitions	1	1	5	0	1	1	0	0	15DA34DE-2D05-4B36-AAC285E900C90DF9	com.FXHOME.HitFilm.SlideTransition	Slide	Transitions - Video|Motion	FXhome
+Split.hfpl	VideoTransitions	1	1	5	0	1	1	0	0	91F68F34-AF70-480C-88677DFC6CC1D909	com.FXHOME.HitFilm.SplitTransition	Split	Transitions - Video|Motion	FXhome
+Zoom.hfpl	VideoTransitions	1	1	5	0	1	1	0	0	9BD7BE42-BF4D-4F73-A2D19A3EE2F833F4	com.FXHOME.HitFilm.ZoomTransition	Zoom	Transitions - Video|Zoom	FXhome

@@ -1,0 +1,1998 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VegasEffectsProject Version="0" CurrentScreen="2" AppVersion="5.0.2.0" AppEdition="5000">
+    <Project Version="7">
+        <ID>1bd8b759-d488-4b04-8e3d-d1d3bf27b8ea</ID>
+        <Name>Project.vegfx</Name>
+        <ProjectSettings Version="9">
+            <BPC>1000</BPC>
+            <AntialiasingMode>1</AntialiasingMode>
+            <ReflectionMapSize>512</ReflectionMapSize>
+            <ModelTextureMaxSize>4096</ModelTextureMaxSize>
+            <ShadowMapSize>2048</ShadowMapSize>
+            <LimitVideoDecodingTo8bit>0</LimitVideoDecodingTo8bit>
+            <UseLinearColor>0</UseLinearColor>
+        </ProjectSettings>
+        <AssetList Version="7">
+            <Assets>
+                <CompositionAsset Version="19">
+                    <ID>ce5943ba-c452-4ff0-a12f-3bb72a4af3f1</ID>
+                    <Name>Облога</Name>
+                    <ParentFolderID>00000000-0000-0000-0000-000000000000</ParentFolderID>
+                    <IsHidden>0</IsHidden>
+                    <CTI>1370</CTI>
+                    <InPoint>0</InPoint>
+                    <OutPoint>1800</OutPoint>
+                    <TimelineZoom>0</TimelineZoom>
+                    <SplitterPosition>440</SplitterPosition>
+                    <TimelineTimeFormat>1000</TimelineTimeFormat>
+                    <TimelineSnapMode>1000</TimelineSnapMode>
+                    <IsPrimary>1</IsPrimary>
+                    <AudioVideoSettings Version="1">
+                        <FrameCount>2100</FrameCount>
+                        <AudioSampleRate>48000</AudioSampleRate>
+                        <Width>1080</Width>
+                        <Height>1920</Height>
+                        <PAR>0</PAR>
+                        <PARCustom>1</PARCustom>
+                        <FrameRate>60</FrameRate>
+                    </AudioVideoSettings>
+                    <RenderSettings Version="2">
+                        <FogEnabled>0</FogEnabled>
+                        <FogNearDistance>900</FogNearDistance>
+                        <FogFarDistance>2000</FogFarDistance>
+                        <FogDensity>1</FogDensity>
+                        <FogColor A="1" R="0" G="0" B="0" />
+                        <FogFalloff>0</FogFalloff>
+                        <MotionBlurEnabled>1</MotionBlurEnabled>
+                        <ShutterAngle>180</ShutterAngle>
+                        <ShutterPhase>-90</ShutterPhase>
+                        <MaxNumOfSamples>20</MaxNumOfSamples>
+                        <UseAdaptiveSamples>1</UseAdaptiveSamples>
+                    </RenderSettings>
+                    <Layers>
+                        <TextLayer Version="13">
+                            <Dimensions>0</Dimensions>
+                            <IncludeInDepthMap>1</IncludeInDepthMap>
+                            <TextBox Version="1">
+                                <ID>e3b896df-716b-4182-9845-6127f857d315</ID>
+                                <MinX>-295.164</MinX>
+                                <MaxX>295.164</MaxX>
+                                <MinY>-11.529</MinY>
+                                <MaxY>56.852</MaxY>
+                                <Mode>0</Mode>
+                                <VerticalAlignment>1</VerticalAlignment>
+                                <TopIndentation>0</TopIndentation>
+                                <BottomIndentation>0</BottomIndentation>
+                                <BackgroundEnable>0</BackgroundEnable>
+                                <BackgroundOpacity>100</BackgroundOpacity>
+                                <BackgroundExpansionX>0</BackgroundExpansionX>
+                                <BackgroundExpansionY>0</BackgroundExpansionY>
+                                <BackgroundExpandLink>0</BackgroundExpandLink>
+                                <BackgroundRoundness>0</BackgroundRoundness>
+                                <BackgroundColor A="1" R="0" G="0" B="0" />
+                                <Tokens>
+                                    <Tk Fi="0" Tp="1" Jf="1" Sb="0" Li="0" V="2" Sa="0" Ri="0" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="68" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="97" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="102" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="116" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="32" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="80" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="117" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="110" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="107" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="32" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="120" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="32" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="79" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="116" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="116" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="97" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="119" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="97" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="110" />
+                                    <Tk Tp="0" Ft="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee" V="2"
+                                        Ch="32" />
+                                </Tokens>
+                                <Formats>
+                                    <Format Size="61" Underline="0" HorizontalScale="1" Script="0"
+                                        BaselineShift="0" Version="4" Tracking="0" Strikethrough="0"
+                                        Capitalization="0" ID="6876ffa9-c2bc-463d-9cc4-a2b1f62587ee"
+                                        Leading="1" StrokeLocation="0" VerticalScale="1">
+                                        <Family>Ubuntu</Family>
+                                        <Style>Ubuntu Medium</Style>
+                                        <PostscriptName>Ubuntu-Medium</PostscriptName>
+                                        <FillColor A="1" R="1" G="1" B="1" />
+                                    </Format>
+                                </Formats>
+                            </TextBox>
+                            <Effects />
+                            <GeometryEffects />
+                            <Masks />
+                            <LayerBase Version="2">
+                                <ID>ac462278-fc4e-435b-b73b-33df2b127516</ID>
+                                <Name>New Text</Name>
+                                <CompID>ce5943ba-c452-4ff0-a12f-3bb72a4af3f1</CompID>
+                                <ParentLayerID>00000000-0000-0000-0000-000000000000</ParentLayerID>
+                                <StartFrame>0</StartFrame>
+                                <EndFrame>1800</EndFrame>
+                                <BlendMode>0</BlendMode>
+                                <Visible>1</Visible>
+                                <Muted>0</Muted>
+                                <Locked>0</Locked>
+                                <MotionBlurOn>0</MotionBlurOn>
+                                <Label>-1</Label>
+                                <BehaviorEffects />
+                                <PropertyManager Version="7">
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>anchorPoint</Name>
+                                        <Default V="4">
+                                            <p3 X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>position</Name>
+                                        <Default V="4">
+                                            <p3 X="0" Y="0" Z="0" />
+                                        </Default>
+                                        <Static V="4">
+                                            <p3 X="0" Y="-56.6667" Z="0" />
+                                        </Static>
+                                        <Animation>
+                                            <Key STp="2" Ti="0" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TOuPt X="316.5" Y="0" />
+                                                <SLk>0</SLk>
+                                                <SOuPt X="0" Y="56.6666" Z="0" />
+                                                <Vl V="4">
+                                                    <p3 X="0" Y="-170" Z="0" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="633" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <SInPt X="0" Y="-56.6667" Z="0" />
+                                                <Vl V="4">
+                                                    <p3 X="0" Y="-56.6667" Z="0" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="34366" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TInPt X="-16866.5" Y="0" />
+                                                <TOuPt X="308.5" Y="0" />
+                                                <SLk>0</SLk>
+                                                <SOuPt X="0" Y="-56.6667" Z="0" />
+                                                <Vl V="4">
+                                                    <p3 X="0" Y="-56.6667" Z="0" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="34983" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <SInPt X="0" Y="56.6666" Z="0" />
+                                                <Vl V="4">
+                                                    <p3 X="0" Y="-170" Z="0" />
+                                                </Vl>
+                                            </Key>
+                                        </Animation>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationY</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoSampleRadius</Name>
+                                        <Default V="4">
+                                            <i>15</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>scale</Name>
+                                        <Default V="4">
+                                            <sc X="100" Y="100" Z="100" />
+                                        </Default>
+                                        <Static V="4">
+                                            <sc X="100" Y="100" Z="100" />
+                                        </Static>
+                                        <Animation>
+                                            <Key STp="2" Ti="0" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TOuPt X="316.5" Y="0" />
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <sc X="80" Y="80" Z="80" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="633" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <sc X="100" Y="100" Z="100" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="34400" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TInPt X="-16883.5" Y="0" />
+                                                <TOuPt X="291.5" Y="0" />
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <sc X="100" Y="100" Z="100" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="34983" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <sc X="80" Y="80" Z="80" />
+                                                </Vl>
+                                            </Key>
+                                        </Animation>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>illuminated</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>orientation</Name>
+                                        <Default V="4">
+                                            <or X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>scaleLinked</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>environmentMapType</Name>
+                                        <Default V="4">
+                                            <i>1000</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationX</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationZ</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>opacity</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                        <Static V="4">
+                                            <fl>100</fl>
+                                        </Static>
+                                        <Animation>
+                                            <Key STp="2" Ti="0" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TOuPt X="316.5" Y="0" />
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>30</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="633" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>100</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="34366" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TInPt X="-16866.5" Y="0" />
+                                                <TOuPt X="308.5" Y="0" />
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>100</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="34983" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>30</fl>
+                                                </Vl>
+                                            </Key>
+                                        </Animation>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveShadows</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>shadowColor</Name>
+                                        <Default V="4">
+                                            <cl A="1" R="0" G="0" B="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>billboardedLights</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>environmentMapLayerID</Name>
+                                        <Default V="4">
+                                            <id>00000000-0000-0000-0000-000000000000</id>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castShadows</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castAmbientOcclusion</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castShadowsIfLayerDisabled</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>billboardedShadows</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matAmbient</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveAmbientOcclusion</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matDiffuse</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matSpecular</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoDepthFallOff</Name>
+                                        <Default V="4">
+                                            <fl>10</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matShininess</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matEmissiveColor</Name>
+                                        <Default V="4">
+                                            <cl A="1" R="0" G="0" B="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castReflections</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castReflectionsIfLayerDisabled</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoDepthScale</Name>
+                                        <Default V="4">
+                                            <fl>10</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveReflections</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>specularReflectivity</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>diffuseReflectivity</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoSamples</Name>
+                                        <Default V="4">
+                                            <i>4</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoIntensity</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoBias</Name>
+                                        <Default V="4">
+                                            <fl>0.01</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoBlurRadius</Name>
+                                        <Default V="4">
+                                            <i>5</i>
+                                        </Default>
+                                    </Prop>
+                                </PropertyManager>
+                            </LayerBase>
+                        </TextLayer>
+                        <TextLayer Version="13">
+                            <Dimensions>0</Dimensions>
+                            <IncludeInDepthMap>1</IncludeInDepthMap>
+                            <TextBox Version="1">
+                                <ID>a02db796-49a8-4e7c-9ec5-5a6be841d458</ID>
+                                <MinX>-315.063</MinX>
+                                <MaxX>315.063</MaxX>
+                                <MinY>-19.656</MinY>
+                                <MaxY>96.928</MaxY>
+                                <Mode>0</Mode>
+                                <VerticalAlignment>0</VerticalAlignment>
+                                <TopIndentation>0</TopIndentation>
+                                <BottomIndentation>0</BottomIndentation>
+                                <BackgroundEnable>0</BackgroundEnable>
+                                <BackgroundOpacity>100</BackgroundOpacity>
+                                <BackgroundExpansionX>0</BackgroundExpansionX>
+                                <BackgroundExpansionY>0</BackgroundExpansionY>
+                                <BackgroundExpandLink>0</BackgroundExpandLink>
+                                <BackgroundRoundness>0</BackgroundRoundness>
+                                <BackgroundColor A="1" R="0" G="0" B="0" />
+                                <Tokens>
+                                    <Tk Fi="0" Tp="1" Jf="1" Sb="0" Li="0" V="2" Sa="0" Ri="0" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="86" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="101" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="114" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="121" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="32" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="68" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="46" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="73" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="46" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="83" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="46" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="67" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="46" />
+                                    <Tk Tp="0" Ft="08dccd19-ce0c-477c-8b3f-fdb45dd89678" V="2"
+                                        Ch="79" />
+                                </Tokens>
+                                <Formats>
+                                    <Format Size="104" Underline="0" HorizontalScale="1" Script="0"
+                                        BaselineShift="0" Version="4" Tracking="0" Strikethrough="0"
+                                        Capitalization="0" ID="08dccd19-ce0c-477c-8b3f-fdb45dd89678"
+                                        Leading="1" StrokeLocation="0" VerticalScale="1">
+                                        <Family>Ubuntu</Family>
+                                        <Style>Ubuntu Light</Style>
+                                        <PostscriptName>Ubuntu-Light</PostscriptName>
+                                        <FillColor A="1" R="0.721569" G="0.721569" B="0.721569" />
+                                    </Format>
+                                </Formats>
+                            </TextBox>
+                            <Effects />
+                            <GeometryEffects />
+                            <Masks />
+                            <LayerBase Version="2">
+                                <ID>9bb9a70d-613b-4214-99cf-1741c9030770</ID>
+                                <Name>New Text</Name>
+                                <CompID>ce5943ba-c452-4ff0-a12f-3bb72a4af3f1</CompID>
+                                <ParentLayerID>00000000-0000-0000-0000-000000000000</ParentLayerID>
+                                <StartFrame>0</StartFrame>
+                                <EndFrame>1800</EndFrame>
+                                <BlendMode>0</BlendMode>
+                                <Visible>1</Visible>
+                                <Muted>0</Muted>
+                                <Locked>0</Locked>
+                                <MotionBlurOn>0</MotionBlurOn>
+                                <Label>-1</Label>
+                                <BehaviorEffects />
+                                <PropertyManager Version="7">
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>anchorPoint</Name>
+                                        <Default V="4">
+                                            <p3 X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>position</Name>
+                                        <Default V="4">
+                                            <p3 X="0" Y="0" Z="0" />
+                                        </Default>
+                                        <Static V="4">
+                                            <p3 X="0" Y="-188.807" Z="0" />
+                                        </Static>
+                                        <Animation>
+                                            <Key STp="2" Ti="0" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TOuPt X="325" Y="0" />
+                                                <SLk>0</SLk>
+                                                <SOuPt X="0" Y="40.5965" Z="0" />
+                                                <Vl V="4">
+                                                    <p3 X="0" Y="-270" Z="0" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="650" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <SInPt X="0" Y="-40.5965" Z="0" />
+                                                <Vl V="4">
+                                                    <p3 X="0" Y="-188.807" Z="0" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="29300" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TInPt X="-14325" Y="0" />
+                                                <TOuPt X="350" Y="0" />
+                                                <SLk>0</SLk>
+                                                <SOuPt X="0" Y="-40.5965" Z="0" />
+                                                <Vl V="4">
+                                                    <p3 X="0" Y="-188.807" Z="0" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="30000" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <SInPt X="0" Y="40.5965" Z="0" />
+                                                <Vl V="4">
+                                                    <p3 X="0" Y="-270" Z="0" />
+                                                </Vl>
+                                            </Key>
+                                        </Animation>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationY</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoSampleRadius</Name>
+                                        <Default V="4">
+                                            <i>15</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>scale</Name>
+                                        <Default V="4">
+                                            <sc X="100" Y="100" Z="100" />
+                                        </Default>
+                                        <Static V="4">
+                                            <sc X="100" Y="100" Z="100" />
+                                        </Static>
+                                        <Animation>
+                                            <Key STp="2" Ti="0" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TOuPt X="325" Y="0" />
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <sc X="80" Y="80" Z="80" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="650" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <sc X="100" Y="100" Z="100" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="29300" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TInPt X="-14325" Y="0" />
+                                                <TOuPt X="350" Y="0" />
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <sc X="100" Y="100" Z="100" />
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="30000" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <sc X="80" Y="80" Z="80" />
+                                                </Vl>
+                                            </Key>
+                                        </Animation>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>illuminated</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>orientation</Name>
+                                        <Default V="4">
+                                            <or X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>scaleLinked</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>environmentMapType</Name>
+                                        <Default V="4">
+                                            <i>1000</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationX</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationZ</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>opacity</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                        <Static V="4">
+                                            <fl>100</fl>
+                                        </Static>
+                                        <Animation>
+                                            <Key STp="2" Ti="0" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TOuPt X="325" Y="0" />
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>20</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="650" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>100</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="29300" Tp="6" V="5">
+                                                <TLk>0</TLk>
+                                                <InInf>0.5</InInf>
+                                                <OuInf>0.5</OuInf>
+                                                <TInPt X="-14325" Y="0" />
+                                                <TOuPt X="350" Y="0" />
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>100</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="30000" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>20</fl>
+                                                </Vl>
+                                            </Key>
+                                        </Animation>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveShadows</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>shadowColor</Name>
+                                        <Default V="4">
+                                            <cl A="1" R="0" G="0" B="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>billboardedLights</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>environmentMapLayerID</Name>
+                                        <Default V="4">
+                                            <id>00000000-0000-0000-0000-000000000000</id>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castShadows</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castAmbientOcclusion</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castShadowsIfLayerDisabled</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>billboardedShadows</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matAmbient</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveAmbientOcclusion</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matDiffuse</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matSpecular</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoDepthFallOff</Name>
+                                        <Default V="4">
+                                            <fl>10</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matShininess</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matEmissiveColor</Name>
+                                        <Default V="4">
+                                            <cl A="1" R="0" G="0" B="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castReflections</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castReflectionsIfLayerDisabled</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoDepthScale</Name>
+                                        <Default V="4">
+                                            <fl>10</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveReflections</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>specularReflectivity</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>diffuseReflectivity</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoSamples</Name>
+                                        <Default V="4">
+                                            <i>4</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoIntensity</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoBias</Name>
+                                        <Default V="4">
+                                            <fl>0.01</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoBlurRadius</Name>
+                                        <Default V="4">
+                                            <i>5</i>
+                                        </Default>
+                                    </Prop>
+                                </PropertyManager>
+                            </LayerBase>
+                        </TextLayer>
+                        <AssetLayer Version="17">
+                            <AssetID>d5693c0f-de74-48aa-bdda-ab6a69d4ff01</AssetID>
+                            <AssetInstanceStart>0</AssetInstanceStart>
+                            <AssetHasAudio>0</AssetHasAudio>
+                            <AssetHasVideo>1</AssetHasVideo>
+                            <AssetHadAudio>0</AssetHadAudio>
+                            <AssetHadVideo>1</AssetHadVideo>
+                            <AssetType>1</AssetType>
+                            <Dimensions>0</Dimensions>
+                            <AutoOrient>0</AutoOrient>
+                            <AutoOrientPathAxis>1</AutoOrientPathAxis>
+                            <AutoOrientLayer>00000000-0000-0000-0000-000000000000</AutoOrientLayer>
+                            <PromoteLights>0</PromoteLights>
+                            <IncludeInDepthMap>1</IncludeInDepthMap>
+                            <WaveformIsVisible>0</WaveformIsVisible>
+                            <UseProxyMedia>1</UseProxyMedia>
+                            <Trackers />
+                            <Effects />
+                            <Masks />
+                            <LayerBase Version="2">
+                                <ID>04bb8845-7c66-4804-93ba-4435eb4676c8</ID>
+                                <Name>1_облога-круг.png</Name>
+                                <CompID>ce5943ba-c452-4ff0-a12f-3bb72a4af3f1</CompID>
+                                <ParentLayerID>00000000-0000-0000-0000-000000000000</ParentLayerID>
+                                <StartFrame>0</StartFrame>
+                                <EndFrame>1800</EndFrame>
+                                <BlendMode>0</BlendMode>
+                                <Visible>1</Visible>
+                                <Muted>0</Muted>
+                                <Locked>0</Locked>
+                                <MotionBlurOn>0</MotionBlurOn>
+                                <Label>-1</Label>
+                                <BehaviorEffects />
+                                <PropertyManager Version="7">
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>anchorPoint</Name>
+                                        <Default V="4">
+                                            <p3 X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>position</Name>
+                                        <Default V="4">
+                                            <p3 X="0" Y="0" Z="0" />
+                                        </Default>
+                                        <Static V="4">
+                                            <p3 X="0" Y="440.095" Z="0" />
+                                        </Static>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationY</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoSampleRadius</Name>
+                                        <Default V="4">
+                                            <i>15</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>scale</Name>
+                                        <Default V="4">
+                                            <sc X="100" Y="100" Z="100" />
+                                        </Default>
+                                        <Static V="4">
+                                            <sc X="80" Y="80" Z="100" />
+                                        </Static>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>illuminated</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>orientation</Name>
+                                        <Default V="4">
+                                            <or X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>scaleLinked</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationX</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationZ</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                        <Static V="4">
+                                            <fl>0</fl>
+                                        </Static>
+                                        <Animation>
+                                            <Key STp="2" Ti="0" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>0</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="15000" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>180</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="29933" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>360</fl>
+                                                </Vl>
+                                            </Key>
+                                        </Animation>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>opacity</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>audioLevel</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castShadowsIfLayerDisabled</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>speed</Name>
+                                        <Default V="4">
+                                            <db>1</db>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveReflections</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveShadows</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>shadowColor</Name>
+                                        <Default V="4">
+                                            <cl A="1" R="0" G="0" B="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>billboardedLights</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castShadows</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castAmbientOcclusion</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>billboardedShadows</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matAmbient</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveAmbientOcclusion</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matDiffuse</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matSpecular</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoDepthFallOff</Name>
+                                        <Default V="4">
+                                            <fl>10</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matShininess</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matEmissiveColor</Name>
+                                        <Default V="4">
+                                            <cl A="1" R="0" G="0" B="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castReflections</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castReflectionsIfLayerDisabled</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoDepthScale</Name>
+                                        <Default V="4">
+                                            <fl>10</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>specularReflectivity</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoSamples</Name>
+                                        <Default V="4">
+                                            <i>4</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoIntensity</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoBias</Name>
+                                        <Default V="4">
+                                            <fl>0.01</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoBlurRadius</Name>
+                                        <Default V="4">
+                                            <i>5</i>
+                                        </Default>
+                                    </Prop>
+                                </PropertyManager>
+                            </LayerBase>
+                        </AssetLayer>
+                        <AssetLayer Version="17">
+                            <AssetID>58429a15-2bcd-4650-b383-0b577a9d3e1c</AssetID>
+                            <AssetInstanceStart>0</AssetInstanceStart>
+                            <AssetHasAudio>0</AssetHasAudio>
+                            <AssetHasVideo>1</AssetHasVideo>
+                            <AssetHadAudio>0</AssetHadAudio>
+                            <AssetHadVideo>1</AssetHadVideo>
+                            <AssetType>1</AssetType>
+                            <Dimensions>0</Dimensions>
+                            <AutoOrient>0</AutoOrient>
+                            <AutoOrientPathAxis>1</AutoOrientPathAxis>
+                            <AutoOrientLayer>00000000-0000-0000-0000-000000000000</AutoOrientLayer>
+                            <PromoteLights>0</PromoteLights>
+                            <IncludeInDepthMap>1</IncludeInDepthMap>
+                            <WaveformIsVisible>0</WaveformIsVisible>
+                            <UseProxyMedia>1</UseProxyMedia>
+                            <Trackers />
+                            <Effects />
+                            <Masks />
+                            <LayerBase Version="2">
+                                <ID>2255aa9b-431a-4d4e-9a41-9cfbd85ee44d</ID>
+                                <Name>фон.png</Name>
+                                <CompID>ce5943ba-c452-4ff0-a12f-3bb72a4af3f1</CompID>
+                                <ParentLayerID>00000000-0000-0000-0000-000000000000</ParentLayerID>
+                                <StartFrame>0</StartFrame>
+                                <EndFrame>1800</EndFrame>
+                                <BlendMode>0</BlendMode>
+                                <Visible>1</Visible>
+                                <Muted>0</Muted>
+                                <Locked>1</Locked>
+                                <MotionBlurOn>0</MotionBlurOn>
+                                <Label>-1</Label>
+                                <BehaviorEffects />
+                                <PropertyManager Version="7">
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>anchorPoint</Name>
+                                        <Default V="4">
+                                            <p3 X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>position</Name>
+                                        <Default V="4">
+                                            <p3 X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationY</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoSampleRadius</Name>
+                                        <Default V="4">
+                                            <i>15</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>scale</Name>
+                                        <Default V="4">
+                                            <sc X="100" Y="100" Z="100" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>illuminated</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>orientation</Name>
+                                        <Default V="4">
+                                            <or X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>scaleLinked</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationX</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationZ</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>opacity</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>audioLevel</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castShadowsIfLayerDisabled</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>speed</Name>
+                                        <Default V="4">
+                                            <db>1</db>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveReflections</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveShadows</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>shadowColor</Name>
+                                        <Default V="4">
+                                            <cl A="1" R="0" G="0" B="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>billboardedLights</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castShadows</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castAmbientOcclusion</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>billboardedShadows</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matAmbient</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveAmbientOcclusion</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matDiffuse</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matSpecular</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoDepthFallOff</Name>
+                                        <Default V="4">
+                                            <fl>10</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matShininess</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matEmissiveColor</Name>
+                                        <Default V="4">
+                                            <cl A="1" R="0" G="0" B="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castReflections</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castReflectionsIfLayerDisabled</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoDepthScale</Name>
+                                        <Default V="4">
+                                            <fl>10</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>specularReflectivity</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoSamples</Name>
+                                        <Default V="4">
+                                            <i>4</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoIntensity</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoBias</Name>
+                                        <Default V="4">
+                                            <fl>0.01</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoBlurRadius</Name>
+                                        <Default V="4">
+                                            <i>5</i>
+                                        </Default>
+                                    </Prop>
+                                </PropertyManager>
+                            </LayerBase>
+                        </AssetLayer>
+                        <AssetLayer Version="17">
+                            <AssetID>b60b46bb-5d13-4a9e-a4da-f12e8f794125</AssetID>
+                            <AssetInstanceStart>1853</AssetInstanceStart>
+                            <AssetHasAudio>1</AssetHasAudio>
+                            <AssetHasVideo>0</AssetHasVideo>
+                            <AssetHadAudio>1</AssetHadAudio>
+                            <AssetHadVideo>0</AssetHadVideo>
+                            <AssetType>0</AssetType>
+                            <Dimensions>0</Dimensions>
+                            <AutoOrient>0</AutoOrient>
+                            <AutoOrientPathAxis>1</AutoOrientPathAxis>
+                            <AutoOrientLayer>00000000-0000-0000-0000-000000000000</AutoOrientLayer>
+                            <PromoteLights>0</PromoteLights>
+                            <IncludeInDepthMap>1</IncludeInDepthMap>
+                            <WaveformIsVisible>0</WaveformIsVisible>
+                            <UseProxyMedia>1</UseProxyMedia>
+                            <Trackers />
+                            <Effects />
+                            <Masks />
+                            <LayerBase Version="2">
+                                <ID>6a4f0ae9-8e19-471b-81a0-2adcbd20d7d4</ID>
+                                <Name>ika copyleft - Very D.I.S.C.O.mp3</Name>
+                                <CompID>ce5943ba-c452-4ff0-a12f-3bb72a4af3f1</CompID>
+                                <ParentLayerID>00000000-0000-0000-0000-000000000000</ParentLayerID>
+                                <StartFrame>0</StartFrame>
+                                <EndFrame>15376</EndFrame>
+                                <BlendMode>0</BlendMode>
+                                <Visible>1</Visible>
+                                <Muted>0</Muted>
+                                <Locked>0</Locked>
+                                <MotionBlurOn>0</MotionBlurOn>
+                                <Label>-1</Label>
+                                <BehaviorEffects />
+                                <PropertyManager Version="7">
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>anchorPoint</Name>
+                                        <Default V="4">
+                                            <p3 X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>position</Name>
+                                        <Default V="4">
+                                            <p3 X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationY</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoSampleRadius</Name>
+                                        <Default V="4">
+                                            <i>15</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>scale</Name>
+                                        <Default V="4">
+                                            <sc X="100" Y="100" Z="100" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>illuminated</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="1" CanInterpT="1">
+                                        <Name>orientation</Name>
+                                        <Default V="4">
+                                            <or X="0" Y="0" Z="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>scaleLinked</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationX</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>rotationZ</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>opacity</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>audioLevel</Name>
+                                        <Default V="4">
+                                            <fl>0</fl>
+                                        </Default>
+                                        <Static V="4">
+                                            <fl>0</fl>
+                                        </Static>
+                                        <Animation>
+                                            <Key STp="2" Ti="-30888" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>-60</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="-30395" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>0</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="29700" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>0</fl>
+                                                </Vl>
+                                            </Key>
+                                            <Key STp="2" Ti="30050" Tp="1" V="5">
+                                                <TLk>0</TLk>
+                                                <SLk>0</SLk>
+                                                <Vl V="4">
+                                                    <fl>-60</fl>
+                                                </Vl>
+                                            </Key>
+                                        </Animation>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castShadowsIfLayerDisabled</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>speed</Name>
+                                        <Default V="4">
+                                            <db>1</db>
+                                        </Default>
+                                        <Static V="4">
+                                            <db>1.0146</db>
+                                        </Static>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveReflections</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveShadows</Name>
+                                        <Default V="4">
+                                            <b>1</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>shadowColor</Name>
+                                        <Default V="4">
+                                            <cl A="1" R="0" G="0" B="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>billboardedLights</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castShadows</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castAmbientOcclusion</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>billboardedShadows</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matAmbient</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>receiveAmbientOcclusion</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matDiffuse</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matSpecular</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoDepthFallOff</Name>
+                                        <Default V="4">
+                                            <fl>10</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matShininess</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>matEmissiveColor</Name>
+                                        <Default V="4">
+                                            <cl A="1" R="0" G="0" B="0" />
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castReflections</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="0">
+                                        <Name>castReflectionsIfLayerDisabled</Name>
+                                        <Default V="4">
+                                            <b>0</b>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoDepthScale</Name>
+                                        <Default V="4">
+                                            <fl>10</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="0" Spatial="0" CanInterpT="1">
+                                        <Name>specularReflectivity</Name>
+                                        <Default V="4">
+                                            <fl>100</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoSamples</Name>
+                                        <Default V="4">
+                                            <i>4</i>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoIntensity</Name>
+                                        <Default V="4">
+                                            <fl>50</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoBias</Name>
+                                        <Default V="4">
+                                            <fl>0.01</fl>
+                                        </Default>
+                                    </Prop>
+                                    <Prop Type="1" Spatial="0" CanInterpT="1">
+                                        <Name>aoBlurRadius</Name>
+                                        <Default V="4">
+                                            <i>5</i>
+                                        </Default>
+                                    </Prop>
+                                </PropertyManager>
+                            </LayerBase>
+                        </AssetLayer>
+                    </Layers>
+                    <Instances />
+                    <ViewerState Version="5">
+                        <CurrentLayout>0</CurrentLayout>
+                        <Layout0 Pos0="dcd82c4a-7a9a-4c31-b38e-8d7f6cd28e9f" />
+                        <Layout1 />
+                        <Layout2 Sp0="0.5" Sp1="0" Sp2="0" />
+                        <Layout3 Sp0="0.5" Sp1="0" Sp2="0.5" />
+                        <Layout4 Sp0="0.5" Sp1="0.5" Sp2="0.5" />
+                        <Views>
+                            <State CameraScale="1" Active="1" TextureScale="0.015" Type="0"
+                                Layout="0" ID="dcd82c4a-7a9a-4c31-b38e-8d7f6cd28e9f">
+                                <TexturePosition X="0" Y="0" />
+                                <TextureAnchorPoint X="0" Y="0" />
+                                <CameraPosition X="0" Y="0" Z="0" />
+                                <CameraRotation X="0" Y="0" Z="0" />
+                                <Options Gz="0" Vol="1" BiTo="1" MoPa="1" TrCb="0" TrPa="1" Ch="0"
+                                    WoAx="1">
+                                    <BGColor A="1" R="0" G="0" B="0" />
+                                </Options>
+                            </State>
+                        </Views>
+                    </ViewerState>
+                    <CompositionTemplate Version="1">
+                        <IsEditable>1</IsEditable>
+                    </CompositionTemplate>
+                    <TemplateParent>00000000-0000-0000-0000-000000000000</TemplateParent>
+                </CompositionAsset>
+                <ImageAsset Version="3">
+                    <ID>58429a15-2bcd-4650-b383-0b577a9d3e1c</ID>
+                    <Name>фон.png</Name>
+                    <ParentFolderID>00000000-0000-0000-0000-000000000000</ParentFolderID>
+                    <IsHidden>0</IsHidden>
+                    <Filename>D:\Devs\C++\OpenVegas_Effects\SAMPLES\vegfx_projects\project_1\фон.png</Filename>
+                    <PAR>0</PAR>
+                    <OverrideAlpha>0</OverrideAlpha>
+                    <AlphaMode>0</AlphaMode>
+                    <Instances>
+                        <Instance CompID="ce5943ba-c452-4ff0-a12f-3bb72a4af3f1" Type="2"
+                            ID="2255aa9b-431a-4d4e-9a41-9cfbd85ee44d" />
+                    </Instances>
+                </ImageAsset>
+                <ImageAsset Version="3">
+                    <ID>d5693c0f-de74-48aa-bdda-ab6a69d4ff01</ID>
+                    <Name>2_облога-круг.png</Name>
+                    <ParentFolderID>00000000-0000-0000-0000-000000000000</ParentFolderID>
+                    <IsHidden>0</IsHidden>
+                    <Filename>D:\Devs\C++\OpenVegas_Effects\SAMPLES\vegfx_projects\project_1\Облоги\2_облога-круг.png</Filename>
+                    <PAR>0</PAR>
+                    <OverrideAlpha>0</OverrideAlpha>
+                    <AlphaMode>0</AlphaMode>
+                    <Instances>
+                        <Instance CompID="ce5943ba-c452-4ff0-a12f-3bb72a4af3f1" Type="2"
+                            ID="04bb8845-7c66-4804-93ba-4435eb4676c8" />
+                    </Instances>
+                </ImageAsset>
+                <MediaAsset Version="10">
+                    <ID>b60b46bb-5d13-4a9e-a4da-f12e8f794125</ID>
+                    <Name>ika copyleft - Very D.I.S.C.O.mp3</Name>
+                    <ParentFolderID>00000000-0000-0000-0000-000000000000</ParentFolderID>
+                    <IsHidden>0</IsHidden>
+                    <MediaPathType>0</MediaPathType>
+                    <Filename>D:\Devs\C++\OpenVegas_Effects\SAMPLES\vegfx_projects\project_1\ika copyleft - Very D.I.S.C.O.mp3</Filename>
+                    <IsImageSequence>0</IsImageSequence>
+                    <HWAccelerate>1</HWAccelerate>
+                    <MergedAudioFilename></MergedAudioFilename>
+                    <MergedAudioOffset>0</MergedAudioOffset>
+                    <VideoIdx>0</VideoIdx>
+                    <AudioIdx>0</AudioIdx>
+                    <OverrideFrameRate>0</OverrideFrameRate>
+                    <FrameRate>30</FrameRate>
+                    <OverridePAR>0</OverridePAR>
+                    <PAR>0</PAR>
+                    <OverrideAlpha>0</OverrideAlpha>
+                    <AlphaMode>0</AlphaMode>
+                    <OverrideColorLevels>0</OverrideColorLevels>
+                    <ColorLevels>0</ColorLevels>
+                    <OverrideColorSpace>0</OverrideColorSpace>
+                    <ColorSpace>0</ColorSpace>
+                    <InPoint>0</InPoint>
+                    <OutPoint>8740</OutPoint>
+                    <Instances>
+                        <Instance CompID="ce5943ba-c452-4ff0-a12f-3bb72a4af3f1" Type="2"
+                            ID="6a4f0ae9-8e19-471b-81a0-2adcbd20d7d4" />
+                    </Instances>
+                </MediaAsset>
+            </Assets>
+        </AssetList>
+        <BinFolder Version="0">
+            <ID>6e8ebb04-de2d-4679-9c41-6883404a96ee</ID>
+            <IsExpanded>0</IsExpanded>
+            <Name>Root</Name>
+            <ParentFolderID>00000000-0000-0000-0000-000000000000</ParentFolderID>
+            <Assets>
+                <ID>ce5943ba-c452-4ff0-a12f-3bb72a4af3f1</ID>
+                <ID>58429a15-2bcd-4650-b383-0b577a9d3e1c</ID>
+                <ID>d5693c0f-de74-48aa-bdda-ab6a69d4ff01</ID>
+                <ID>b60b46bb-5d13-4a9e-a4da-f12e8f794125</ID>
+            </Assets>
+            <SubFolders />
+        </BinFolder>
+        <EditorSequence Version="5">
+            <ID>0fd85270-bc96-465c-a474-32b576957dcf</ID>
+            <Name>Editor</Name>
+            <CTI>0</CTI>
+            <InPoint>0</InPoint>
+            <OutPoint>17982</OutPoint>
+            <TimelineZoom>0</TimelineZoom>
+            <TimelineTimeFormat>1000</TimelineTimeFormat>
+            <TimelineSnapMode>1000</TimelineSnapMode>
+            <TimelineScrollSyncMode>0</TimelineScrollSyncMode>
+            <VideoPreviewSize>1002</VideoPreviewSize>
+            <AudioPreviewSize>1002</AudioPreviewSize>
+            <PreviewMode>1002</PreviewMode>
+            <AudioVideoSettings Version="1">
+                <FrameCount>17982</FrameCount>
+                <AudioSampleRate>48000</AudioSampleRate>
+                <Width>1920</Width>
+                <Height>1080</Height>
+                <PAR>0</PAR>
+                <PARCustom>0</PARCustom>
+                <FrameRate>59.94</FrameRate>
+            </AudioVideoSettings>
+            <RenderSettings Version="1">
+                <MotionBlurEnabled>1</MotionBlurEnabled>
+                <ShutterAngle>180</ShutterAngle>
+                <ShutterPhase>-90</ShutterPhase>
+                <MaxNumOfSamples>20</MaxNumOfSamples>
+                <UseAdaptiveSamples>1</UseAdaptiveSamples>
+            </RenderSettings>
+            <Video>
+                <VideoTrack Version="3">
+                    <ID>b63db3b8-17dc-4201-891d-2b2cca9b3afb</ID>
+                    <Name>Video 1</Name>
+                    <Visible>1</Visible>
+                    <Locked>0</Locked>
+                    <Objects />
+                </VideoTrack>
+            </Video>
+            <Audio>
+                <AudioTrack Version="3">
+                    <ID>5fa7fbfa-b751-47cf-88cc-25663215992d</ID>
+                    <Name>Audio 1</Name>
+                    <Muted>0</Muted>
+                    <Solo>0</Solo>
+                    <Locked>0</Locked>
+                    <PropertyManager Version="7">
+                        <Prop Type="0" Spatial="0" CanInterpT="1">
+                            <Name>audioLevel</Name>
+                            <Default V="4">
+                                <fl>0</fl>
+                            </Default>
+                        </Prop>
+                        <Prop Type="0" Spatial="0" CanInterpT="1">
+                            <Name>stereoBalance</Name>
+                            <Default V="4">
+                                <fl>0</fl>
+                            </Default>
+                        </Prop>
+                    </PropertyManager>
+                    <Objects />
+                </AudioTrack>
+            </Audio>
+            <AudioMaster>
+                <AudioTrack Version="3">
+                    <ID>178748ea-26c4-4562-bb28-4ae71f7884ec</ID>
+                    <Name>Master</Name>
+                    <Muted>0</Muted>
+                    <Solo>0</Solo>
+                    <Locked>0</Locked>
+                    <PropertyManager Version="7">
+                        <Prop Type="0" Spatial="0" CanInterpT="1">
+                            <Name>audioLevel</Name>
+                            <Default V="4">
+                                <fl>0</fl>
+                            </Default>
+                        </Prop>
+                        <Prop Type="0" Spatial="0" CanInterpT="1">
+                            <Name>stereoBalance</Name>
+                            <Default V="4">
+                                <fl>0</fl>
+                            </Default>
+                        </Prop>
+                    </PropertyManager>
+                    <Objects />
+                </AudioTrack>
+            </AudioMaster>
+            <ViewerState Version="5">
+                <CurrentLayout>0</CurrentLayout>
+                <Layout0 />
+                <Layout1 />
+                <Layout2 Sp0="0.5" Sp1="0" Sp2="0" />
+                <Layout3 Sp0="0.5" Sp1="0" Sp2="0.5" />
+                <Layout4 Sp0="0.5" Sp1="0.5" Sp2="0.5" />
+                <Views />
+            </ViewerState>
+        </EditorSequence>
+        <Metadata Version="0">
+            <bool>
+                <Item K="1352643569" V="0" />
+                <Item K="1352644167" V="1" />
+                <Item K="1868239362" V="1" />
+                <Item K="1868239370" V="1" />
+                <Item K="1868239357" V="0" />
+            </bool>
+            <int32_t>
+                <Item K="1352643567" V="1001" />
+                <Item K="1352643565" V="1001" />
+                <Item K="1120700474" V="1080" />
+                <Item K="1352643566" V="1000" />
+                <Item K="1352649967" V="64" />
+                <Item K="1352643568" V="0" />
+                <Item K="1352643673" V="32" />
+                <Item K="1352643665" V="1003" />
+                <Item K="1868239352" V="1080" />
+                <Item K="1868239369" V="20" />
+                <Item K="1868239353" V="1920" />
+                <Item K="1868239355" V="0" />
+                <Item K="1868239361" V="0" />
+                <Item K="1352649965" V="1000" />
+                <Item K="1120700475" V="1920" />
+                <Item K="1120700476" V="0" />
+            </int32_t>
+            <float>
+                <Item K="1868239354" V="60" />
+                <Item K="1868239367" V="0" />
+                <Item K="1868239358" V="900" />
+                <Item K="1868239363" V="180" />
+                <Item K="1868239359" V="2000" />
+                <Item K="1868239360" V="1" />
+                <Item K="1868239368" V="0" />
+                <Item K="1868239366" V="0" />
+                <Item K="1868239364" V="-90" />
+            </float>
+            <FXID>
+                <Item K="1352649966" V="00000000-0000-0000-0000-000000000000" />
+            </FXID>
+            <wstring />
+        </Metadata>
+        <Effects />
+    </Project>
+    <OpenCompositeShots Version="0" TimelineType="1404"
+        TimelineId="ce5943ba-c452-4ff0-a12f-3bb72a4af3f1">
+        <CompositeShot CompositionId="ce5943ba-c452-4ff0-a12f-3bb72a4af3f1" Name="Облога" />
+    </OpenCompositeShots>
+    <Screens />
+</VegasEffectsProject>

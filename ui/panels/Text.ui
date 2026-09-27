@@ -1,0 +1,555 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Text panel - left dock, tabbed with Media (objName "textPanel").
+
+    Active TextPanel form. Object names and section headings follow the
+    reference; TextPanel.cpp wires behavior, dynamic outline rows, SVG icons,
+    color pickers and scrub gestures after setupUi().
+-->
+<ui version="4.0">
+ <class>openvegas::ui::TextPanel</class>
+ <widget class="QDockWidget" name="textPanel">
+  <property name="windowTitle">
+   <string>Text</string>
+  </property>
+  <widget class="QScrollArea" name="textScrollArea">
+   <property name="frameShape">
+    <enum>QFrame::NoFrame</enum>
+   </property>
+   <property name="widgetResizable">
+    <bool>true</bool>
+   </property>
+   <widget class="QWidget" name="TextPanelWidget">
+    <property name="styleSheet">
+     <string notr="true">QWidget#TextPanelWidget { background:#303030; } QWidget#TextPanelWidget QLabel[textSectionHeading="true"] { background:#292929; padding-left:12px; color:#d0d0d0; }</string>
+    </property>
+    <layout class="QVBoxLayout" name="textLayout">
+     <property name="spacing"><number>8</number></property>
+     <property name="leftMargin"><number>6</number></property>
+     <property name="topMargin"><number>6</number></property>
+     <property name="rightMargin"><number>6</number></property>
+     <property name="bottomMargin"><number>6</number></property>
+     <!-- Character -->
+     <item>
+      <widget class="QGroupBox" name="groupBoxCharacter">
+       <property name="title"><string notr="true"></string></property>
+       <layout class="QGridLayout" name="characterGrid">
+        <property name="horizontalSpacing"><number>6</number></property>
+        <property name="verticalSpacing"><number>4</number></property>
+        <property name="leftMargin"><number>8</number></property>
+        <property name="topMargin"><number>8</number></property>
+        <property name="rightMargin"><number>8</number></property>
+        <property name="bottomMargin"><number>8</number></property>
+        <!-- Section heading -->
+        <item row="0" column="0" colspan="6">
+         <widget class="QLabel" name="labelCharacter">
+          <property name="text"><string>Character</string></property>
+          <property name="textSectionHeading" stdset="0"><bool>true</bool></property>
+          <property name="fixedHeight" stdset="0"><number>28</number></property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="labelFontFamily"><property name="text"><string>Font</string></property></widget>
+        </item>
+        <item row="1" column="1" colspan="3">
+         <widget class="QComboBox" name="comboBoxFontFamily">
+          <property name="editable"><bool>true</bool></property>
+          <property name="insertPolicy"><enum>QComboBox::NoInsert</enum></property>
+          <property name="sizeAdjustPolicy"><enum>QComboBox::AdjustToMinimumContentsLengthWithIcon</enum></property>
+         </widget>
+        </item>
+        <item row="1" column="4" colspan="2">
+         <widget class="QComboBox" name="comboBoxFontStyle">
+          <property name="sizeAdjustPolicy"><enum>QComboBox::AdjustToMinimumContentsLengthWithIcon</enum></property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="labelFontSize"><property name="text"><string>Font Size</string></property></widget>
+        </item>
+        <item row="2" column="1" colspan="3">
+         <widget class="QSpinBox" name="spinBoxFontSize">
+          <property name="minimum"><number>1</number></property>
+          <property name="maximum"><number>1024</number></property>
+          <property name="value"><number>48</number></property>
+         </widget>
+        </item>
+        <item row="2" column="4">
+         <widget class="QLabel" name="labelFontColor"><property name="text"><string>Font Color</string></property></widget>
+        </item>
+        <item row="2" column="5">
+         <layout class="QHBoxLayout" name="fontColorRow">
+          <property name="spacing"><number>4</number></property>
+          <property name="leftMargin"><number>0</number></property>
+          <property name="topMargin"><number>0</number></property>
+          <property name="rightMargin"><number>0</number></property>
+          <property name="bottomMargin"><number>0</number></property>
+          <item>
+           <widget class="QToolButton" name="toolButtonFontColor">
+            <property name="minimumSize"><size><width>56</width><height>20</height></size></property>
+            <property name="maximumSize"><size><width>56</width><height>20</height></size></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QToolButton" name="toolButtonFontColorPipette">
+            <property name="toolTip"><string>Pick a color on screen</string></property>
+            <property name="autoRaise"><bool>true</bool></property>
+            <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+            <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="labelFontOutlineSize1"><property name="text"><string>Outline</string></property></widget>
+        </item>
+        <item row="3" column="1" colspan="5">
+         <layout class="QHBoxLayout" name="outlineSizeRow">
+          <property name="spacing"><number>6</number></property>
+          <property name="leftMargin"><number>0</number></property>
+          <property name="topMargin"><number>0</number></property>
+          <property name="rightMargin"><number>0</number></property>
+          <property name="bottomMargin"><number>0</number></property>
+          <item>
+           <widget class="QDoubleSpinBox" name="doubleSpinBoxFontOutlineSize">
+            <property name="decimals"><number>2</number></property>
+            <property name="maximum"><double>400.000000000000000</double></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QToolButton" name="toolButtonAddOutline">
+            <property name="toolTip"><string>Add Outline</string></property>
+            <property name="autoRaise"><bool>true</bool></property>
+            <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+            <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="4" column="4" colspan="2">
+         <layout class="QHBoxLayout" name="outlineColors">
+          <property name="spacing"><number>4</number></property>
+          <property name="leftMargin"><number>0</number></property>
+          <property name="topMargin"><number>0</number></property>
+          <property name="rightMargin"><number>0</number></property>
+          <property name="bottomMargin"><number>0</number></property>
+          <item>
+           <widget class="QLabel" name="labelFontOutlineColor"><property name="text"><string>Outline Color</string></property></widget>
+          </item>
+          <item>
+           <widget class="QToolButton" name="toolButtonFontOutlineColor">
+            <property name="minimumSize"><size><width>56</width><height>20</height></size></property>
+            <property name="maximumSize"><size><width>56</width><height>20</height></size></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QToolButton" name="toolButtonFontOutlineColorPipette">
+            <property name="toolTip"><string>Pick a color on screen</string></property>
+            <property name="autoRaise"><bool>true</bool></property>
+            <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+            <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="5" column="0">
+         <widget class="QLabel" name="labelFontOutlineSize2"><property name="text"><string>Outline</string></property></widget>
+        </item>
+        <item row="5" column="1" colspan="3">
+         <widget class="QComboBox" name="comboBoxStrokeOrder">
+          <item><property name="text"><string>Stroke Over Fill</string></property></item>
+          <item><property name="text"><string>Fill Over Stroke</string></property></item>
+          <item><property name="text"><string>Centered</string></property></item>
+         </widget>
+        </item>
+        <item row="6" column="0" colspan="6">
+         <widget class="QListWidget" name="listViewOutlines">
+          <property name="selectionMode"><enum>QAbstractItemView::NoSelection</enum></property>
+          <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+         </widget>
+        </item>
+        <!-- Metrics: Line Spacing / Vertical Scale / Horizontal Scale /
+             Character Spacing / Baseline Shift. -->
+        <item row="7" column="0">
+         <widget class="QLabel" name="labelLineHeight"><property name="text"><string>Line Spacing</string></property></widget>
+        </item>
+        <item row="7" column="1" colspan="2">
+         <widget class="QDoubleSpinBox" name="doubleSpinBoxLineHeight"><property name="maximum"><double>1000.000000000000000</double></property><property name="suffix"><string>%</string></property></widget>
+        </item>
+        <item row="8" column="0">
+         <widget class="QLabel" name="labelVerticalScale"><property name="text"><string>Vertical Scale</string></property></widget>
+        </item>
+        <item row="8" column="1" colspan="2">
+         <widget class="QDoubleSpinBox" name="doubleSpinBoxVerticalScale"><property name="maximum"><double>1000.000000000000000</double></property><property name="suffix"><string>%</string></property></widget>
+        </item>
+        <item row="8" column="3">
+         <widget class="QLabel" name="labelHorizontalScale"><property name="text"><string>Horizontal Scale</string></property></widget>
+        </item>
+        <item row="8" column="4" colspan="2">
+         <widget class="QDoubleSpinBox" name="doubleSpinBoxHorizontalScale"><property name="maximum"><double>1000.000000000000000</double></property><property name="suffix"><string>%</string></property></widget>
+        </item>
+        <item row="9" column="3">
+         <widget class="QLabel" name="labelLetterSpacing"><property name="text"><string>Character Spacing</string></property></widget>
+        </item>
+        <item row="9" column="4" colspan="2">
+         <widget class="QDoubleSpinBox" name="doubleSpinBoxLetterSpacing">
+          <property name="decimals"><number>0</number></property>
+          <property name="minimum"><double>-1000.000000000000000</double></property>
+          <property name="maximum"><double>10000.000000000000000</double></property>
+          <property name="suffix"><string notr="true">&#x2030;</string></property>
+         </widget>
+        </item>
+        <item row="10" column="0">
+         <widget class="QLabel" name="labelBaselineShift"><property name="text"><string>Baseline Shift</string></property></widget>
+        </item>
+        <item row="10" column="1" colspan="2">
+         <widget class="QDoubleSpinBox" name="doubleSpinBoxBaselineShift"><property name="maximum"><double>1000.000000000000000</double></property><property name="suffix"><string>%</string></property></widget>
+        </item>
+        <!-- Case / underline / strike / script toggles. -->
+        <item row="11" column="0" colspan="6">
+         <widget class="QWidget" name="horizontalLayout_4">
+          <layout class="QHBoxLayout" name="toggleLayout">
+           <property name="spacing"><number>2</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <item>
+            <widget class="QToolButton" name="toolButtonAllCaps">
+             <property name="text"><string notr="true">TT</string></property>
+             <property name="toolTip"><string>All Caps</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonSmallCaps">
+             <property name="text"><string notr="true">Tt</string></property>
+             <property name="toolTip"><string>Small Caps</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonTitleCase">
+             <property name="text"><string notr="true">Tt</string></property>
+             <property name="toolTip"><string>Start Case</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonLowerCase">
+             <property name="text"><string notr="true">tt</string></property>
+             <property name="toolTip"><string>Lower Case</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonUnderline">
+             <property name="text"><string notr="true">U</string></property>
+             <property name="toolTip"><string>Underline</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonStrikethrough">
+             <property name="text"><string notr="true">S</string></property>
+             <property name="toolTip"><string>Strikethrough</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonSuperscript">
+             <property name="text"><string notr="true">T&#x00B9;</string></property>
+             <property name="toolTip"><string>Superscript</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonSubscript">
+             <property name="text"><string notr="true">T&#x2081;</string></property>
+             <property name="toolTip"><string>Subscript</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <!-- Paragraph -->
+     <item>
+      <widget class="QGroupBox" name="groupBoxParagraph">
+       <property name="title"><string notr="true"></string></property>
+       <layout class="QVBoxLayout" name="paragraphLayout">
+        <property name="spacing"><number>6</number></property>
+        <property name="leftMargin"><number>8</number></property>
+        <property name="topMargin"><number>8</number></property>
+        <property name="rightMargin"><number>8</number></property>
+        <property name="bottomMargin"><number>8</number></property>
+        <item>
+         <widget class="QLabel" name="labelParagraph">
+          <property name="text"><string>Paragraph</string></property>
+          <property name="textSectionHeading" stdset="0"><bool>true</bool></property>
+          <property name="fixedHeight" stdset="0"><number>28</number></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="horizontalLayout_2">
+          <layout class="QHBoxLayout" name="alignLayout">
+           <property name="spacing"><number>2</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <item>
+            <widget class="QToolButton" name="toolButtonAlignLeft">
+             <property name="toolTip"><string>Left Alignment</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonAlignCenter">
+             <property name="toolTip"><string>Center Alignment</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonAlignRight">
+             <property name="toolTip"><string>Right Alignment</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonAlignLeftJustify">
+             <property name="toolTip"><string>Left Justify Alignment</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonAlignCenterJustify">
+             <property name="toolTip"><string>Center Justify Alignment</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonAlignRightJustify">
+             <property name="toolTip"><string>Right Justify Alignment</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QToolButton" name="toolButtonAlignJustify">
+             <property name="toolTip"><string>Justify Alignment</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <layout class="QGridLayout" name="indentGrid">
+          <property name="horizontalSpacing"><number>6</number></property>
+          <property name="verticalSpacing"><number>4</number></property>
+          <item row="0" column="0"><widget class="QLabel" name="labelIndentLeft"><property name="text"><string>Left Indentation</string></property></widget></item>
+          <item row="0" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBoxIndentLeft"><property name="maximum"><double>4096.000000000000000</double></property></widget></item>
+          <item row="1" column="0"><widget class="QLabel" name="labelIndentRight"><property name="text"><string>Right Indentation</string></property></widget></item>
+          <item row="1" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBoxIndentRight"><property name="maximum"><double>4096.000000000000000</double></property></widget></item>
+          <item row="2" column="0"><widget class="QLabel" name="labelIndentFirstLine"><property name="text"><string>First Line Indentation</string></property></widget></item>
+          <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleSpinBoxIndentFirstLine"><property name="minimum"><double>-4096.000000000000000</double></property><property name="maximum"><double>4096.000000000000000</double></property></widget></item>
+          <item row="0" column="2"><widget class="QLabel" name="labelIndentTop"><property name="text"><string>Top Indentation</string></property></widget></item>
+          <item row="0" column="3"><widget class="QDoubleSpinBox" name="doubleSpinBoxIndentTop"><property name="maximum"><double>4096.000000000000000</double></property></widget></item>
+          <item row="1" column="2"><widget class="QLabel" name="labelIndentBottom"><property name="text"><string>Bottom Indentation</string></property></widget></item>
+          <item row="1" column="3"><widget class="QDoubleSpinBox" name="doubleSpinBoxIndentBottom"><property name="maximum"><double>4096.000000000000000</double></property></widget></item>
+          <item row="2" column="2"><widget class="QLabel" name="labelSpaceBeforeParagraph"><property name="text"><string>Gap Before Paragraph</string></property></widget></item>
+          <item row="2" column="3"><widget class="QDoubleSpinBox" name="doubleSpinBoxSpaceBeforeParagraph"><property name="maximum"><double>4096.000000000000000</double></property></widget></item>
+          <item row="3" column="2"><widget class="QLabel" name="labelSpaceAfterParagraph"><property name="text"><string>Gap After Paragraph</string></property></widget></item>
+          <item row="3" column="3"><widget class="QDoubleSpinBox" name="doubleSpinBoxSpaceAfterParagraph"><property name="maximum"><double>4096.000000000000000</double></property></widget></item>
+          <!-- Vertical alignment column down the right. -->
+          <item row="0" column="4" rowspan="4">
+           <widget class="QWidget" name="verticalLayout_2">
+            <layout class="QVBoxLayout" name="verticalAlignLayout">
+             <property name="spacing"><number>2</number></property>
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>0</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item>
+              <widget class="QToolButton" name="toolButtonAlignTop">
+               <property name="toolTip"><string>Top Alignment</string></property>
+               <property name="autoRaise"><bool>true</bool></property>
+               <property name="checkable"><bool>true</bool></property>
+               <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+               <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QToolButton" name="toolButtonAlignMiddle">
+               <property name="toolTip"><string>Middle Alignment</string></property>
+               <property name="autoRaise"><bool>true</bool></property>
+               <property name="checkable"><bool>true</bool></property>
+               <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+               <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QToolButton" name="toolButtonAlignBottom">
+               <property name="toolTip"><string>Bottom Alignment</string></property>
+               <property name="autoRaise"><bool>true</bool></property>
+               <property name="checkable"><bool>true</bool></property>
+               <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+               <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <!-- Background -->
+     <item>
+      <widget class="QGroupBox" name="groupBoxBackground">
+       <property name="title"><string notr="true"></string></property>
+       <layout class="QVBoxLayout" name="backgroundLayout">
+        <property name="spacing"><number>6</number></property>
+        <property name="leftMargin"><number>8</number></property>
+        <property name="topMargin"><number>8</number></property>
+        <property name="rightMargin"><number>8</number></property>
+        <property name="bottomMargin"><number>8</number></property>
+        <item>
+         <widget class="QCheckBox" name="checkBoxBackground">
+          <property name="text"><string>Background</string></property>
+          <property name="fixedHeight" stdset="0"><number>28</number></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="widgetBackground">
+          <layout class="QGridLayout" name="backgroundGrid">
+           <property name="horizontalSpacing"><number>6</number></property>
+           <property name="verticalSpacing"><number>4</number></property>
+           <property name="leftMargin"><number>8</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>8</number></property>
+           <property name="bottomMargin"><number>8</number></property>
+           <item row="0" column="0"><widget class="QLabel" name="labelBackgroundColor"><property name="text"><string>Background Color</string></property></widget></item>
+           <item row="0" column="1">
+            <widget class="QToolButton" name="toolButtonBackgroundColor">
+             <property name="minimumSize"><size><width>56</width><height>20</height></size></property>
+             <property name="maximumSize"><size><width>56</width><height>20</height></size></property>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QToolButton" name="toolButtonBackgroundColorPipette">
+             <property name="toolTip"><string>Pick a color on screen</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item row="1" column="0"><widget class="QLabel" name="labelBackgroundOpacity"><property name="text"><string>Background Opacity</string></property></widget></item>
+           <item row="1" column="1">
+            <widget class="QDoubleSpinBox" name="doubleSpinBoxBackgroundOpacity">
+             <property name="maximum"><double>100.000000000000000</double></property>
+             <property name="suffix"><string>%</string></property>
+            </widget>
+           </item>
+           <item row="2" column="0"><widget class="QLabel" name="labelBackgroundRoundness"><property name="text"><string>Background Corners</string></property></widget></item>
+           <item row="2" column="1">
+            <widget class="QDoubleSpinBox" name="doubleSpinBoxBackgroundRoundness">
+             <property name="maximum"><double>2000.000000000000000</double></property>
+             <property name="suffix"><string>%</string></property>
+            </widget>
+           </item>
+           <item row="3" column="0"><widget class="QLabel" name="labelBackgroundExpansionX"><property name="text"><string>Background X-Axis Expansion</string></property></widget></item>
+           <item row="3" column="1">
+            <widget class="QDoubleSpinBox" name="doubleSpinBoxBackgroundExpansionX">
+             <property name="maximum"><double>4000.000000000000000</double></property>
+             <property name="suffix"><string>%</string></property>
+            </widget>
+           </item>
+           <item row="3" column="2" rowspan="2">
+            <widget class="QToolButton" name="toolButtonExpansionLinked">
+             <property name="text"><string notr="true">&#x2194;</string></property>
+             <property name="toolTip"><string>Enable Individual Expansion</string></property>
+             <property name="autoRaise"><bool>true</bool></property>
+             <property name="checkable"><bool>true</bool></property>
+             <property name="minimumSize"><size><width>22</width><height>22</height></size></property>
+             <property name="maximumSize"><size><width>22</width><height>22</height></size></property>
+            </widget>
+           </item>
+           <item row="4" column="0"><widget class="QLabel" name="labelBackgroundExpansionY"><property name="text"><string>Background Y-Axis Expansion</string></property></widget></item>
+           <item row="4" column="1">
+            <widget class="QDoubleSpinBox" name="doubleSpinBoxBackgroundExpansionY">
+             <property name="maximum"><double>4000.000000000000000</double></property>
+             <property name="suffix"><string>%</string></property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <spacer name="textBottomSpacer">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size><width>20</width><height>40</height></size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

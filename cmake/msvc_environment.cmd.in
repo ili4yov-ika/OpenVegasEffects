@@ -1,0 +1,15 @@
+@echo off
+setlocal
+rem Discard a developer environment supplied by a different VS installation.
+set "VSCMD_VER="
+set "VSINSTALLDIR="
+set "VCINSTALLDIR="
+set "VCToolsInstallDir="
+set "VCToolsVersion="
+set "INCLUDE="
+set "LIB="
+set "LIBPATH="
+call "@OPENVEGAS_MSVC_VCVARS@" -vcvars_ver=@OPENVEGAS_MSVC_TOOLSET_VERSION@ >nul
+if errorlevel 1 exit /b 1
+%*
+exit /b %ERRORLEVEL%

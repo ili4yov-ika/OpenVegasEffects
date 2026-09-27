@@ -1,0 +1,194 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CMake: Configure (MSVC Debug)",
+      "type": "shell",
+      "command": "call \"${workspaceFolder}/tools/msvc_build.cmd\" configure windows-msvc-debug",
+      "options": {
+        "shell": {
+          "executable": "cmd.exe",
+          "args": [
+            "/d",
+            "/c"
+          ]
+        },
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "detail": "Ninja + MSVC v143 + Qt msvc2022_64 -> build/Windows_MSVC-x64/"
+    },
+    {
+      "label": "CMake: Build (MSVC Debug)",
+      "type": "shell",
+      "command": "call \"${workspaceFolder}/tools/msvc_build.cmd\" build windows-msvc-debug",
+      "options": {
+        "shell": {
+          "executable": "cmd.exe",
+          "args": [
+            "/d",
+            "/c"
+          ]
+        },
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "detail": "Incremental build of build/Windows_MSVC-x64/"
+    },
+    {
+      "label": "CMake: Configure + Build (MSVC Debug)",
+      "type": "shell",
+      "command": "call \"${workspaceFolder}/tools/msvc_build.cmd\" buildall windows-msvc-debug",
+      "options": {
+        "shell": {
+          "executable": "cmd.exe",
+          "args": [
+            "/d",
+            "/c"
+          ]
+        },
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "detail": "preLaunchTask for debugging"
+    },
+    {
+      "label": "CMake: Configure (MSVC Release)",
+      "type": "shell",
+      "command": "call \"${workspaceFolder}/tools/msvc_build.cmd\" configure windows-msvc-release",
+      "options": {
+        "shell": {
+          "executable": "cmd.exe",
+          "args": [
+            "/d",
+            "/c"
+          ]
+        },
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "detail": "RelWithDebInfo -> build/Windows_MSVC-x64-Release/"
+    },
+    {
+      "label": "CMake: Build (MSVC Release)",
+      "type": "shell",
+      "command": "call \"${workspaceFolder}/tools/msvc_build.cmd\" build windows-msvc-release",
+      "options": {
+        "shell": {
+          "executable": "cmd.exe",
+          "args": [
+            "/d",
+            "/c"
+          ]
+        },
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "CMake: Configure + Build (MSVC Release)",
+      "type": "shell",
+      "command": "call \"${workspaceFolder}/tools/msvc_build.cmd\" buildall windows-msvc-release",
+      "options": {
+        "shell": {
+          "executable": "cmd.exe",
+          "args": [
+            "/d",
+            "/c"
+          ]
+        },
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "CMake: Clean (MSVC)",
+      "type": "shell",
+      "command": "if exist \"${workspaceFolder}\\build\\Windows_MSVC-x64\" rmdir /s /q \"${workspaceFolder}\\build\\Windows_MSVC-x64\" & if exist \"${workspaceFolder}\\build\\Windows_MSVC-x64-Release\" rmdir /s /q \"${workspaceFolder}\\build\\Windows_MSVC-x64-Release\" & echo Cleaned.",
+      "options": {
+        "shell": {
+          "executable": "cmd.exe",
+          "args": [
+            "/d",
+            "/c"
+          ]
+        },
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "Run OpenVegas Effects (MSVC Debug)",
+      "type": "shell",
+      "command": "${workspaceFolder}/build/Windows_MSVC-x64/OpenVegasEffects.exe",
+      "options": {
+        "cwd": "${workspaceFolder}/build/Windows_MSVC-x64",
+        "env": {
+          "PATH": "C:/Qt/6.9.3/msvc2022_64/bin;${env:PATH}",
+          "QT_PLUGIN_PATH": "C:/Qt/6.9.3/msvc2022_64/plugins"
+        }
+      },
+      "dependsOn": [
+        "CMake: Build (MSVC Debug)"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}

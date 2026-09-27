@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>openvegas::ui::ViewerPanel</class>
+ <widget class="QWidget" name="ViewerPanel">
+  <property name="windowTitle"><string>Viewer</string></property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="spacing"><number>0</number></property>
+   <property name="leftMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+   <item>
+    <widget class="openvegas::ui::ViewerWidget" name="graphicsViewViewer">
+     <property name="minimumSize"><size><width>320</width><height>180</height></size></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="openvegas::ui::ViewerTransportBar" name="ViewerPlaybackWidget"/>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>openvegas::ui::ViewerWidget</class>
+   <extends>QWidget</extends>
+   <header>ui/ViewerWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>openvegas::ui::ViewerTransportBar</class>
+   <extends>QWidget</extends>
+   <header>ui/ViewerTransportBar.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
