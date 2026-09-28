@@ -616,19 +616,60 @@ int main(int argc, char** argv)
         openvegas::plugin::registerNativeBehaviorModule(
             id, file, dependencyDir, true, metadata.parameters);
         openvegas::plugin::NativeBehaviorResult result;
-        const bool rendered = foundLayer && openvegas::plugin::evaluateNativeBehavior(
+        const bool rendered = openvegas::plugin::evaluateNativeBehavior(
             result, 30, 30, 120, 1920, 1080, 30.0, id, values,
             &composition, sourceId);
         const float* matrix = result.transformation.constData();
         const bool moved = std::abs(matrix[12]) > 0.001f
                            || std::abs(matrix[13]) > 0.001f
                            || std::abs(matrix[14]) > 0.001f;
-        out << "layer-picker\trendered\tmoved\tposition\n"
+        const QVector<openvegas::plugin::NativeBehaviorRequest> requests {{id, values}};
+        openvegas::plugin::NativeBehaviorResult stacked;
+        const bool stackedOk = openvegas::plugin::simulateNativeBehaviorStack(
+            stacked, 30, 30, 120, 1920, 1080, 30.0, requests,
+            &composition, sourceId);
+        const float* stackedMatrix = stacked.transformation.constData();
+        bool same = rendered && stackedOk;
+        for (int axis = 12; axis <= 14; ++axis) {
+            same = same && std::abs(matrix[axis] - stackedMatrix[axis]) < 0.001f;
+        }
+        composition.swapLayers(0, 1);
+        openvegas::plugin::NativeBehaviorResult reordered;
+        const bool reorderedOk = openvegas::plugin::simulateNativeBehaviorStack(
+            reordered, 30, 30, 120, 1920, 1080, 30.0, requests,
+            &composition, sourceId);
+        const float* reorderedMatrix = reordered.transformation.constData();
+        for (int axis = 12; axis <= 14; ++axis) {
+            same = same && std::abs(matrix[axis] - reorderedMatrix[axis]) < 0.001f;
+        }
+        same = same && reorderedOk;
+        openvegas::plugin::NativeBehaviorResult threaded;
+        bool threadedOk = false;
+        QThread* renderThread = QThread::create([&]() {
+            threadedOk = openvegas::plugin::simulateNativeBehaviorStack(
+                threaded, 30, 30, 120, 1920, 1080, 30.0, requests,
+                &composition, sourceId);
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        });
+        renderThread->start();
+        renderThread->wait();
+        delete renderThread;
+        const float* threadedMatrix = threaded.transformation.constData();
+        for (int axis = 12; axis <= 14; ++axis) {
+            same = same && std::abs(matrix[axis] - threadedMatrix[axis]) < 0.001f;
+        }
+        same = same && threadedOk;
+        out << "layer-picker\trendered\tmoved\tstack-and-reorder\tposition"
+               "\tstack\treordered\n"
             << foundLayer << '\t' << rendered << '\t' << moved << '\t'
-            << matrix[12] << ',' << matrix[13] << ',' << matrix[14] << '\n';
+            << same << '\t' << matrix[12] << ',' << matrix[13] << ','
+            << matrix[14] << '\t' << stackedMatrix[12] << ','
+            << stackedMatrix[13] << ',' << stackedMatrix[14] << '\t'
+            << reorderedMatrix[12] << ',' << reorderedMatrix[13] << ','
+            << reorderedMatrix[14] << '\n';
         out.flush();
         openvegas::plugin::releaseNativeEffectThreadRenderer();
-        return rendered ? 0 : 1;
+        return rendered && moved && same ? 0 : 1;
     }
 
     if (behaviorStackApi) {

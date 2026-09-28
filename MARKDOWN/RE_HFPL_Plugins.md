@@ -493,10 +493,10 @@ Runtime повторяет этот порядок с фактическим FPS
 после чего хост один раз обновляет общие velocity/position. Поэтому `Drag` влияет на скорость,
 созданную `Acceleration` и `Gravity`, и также включён. Режим probe `behavior-stack` проверяет эту
 комбинацию в основном и worker-thread: за секунду при значениях по умолчанию получается одинаковая
-позиция `(171.958, -238.831, 0)`. Рабочий итог составляет 22/43 Behavior. `MotionTrack` не входит
+позиция `(171.958, -238.831, 0)`. Layer-state массив дополнительно включает
+`AttractTo`, `Follow` и `RepelFrom`; рабочий итог составляет 25/43 Behavior. `MotionTrack` не входит
 в whitelist: поставляемый модуль возвращает unsupported для `Notify(102/103/104)` и не создаёт
-матрицу либо opacity. Layer-dependent `Attract To`,
-`Follow`, `Repel From`, `Throw` требуют настоящего графа слоёв; текстовые модули требуют
+матрицу либо opacity. `Throw` по-прежнему требует отдельного simulation ABI; текстовые модули требуют
 `SubObjectTransformationAtTime` (`Notify(105)`). `OrientationValue +0x340` уже возвращает
 сохранённый трёхкомпонентный параметр этим обработчикам.
 

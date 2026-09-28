@@ -58,7 +58,10 @@ bool isVerifiedSimulationBehavior(const ModuleRecord& record)
     static const QSet<QString> names {
         QStringLiteral("acceleration"),
         QStringLiteral("drag"),
-        QStringLiteral("gravity")
+        QStringLiteral("gravity"),
+        QStringLiteral("attractto"),
+        QStringLiteral("follow"),
+        QStringLiteral("repelfrom")
     };
     return record.behaviorRenderingVerified
            && names.contains(QFileInfo(record.filePath).baseName().toLower());
@@ -452,6 +455,70 @@ const composition::Layer* behaviorLayer(const char* layerId)
         }
     }
     return nullptr;
+}
+
+int simulationSourceIndex(const composition::Composition* composition,
+                          const core::Identifier& sourceLayerId)
+{
+    if (!composition || !sourceLayerId.isValid()) return 0;
+    for (int index = 0; index < composition->layers().size(); ++index) {
+        if (composition->layers().at(index).id == sourceLayerId) return index;
+    }
+    return 0;
+}
+
+struct SimulationLayerStates
+{
+    QByteArray records;
+    QVector<QByteArray> ids;
+    int count = 0;
+};
+
+SimulationLayerStates simulationLayerStates(
+    const composition::Composition* composition, int frame, double durationSeconds,
+    int sourceIndex, const std::array<float, 3>& velocity,
+    const std::array<float, 3>& displacement)
+{
+    // Project::CompositionAsset::SimulateLayers passes a contiguous array of
+    // 0x80-byte records. Layer-dependent Behaviors index it by GetLayerID;
+    // supplying just the source record lets a target lookup read past the end.
+    SimulationLayerStates result;
+    result.count = composition ? qMax(1, composition->layers().size()) : 1;
+    result.ids.reserve(result.count);
+    for (int index = 0; index < result.count; ++index) {
+        result.ids.append(composition && index < composition->layers().size()
+                              ? composition->layers().at(index).id.value().toLatin1()
+                              : QByteArrayLiteral("00000000-0000-0000-0000-000000000000"));
+    }
+    result.records = QByteArray(result.count * 0x80, '\0');
+    const double startTime = 0.0;
+    const double endTime = qMax(1.0, durationSeconds);
+    for (int index = 0; index < result.count; ++index) {
+        char* record = result.records.data() + index * 0x80;
+        const char* id = result.ids.at(index).constData();
+        std::memcpy(record, &id, sizeof(id));
+        std::memcpy(record + 0x18, &startTime, sizeof(startTime));
+        std::memcpy(record + 0x20, &endTime, sizeof(endTime));
+        std::array<float, 16> transform {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        };
+        if (composition && index < composition->layers().size()) {
+            const auto& layer = composition->layers().at(index);
+            const QPointF position = layer.transform.positionAt(frame);
+            transform[12] = float(position.x());
+            transform[13] = float(position.y());
+            transform[14] = float(layer.transform.positionZAt(frame));
+        }
+        if (index == sourceIndex) {
+            std::memcpy(record + 0x28, velocity.data(), sizeof(float) * 3);
+            for (int axis = 0; axis < 3; ++axis) transform[12 + axis] += displacement[axis];
+        }
+        std::memcpy(record + 0x40, transform.data(), sizeof(transform));
+    }
+    return result;
 }
 
 int numberOfBehaviorLayers(quint64)
@@ -1418,7 +1485,7 @@ public:
              ++simulationFrame) {
             simulation = {};
             QByteArray simulationContext(0x80, '\0');
-            const int objectIndex = 0;
+            const int objectIndex = simulationSourceIndex(composition, sourceLayerId);
             const double currentTime = double(simulationFrame + 1) * timeStep;
             std::memcpy(simulationContext.data() + 0x00, &objectIndex,
                         sizeof(objectIndex));
@@ -1432,13 +1499,16 @@ public:
             // SimulateLayers exposes one 0x80-byte record per participating
             // layer through SC+0x30. Drag reads the current velocity at
             // record+0x28 before submitting its damping multiplier.
-            QByteArray layerSimulationState(0x80, '\0');
-            std::memcpy(layerSimulationState.data() + 0x28, velocity.data(),
-                        sizeof(float) * velocity.size());
-            void* layerSimulationStatePointer = layerSimulationState.data();
+            SimulationLayerStates layerSimulationState = simulationLayerStates(
+                composition, timelineFrame - localFrame + simulationFrame + 1,
+                double(layerDurationFrames) / invocation.frameRate, objectIndex,
+                velocity, position);
+            void* layerSimulationStatePointer = layerSimulationState.records.data();
             std::memcpy(simulationContext.data() + 0x30,
                         &layerSimulationStatePointer,
                         sizeof(layerSimulationStatePointer));
+            std::memcpy(simulationContext.data() + 0x38,
+                        &layerSimulationState.count, sizeof(layerSimulationState.count));
             const auto callback = simulationCallback;
             std::memcpy(simulationContext.data() + 0x40, &callback,
                         sizeof(callback));
@@ -1570,10 +1640,12 @@ public:
         for (int simulationFrame = 0; simulationFrame < localFrame;
              ++simulationFrame) {
             simulation = {};
-            QByteArray layerSimulationState(0x80, '\0');
-            std::memcpy(layerSimulationState.data() + 0x28, velocity.data(),
-                        sizeof(float) * velocity.size());
-            void* layerSimulationStatePointer = layerSimulationState.data();
+            const int objectIndex = simulationSourceIndex(composition, sourceLayerId);
+            SimulationLayerStates layerSimulationState = simulationLayerStates(
+                composition, timelineFrame - localFrame + simulationFrame + 1,
+                double(layerDurationFrames) / safeFrameRate, objectIndex,
+                velocity, position);
+            void* layerSimulationStatePointer = layerSimulationState.records.data();
 
             for (const BehaviorStackEntry& entry : entries) {
                 if (rejected.contains(entry.id)) continue;
@@ -1595,7 +1667,6 @@ public:
                 }
 
                 QByteArray context(0x80, '\0');
-                const int objectIndex = 0;
                 const double currentTime = double(simulationFrame + 1) * timeStep;
                 std::memcpy(context.data() + 0x00, &objectIndex,
                             sizeof(objectIndex));
@@ -1608,6 +1679,8 @@ public:
                             sizeof(simulationState));
                 std::memcpy(context.data() + 0x30, &layerSimulationStatePointer,
                             sizeof(layerSimulationStatePointer));
+                std::memcpy(context.data() + 0x38, &layerSimulationState.count,
+                            sizeof(layerSimulationState.count));
                 const auto force = forceCallback;
                 const auto drag = dampingCallback;
                 std::memcpy(context.data() + 0x40, &force, sizeof(force));

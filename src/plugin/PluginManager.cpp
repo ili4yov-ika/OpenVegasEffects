@@ -1039,13 +1039,14 @@ private:
         // completes with identical matrix/opacity output on the GUI and render
         // threads in tools/hfpl_runtime_probe's behavior mode. PositionMix and
         // RotateByLayer additionally exercise the layer transform services at
-        // API+0x308..+0x330. Acceleration, Drag and Gravity additionally use
-        // the shared Notify(103) integrator. The remaining 21 Behavior modules
-        // need a shared simulation pass, a layer graph, or per-text-object
-        // callbacks and stay disabled until those contexts are connected.
+        // API+0x308..+0x330. Acceleration, Drag and Gravity use the shared
+        // Notify(103) integrator. AttractTo, Follow and RepelFrom additionally
+        // use the layer-state array and stable target FXID. Remaining modules
+        // need more simulation or per-text-object callbacks.
         static const QSet<QString> verifiedNativeBehaviors {
             QStringLiteral("downinsert"),
             QStringLiteral("acceleration"),
+            QStringLiteral("attractto"),
             QStringLiteral("drag"),
             QStringLiteral("downroll"),
             QStringLiteral("drop"),
@@ -1054,9 +1055,11 @@ private:
             QStringLiteral("flyinfadeout"),
             QStringLiteral("flyinflyout"),
             QStringLiteral("flytozoomin"),
+            QStringLiteral("follow"),
             QStringLiteral("gravity"),
             QStringLiteral("leftroll"),
             QStringLiteral("positionmix"),
+            QStringLiteral("repelfrom"),
             QStringLiteral("rightroll"),
             QStringLiteral("rotatebylayer"),
             QStringLiteral("stretchandzoomin"),
