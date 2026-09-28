@@ -688,7 +688,7 @@ opacity — вместе с host callbacks `GetPreBehaviorEffectTransformation` 
 `velocity/position` из `Project.dll`. `Acceleration`, `Gravity` и `Drag` исполняются в общем
 покадровом проходе с одной скоростью; отдельная регрессия сравнивает результат
 всего стека в основном и worker-thread. Layer-dependent `AttractTo`, `Follow`
-и `RepelFrom` доводят production-набор до 25/43. Посимвольный `Notify(105)`
+и `RepelFrom` вместе с `Throw` доводят production-набор до 26/43. Посимвольный `Notify(105)`
 ещё не подключён.
 
 ### Выбор целевого слоя в Behavior (повторная проверка в Ghidra)
@@ -715,8 +715,11 @@ opacity — вместе с host callbacks `GetPreBehaviorEffectTransformation` 
 worker-thread. При позиции цели `(240, 80)` на 30-м кадре результаты:
 `AttractTo` `(19.6868, 6.56226)`, `Follow` `(153.201, 51.0671)`,
 `RepelFrom` `(-18.6661, -6.22205)`. Все три включены в production whitelist.
-`Throw` не имеет layer picker и в том же зондировании остаётся без движения;
-его ABI требует отдельного разбора.
+У `Throw` нет layer picker: при исходном `Acceleration Time = 0` его
+`Notify(103)` не подаёт силу, а при `1 s` даёт `(257.778, 0)` за 30 кадров.
+Общий стек, перестановка слоёв и worker-thread дают тот же результат, поэтому
+`Throw` также включён. Восстановление полного transform/orientation состояния
+слоёв и других модулей остаётся открытым.
 
 Восстановленный порядок запуска и геометрия окна также отражены в `AppMain`/`MainWindow`: сначала
 менеджеры медиа и плагинов, затем модель и окно; `MainWindow/Geometry`, `NormalGeometry` и

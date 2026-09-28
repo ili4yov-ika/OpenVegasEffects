@@ -494,9 +494,10 @@ Runtime повторяет этот порядок с фактическим FPS
 созданную `Acceleration` и `Gravity`, и также включён. Режим probe `behavior-stack` проверяет эту
 комбинацию в основном и worker-thread: за секунду при значениях по умолчанию получается одинаковая
 позиция `(171.958, -238.831, 0)`. Layer-state массив дополнительно включает
-`AttractTo`, `Follow` и `RepelFrom`; рабочий итог составляет 25/43 Behavior. `MotionTrack` не входит
+`AttractTo`, `Follow` и `RepelFrom`; `Throw` подтверждён при ненулевом Acceleration Time.
+Рабочий итог составляет 26/43 Behavior. `MotionTrack` не входит
 в whitelist: поставляемый модуль возвращает unsupported для `Notify(102/103/104)` и не создаёт
-матрицу либо opacity. `Throw` по-прежнему требует отдельного simulation ABI; текстовые модули требуют
+матрицу либо opacity. Текстовые модули требуют
 `SubObjectTransformationAtTime` (`Notify(105)`). `OrientationValue +0x340` уже возвращает
 сохранённый трёхкомпонентный параметр этим обработчикам.
 

@@ -61,7 +61,8 @@ bool isVerifiedSimulationBehavior(const ModuleRecord& record)
         QStringLiteral("gravity"),
         QStringLiteral("attractto"),
         QStringLiteral("follow"),
-        QStringLiteral("repelfrom")
+        QStringLiteral("repelfrom"),
+        QStringLiteral("throw")
     };
     return record.behaviorRenderingVerified
            && names.contains(QFileInfo(record.filePath).baseName().toLower());

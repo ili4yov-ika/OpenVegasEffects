@@ -1041,7 +1041,8 @@ private:
         // RotateByLayer additionally exercise the layer transform services at
         // API+0x308..+0x330. Acceleration, Drag and Gravity use the shared
         // Notify(103) integrator. AttractTo, Follow and RepelFrom additionally
-        // use the layer-state array and stable target FXID. Remaining modules
+        // use the layer-state array and stable target FXID. Throw also uses
+        // Notify(103), and moves with a nonzero Acceleration Time. Remaining modules
         // need more simulation or per-text-object callbacks.
         static const QSet<QString> verifiedNativeBehaviors {
             QStringLiteral("downinsert"),
@@ -1065,6 +1066,7 @@ private:
             QStringLiteral("stretchandzoomin"),
             QStringLiteral("tinyzoom"),
             QStringLiteral("twirlbehavior"),
+            QStringLiteral("throw"),
             QStringLiteral("upinsert"),
             QStringLiteral("uproll"),
             QStringLiteral("zoomin"),

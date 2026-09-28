@@ -757,7 +757,8 @@ Behavior хост применяет `pow(damping, dt)`, обновляет velo
 Runtime собирает `Acceleration`, `Gravity` и `Drag` в один покадровый проход с общей скоростью:
 при значениях по умолчанию их совместный результат `(171.958, -238.831, 0)` одинаков в основном
 и worker-thread. Все три включены в production whitelist; вместе с `AttractTo`,
-`Follow` и `RepelFrom`, проверенными с layer-state массивом, итог — 25/43 Behavior. `MotionTrack`
+`Follow` и `RepelFrom`, проверенными с layer-state массивом, и `Throw` при
+ненулевом Acceleration Time итог — 26/43 Behavior. `MotionTrack`
 удалён из whitelist после повторной проверки: он отвергает все три runtime-callback. Для следующих
 модулей требуется дальнейшее восстановление simulation ABI; `Notify(105)`
 остаётся отдельной задачей для текстовых Behavior.
