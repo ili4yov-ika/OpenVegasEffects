@@ -272,7 +272,44 @@ QImage RenderWorker::renderClip(const composition::Layer& layer, const compositi
         // puts a text box's own centre.
         const QRectF box(-canvasSize.width() / 2.0, -canvasSize.height() / 2.0,
                          canvasSize.width(), canvasSize.height());
-        render::drawStyledText(painter, box, style);
+        bool hasGlyphBehavior = false;
+        for (const composition::Effect& fx : clip.effects) {
+            if (fx.enabled && plugin::nativeBehaviorSubObjectRenderingVerified(fx.pluginId)) {
+                hasGlyphBehavior = true;
+                break;
+            }
+        }
+        render::GlyphOpacityModifier glyphModifier;
+        if (hasGlyphBehavior) {
+            glyphModifier = [&](QVector<float>& opacities) {
+                plugin::NativeSubObjectResult result;
+                result.transformations.resize(opacities.size());
+                result.clipValues.resize(opacities.size());
+                result.opacities = opacities;
+                const double fps = m_composition
+                    ? double(m_composition->fpsNumerator())
+                          / qMax(1, m_composition->fpsDenominator())
+                    : 30.0;
+                const int localFrame = qMax(0, frame - qRound(clip.startSeconds * fps));
+                const int durationFrames = qMax(1, qRound(clip.durationSeconds * fps));
+                for (const composition::Effect& fx : clip.effects) {
+                    if (!fx.enabled
+                        || !plugin::nativeBehaviorSubObjectRenderingVerified(fx.pluginId)) {
+                        continue;
+                    }
+                    QStringList resolved;
+                    for (int i = 0; i < fx.parameterValues.size(); ++i) {
+                        resolved.append(fx.parameterAt(i, frame).toString());
+                    }
+                    plugin::evaluateNativeSubObjectBehavior(
+                        result, frame, localFrame, durationFrames,
+                        canvasSize.width(), canvasSize.height(), fps,
+                        fx.pluginId, resolved, layer.id);
+                }
+                opacities = result.opacities;
+            };
+        }
+        render::drawStyledText(painter, box, style, glyphModifier);
     } else {
         // Placeholder: determined by media, animated by local clip time so playback
         // is visibly moving.
@@ -362,7 +399,8 @@ double RenderWorker::applyClipBehaviors(QImage& image,
         image = std::move(transformed);
     };
     for (const composition::Effect& fx : clip.effects) {
-        if (!fx.enabled || !plugin::nativeBehaviorRenderingVerified(fx.pluginId)) {
+        if (!fx.enabled || !plugin::nativeBehaviorRenderingVerified(fx.pluginId)
+            || plugin::nativeBehaviorSubObjectRenderingVerified(fx.pluginId)) {
             continue;
         }
         QStringList values = fx.parameterValues;

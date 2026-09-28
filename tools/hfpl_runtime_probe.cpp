@@ -530,7 +530,7 @@ int main(int argc, char** argv)
     const QStringList args = app.arguments();
     if (args.size() < 2 || args.size() > 4) {
         err << "Usage: hfpl_runtime_probe <plugin-or-directory> [dependency-directory] "
-               "[message[,message...]|metadata|parameters|render|transition|audio|audio-transition|behavior|behavior-stack]\n";
+               "[message[,message...]|metadata|parameters|render|transition|audio|audio-transition|behavior|behavior-stack|behavior-subobject]\n";
         return 2;
     }
 
@@ -571,6 +571,10 @@ int main(int argc, char** argv)
                                   && args.at(3).compare(
                                          QStringLiteral("behavior-stack"),
                                          Qt::CaseInsensitive) == 0;
+    const bool behaviorSubObjectApi = args.size() == 4
+                                      && args.at(3).compare(
+                                             QStringLiteral("behavior-subobject"),
+                                             Qt::CaseInsensitive) == 0;
     const bool rendererApi = args.size() == 4
                              && (args.at(3).compare(QStringLiteral("render"),
                                                    Qt::CaseInsensitive) == 0
@@ -580,7 +584,7 @@ int main(int argc, char** argv)
                                                      Qt::CaseInsensitive) == 0;
     if (args.size() == 4 && !metadataOnly && !parametersOnly && !rendererApi
         && !audioApi && !audioTransitionApi && !behaviorApi && !behaviorGraphApi
-        && !behaviorStackApi) {
+        && !behaviorStackApi && !behaviorSubObjectApi) {
         for (const QString& value : args.at(3).split(QLatin1Char(','), Qt::SkipEmptyParts)) {
             bool ok = false;
             const int message = value.toInt(&ok, 0);
@@ -588,6 +592,91 @@ int main(int argc, char** argv)
                 messages.append(message);
             }
         }
+    }
+
+    if (behaviorSubObjectApi) {
+        out << "file\tnotify105\tfirst-eight-opacity\tfirst-eight-clips\tfirst-four-records\tthread-match\n";
+        int failures = 0;
+        for (const QString& file : files) {
+            const QString dependencyDir = QFileInfo(args.at(2)).absoluteFilePath();
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(
+                file, dependencyDir);
+            QStringList parameterValues;
+            for (const auto& parameter : metadata.parameters) {
+                parameterValues.append(parameter.defaultValue);
+            }
+            const openvegas::core::Identifier id(
+                QStringLiteral("probe.native.behavior.subobject"));
+            openvegas::plugin::clearNativeEffectModules();
+            openvegas::plugin::registerNativeBehaviorModule(
+                id, file, dependencyDir, true, metadata.parameters);
+            openvegas::plugin::NativeSubObjectResult result;
+            result.transformations.resize(8);
+            result.clipValues.resize(8);
+            result.opacities.fill(1.0f, 8);
+            const bool ok = openvegas::plugin::evaluateNativeSubObjectBehavior(
+                result, 15, 15, 120, 1920, 1080, 30.0, id,
+                parameterValues, {});
+            openvegas::plugin::NativeSubObjectResult threaded;
+            threaded.transformations.resize(8);
+            threaded.clipValues.resize(8);
+            threaded.opacities.fill(1.0f, 8);
+            bool threadOk = false;
+            QThread* renderThread = QThread::create([&]() {
+                threadOk = openvegas::plugin::evaluateNativeSubObjectBehavior(
+                    threaded, 15, 15, 120, 1920, 1080, 30.0, id,
+                    parameterValues, {});
+                openvegas::plugin::releaseNativeEffectThreadRenderer();
+            });
+            renderThread->start();
+            renderThread->wait();
+            delete renderThread;
+            bool same = threadOk == ok;
+            if (ok && threadOk) {
+                for (int i = 0; i < 8; ++i) {
+                    same = same && qAbs(result.opacities.at(i)
+                                        - threaded.opacities.at(i)) < 0.00001f;
+                    const float* mainMatrix = result.transformations.at(i).constData();
+                    const float* workerMatrix = threaded.transformations.at(i).constData();
+                    for (int j = 0; j < 16; ++j) {
+                        same = same && qAbs(mainMatrix[j] - workerMatrix[j]) < 0.0001f;
+                    }
+                }
+            }
+            const bool typewriter = QFileInfo(file).baseName().compare(
+                QStringLiteral("Typewriter"), Qt::CaseInsensitive) == 0;
+            if (typewriter && (!ok || !same
+                               || result.opacities.at(0) <= 0.0f
+                               || result.opacities.at(0) >= 1.0f
+                               || result.opacities.at(1) != 0.0f)) {
+                ++failures;
+            }
+            QStringList opacities;
+            QStringList clips;
+            QStringList records;
+            for (int i = 0; i < 8; ++i) {
+                opacities.append(QString::number(result.opacities.at(i)));
+                clips.append(result.clipValues.at(i).enabled
+                                 ? QStringLiteral("1") : QStringLiteral("0"));
+                if (i < 4) {
+                    const auto& clip = result.clipValues.at(i);
+                    const float* matrix = result.transformations.at(i).constData();
+                    records.append(QStringLiteral("%1,%2,%3,%4,%5,%6,%7,%8")
+                                       .arg(matrix[12]).arg(matrix[13])
+                                       .arg(matrix[0]).arg(clip.values[0])
+                                       .arg(clip.values[1]).arg(clip.values[2])
+                                       .arg(clip.values[3]).arg(clip.values[4]));
+                }
+            }
+            out << QFileInfo(file).fileName() << '\t' << (ok ? 1 : 0)
+                << '\t' << opacities.join(QLatin1Char(','))
+                << '\t' << clips.join(QLatin1Char(','))
+                << '\t' << records.join(QLatin1Char(';'))
+                << '\t' << (same ? 1 : 0) << '\n';
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        }
+        out.flush();
+        return failures == 0 ? 0 : 1;
     }
 
     if (behaviorGraphApi) {

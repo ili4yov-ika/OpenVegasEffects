@@ -688,8 +688,12 @@ opacity — вместе с host callbacks `GetPreBehaviorEffectTransformation` 
 `velocity/position` из `Project.dll`. `Acceleration`, `Gravity` и `Drag` исполняются в общем
 покадровом проходе с одной скоростью; отдельная регрессия сравнивает результат
 всего стека в основном и worker-thread. Layer-dependent `AttractTo`, `Follow`
-и `RepelFrom` вместе с `Throw` доводят production-набор до 26/43. Посимвольный `Notify(105)`
-ещё не подключён.
+и `RepelFrom` вместе с `Throw` доводят production-набор до 26/43. Восстановленный
+посимвольный `Notify(105)` (`PluginBehaviorEffect` VA `0x18034c810`, `PluginFile` RVA
+`0x3593e0`) довёл его до 27/43 за счёт `Typewriter`. Контекст MC размером `0x78`
+передаёт count в `+0x58` и указатель на 0x5c-byte записи в `+0x60`; opacity float
+находится в каждой записи по `+0x40`. Остальные 15 текстовых модулей отвечают на
+`Notify(105)` и проверены probe, но их матрицы/ClipValue пока не применяются в рендере.
 
 ### Выбор целевого слоя в Behavior (повторная проверка в Ghidra)
 

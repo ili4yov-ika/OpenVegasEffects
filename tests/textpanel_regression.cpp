@@ -58,6 +58,42 @@ class TextPanelRegression : public QObject
 {
     Q_OBJECT
 private slots:
+    void glyphOpacityKeepsShapedTextIndependent()
+    {
+        TextStyle style = sampleStyle();
+        style.text = QStringLiteral("OO");
+        style.backgroundEnabled = false;
+        style.underline = false;
+        style.strikethrough = false;
+        style.outlineSize = 0;
+        const auto alphaSum = [](const QImage& image) {
+            qint64 sum = 0;
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    sum += qAlpha(image.pixel(x, y));
+                }
+            }
+            return sum;
+        };
+        const qint64 both = alphaSum(renderStyle(style));
+        QVERIFY(both > 0);
+        QImage single(480, 360, QImage::Format_ARGB32_Premultiplied);
+        single.fill(Qt::transparent);
+        QPainter painter(&single);
+        int glyphCount = 0;
+        openvegas::render::drawStyledText(
+            painter, QRectF(30, 40, 350, 260), style,
+            [&](QVector<float>& opacities) {
+                glyphCount = opacities.size();
+                if (opacities.size() == 2) opacities[1] = 0.0f;
+            });
+        painter.end();
+        QCOMPARE(glyphCount, 2);
+        const qint64 one = alphaSum(single);
+        QVERIFY(one > 0);
+        QVERIFY(one < both);
+    }
+
     void missingAudioSurvivesProjectLoad()
     {
         using namespace openvegas;

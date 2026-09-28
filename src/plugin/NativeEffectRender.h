@@ -45,6 +45,7 @@ bool nativeAudioEffectRenderingVerified(const core::Identifier& id);
 bool nativeAudioTransitionRenderingVerified(const core::Identifier& id);
 bool nativeBehaviorRenderingVerified(const core::Identifier& id);
 bool nativeBehaviorSimulationRenderingVerified(const core::Identifier& id);
+bool nativeBehaviorSubObjectRenderingVerified(const core::Identifier& id);
 
 // Result of the three Behavior callbacks used by Tannen. TransformationAtTime
 // (Notify 102) writes a column-major 4x4 matrix; OpacityAtTime (Notify 104)
@@ -54,6 +55,23 @@ struct NativeBehaviorResult
 {
     QMatrix4x4 transformation;
     float opacity = 1.0f;
+};
+
+// BIFF's SubObjectTransformationAtTime (Notify 105) edits one 0x5c-byte
+// record per glyph. The trailing 0x18 bytes are the native ClipValue (an
+// enabled byte, three reserved bytes, and five floats). Keep all five values
+// until their distinct clipping semantics are recovered.
+struct NativeSubObjectClipValue
+{
+    bool enabled = true;
+    float values[5] {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+};
+
+struct NativeSubObjectResult
+{
+    QVector<QMatrix4x4> transformations;
+    QVector<NativeSubObjectClipValue> clipValues;
+    QVector<float> opacities;
 };
 
 struct NativeBehaviorRequest
@@ -80,6 +98,11 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
                                  const QStringList& parameterValues = {},
                                  const composition::Composition* composition = nullptr,
                                  const core::Identifier& sourceLayerId = {});
+bool evaluateNativeSubObjectBehavior(
+    NativeSubObjectResult& result, int timelineFrame, int localFrame,
+    int layerDurationFrames, int canvasWidth, int canvasHeight,
+    double frameRate, const core::Identifier& id,
+    const QStringList& parameterValues, const core::Identifier& sourceLayerId);
 bool simulateNativeBehaviorStack(NativeBehaviorResult& result, int timelineFrame,
                                  int localFrame, int layerDurationFrames,
                                  int canvasWidth, int canvasHeight, double frameRate,

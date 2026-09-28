@@ -1370,6 +1370,112 @@ public:
         }
     }
 
+    bool evaluateSubObjects(NativeSubObjectResult& result, int timelineFrame,
+                            int localFrame, int layerDurationFrames,
+                            int canvasWidth, int canvasHeight, double frameRate,
+                            const QString& id, const ModuleRecord& record,
+                            const QStringList& parameterValues,
+                            const core::Identifier& sourceLayerId)
+    {
+#ifndef Q_OS_WIN
+        Q_UNUSED(result);
+        Q_UNUSED(timelineFrame);
+        Q_UNUSED(localFrame);
+        Q_UNUSED(layerDurationFrames);
+        Q_UNUSED(canvasWidth);
+        Q_UNUSED(canvasHeight);
+        Q_UNUSED(frameRate);
+        Q_UNUSED(id);
+        Q_UNUSED(record);
+        Q_UNUSED(parameterValues);
+        Q_UNUSED(sourceLayerId);
+        return false;
+#else
+        const qsizetype count = result.transformations.size();
+        if (count == 0 || result.clipValues.size() != count
+            || result.opacities.size() != count || count > 100000) {
+            return false;
+        }
+        RenderInvocation invocation;
+        invocation.module = &record;
+        invocation.values = &parameterValues;
+        invocation.width = qMax(1, canvasWidth);
+        invocation.height = qMax(1, canvasHeight);
+        invocation.timelineFrame = timelineFrame;
+        invocation.layerDurationFrames = qMax(1, layerDurationFrames);
+        invocation.frameRate = qMax(0.001, frameRate);
+        invocation.sourceLayerId = sourceLayerId;
+        RenderInvocation* previousInvocation = g_renderInvocation;
+        g_renderInvocation = &invocation;
+        NativePluginRuntime* runtime = runtimeFor(id, record);
+        if (!runtime) {
+            g_renderInvocation = previousInvocation;
+            return false;
+        }
+
+        // PluginBehaviorEffect allocates a 0x78-byte MC context. Its +0x58
+        // count and +0x60 pointer describe contiguous 0x5c-byte glyph records.
+        // The matrix at +0x18 is inline, unlike Notify(102)'s matrix pointer.
+        QByteArray records(count * 0x5c, '\0');
+        for (qsizetype index = 0; index < count; ++index) {
+            char* recordBytes = records.data() + index * 0x5c;
+            std::memcpy(recordBytes, result.transformations[index].constData(),
+                        16 * sizeof(float));
+            const float opacity = result.opacities[index];
+            std::memcpy(recordBytes + 0x40, &opacity, sizeof(opacity));
+            recordBytes[0x44] = result.clipValues[index].enabled ? 1 : 0;
+            std::memcpy(recordBytes + 0x48, result.clipValues[index].values,
+                        sizeof(result.clipValues[index].values));
+        }
+        QByteArray context(0x78, '\0');
+        static constexpr char nullLayerId[] =
+            "00000000-0000-0000-0000-000000000000";
+        const QByteArray sourceId = sourceLayerId.isValid()
+                                        ? sourceLayerId.value().toLatin1()
+                                        : QByteArray(nullLayerId);
+        const char* layerId = sourceId.constData();
+        std::memcpy(context.data(), &layerId, sizeof(layerId));
+        std::memcpy(context.data() + 0x08, &timelineFrame, sizeof(timelineFrame));
+        std::memcpy(context.data() + 0x0c, &localFrame, sizeof(localFrame));
+        std::memcpy(context.data() + 0x18,
+                    invocation.preBehaviorTransformation.data(),
+                    16 * sizeof(float));
+        const qint32 objectCount = qint32(count);
+        std::memcpy(context.data() + 0x58, &objectCount, sizeof(objectCount));
+        void* recordPointer = records.data();
+        std::memcpy(context.data() + 0x60, &recordPointer,
+                    sizeof(recordPointer));
+        const float width = float(invocation.width);
+        const float height = float(invocation.height);
+        std::memcpy(context.data() + 0x68, &width, sizeof(width));
+        std::memcpy(context.data() + 0x6c, &height, sizeof(height));
+        std::memcpy(context.data() + 0x70, &width, sizeof(width));
+        std::memcpy(context.data() + 0x74, &height, sizeof(height));
+        void* contextPointer = context.data();
+        std::memcpy(runtime->apiBlock().data() + 0x20, &contextPointer,
+                    sizeof(contextPointer));
+        const qint32 capability = 8;
+        std::memcpy(runtime->apiBlock().data() + 0x498, &capability,
+                    sizeof(capability));
+        const int notifyResult = runtime->notify(105);
+        g_renderInvocation = previousInvocation;
+        if (notifyResult != 1 || runtime->lastFaultCode() != 0) {
+            return false;
+        }
+        for (qsizetype index = 0; index < count; ++index) {
+            const char* recordBytes = records.constData() + index * 0x5c;
+            std::memcpy(result.transformations[index].data(), recordBytes,
+                        16 * sizeof(float));
+            std::memcpy(&result.opacities[index], recordBytes + 0x40,
+                        sizeof(float));
+            result.clipValues[index].enabled = recordBytes[0x44] != 0;
+            std::memcpy(result.clipValues[index].values, recordBytes + 0x48,
+                        sizeof(result.clipValues[index].values));
+        }
+        return true;
+#endif
+    }
+
     bool evaluate(NativeBehaviorResult& result, int timelineFrame, int localFrame,
                   int layerDurationFrames, int canvasWidth, int canvasHeight,
                   double frameRate, bool includeSimulation,
@@ -2506,6 +2612,17 @@ bool nativeBehaviorSimulationRenderingVerified(const core::Identifier& id)
     return it != g_registry.constEnd() && isVerifiedSimulationBehavior(it.value());
 }
 
+bool nativeBehaviorSubObjectRenderingVerified(const core::Identifier& id)
+{
+    QMutexLocker lock(&g_registryMutex);
+    const auto it = g_registry.constFind(id.value());
+    // Typewriter is verified end-to-end: Notify(105) edits the per-glyph
+    // opacity at record+0x40, which TextRender composites independently.
+    return it != g_registry.constEnd() && it->behaviorRenderingVerified
+           && QFileInfo(it->filePath).baseName().compare(
+                  QStringLiteral("Typewriter"), Qt::CaseInsensitive) == 0;
+}
+
 bool evaluateNativeBehavior(NativeBehaviorResult& result, int timelineFrame,
                             int localFrame, int layerDurationFrames,
                             int canvasWidth, int canvasHeight, double frameRate,
@@ -2556,6 +2673,30 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
         result, timelineFrame, localFrame, layerDurationFrames,
         canvasWidth, canvasHeight, frameRate, false, id.value(), record,
         parameterValues, composition, sourceLayerId);
+}
+
+bool evaluateNativeSubObjectBehavior(
+    NativeSubObjectResult& result, int timelineFrame, int localFrame,
+    int layerDurationFrames, int canvasWidth, int canvasHeight,
+    double frameRate, const core::Identifier& id,
+    const QStringList& parameterValues, const core::Identifier& sourceLayerId)
+{
+    ModuleRecord record;
+    {
+        QMutexLocker lock(&g_registryMutex);
+        const auto it = g_registry.constFind(id.value());
+        if (it == g_registry.constEnd() || !it->behaviorRenderingVerified) {
+            return false;
+        }
+        record = it.value();
+    }
+    if (!g_behaviorThreadRenderer) {
+        g_behaviorThreadRenderer = std::make_unique<BehaviorThreadRenderer>();
+    }
+    return g_behaviorThreadRenderer->evaluateSubObjects(
+        result, timelineFrame, localFrame, layerDurationFrames,
+        canvasWidth, canvasHeight, frameRate,
+        id.value(), record, parameterValues, sourceLayerId);
 }
 
 bool simulateNativeBehaviorStack(

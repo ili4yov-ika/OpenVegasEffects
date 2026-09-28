@@ -1042,8 +1042,9 @@ private:
         // API+0x308..+0x330. Acceleration, Drag and Gravity use the shared
         // Notify(103) integrator. AttractTo, Follow and RepelFrom additionally
         // use the layer-state array and stable target FXID. Throw also uses
-        // Notify(103), with its default impulse at simulation time zero. Remaining modules
-        // need more simulation or per-text-object callbacks.
+        // Notify(103), with its default impulse at simulation time zero.
+        // Typewriter uses Notify(105) and per-glyph opacity in TextRender.
+        // Remaining modules need more simulation or glyph-matrix support.
         static const QSet<QString> verifiedNativeBehaviors {
             QStringLiteral("downinsert"),
             QStringLiteral("acceleration"),
@@ -1067,6 +1068,7 @@ private:
             QStringLiteral("tinyzoom"),
             QStringLiteral("twirlbehavior"),
             QStringLiteral("throw"),
+            QStringLiteral("typewriter"),
             QStringLiteral("upinsert"),
             QStringLiteral("uproll"),
             QStringLiteral("zoomin"),

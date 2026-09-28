@@ -9,6 +9,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QTextOption>
+#include <utility>
 
 namespace openvegas {
 namespace render {
@@ -92,6 +93,7 @@ Qt::Alignment horizontalAlignment(TextStyle::AlignH align)
 struct TextGeometry
 {
     QPainterPath glyphs;
+    QVector<QPainterPath> glyphPaths;
     QPainterPath decorations;
     QRectF bounds;
 };
@@ -159,8 +161,10 @@ TextGeometry layoutText(const QRectF& box, const TextStyle& style)
             const auto positions = run.positions();
             for (qsizetype i = 0; i < indexes.size(); ++i) {
                 const QPointF pos = positions[i] + QPointF(0, scriptShift);
-                result.glyphs.addPath(QTransform::fromTranslate(pos.x(), pos.y())
-                                         .map(raw.pathForGlyph(indexes[i])));
+                QPainterPath glyph = QTransform::fromTranslate(pos.x(), pos.y())
+                                         .map(raw.pathForGlyph(indexes[i]));
+                result.glyphs.addPath(glyph);
+                result.glyphPaths.append(std::move(glyph));
             }
         }
         if (style.underline || style.strikethrough) {
@@ -186,6 +190,7 @@ TextGeometry layoutText(const QRectF& box, const TextStyle& style)
     top -= style.fontSize * style.baselineShift / 100.0;
     const QTransform origin = QTransform::fromTranslate(box.left() + style.indentLeft, top);
     result.glyphs = origin.map(result.glyphs);
+    for (QPainterPath& glyph : result.glyphPaths) glyph = origin.map(glyph);
     result.decorations = origin.map(result.decorations);
     result.bounds = result.glyphs.boundingRect().united(result.decorations.boundingRect());
     return result;
@@ -198,7 +203,9 @@ QRectF styledTextBounds(const QRectF& box, const TextStyle& style)
     return style.text.isEmpty() ? QRectF() : layoutText(effectiveTextBox(box, style), style).bounds;
 }
 
-void drawStyledText(QPainter& painter, const QRectF& box, const TextStyle& style)
+void drawStyledText(QPainter& painter, const QRectF& box,
+                    const TextStyle& style,
+                    const GlyphOpacityModifier& glyphOpacityModifier)
 {
     if (style.text.isEmpty()) return;
     painter.save();
@@ -208,6 +215,14 @@ void drawStyledText(QPainter& painter, const QRectF& box, const TextStyle& style
                   qMax(0.01, style.verticalScale / 100.0));
     painter.translate(-box.center());
     const TextGeometry geometry = layoutText(effectiveTextBox(box, style), style);
+    QVector<float> glyphOpacities;
+    if (glyphOpacityModifier && !geometry.glyphPaths.isEmpty()) {
+        glyphOpacities.fill(1.0f, geometry.glyphPaths.size());
+        glyphOpacityModifier(glyphOpacities);
+        if (glyphOpacities.size() != geometry.glyphPaths.size()) {
+            glyphOpacities.clear();
+        }
+    }
     if (style.backgroundEnabled && style.backgroundOpacity > 0 && !geometry.bounds.isEmpty()) {
         const double ex = style.backgroundExpansionX * style.fontSize / 100.0;
         const double ey = style.expansionLinked ? ex : style.backgroundExpansionY * style.fontSize / 100.0;
@@ -222,7 +237,16 @@ void drawStyledText(QPainter& painter, const QRectF& box, const TextStyle& style
         painter.drawRoundedRect(plate, radius, radius);
     }
     const auto fill = [&] {
-        painter.fillPath(geometry.glyphs, style.fontColor);
+        if (glyphOpacities.isEmpty()) {
+            painter.fillPath(geometry.glyphs, style.fontColor);
+        } else {
+            const qreal originalOpacity = painter.opacity();
+            for (qsizetype i = 0; i < geometry.glyphPaths.size(); ++i) {
+                painter.setOpacity(originalOpacity * qBound(0.0f, glyphOpacities[i], 1.0f));
+                painter.fillPath(geometry.glyphPaths[i], style.fontColor);
+            }
+            painter.setOpacity(originalOpacity);
+        }
         painter.fillPath(geometry.decorations, style.fontColor);
     };
     const auto outlines = [&] {
@@ -235,7 +259,16 @@ void drawStyledText(QPainter& painter, const QRectF& box, const TextStyle& style
             QPen pen(it->color);
             pen.setWidthF(it->size * (style.strokeOrder == TextStyle::StrokeOrder::Centered ? 1.0 : 2.0));
             pen.setJoinStyle(Qt::RoundJoin);
-            painter.strokePath(geometry.glyphs, pen);
+            if (glyphOpacities.isEmpty()) {
+                painter.strokePath(geometry.glyphs, pen);
+            } else {
+                const qreal originalOpacity = painter.opacity();
+                for (qsizetype i = 0; i < geometry.glyphPaths.size(); ++i) {
+                    painter.setOpacity(originalOpacity * qBound(0.0f, glyphOpacities[i], 1.0f));
+                    painter.strokePath(geometry.glyphPaths[i], pen);
+                }
+                painter.setOpacity(originalOpacity);
+            }
             painter.strokePath(geometry.decorations, pen);
         }
     };
