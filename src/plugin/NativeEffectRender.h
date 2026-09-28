@@ -10,6 +10,8 @@
 
 class QImage;
 
+namespace openvegas::composition { class Composition; }
+
 namespace openvegas {
 namespace plugin {
 
@@ -64,7 +66,9 @@ bool evaluateNativeBehavior(NativeBehaviorResult& result, int timelineFrame,
                             int localFrame, int layerDurationFrames,
                             int canvasWidth, int canvasHeight, double frameRate,
                             const core::Identifier& id,
-                            const QStringList& parameterValues = {});
+                            const QStringList& parameterValues = {},
+                            const composition::Composition* composition = nullptr,
+                            const core::Identifier& sourceLayerId = {});
 
 // Frame-only 102/104 path used before the layer's simulation behaviors are
 // evaluated together. Calling the simulation modules separately would reset
@@ -73,11 +77,15 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
                                  int localFrame, int layerDurationFrames,
                                  int canvasWidth, int canvasHeight, double frameRate,
                                  const core::Identifier& id,
-                                 const QStringList& parameterValues = {});
+                                 const QStringList& parameterValues = {},
+                                 const composition::Composition* composition = nullptr,
+                                 const core::Identifier& sourceLayerId = {});
 bool simulateNativeBehaviorStack(NativeBehaviorResult& result, int timelineFrame,
                                  int localFrame, int layerDurationFrames,
                                  int canvasWidth, int canvasHeight, double frameRate,
-                                 const QVector<NativeBehaviorRequest>& behaviors);
+                                 const QVector<NativeBehaviorRequest>& behaviors,
+                                 const composition::Composition* composition = nullptr,
+                                 const core::Identifier& sourceLayerId = {});
 
 // Executes the 2D BIFF GPU path (Notify 8 once per render thread, Notify 10 per
 // frame). Returns false without changing image when the id is unregistered or

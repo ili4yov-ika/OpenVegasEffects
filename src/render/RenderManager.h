@@ -71,7 +71,8 @@ private:
     void applyClipEffects(QImage& image, const composition::Clip& clip, int frame) const;
     // Runs native Behavior callbacks and applies their 2D matrix to the
     // already-rendered clip. Returns the accumulated opacity multiplier.
-    double applyClipBehaviors(QImage& image, const composition::Clip& clip,
+    double applyClipBehaviors(QImage& image, const composition::Layer& layer,
+                              const composition::Clip& clip,
                               int frame, int localFrame,
                               const QSize& canvasSize) const;
     void applyLayerMasks(QImage& image, const composition::Layer& layer) const;

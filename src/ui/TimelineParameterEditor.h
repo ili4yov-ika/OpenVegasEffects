@@ -42,11 +42,26 @@ inline QWidget* timelineParameterEditor(QWidget* parent, const plugin::EffectPar
         auto* combo = new QComboBox(root);
         combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
         combo->setMinimumContentsLength(1);
-        combo->addItems(spec.choices);
-        if (combo->findText(read().toString()) < 0) combo->addItem(read().toString());
+        const bool hasStoredValues = spec.choiceValues.size() == spec.choices.size();
+        for (int i = 0; i < spec.choices.size(); ++i) {
+            combo->addItem(spec.choices.at(i),
+                           hasStoredValues ? QVariant(spec.choiceValues.at(i)) : QVariant());
+        }
+        const QString current = read().toString();
+        if ((hasStoredValues ? combo->findData(current) : combo->findText(current)) < 0) {
+            combo->addItem(current, hasStoredValues ? QVariant(current) : QVariant());
+        }
         layout->addWidget(combo);
-        refresh(combo, [combo, read] { combo->setCurrentText(read().toString()); });
-        QObject::connect(combo, &QComboBox::currentTextChanged, root, [write](const QString& text) { write(text); });
+        refresh(combo, [combo, read, hasStoredValues] {
+            const QString value = read().toString();
+            const int index = hasStoredValues ? combo->findData(value) : combo->findText(value);
+            if (index >= 0) combo->setCurrentIndex(index);
+        });
+        QObject::connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), root,
+                         [combo, write, hasStoredValues](int index) {
+            if (index < 0) return;
+            write(hasStoredValues ? combo->itemData(index) : QVariant(combo->itemText(index)));
+        });
     } else if (type == "label") {
         auto* label = new QLabel(root);
         label->setWordWrap(true);

@@ -152,8 +152,12 @@ void TimelineWidget::buildParameterEditor(QTreeWidgetItem* row, int layerIndex, 
         param.type = numeric ? "double" : "string";
     }
     if (param.type == "layer") {
-        param.choices.append(QString());
-        for (const auto& layer : m_comp->layers()) param.choices.append(layer.name);
+        param.choices = {QString()};
+        param.choiceValues = {QStringLiteral("00000000-0000-0000-0000-000000000000")};
+        for (const auto& layer : m_comp->layers()) {
+            param.choices.append(layer.name);
+            param.choiceValues.append(layer.id.value());
+        }
     }
     // Text's original enum strings remain its serialization vocabulary.
     if (effect.pluginId.value() == "text") {

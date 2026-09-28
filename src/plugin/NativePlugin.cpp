@@ -842,6 +842,12 @@ QVector<EffectParameterSpec> parametersFromDiagnosticCalls()
             parameter.maximum = 100000.0;
             parameter.decimals = 0;
             parameter.step = 1.0;
+        } else if (call.offset == 0x98) {
+            // Tannen::CreateLayerPicker(host, label, key, flags). The selected
+            // value is an FXID, not the visible (editable) layer name.
+            parameter.name = QString::fromUtf8(call.ansiArgument2.data()).trimmed();
+            parameter.type = QStringLiteral("layer");
+            parameter.defaultValue = QStringLiteral("00000000-0000-0000-0000-000000000000");
         } else if (call.offset == 0x238) {
             // CreateLabel(host, wide label, ASCII key, flags, wide text).
             parameter.name = QString::fromUtf8(call.ansiArgument2.data()).trimmed();

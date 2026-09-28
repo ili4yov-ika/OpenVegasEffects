@@ -20,6 +20,7 @@
 
 #include "plugin/NativePlugin.h"
 #include "plugin/NativeEffectRender.h"
+#include "composition/Composition.h"
 
 namespace {
 
@@ -563,6 +564,9 @@ int main(int argc, char** argv)
     const bool behaviorApi = args.size() == 4
                              && args.at(3).compare(QStringLiteral("behavior"),
                                                    Qt::CaseInsensitive) == 0;
+    const bool behaviorGraphApi = args.size() == 4
+                                  && args.at(3).compare(QStringLiteral("behavior-graph"),
+                                                        Qt::CaseInsensitive) == 0;
     const bool behaviorStackApi = args.size() == 4
                                   && args.at(3).compare(
                                          QStringLiteral("behavior-stack"),
@@ -575,7 +579,7 @@ int main(int argc, char** argv)
                                 && args.at(3).compare(QStringLiteral("parameters"),
                                                      Qt::CaseInsensitive) == 0;
     if (args.size() == 4 && !metadataOnly && !parametersOnly && !rendererApi
-        && !audioApi && !audioTransitionApi && !behaviorApi
+        && !audioApi && !audioTransitionApi && !behaviorApi && !behaviorGraphApi
         && !behaviorStackApi) {
         for (const QString& value : args.at(3).split(QLatin1Char(','), Qt::SkipEmptyParts)) {
             bool ok = false;
@@ -584,6 +588,47 @@ int main(int argc, char** argv)
                 messages.append(message);
             }
         }
+    }
+
+    if (behaviorGraphApi) {
+        openvegas::plugin::clearNativeEffectModules();
+        const QString file = files.value(0);
+        const QString dependencyDir = QFileInfo(args.at(2)).absoluteFilePath();
+        const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+        openvegas::composition::Composition composition;
+        auto& source = composition.addLayer(QStringLiteral("Same name"));
+        source.transform.position = QPointF(0.0, 0.0);
+        const auto sourceId = source.id;
+        auto& target = composition.addLayer(QStringLiteral("Same name"));
+        target.transform.position = QPointF(240.0, 80.0);
+        const auto targetId = target.id;
+        QStringList values;
+        bool foundLayer = false;
+        for (const auto& parameter : metadata.parameters) {
+            if (parameter.type == QStringLiteral("layer")) {
+                values.append(targetId.value());
+                foundLayer = true;
+            } else {
+                values.append(parameter.defaultValue);
+            }
+        }
+        const openvegas::core::Identifier id(QStringLiteral("probe.native.behavior.graph"));
+        openvegas::plugin::registerNativeBehaviorModule(
+            id, file, dependencyDir, true, metadata.parameters);
+        openvegas::plugin::NativeBehaviorResult result;
+        const bool rendered = foundLayer && openvegas::plugin::evaluateNativeBehavior(
+            result, 30, 30, 120, 1920, 1080, 30.0, id, values,
+            &composition, sourceId);
+        const float* matrix = result.transformation.constData();
+        const bool moved = std::abs(matrix[12]) > 0.001f
+                           || std::abs(matrix[13]) > 0.001f
+                           || std::abs(matrix[14]) > 0.001f;
+        out << "layer-picker\trendered\tmoved\tposition\n"
+            << foundLayer << '\t' << rendered << '\t' << moved << '\t'
+            << matrix[12] << ',' << matrix[13] << ',' << matrix[14] << '\n';
+        out.flush();
+        openvegas::plugin::releaseNativeEffectThreadRenderer();
+        return rendered ? 0 : 1;
     }
 
     if (behaviorStackApi) {

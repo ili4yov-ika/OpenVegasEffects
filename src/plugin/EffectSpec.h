@@ -27,6 +27,9 @@ struct EffectParameterSpec
     int decimals = 2;
     double step = 1.0;
     QStringList choices;
+    // Optional stored values for dynamic controls (notably native LayerPicker).
+    // Labels may be renamed or duplicated; layer IDs must survive either case.
+    QStringList choiceValues;
     QString group;
 };
 

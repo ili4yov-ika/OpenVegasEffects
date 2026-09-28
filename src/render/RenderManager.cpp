@@ -329,6 +329,7 @@ void RenderWorker::applyClipEffects(QImage& image, const composition::Clip& clip
 }
 
 double RenderWorker::applyClipBehaviors(QImage& image,
+                                        const composition::Layer& layer,
                                         const composition::Clip& clip,
                                         int frame, int localFrame,
                                         const QSize& canvasSize) const
@@ -375,7 +376,7 @@ double RenderWorker::applyClipBehaviors(QImage& image,
         if (!plugin::evaluateNativeBehaviorFrame(
                 behavior, frame, localFrame, durationFrames,
                 canvasSize.width(), canvasSize.height(), frameRate,
-                fx.pluginId, values)) {
+                fx.pluginId, values, m_composition.get(), layer.id)) {
             continue;
         }
         opacity *= behavior.opacity;
@@ -385,7 +386,7 @@ double RenderWorker::applyClipBehaviors(QImage& image,
     if (plugin::simulateNativeBehaviorStack(
             simulation, frame, localFrame, durationFrames,
             canvasSize.width(), canvasSize.height(), frameRate,
-            simulationBehaviors)) {
+            simulationBehaviors, m_composition.get(), layer.id)) {
         applyTransformation(simulation.transformation);
     }
     return qBound(0.0, opacity, 1.0);
@@ -654,7 +655,7 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
             }
             const int localFrame = frameForTime(timeSeconds - clip.startSeconds);
             const double behaviorOpacity = withEffects
-                ? applyClipBehaviors(clipImage, clip, frameNo, localFrame, size)
+                ? applyClipBehaviors(clipImage, layer, clip, frameNo, localFrame, size)
                 : 1.0;
             applyLayerMasks(clipImage, layer);
 

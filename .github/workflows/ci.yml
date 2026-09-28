@@ -55,5 +55,23 @@ jobs:
       - name: Build regression tests
         run: cmake --build build/ci-tests --config Release --parallel 2
 
+      - name: Install libVLC test runtime
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'vlc-3.0.24-win64.7z'
+          Invoke-WebRequest 'https://downloads.videolan.org/vlc/3.0.24/win64/vlc-3.0.24-win64.7z' -OutFile $archive
+          $expected = '1ed59c09152e78aff84663fa76efab26057716576db74332858810e5ef54ae1f'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+            throw 'libVLC archive SHA-256 mismatch'
+          }
+          7z x $archive "-o$env:RUNNER_TEMP\vlc-runtime" -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to extract libVLC runtime' }
+          $runtime = Join-Path $env:RUNNER_TEMP 'vlc-runtime\vlc-3.0.24'
+          if (-not (Test-Path (Join-Path $runtime 'libvlc.dll'))) {
+            throw 'libvlc.dll was not found in the extracted runtime'
+          }
+          "OPENVEGAS_VLC_DIR=$runtime" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          'OPENVEGAS_VLC_AUDIO_OUTPUT=dummy' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Run regression tests
         run: ctest --test-dir build/ci-tests -C Release --output-on-failure --timeout 120

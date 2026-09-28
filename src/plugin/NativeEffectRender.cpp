@@ -27,6 +27,7 @@
 #include <utility>
 
 #include "plugin/NativePlugin.h"
+#include "composition/Composition.h"
 
 namespace openvegas {
 namespace plugin {
@@ -228,6 +229,8 @@ struct RenderInvocation
     qint32 timelineFrame = 0;
     qint32 layerDurationFrames = 1;
     double frameRate = 30.0;
+    const composition::Composition* composition = nullptr;
+    core::Identifier sourceLayerId;
     std::array<float, 16> preBehaviorTransformation {
         1.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 1.0f, 0.0f, 0.0f,
@@ -334,7 +337,10 @@ void layerIdParameter(quint64, const char* key, quint32, char* layerId)
         return;
     }
     std::memset(layerId, 0, 0x28);
-    const QByteArray value = parameterValue(key).toUtf8();
+    const QString selected = parameterValue(key).trimmed();
+    const QByteArray value = selected.isEmpty()
+        ? QByteArrayLiteral("00000000-0000-0000-0000-000000000000")
+        : selected.toLatin1();
     std::memcpy(layerId, value.constData(), size_t(qMin(value.size(), 0x27)));
 }
 
@@ -434,9 +440,71 @@ int layerScale(quint64, const char*, qint32, double* scale)
     return 0;
 }
 
-int layerPosition(quint64, const char*, qint32, float* position)
+const composition::Layer* behaviorLayer(const char* layerId)
+{
+    if (!g_renderInvocation || !g_renderInvocation->composition || !layerId) {
+        return nullptr;
+    }
+    const QString id = QString::fromLatin1(layerId);
+    for (const auto& layer : g_renderInvocation->composition->layers()) {
+        if (layer.id.value().compare(id, Qt::CaseInsensitive) == 0) {
+            return &layer;
+        }
+    }
+    return nullptr;
+}
+
+int numberOfBehaviorLayers(quint64)
+{
+    return g_renderInvocation && g_renderInvocation->composition
+               ? g_renderInvocation->composition->layers().size() : 0;
+}
+
+void behaviorLayerId(quint64, qint32 index, char* id, char* name,
+                     qint32 nameCapacity, qint32* kind)
+{
+    static constexpr char nullId[] = "00000000-0000-0000-0000-000000000000";
+    if (id) {
+        std::memset(id, 0, 0x28);
+        std::memcpy(id, nullId, sizeof(nullId));
+    }
+    if (name && nameCapacity > 0) name[0] = '\0';
+    if (kind) *kind = 0;
+    if (!g_renderInvocation || !g_renderInvocation->composition
+        || index < 0 || index >= g_renderInvocation->composition->layers().size()) {
+        return;
+    }
+    const auto& layer = g_renderInvocation->composition->layers().at(index);
+    if (id) {
+        const QByteArray encoded = layer.id.value().toLatin1();
+        std::memset(id, 0, 0x28);
+        std::memcpy(id, encoded.constData(), size_t(qMin(encoded.size(), 0x27)));
+    }
+    if (name && nameCapacity > 0) {
+        const QByteArray encoded = layer.name.toUtf8();
+        const int length = qMin(encoded.size(), nameCapacity - 1);
+        std::memcpy(name, encoded.constData(), size_t(length));
+        name[length] = '\0';
+    }
+    // Native BiffLayerType values still need a verified crosswalk for every
+    // layer kind; 0 is the ordinary media/asset layer accepted by behaviors.
+}
+
+int layerPosition(quint64, const char* layerId, qint32 frame, float* position)
 {
     if (!position || !g_renderInvocation) return -5;
+    if (g_renderInvocation->composition) {
+        const composition::Layer* layer = behaviorLayer(layerId);
+        if (!layer) {
+            position[0] = position[1] = position[2] = 0.0f;
+            return -4;
+        }
+        const QPointF sampled = layer->transform.positionAt(frame);
+        position[0] = float(sampled.x());
+        position[1] = float(sampled.y());
+        position[2] = float(layer->transform.positionZAt(frame));
+        return 0;
+    }
     position[0] = float(g_renderInvocation->width) * 0.5f;
     position[1] = float(g_renderInvocation->height) * 0.5f;
     position[2] = 0.0f;
@@ -994,6 +1062,8 @@ void installCpuServices(NativePluginRuntime& runtime)
 void installBehaviorServices(NativePluginRuntime& runtime)
 {
     installCpuServices(runtime);
+    putService(runtime.apiBlock(), 0xe8,
+               reinterpret_cast<void*>(&layerIdParameter));
     putService(runtime.apiBlock(), 0x60,
                reinterpret_cast<void*>(&createBehaviorFloatSlider));
     putService(runtime.apiBlock(), 0x98,
@@ -1017,6 +1087,10 @@ void installBehaviorServices(NativePluginRuntime& runtime)
                reinterpret_cast<void*>(&layerPosition));
     putService(runtime.apiBlock(), 0x330,
                reinterpret_cast<void*>(&layerAnchorPoint));
+    putService(runtime.apiBlock(), 0x360,
+               reinterpret_cast<void*>(&numberOfBehaviorLayers));
+    putService(runtime.apiBlock(), 0x368,
+               reinterpret_cast<void*>(&behaviorLayerId));
 }
 
 class AudioThreadRenderer
@@ -1232,7 +1306,9 @@ public:
                   int layerDurationFrames, int canvasWidth, int canvasHeight,
                   double frameRate, bool includeSimulation,
                   const QString& id, const ModuleRecord& record,
-                  const QStringList& parameterValues)
+                  const QStringList& parameterValues,
+                  const composition::Composition* composition,
+                  const core::Identifier& sourceLayerId)
     {
 #ifndef Q_OS_WIN
         Q_UNUSED(result);
@@ -1246,11 +1322,10 @@ public:
         Q_UNUSED(id);
         Q_UNUSED(record);
         Q_UNUSED(parameterValues);
+        Q_UNUSED(composition);
+        Q_UNUSED(sourceLayerId);
         return false;
 #else
-        NativePluginRuntime* runtime = runtimeFor(id, record);
-        if (!runtime) return false;
-
         RenderInvocation invocation;
         invocation.module = &record;
         invocation.values = &parameterValues;
@@ -1259,12 +1334,22 @@ public:
         invocation.timelineFrame = timelineFrame;
         invocation.layerDurationFrames = qMax(1, layerDurationFrames);
         invocation.frameRate = qMax(0.001, frameRate);
+        invocation.composition = composition;
+        invocation.sourceLayerId = sourceLayerId;
         RenderInvocation* previousInvocation = g_renderInvocation;
         g_renderInvocation = &invocation;
+        NativePluginRuntime* runtime = runtimeFor(id, record);
+        if (!runtime) {
+            g_renderInvocation = previousInvocation;
+            return false;
+        }
 
         static constexpr char nullLayerId[] =
             "00000000-0000-0000-0000-000000000000";
-        const char* layerId = nullLayerId;
+        const QByteArray sourceId = sourceLayerId.isValid()
+                                        ? sourceLayerId.value().toLatin1()
+                                        : QByteArray(nullLayerId);
+        const char* layerId = sourceId.constData();
 
         std::array<float, 16> matrix = invocation.preBehaviorTransformation;
         float* matrixPointer = matrix.data();
@@ -1435,7 +1520,9 @@ public:
     bool simulateStack(NativeBehaviorResult& result, int timelineFrame,
                        int localFrame, int layerDurationFrames,
                        int canvasWidth, int canvasHeight, double frameRate,
-                       const QVector<BehaviorStackEntry>& entries)
+                       const QVector<BehaviorStackEntry>& entries,
+                       const composition::Composition* composition,
+                       const core::Identifier& sourceLayerId)
     {
 #ifndef Q_OS_WIN
         Q_UNUSED(result);
@@ -1446,6 +1533,8 @@ public:
         Q_UNUSED(canvasHeight);
         Q_UNUSED(frameRate);
         Q_UNUSED(entries);
+        Q_UNUSED(composition);
+        Q_UNUSED(sourceLayerId);
         return false;
 #else
         struct SimulationAccumulator {
@@ -1488,12 +1577,6 @@ public:
 
             for (const BehaviorStackEntry& entry : entries) {
                 if (rejected.contains(entry.id)) continue;
-                NativePluginRuntime* runtime = runtimeFor(entry.id, entry.module);
-                if (!runtime) {
-                    rejected.insert(entry.id);
-                    continue;
-                }
-
                 RenderInvocation invocation;
                 invocation.module = &entry.module;
                 invocation.values = &entry.values;
@@ -1502,7 +1585,14 @@ public:
                 invocation.timelineFrame = timelineFrame;
                 invocation.layerDurationFrames = qMax(1, layerDurationFrames);
                 invocation.frameRate = safeFrameRate;
+                invocation.composition = composition;
+                invocation.sourceLayerId = sourceLayerId;
                 g_renderInvocation = &invocation;
+                NativePluginRuntime* runtime = runtimeFor(entry.id, entry.module);
+                if (!runtime) {
+                    rejected.insert(entry.id);
+                    continue;
+                }
 
                 QByteArray context(0x80, '\0');
                 const int objectIndex = 0;
@@ -2345,7 +2435,9 @@ bool evaluateNativeBehavior(NativeBehaviorResult& result, int timelineFrame,
                             int localFrame, int layerDurationFrames,
                             int canvasWidth, int canvasHeight, double frameRate,
                             const core::Identifier& id,
-                            const QStringList& parameterValues)
+                            const QStringList& parameterValues,
+                            const composition::Composition* composition,
+                            const core::Identifier& sourceLayerId)
 {
     ModuleRecord record;
     {
@@ -2362,14 +2454,16 @@ bool evaluateNativeBehavior(NativeBehaviorResult& result, int timelineFrame,
     return g_behaviorThreadRenderer->evaluate(
         result, timelineFrame, localFrame, layerDurationFrames,
         canvasWidth, canvasHeight, frameRate, true, id.value(), record,
-        parameterValues);
+        parameterValues, composition, sourceLayerId);
 }
 
 bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame,
                                  int localFrame, int layerDurationFrames,
                                  int canvasWidth, int canvasHeight, double frameRate,
                                  const core::Identifier& id,
-                                 const QStringList& parameterValues)
+                                 const QStringList& parameterValues,
+                                 const composition::Composition* composition,
+                                 const core::Identifier& sourceLayerId)
 {
     ModuleRecord record;
     {
@@ -2386,13 +2480,15 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
     return g_behaviorThreadRenderer->evaluate(
         result, timelineFrame, localFrame, layerDurationFrames,
         canvasWidth, canvasHeight, frameRate, false, id.value(), record,
-        parameterValues);
+        parameterValues, composition, sourceLayerId);
 }
 
 bool simulateNativeBehaviorStack(
     NativeBehaviorResult& result, int timelineFrame, int localFrame,
     int layerDurationFrames, int canvasWidth, int canvasHeight, double frameRate,
-    const QVector<NativeBehaviorRequest>& behaviors)
+    const QVector<NativeBehaviorRequest>& behaviors,
+    const composition::Composition* composition,
+    const core::Identifier& sourceLayerId)
 {
     QVector<BehaviorStackEntry> entries;
     {
@@ -2414,7 +2510,7 @@ bool simulateNativeBehaviorStack(
     }
     return g_behaviorThreadRenderer->simulateStack(
         result, timelineFrame, localFrame, layerDurationFrames,
-        canvasWidth, canvasHeight, frameRate, entries);
+        canvasWidth, canvasHeight, frameRate, entries, composition, sourceLayerId);
 }
 
 bool applyNativeEffectToImage(QImage& image, const core::Identifier& id,

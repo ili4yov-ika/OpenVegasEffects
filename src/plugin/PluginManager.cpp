@@ -1233,7 +1233,7 @@ private:
         m_entries.push_back(entry);
     }
 
-    static constexpr int kMetadataCacheVersion = 10;
+    static constexpr int kMetadataCacheVersion = 11;
 
     QVector<QString> m_dirs;
     Callbacks m_callbacks;

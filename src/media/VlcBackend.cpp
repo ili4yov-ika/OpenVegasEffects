@@ -8,6 +8,7 @@
 #include <QElapsedTimer>
 #include <QThread>
 #include <QtGlobal>
+#include <vector>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -283,7 +284,7 @@ libvlc_instance_t* vlcInstance()
         }
         // No interface, no on-screen title, no plugin cache rebuild noise, and
         // errors only: this is a decoding back end, not a media player.
-        const char* options[] = {
+        std::vector<const char*> options {
             "--no-video-title-show",
             "--no-osd",
             "--no-snapshot-preview",
@@ -292,8 +293,14 @@ libvlc_instance_t* vlcInstance()
             "--quiet",
             "--intf=dummy",
         };
+        // CI runners have no physical output device. The dummy VLC sink still
+        // drives the real decoder and PCM mixer at playback speed.
+        if (qEnvironmentVariable("OPENVEGAS_VLC_AUDIO_OUTPUT")
+            == QLatin1String("dummy")) {
+            options.push_back("--aout=dummy");
+        }
         libvlc_instance_t* created =
-            api.libvlc_new(int(sizeof(options) / sizeof(options[0])), options);
+            api.libvlc_new(int(options.size()), options.data());
         if (!created) {
             OV_LOG_WARN(QStringLiteral("libvlc_new failed: %1")
                             .arg(QString::fromUtf8(api.libvlc_errmsg ? api.libvlc_errmsg() : "")));

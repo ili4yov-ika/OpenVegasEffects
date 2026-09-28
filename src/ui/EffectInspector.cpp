@@ -626,7 +626,11 @@ void EffectInspector::buildEffects(const composition::Layer& layer, bool behavio
             plugin::EffectParameterSpec param = spec.parameters[p];
             if (param.type == "layer") {
                 param.choices = {tr("None")};
-                for (const auto& candidate : m_comp->layers()) param.choices.append(candidate.name);
+                param.choiceValues = {QStringLiteral("00000000-0000-0000-0000-000000000000")};
+                for (const auto& candidate : m_comp->layers()) {
+                    param.choices.append(candidate.name);
+                    param.choiceValues.append(candidate.id.value());
+                }
             }
             QTreeWidgetItem* parent = effectItem;
             if (!param.group.isEmpty()) {

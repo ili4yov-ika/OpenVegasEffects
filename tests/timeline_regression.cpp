@@ -19,6 +19,7 @@
 #include "ui/LayoutPanel.h"
 #include "ui/TimelineValueGraphView.h"
 #include "ui/Theme.h"
+#include "ui/TimelineParameterEditor.h"
 #include "plugin/PluginManager.h"
 #include "plugin/EffectRender.h"
 #include "render/RenderManager.h"
@@ -125,6 +126,30 @@ private slots:
         panel->show(); QTest::qWait(40);
     }
     void cleanup() { panel.reset(); history.clear(); }
+    void nativeLayerPickerKeepsIdentityAcrossDuplicateNames() {
+        plugin::EffectParameterSpec spec;
+        spec.type = QStringLiteral("layer");
+        spec.choices = {QStringLiteral("None"), QStringLiteral("Target"),
+                        QStringLiteral("Target")};
+        spec.choiceValues = {QStringLiteral("00000000-0000-0000-0000-000000000000"),
+                             QStringLiteral("layer-one"), QStringLiteral("layer-two")};
+        QVariant stored = QStringLiteral("layer-one");
+        QVector<std::function<void()>> readers;
+        QWidget holder;
+        auto* editor = ui::timelineParameterEditor(
+            &holder, spec, QStringLiteral("layerPicker"),
+            [&stored] { return stored; },
+            [&stored](QVariant value) { stored = value; }, readers);
+        auto* combo = editor->findChild<QComboBox*>();
+        QVERIFY(combo);
+        QCOMPARE(combo->currentIndex(), 1);
+        combo->setCurrentIndex(2);
+        QCOMPARE(stored.toString(), QStringLiteral("layer-two"));
+        combo->setItemText(2, QStringLiteral("Renamed"));
+        for (const auto& refresh : readers) refresh();
+        QCOMPARE(combo->currentIndex(), 2);
+        QCOMPARE(stored.toString(), QStringLiteral("layer-two"));
+    }
     void relativePathsAndWorkspaceSurviveProjectMove() {
         QTemporaryDir temp; QVERIFY(temp.isValid());
         QDir root(temp.path()); QVERIFY(root.mkpath("original/media")); QVERIFY(root.mkpath("moved/media"));

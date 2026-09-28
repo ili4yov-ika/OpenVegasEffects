@@ -480,6 +480,8 @@ if(WIN32)
     # application build do not need the shipped VEGAS Effects plugin tree.
     add_executable(hfpl_runtime_probe EXCLUDE_FROM_ALL
         tools/hfpl_runtime_probe.cpp
+        src/composition/Composition.cpp
+        src/composition/KeyFrame.cpp
         src/plugin/NativePlugin.h
         src/plugin/NativePlugin.cpp
         src/plugin/NativeEffectRender.h
