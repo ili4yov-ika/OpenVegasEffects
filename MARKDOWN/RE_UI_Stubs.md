@@ -13,7 +13,8 @@ Ghidra MCP. Этот документ заменяет аудит 2026-09-14: с
 VegasEffects.exe, проверка соответствующих функций в локальном bulk-декомпиляте
 и поиск потребителей в текущем `src`. Найдены дополнительные незавершённые пути:
 Turbo Rendering, подключение Media Cache DB к медиапайплайну
-и realtime native audio DSP. Лимит thumbnail cache и многодорожечный master mix подключены. Предыдущее описание этих частей
+и realtime native audio DSP. Последний теперь подключён для Audio `.hfpl` на уровне
+клипа; лимит thumbnail cache и многодорожечный master mix также подключены. Предыдущее описание этих частей
 как полностью рабочих исправлено. Миграция libVLC и подключённые обработчики
 описаны ниже; остальные незавершённые пути остаются в матрице раздела 4.
 
@@ -146,8 +147,9 @@ Cancel и ошибка не перезаписывают существующи�
   sourceStart, speed, gain и вложенных композиций. Audio Meters получает RMS
   того же ограниченного итогового PCM после master mute. Очереди декодеров
   ограничены, stop/seek отменяют ожидания и устаревшие queued-сигналы.
-  Realtime native DSP/AudioTransition и автоматизация аудиопараметров ещё
-  не подключены; скорость меняет высоту тона через ресемплирование.
+  Нативные Audio `.hfpl` теперь действуют на PCM клипа до gain и master mix,
+  но AudioTransition и непрерывная автоматизация параметров ещё не подключены;
+  скорость меняет высоту тона через ресемплирование.
 - Маски и Behaviors в Controls используют общие редакторы и Undo/Redo. Разделение
   UI-параметров Behaviors не означает завершённое исполнение закрытого ABI всех `.hfpl`.
 - Text: реальные слои, форматирование, цвета, Point/Paragraph, редактирование на канвасе.
@@ -165,7 +167,7 @@ Cancel и ошибка не перезаписывают существующи�
 
 | Путь | Что действительно работает | Чего нет |
 |---|---|---|
-| Audio preview / Audio Meters | libVLC PCM master mix всех активных Audio/Video клипов: visible/muted, offset, speed, gain, вложенные композиции; seek/loop и RMS итогового PCM | Realtime native effects/AudioTransition, автоматизация параметров во время Play; сохранение высоты тона при speed |
+| Audio preview / Audio Meters | libVLC PCM master mix всех активных Audio/Video клипов: visible/muted, offset, speed, gain, вложенные композиции; native Audio `.hfpl` перед gain, seek/loop и RMS итогового PCM | Realtime AudioTransition, автоматизация параметров во время Play; сохранение высоты тона при speed |
 | Видеоэкспорт со звуком | Отдельный путь `MainWindow::finishVideoExport`: FFmpeg `atempo`, `volume`, `adelay`, `amix`; native Audio обрабатывается перед сведением | Этот экспортный путь не подключён к AudioPlayer и master meter при Play/Scrub |
 | Media Cache DB | `AppMain::initializeCache`: каталог, SQLite open, подсчёт записей, `pruneOlderThan` по сроку хранения | Вне CacheDB нет использования `put/get` для наполнения и повторного использования media cache. `MediaManager` держит отдельный RAM video-frame cache с фиксированным лимитом 256 MiB |
 | Thumbnail cache limit | QPixmapCache использует ThumbnailCacheSizeMB; миниатюры Media повторно используются по path/mtime/size, QImageReader декодирует уменьшенное изображение | QIcon видимого списка хранит свои ссылки; это не общий лимит всей памяти Media |
@@ -190,7 +192,7 @@ Native render pipeline, lens model и Fisheye/Scale/Motion Blur пока не в
 | Prompts & Warnings | `Options/Prompts/*`, кроме подключённого ShowProjectSettings | Подключение остальных флагов к импорту, GPU/QuickTime, камерам и удалению export tasks |
 | Render | `TurboRendering`, планировщик `RenderThreads`, `UseHardwareEncoding`, `LimitVideoDecodingTo8bit` | UseHardwareDecoding и avcodec-threads уже передаются видеодекодеру VLC; фактическое hardware acceleration требует проверки и возможен fallback при CPU readback. Настройки encoder/renderer ещё не подключены |
 | Media cache | `MediaCacheDB`, `MediaCacheFiles`, `DaysToKeepMediaCacheFiles` | Startup open/prune работает; требуется наполнение и повторное использование кеша медиапайплайном |
-| Realtime audio DSP | Native effects/AudioTransition, анимация аудиопараметров | Подключить DSP к PCM master mixer; общий mix и master meter уже работают |
+| Realtime audio DSP | Native AudioTransition и анимация аудиопараметров | 16 Audio `.hfpl` подключены к PCM master mixer, проверены на `Balance.hfpl`; модель перекрытий ещё отсутствует |
 | 3D Render/Display | `ModelTextureMaxSize`, `ShadowMapSize`, `ReflectionMapSize`, `Antialiasing`, `ShowCheckerboard3D`, `ShowFloorPlane` | Соответствующие рендер-пути, текстуры и настоящая 3D сцена Viewer |
 | Timeline cache | `TimelineCache`, `TimelineCacheDays`, `UseAutomaticRenderCache`, `RenderCacheDelay` | Хранилище и автоматическое планирование; ручной playback cache не заменяет эти опции |
 | Export | `TimeFormat` | Применение к представлению времени export tasks, а не произвольное изменение имён файлов |

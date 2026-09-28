@@ -455,7 +455,13 @@ input B `+0x28/+0x30`, output `+0x38/+0x40`, текущая позиция/дл�
 AudioTransition остаются недоступны в UI до появления модели перекрытий. Для финального экспорта клипы с Audio `.hfpl` предварительно
 декодируются FFmpeg в stereo PCM16/48 kHz с учётом source range и speed, последовательно
 обрабатываются нативными модулями, записываются во временный raw PCM и входят в существующий
-gain/delay/amix. Модель перекрытий AudioTransition и realtime audio preview пока отсутствуют.
+gain/delay/amix. Realtime preview теперь подаёт каждый 480-frame stereo PCM блок в те же
+проверенные Audio `.hfpl` перед gain и master mix. Runtime-ключ отдельный для каждого
+экземпляра эффекта, отказ оставляет сухой сигнал. Локальный регрессионный тест с
+`Balance.hfpl` фиксирует изменение каналов в итоговом `pcmMixed`; физический аудиовыход
+тестом не измеряется. Значения параметров пока берутся на начале проигрываемого участка,
+без непрерывной автоматизации. Модель перекрытий AudioTransition и realtime
+AudioTransition остаются незавершёнными.
 
 Для `Behavior` восстановлены три отдельные точки ABI из `PluginFile`: `Notify(102)`
 (`TransformationAtTime`, capability `6`), `Notify(104)` (`OpacityAtTime`, capability `7`) и

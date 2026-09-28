@@ -1,6 +1,9 @@
 #include "media/AudioPlayer.h"
+#include "plugin/NativeEffectRender.h"
+#include "plugin/NativePlugin.h"
 #include <QDataStream>
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -35,6 +38,62 @@ class AudioRegression : public QObject
         return false;
     }
 private slots:
+    void unavailableNativeEffectKeepsDryAudio()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        openvegas::media::AudioClip clip {
+            constantWave(dir, QStringLiteral("dry.wav"), 1000),
+            0, 0.5, 0, 1, 1};
+        clip.nativeEffects.append({
+            openvegas::core::Identifier(QStringLiteral("test.missing.native.audio")),
+            {}, QStringLiteral("missing-instance")});
+        openvegas::media::AudioPlayer audio;
+        QSignalSpy pcm(&audio, &openvegas::media::AudioPlayer::pcmMixed);
+        audio.setClips({clip}, 0.5);
+        audio.play(0);
+        QTRY_VERIFY_WITH_TIMEOUT(containsSample(pcm, 1000), 3000);
+        audio.stop();
+    }
+    void nativeBalanceChangesRealtimeMaster()
+    {
+        const QString modulePath = qEnvironmentVariable("OPENVEGAS_HFPL_BALANCE");
+        if (modulePath.isEmpty() || !QFileInfo::exists(modulePath)) {
+            QSKIP("Set OPENVEGAS_HFPL_BALANCE to the reference Balance.hfpl for this integration test");
+        }
+        const QString dependencyDir = QFileInfo(modulePath).absoluteDir().absoluteFilePath(
+            QStringLiteral("../../.."));
+        const auto metadata = openvegas::plugin::loadNativePluginMetadata(
+            modulePath, dependencyDir);
+        QVERIFY(metadata.lifecycleCompatible);
+        const openvegas::core::Identifier id(QStringLiteral("test.audio.balance"));
+        openvegas::plugin::registerNativeAudioEffectModule(
+            id, modulePath, dependencyDir, true, metadata.parameters);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = constantWave(dir, QStringLiteral("balance.wav"), 1000);
+        openvegas::media::AudioClip clip {path, 0, 1.5, 0, 1, 1};
+        clip.nativeEffects.append({id, {QStringLiteral("100")},
+                                   QStringLiteral("balance-instance")});
+        openvegas::media::AudioPlayer audio;
+        QSignalSpy pcm(&audio, &openvegas::media::AudioPlayer::pcmMixed);
+        audio.setClips({clip}, 1.5);
+        audio.play(0);
+        const auto panned = [&] {
+            for (const auto& entry : pcm) {
+                const QByteArray data = entry[0].toByteArray();
+                if (data.size() < 404) continue;
+                const int left = qFromLittleEndian<qint16>(data.constData() + 200);
+                const int right = qFromLittleEndian<qint16>(data.constData() + 202);
+                if (qAbs(left - right) >= 400 && qMax(qAbs(left), qAbs(right)) >= 400)
+                    return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(panned(), 5000);
+        audio.stop();
+        openvegas::plugin::clearNativeEffectModules();
+    }
     void masterMixGainMuteAndQueuedStop() {
         QTemporaryDir dir; QVERIFY(dir.isValid());
         const auto a = constantWave(dir, "one.wav", 1000);

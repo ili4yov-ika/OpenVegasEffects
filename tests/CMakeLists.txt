@@ -91,9 +91,14 @@ set_target_properties(ui_stubs_regression PROPERTIES AUTOUIC ON
 add_test(NAME ui_stubs_regression COMMAND ui_stubs_regression -o -,txt)
 set_tests_properties(ui_stubs_regression PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 add_executable(audio_regression audio_regression.cpp
-    ../src/media/AudioPlayer.cpp ../src/media/AudioPlayer.h ../src/media/Vlc4Adapter.cpp ../src/media/VlcBackend.cpp ../src/core/Log.cpp)
+    ../src/media/AudioPlayer.cpp ../src/media/AudioPlayer.h ../src/media/Vlc4Adapter.cpp ../src/media/VlcBackend.cpp ../src/core/Log.cpp
+    ../src/plugin/NativeEffectRender.cpp ../src/plugin/NativePlugin.cpp
+    ../src/composition/Composition.cpp ../src/composition/KeyFrame.cpp)
 target_include_directories(audio_regression PRIVATE ../src)
-target_link_libraries(audio_regression PRIVATE Qt6::Test)
+target_link_libraries(audio_regression PRIVATE Qt6::Test Qt6::Gui Qt6::OpenGL)
+if(WIN32)
+    target_compile_definitions(audio_regression PRIVATE NOMINMAX UNICODE _UNICODE)
+endif()
 add_test(NAME audio_regression COMMAND audio_regression -o -,txt)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS LinguistTools)

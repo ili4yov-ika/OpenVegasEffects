@@ -2,13 +2,21 @@
 #include <QObject>
 #include <QString>
 #include <QVector>
+#include <QStringList>
+#include "core/Identifier.h"
 #include <memory>
 
 namespace openvegas::media {
+struct NativeAudioModule {
+    core::Identifier pluginId;
+    QStringList parameters;
+    QString instanceKey;
+};
 // Timeline coordinates; every active source contributes to one PCM master.
 struct AudioClip {
     QString path;
     double start = 0, end = 0, sourceStart = 0, speed = 1, gain = 1;
+    QVector<NativeAudioModule> nativeEffects;
 };
 class AudioPlayer : public QObject {
     Q_OBJECT

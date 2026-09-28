@@ -2810,7 +2810,8 @@ bool applyNativeVideoTransition(QImage& output, const QImage& from, const QImage
 bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,
                             int sampleRate, qint64 startSample,
                             const core::Identifier& id,
-                            const QStringList& parameterValues)
+                            const QStringList& parameterValues,
+                            const QString& instanceKey)
 {
     ModuleRecord record;
     {
@@ -2823,7 +2824,9 @@ bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,
         g_audioThreadRenderer = std::make_unique<AudioThreadRenderer>();
     }
     return g_audioThreadRenderer->processEffect(
-        interleavedSamples, channels, sampleRate, startSample, id.value(), record,
+        interleavedSamples, channels, sampleRate, startSample,
+        instanceKey.isEmpty() ? id.value() : id.value() + QLatin1Char(':') + instanceKey,
+        record,
         parameterValues);
 }
 

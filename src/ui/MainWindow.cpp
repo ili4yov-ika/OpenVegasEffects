@@ -4078,7 +4078,35 @@ double MainWindow::prepareAudioSource()
                 if (asset.filePath().isEmpty()) continue;
                 const double source = clip.sourceStartSeconds
                     + (first - origin - clip.startSeconds / rate) * rate * speed;
-                sources.append({asset.filePath(), first, last, source, speed * rate, level});
+                media::AudioClip audioClip {asset.filePath(), first, last,
+                                            source, speed * rate, level};
+                const plugin::PluginManager* plugins =
+                    m_owner ? m_owner->pluginManager() : nullptr;
+                if (plugins) {
+                    const double shotFps = shot.fpsDenominator() > 0
+                        ? double(shot.fpsNumerator()) / shot.fpsDenominator() : 30.0;
+                    const int parameterFrame = qRound((first - origin) * rate * shotFps);
+                    for (const composition::Effect& effect : clip.effects) {
+                        if (!effect.enabled
+                            || !plugin::nativeAudioEffectRenderingVerified(effect.pluginId)) {
+                            continue;
+                        }
+                        const plugin::EffectSpec effectSpec = plugins->spec(effect.pluginId);
+                        media::NativeAudioModule module;
+                        module.pluginId = effect.pluginId;
+                        module.instanceKey = QUuid::createUuid().toString(
+                            QUuid::WithoutBraces);
+                        for (int parameter = 0;
+                             parameter < effectSpec.parameters.size(); ++parameter) {
+                            const QVariant value = effect.parameterAt(parameter, parameterFrame);
+                            module.parameters.append(value.isValid()
+                                ? value.toString()
+                                : effectSpec.parameters.at(parameter).defaultValue);
+                        }
+                        audioClip.nativeEffects.append(std::move(module));
+                    }
+                }
+                sources.append(std::move(audioClip));
             }
         }
         visited.remove(&shot);

@@ -700,6 +700,25 @@ opacity float находится в каждой записи по `+0x40`. Clip
 сопоставляет четыре float с локальными границами глифа X-left/right и Y-top/bottom;
 они применяются к заливке и контуру в `TextRender`.
 
+### Отдельный путь Geometry и MotionTrack
+
+`PluginGeometryEffect::ProcessGeometry` (VA `0x1803c7280`) передаёт управление
+`PluginFile::ProcessGeometry` (VA `0x180359030`). Тот проверяет тип 4, создаёт
+`BiffHost`/`tagBiffAPI`, выбирает capability 5 и вызывает `Notify(101)` с
+`tagBiffGeometryMC`. Сервис `Get3DModelGeometryBatches` (VA `0x180384750`)
+ищет `Model3DLayer` через ID и время в миллисекундах, после чего строит массив
+батчей модели. Следовательно, обычный 2D frame block не может заменить этот
+контекст: хосту нужны модельный слой, батчи и изменяемая геометрия. Изолированный
+вызов `Notify(101)` без MC аварийно читает адрес `0x8` у `RotateGeometry` и
+`BendGeometry`; `Bevel` и `Extrude` возвращают успех, но без входного меша
+этот ответ не доказывает обработку геометрии. Все четыре остаются отключены.
+
+`MotionTrack.hfpl` регистрирует `resumeProcessing`, `motionFromLayer`, оси
+position/rotation/scale и Feature Data IDs. Без выбранного видеослоя и
+аналитических данных callback возвращает исходную матрицу; такой identity-результат
+нельзя считать поддержкой трекинга. Для его подключения нужен мост между
+анализом клипа и feature data ABI, а не включение модуля в render whitelist.
+
 ### Выбор целевого слоя в Behavior (повторная проверка в Ghidra)
 
 `PluginHostAPI::CreateLayerPicker` (`0x18037f960`, слот `+0x98`) регистрирует

@@ -1,11 +1,13 @@
 #include "media/AudioPlayer.h"
 #include "media/VlcBackend.h"
+#include "plugin/NativeEffectRender.h"
 #include "core/Log.h"
 #include <QDataStream>
 #include <QFileInfo>
 #include <QDir>
 #include <QMetaObject>
 #include <QTimer>
+#include <QSet>
 #include <QtEndian>
 #include <algorithm>
 #include <atomic>
@@ -90,7 +92,7 @@ struct AudioPlayer::Engine {
                 if (index + Channels >= pcm.size()) break;
                 const double blend = fraction - std::floor(fraction);
                 for (unsigned c = 0; c < Channels; ++c)
-                    output[f * Channels + c] += float(clip.gain / 32768.0 *
+                    output[f * Channels + c] += float(1.0 / 32768.0 *
                         ((1 - blend) * pcm[index + c] + blend * pcm[index + Channels + c]));
                 fraction += speed;
             }
@@ -102,6 +104,7 @@ struct AudioPlayer::Engine {
     AudioPlayer* owner;
     quint64 generation;
     QVector<AudioClip> clips;
+    QSet<QString> failedNativeEffects;
     std::vector<std::unique_ptr<Decoder>> decoders;
     libvlc_media_player_t* output = nullptr;
     std::atomic<bool> cancelled{false}, muted{false};
@@ -145,7 +148,11 @@ struct AudioPlayer::Engine {
     }
     static ptrdiff_t read(void* opaque, unsigned char* destination, size_t capacity) {
         auto& self = *static_cast<Engine*>(opaque);
-        if (self.cancelled || capacity == 0) return 0;
+        if (capacity == 0) return 0;
+        if (self.cancelled) {
+            plugin::releaseNativeEffectThreadRenderer();
+            return 0;
+        }
         if (self.headerOffset < self.header.size()) {
             const size_t n = std::min(capacity, size_t(self.header.size() - self.headerOffset));
             std::memcpy(destination, self.header.constData() + self.headerOffset, n);
@@ -160,9 +167,15 @@ struct AudioPlayer::Engine {
                 std::unique_lock<std::mutex> lock(self.clockMutex);
                 self.clockWake.wait_until(lock, due, [&] { return self.cancelled.load(); });
             }
-            if (self.cancelled) return 0;
+            if (self.cancelled) {
+                plugin::releaseNativeEffectThreadRenderer();
+                return 0;
+            }
             const double now = self.start + double(self.frame) / Rate;
-            if (now >= self.duration) return 0;
+            if (now >= self.duration) {
+                plugin::releaseNativeEffectThreadRenderer();
+                return 0;
+            }
             const unsigned frames = unsigned(std::min(double(BlockFrames), std::ceil((self.duration - now) * Rate)));
             float samples[BlockFrames * Channels]{};
             for (int i = 0; i < self.clips.size() && !self.cancelled; ++i) {
@@ -179,7 +192,37 @@ struct AudioPlayer::Engine {
                 }
                 const unsigned offset = std::min(frames, unsigned(std::llround((first - now) * Rate)));
                 const unsigned count = std::min(frames - offset, unsigned(std::llround((last - first) * Rate)));
-                decoder->mix(samples + offset * Channels, count);
+                float contribution[BlockFrames * Channels]{};
+                decoder->mix(contribution, count);
+                QVector<qint16> nativeSamples;
+                if (!clip.nativeEffects.isEmpty()) {
+                    nativeSamples.resize(int(count * Channels));
+                    for (unsigned sample = 0; sample < count * Channels; ++sample) {
+                        nativeSamples[int(sample)] = qint16(std::lround(
+                            std::clamp(double(contribution[sample]), -1.0, 1.0)
+                            * 32767.0));
+                    }
+                    for (const NativeAudioModule& effect : clip.nativeEffects) {
+                        if (self.failedNativeEffects.contains(effect.instanceKey)) continue;
+                        const QVector<qint16> before = nativeSamples;
+                        if (!plugin::applyNativeAudioEffect(
+                                nativeSamples, Channels, Rate,
+                                qRound64(first * Rate), effect.pluginId,
+                                effect.parameters, effect.instanceKey)) {
+                            nativeSamples = before;
+                            self.failedNativeEffects.insert(effect.instanceKey);
+                            qWarning().noquote()
+                                << "Native HFPL realtime audio effect failed:"
+                                << effect.pluginId.value();
+                        }
+                    }
+                }
+                for (unsigned sample = 0; sample < count * Channels; ++sample) {
+                    const double value = nativeSamples.isEmpty()
+                        ? double(contribution[sample])
+                        : double(nativeSamples[int(sample)]) / 32768.0;
+                    samples[(offset * Channels) + sample] += float(value * clip.gain);
+                }
             }
             self.pending.resize(int(frames * Channels * 2)); self.pendingOffset = 0;
             double squares[Channels]{};

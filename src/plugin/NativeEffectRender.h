@@ -131,7 +131,8 @@ bool applyNativeVideoTransition(QImage& output, const QImage& from, const QImage
 bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,
                             int sampleRate, qint64 startSample,
                             const core::Identifier& id,
-                            const QStringList& parameterValues = {});
+                            const QStringList& parameterValues = {},
+                            const QString& instanceKey = {});
 bool applyNativeAudioTransition(QVector<qint16>& output,
                                 const QVector<qint16>& from,
                                 const QVector<qint16>& to, int channels,
