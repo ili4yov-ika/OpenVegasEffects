@@ -4,6 +4,7 @@
 #include <QVector>
 #include <QStringList>
 #include "core/Identifier.h"
+#include "composition/Effect.h"
 #include <memory>
 
 namespace openvegas::media {
@@ -11,6 +12,10 @@ struct NativeAudioModule {
     core::Identifier pluginId;
     QStringList parameters;
     QString instanceKey;
+    composition::Effect sourceEffect;
+    double shotOrigin = 0.0;
+    double shotRate = 1.0;
+    double shotFps = 30.0;
 };
 // Timeline coordinates; every active source contributes to one PCM master.
 struct AudioClip {

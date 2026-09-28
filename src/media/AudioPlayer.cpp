@@ -204,11 +204,24 @@ struct AudioPlayer::Engine {
                     }
                     for (const NativeAudioModule& effect : clip.nativeEffects) {
                         if (self.failedNativeEffects.contains(effect.instanceKey)) continue;
+                        QStringList values = effect.parameters;
+                        if (!effect.sourceEffect.animation.isEmpty()) {
+                            const int parameterFrame = qRound(
+                                (first - effect.shotOrigin)
+                                * effect.shotRate * effect.shotFps);
+                            for (auto it = effect.sourceEffect.animation.cbegin();
+                                 it != effect.sourceEffect.animation.cend(); ++it) {
+                                if (it.key() >= 0 && it.key() < values.size()) {
+                                    values[it.key()] = effect.sourceEffect.parameterAt(
+                                        it.key(), parameterFrame).toString();
+                                }
+                            }
+                        }
                         const QVector<qint16> before = nativeSamples;
                         if (!plugin::applyNativeAudioEffect(
                                 nativeSamples, Channels, Rate,
                                 qRound64(first * Rate), effect.pluginId,
-                                effect.parameters, effect.instanceKey)) {
+                                values, effect.instanceKey)) {
                             nativeSamples = before;
                             self.failedNativeEffects.insert(effect.instanceKey);
                             qWarning().noquote()

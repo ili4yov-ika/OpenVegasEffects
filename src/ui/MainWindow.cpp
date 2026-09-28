@@ -4096,6 +4096,10 @@ double MainWindow::prepareAudioSource()
                         module.pluginId = effect.pluginId;
                         module.instanceKey = QUuid::createUuid().toString(
                             QUuid::WithoutBraces);
+                        module.sourceEffect = effect;
+                        module.shotOrigin = origin;
+                        module.shotRate = rate;
+                        module.shotFps = shotFps;
                         for (int parameter = 0;
                              parameter < effectSpec.parameters.size(); ++parameter) {
                             const QVariant value = effect.parameterAt(parameter, parameterFrame);

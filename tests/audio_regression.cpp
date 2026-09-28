@@ -75,6 +75,14 @@ private slots:
         openvegas::media::AudioClip clip {path, 0, 1.5, 0, 1, 1};
         clip.nativeEffects.append({id, {QStringLiteral("100")},
                                    QStringLiteral("balance-instance")});
+        auto& module = clip.nativeEffects.last();
+        module.sourceEffect.pluginId = id;
+        module.sourceEffect.parameterValues = {QStringLiteral("100")};
+        openvegas::composition::KeyFrameList balanceCurve(QStringLiteral("100"));
+        balanceCurve.setCanInterpolate(false);
+        balanceCurve.set(0, 100, openvegas::composition::TemporalType::Hold);
+        balanceCurve.set(20, -100, openvegas::composition::TemporalType::Hold);
+        module.sourceEffect.animation.insert(0, balanceCurve);
         openvegas::media::AudioPlayer audio;
         QSignalSpy pcm(&audio, &openvegas::media::AudioPlayer::pcmMixed);
         audio.setClips({clip}, 1.5);
@@ -91,6 +99,21 @@ private slots:
             return false;
         };
         QTRY_VERIFY_WITH_TIMEOUT(panned(), 5000);
+        const auto oppositePanDirections = [&] {
+            bool positive = false;
+            bool negative = false;
+            for (const auto& entry : pcm) {
+                const QByteArray data = entry[0].toByteArray();
+                if (data.size() < 404) continue;
+                const int left = qFromLittleEndian<qint16>(data.constData() + 200);
+                const int right = qFromLittleEndian<qint16>(data.constData() + 202);
+                const int difference = left - right;
+                if (difference > 400) positive = true;
+                if (difference < -400) negative = true;
+            }
+            return positive && negative;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(oppositePanDirections(), 5000);
         audio.stop();
         openvegas::plugin::clearNativeEffectModules();
     }
