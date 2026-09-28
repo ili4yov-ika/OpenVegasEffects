@@ -115,6 +115,41 @@ private slots:
         QVERIFY(rightmostInk(shifted) > rightmostInk(renderStyle(style)) + 25);
     }
 
+    void glyphClipLimitsFillAndOutlineInLocalSpace()
+    {
+        TextStyle style = sampleStyle();
+        style.text = QStringLiteral("O");
+        style.backgroundEnabled = false;
+        style.outlineSize = 2.0;
+        const auto draw = [&](const QRectF& nativeClip) {
+            QImage image(480, 360, QImage::Format_ARGB32_Premultiplied);
+            image.fill(Qt::transparent);
+            QPainter painter(&image);
+            openvegas::render::drawStyledText(
+                painter, QRectF(30, 40, 350, 260), style,
+                [&](QVector<openvegas::render::GlyphRenderState>& glyphs) {
+                    QCOMPARE(glyphs.size(), 1);
+                    glyphs[0].clipEnabled = true;
+                    glyphs[0].clipRect = nativeClip;
+                });
+            painter.end();
+            qint64 alpha = 0;
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    alpha += qAlpha(image.pixel(x, y));
+                }
+            }
+            return alpha;
+        };
+        const qint64 full = draw(QRectF(-1000, -1000, 2000, 2000));
+        const qint64 half = draw(QRectF(-1000, 0, 2000, 14));
+        const qint64 empty = draw(QRectF(0, 0, 0, 0));
+        QVERIFY(full > 0);
+        QVERIFY(half > 0);
+        QVERIFY(half < full);
+        QCOMPARE(empty, qint64(0));
+    }
+
     void missingAudioSurvivesProjectLoad()
     {
         using namespace openvegas;

@@ -1043,11 +1043,12 @@ private:
         // Notify(103) integrator. AttractTo, Follow and RepelFrom additionally
         // use the layer-state array and stable target FXID. Throw also uses
         // Notify(103), with its default impulse at simulation time zero.
-        // Eleven text modules use Notify(105) with planar per-glyph matrices,
-        // opacity and no ClipValue at the probed animation times. The five
-        // directional modules still require native glyph clipping.
+        // Sixteen text modules use Notify(105) with planar per-glyph matrices
+        // and opacity. Five directional modules additionally use ClipValue;
+        // TextRender applies its native glyph-local rectangle to fill/stroke.
         static const QSet<QString> verifiedNativeBehaviors {
             QStringLiteral("downinsert"),
+            QStringLiteral("downdirinsert"),
             QStringLiteral("acceleration"),
             QStringLiteral("attractto"),
             QStringLiteral("centralspiral"),
@@ -1065,12 +1066,15 @@ private:
             QStringLiteral("follow"),
             QStringLiteral("gravity"),
             QStringLiteral("leftroll"),
+            QStringLiteral("leftdirinsert"),
             QStringLiteral("positionmix"),
+            QStringLiteral("push"),
             QStringLiteral("random"),
             QStringLiteral("random2"),
             QStringLiteral("repelfrom"),
             QStringLiteral("richtick"),
             QStringLiteral("rightroll"),
+            QStringLiteral("rightdirinsert"),
             QStringLiteral("rotatebylayer"),
             QStringLiteral("shufflein"),
             QStringLiteral("stretchandzoomin"),
@@ -1080,6 +1084,7 @@ private:
             QStringLiteral("throw"),
             QStringLiteral("typewriter"),
             QStringLiteral("upinsert"),
+            QStringLiteral("updirinsert"),
             QStringLiteral("uproll"),
             QStringLiteral("wavystyle"),
             QStringLiteral("zoomin"),

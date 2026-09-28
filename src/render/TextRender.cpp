@@ -220,6 +220,7 @@ void drawStyledText(QPainter& painter, const QRectF& box,
     const TextGeometry geometry = layoutText(effectiveTextBox(box, style), style);
     QVector<GlyphRenderState> glyphStates;
     QVector<QPainterPath> transformedGlyphs;
+    QVector<QPainterPath> glyphClips;
     if (glyphModifier && !geometry.glyphPaths.isEmpty()) {
         glyphStates.resize(geometry.glyphPaths.size());
         glyphModifier(glyphStates);
@@ -227,6 +228,7 @@ void drawStyledText(QPainter& painter, const QRectF& box,
             glyphStates.clear();
         } else {
             transformedGlyphs.reserve(glyphStates.size());
+            glyphClips.reserve(glyphStates.size());
             for (qsizetype i = 0; i < glyphStates.size(); ++i) {
                 const QPointF anchor = geometry.glyphOrigins.at(i);
                 const QTransform aroundAnchor =
@@ -234,6 +236,20 @@ void drawStyledText(QPainter& painter, const QRectF& box,
                     * glyphStates.at(i).transformation
                     * QTransform::fromTranslate(-anchor.x(), -anchor.y());
                 transformedGlyphs.append(aroundAnchor.map(geometry.glyphPaths.at(i)));
+                QPainterPath clip;
+                if (glyphStates.at(i).clipEnabled) {
+                    // The native shader evaluates ecLocalPos before cursorMatrix.
+                    // Move the Y-up rectangle into Qt's Y-down glyph coordinates
+                    // before applying the same cursor transform as the outline.
+                    const QRectF native = glyphStates.at(i).clipRect;
+                    if (native.width() > 0.0 && native.height() > 0.0) {
+                        clip.addRect(QRectF(anchor.x() + native.left(),
+                                            anchor.y() - native.bottom(),
+                                            native.width(), native.height()));
+                        clip = aroundAnchor.map(clip);
+                    }
+                }
+                glyphClips.append(clip);
             }
         }
     }
@@ -256,8 +272,14 @@ void drawStyledText(QPainter& painter, const QRectF& box,
         } else {
             const qreal originalOpacity = painter.opacity();
             for (qsizetype i = 0; i < transformedGlyphs.size(); ++i) {
+                if (glyphStates[i].clipEnabled && glyphClips[i].isEmpty()) continue;
+                if (glyphStates[i].clipEnabled) {
+                    painter.save();
+                    painter.setClipPath(glyphClips[i], Qt::IntersectClip);
+                }
                 painter.setOpacity(originalOpacity * qBound(0.0f, glyphStates[i].opacity, 1.0f));
                 painter.fillPath(transformedGlyphs[i], style.fontColor);
+                if (glyphStates[i].clipEnabled) painter.restore();
             }
             painter.setOpacity(originalOpacity);
         }
@@ -278,8 +300,14 @@ void drawStyledText(QPainter& painter, const QRectF& box,
             } else {
                 const qreal originalOpacity = painter.opacity();
                 for (qsizetype i = 0; i < transformedGlyphs.size(); ++i) {
+                    if (glyphStates[i].clipEnabled && glyphClips[i].isEmpty()) continue;
+                    if (glyphStates[i].clipEnabled) {
+                        painter.save();
+                        painter.setClipPath(glyphClips[i], Qt::IntersectClip);
+                    }
                     painter.setOpacity(originalOpacity * qBound(0.0f, glyphStates[i].opacity, 1.0f));
                     painter.strokePath(transformedGlyphs[i], pen);
+                    if (glyphStates[i].clipEnabled) painter.restore();
                 }
                 painter.setOpacity(originalOpacity);
             }

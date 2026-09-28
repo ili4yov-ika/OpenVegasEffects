@@ -326,6 +326,18 @@ QImage RenderWorker::renderClip(const composition::Layer& layer, const compositi
                     glyphs[i].opacity = qIsFinite(nativeOpacity)
                                             ? qBound(0.0f, nativeOpacity, 1.0f)
                                             : 1.0f;
+                    const auto& nativeClip = result.clipValues.at(i);
+                    glyphs[i].clipEnabled = false;
+                    if (nativeClip.enabled) {
+                        const float* values = nativeClip.values;
+                        if (qIsFinite(values[0]) && qIsFinite(values[1])
+                            && qIsFinite(values[2]) && qIsFinite(values[3])) {
+                            glyphs[i].clipEnabled = true;
+                            glyphs[i].clipRect = QRectF(values[0], values[3],
+                                                        values[1] - values[0],
+                                                        values[2] - values[3]);
+                        }
+                    }
                 }
             };
         }

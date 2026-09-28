@@ -28,6 +28,10 @@ struct GlyphRenderState
 {
     QTransform transformation;
     float opacity = 1.0f;
+    // Native ClipValue is in the untransformed, Y-up glyph vertex space:
+    // left, right, top, bottom (the shader tests x..y and w..z).
+    bool clipEnabled = false;
+    QRectF clipRect;
 };
 
 // Called once after shaping, with one state per rendered glyph. The transform

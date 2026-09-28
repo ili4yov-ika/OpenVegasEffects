@@ -645,6 +645,15 @@ int main(int argc, char** argv)
                     for (int j = 0; j < 16; ++j) {
                         same = same && qAbs(mainMatrix[j] - workerMatrix[j]) < 0.0001f;
                     }
+                    same = same && result.clipValues.at(i).enabled
+                                       == threaded.clipValues.at(i).enabled
+                                && result.clipValues.at(i).secondary
+                                       == threaded.clipValues.at(i).secondary;
+                    for (int j = 0; j < 4; ++j) {
+                        same = same
+                               && qAbs(result.clipValues.at(i).values[j]
+                                       - threaded.clipValues.at(i).values[j]) < 0.0001f;
+                    }
                 }
             }
             const bool typewriter = QFileInfo(file).baseName().compare(
@@ -675,6 +684,33 @@ int main(int argc, char** argv)
                 QStringLiteral("ShuffleIn"),
                 QStringLiteral("WavyStyle")
             };
+            static const QStringList clippedTextBehaviors {
+                QStringLiteral("DownDirInsert"),
+                QStringLiteral("LeftDirInsert"),
+                QStringLiteral("RightDirInsert"),
+                QStringLiteral("UpDirInsert"),
+                QStringLiteral("Push")
+            };
+            if (clippedTextBehaviors.contains(baseName, Qt::CaseInsensitive)) {
+                if (!ok || !same || (probeFrame == 15
+                                     && !result.clipValues.at(0).enabled)) {
+                    ++failures;
+                } else {
+                    for (int i = 0; i < result.transformations.size(); ++i) {
+                        const auto& clip = result.clipValues.at(i);
+                        bool finiteClip = true;
+                        for (float value : clip.values) {
+                            finiteClip = finiteClip && qIsFinite(value);
+                        }
+                        if (!planarMatrix(result.transformations.at(i))
+                            || !qIsFinite(result.opacities.at(i))
+                            || !finiteClip) {
+                            ++failures;
+                            break;
+                        }
+                    }
+                }
+            }
             if (planarTextBehaviors.contains(baseName, Qt::CaseInsensitive)) {
                 if (!ok || !same) {
                     ++failures;

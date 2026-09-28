@@ -763,12 +763,17 @@ Runtime собирает `Acceleration`, `Gravity` и `Drag` в один пок�
 `Typewriter`, `DropInByChar`, `StringFade`, `CentralSpiral`, `CinemaStyle`,
 `DoomoDesigns`, `Random`, `Random2`, `RichTick`, `ShuffleIn` и `WavyStyle`
 подключены к посимвольным opacity и 2D-матрицам в TextRender и повышают
-production-итог до 37/43. Время для этого
+production-итог до 42/43 после подключения ещё пяти направленных модулей:
+`DownDirInsert`, `LeftDirInsert`, `RightDirInsert`, `UpDirInsert` и `Push`.
+Время для этого
 контекста передаётся в миллисекундах; ClipValue состоит из двух флагов и четырёх
 float. Восемь добавленных модулей проверены на кадрах 0, 1, 15, 30, 60 и 120:
 ClipValue выключен, матрицы плоские и результаты совпадают между потоками.
-Для пяти направленных модулей ещё требуется применение ClipValue и проверка
-геометрии символов. `MotionTrack` удалён из whitelist после повторной проверки:
+ClipValue направленных модулей применяется к заливке и stroke каждого глифа:
+шейдер Flux сравнивает X с `values[0..1]`, Y с `values[3]..values[2]` в
+локальном пространстве до матрицы символа. Qt-отсечение повторяет эту геометрию,
+хотя сглаживание края может отличаться от исходного GLSL. `MotionTrack` удалён
+из whitelist после повторной проверки:
 он отвергает все четыре runtime-callback.
 
 Выяснено, что SDK хранит в каждом модуле compatibility sentinel: если исходная проверка

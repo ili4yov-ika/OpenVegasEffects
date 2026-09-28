@@ -496,7 +496,7 @@ Runtime повторяет этот порядок с фактическим FPS
 позиция `(171.958, -238.831, 0)`. Layer-state массив дополнительно включает
 `AttractTo`, `Follow` и `RepelFrom`; `Throw` подтверждён с исходным Acceleration Time = 0
 после восстановления импульса при `t=0`.
-Рабочий итог составляет 37/43 Behavior. `MotionTrack` не входит
+Рабочий итог составляет 42/43 Behavior. `MotionTrack` не входит
 в whitelist: поставляемый модуль возвращает unsupported для `Notify(102/103/104/105)` и не создаёт
 матрицу либо opacity. Текстовые модули требуют
 `SubObjectTransformationAtTime` (`Notify(105)`). `OrientationValue +0x340` уже возвращает
@@ -526,8 +526,17 @@ Native wrapper копирует эти записи туда и
 отдельный path и baseline origin каждого сформированного Qt глифа, применяет матрицу
 вокруг этого origin и opacity к fill и stroke. `Flux.dll::FUN_180524a50` умножает
 базовую матрицу глифа на behavior-матрицу и отдельно передаёт ClipValue в шейдер;
-эта часть остаётся отдельной задачей для пяти направленных текстовых модулей
-(`DownDirInsert`, `LeftDirInsert`, `RightDirInsert`, `UpDirInsert`, `Push`).
+пять направленных текстовых модулей (`DownDirInsert`, `LeftDirInsert`,
+`RightDirInsert`, `UpDirInsert`, `Push`) также подключены. `Flux.dll`
+`FUN_180513fd0` задаёт `ecLocalPos = in_Position`, до умножения на
+`cursorMatrix`; fragment shader `FUN_180513930` проверяет интервал
+`clippingValues.x <= ecLocalPos.x <= clippingValues.y` и
+`clippingValues.w <= ecLocalPos.y <= clippingValues.z`. `TextRender` переводит
+этот Y-up прямоугольник в локальные координаты Qt-глифа, трансформирует его
+вместе с глифом и обрезает заливку и stroke. Probe проверяет конечные значения,
+плоские матрицы и совпадение ClipValue между потоками на кадрах 0/1/15/30/60/120;
+регрессия проверяет пустую и частичную область. Краевая антиалиасинг-маска Qt
+может отличаться от производной `dFdx/dFdy` в исходном GPU-шейдере.
 `MotionTrack` требует отдельного контекста.
 
 Штатный сканер теперь вызывает `Notify(2)` в том же загруженном экземпляре, в котором проверяет

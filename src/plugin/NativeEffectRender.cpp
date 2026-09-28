@@ -2639,11 +2639,16 @@ bool nativeBehaviorSubObjectRenderingVerified(const core::Identifier& id)
         QStringLiteral("random2"),
         QStringLiteral("richtick"),
         QStringLiteral("shufflein"),
-        QStringLiteral("wavystyle")
+        QStringLiteral("wavystyle"),
+        QStringLiteral("downdirinsert"),
+        QStringLiteral("leftdirinsert"),
+        QStringLiteral("rightdirinsert"),
+        QStringLiteral("updirinsert"),
+        QStringLiteral("push")
     };
-    // These modules use opacity and planar glyph matrices. Their probe output
-    // leaves the native clipping flag off at the checked default parameters
-    // across the start, midpoint and end of a 120-frame clip.
+    // These modules use opacity and planar glyph matrices. The five directional
+    // modules additionally set native ClipValue, applied by TextRender in
+    // glyph-local coordinates.
     return it != g_registry.constEnd() && it->behaviorRenderingVerified
            && textBehaviors.contains(
                QFileInfo(it->filePath).baseName().toLower());

@@ -690,13 +690,15 @@ opacity — вместе с host callbacks `GetPreBehaviorEffectTransformation` 
 всего стека в основном и worker-thread. Layer-dependent `AttractTo`, `Follow`
 и `RepelFrom` вместе с `Throw` доводят production-набор до 26/43. Восстановленный
 посимвольный `Notify(105)` (`PluginBehaviorEffect` VA `0x18034c810`, `PluginFile` RVA
-`0x3593e0`) довёл его до 37/43 за счёт `Typewriter`, `DropInByChar`,
+`0x3593e0`) довёл его до 42/43 за счёт `Typewriter`, `DropInByChar`,
 `StringFade`, `CentralSpiral`, `CinemaStyle`, `DoomoDesigns`, `Random`, `Random2`,
-`RichTick`, `ShuffleIn` и `WavyStyle`. Контекст MC размером `0x78` передаёт время в миллисекундах в
+`RichTick`, `ShuffleIn`, `WavyStyle` и пяти направленных модулей с ClipValue.
+Контекст MC размером `0x78` передаёт время в миллисекундах в
 `+0x08/+0x0c`, count в `+0x58` и указатель на 0x5c-byte записи в `+0x60`;
 opacity float находится в каждой записи по `+0x40`. ClipValue содержит флаг
-`+0x44`, четыре float `+0x48..+0x54` и флаг `+0x58`. Пять направленных текстовых
-модулей отвечают на `Notify(105)`, но требуют применения ClipValue в рендере.
+`+0x44`, четыре float `+0x48..+0x54` и флаг `+0x58`. Fragment shader Flux
+сопоставляет четыре float с локальными границами глифа X-left/right и Y-top/bottom;
+они применяются к заливке и контуру в `TextRender`.
 
 ### Выбор целевого слоя в Behavior (повторная проверка в Ghidra)
 
