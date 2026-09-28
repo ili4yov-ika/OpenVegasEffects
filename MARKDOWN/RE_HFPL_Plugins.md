@@ -496,7 +496,7 @@ Runtime повторяет этот порядок с фактическим FPS
 позиция `(171.958, -238.831, 0)`. Layer-state массив дополнительно включает
 `AttractTo`, `Follow` и `RepelFrom`; `Throw` подтверждён с исходным Acceleration Time = 0
 после восстановления импульса при `t=0`.
-Рабочий итог составляет 29/43 Behavior. `MotionTrack` не входит
+Рабочий итог составляет 37/43 Behavior. `MotionTrack` не входит
 в whitelist: поставляемый модуль возвращает unsupported для `Notify(102/103/104/105)` и не создаёт
 матрицу либо opacity. Текстовые модули требуют
 `SubObjectTransformationAtTime` (`Notify(105)`). `OrientationValue +0x340` уже возвращает
@@ -518,11 +518,16 @@ Native wrapper копирует эти записи туда и
 `1,1,1,1,0.866025,0,0,0` и полностью раскрывает строку к кадру 30;
 `DropInByChar` сдвигает первый глиф по Y примерно на −57 px; `StringFade`
 даёт opacity 0.5 и масштаб 1.293. Все три совпадают между основным и worker-потоком,
-их ClipValue остаётся выключенным. Они включены в production: `TextRender` хранит
+их ClipValue остаётся выключенным. Дополнительно проверены `CentralSpiral`,
+`CinemaStyle`, `DoomoDesigns`, `Random`, `Random2`, `RichTick`, `ShuffleIn` и
+`WavyStyle`: при кадрах 0, 1, 15, 30, 60 и 120 все восемь дают конечные opacity,
+плоские 2D-матрицы, выключенный ClipValue и совпадение потоков. Эти 11 модулей
+включены в production: `TextRender` хранит
 отдельный path и baseline origin каждого сформированного Qt глифа, применяет матрицу
 вокруг этого origin и opacity к fill и stroke. `Flux.dll::FUN_180524a50` умножает
 базовую матрицу глифа на behavior-матрицу и отдельно передаёт ClipValue в шейдер;
-эта часть остаётся отдельной задачей для остальных 13 текстовых модулей.
+эта часть остаётся отдельной задачей для пяти направленных текстовых модулей
+(`DownDirInsert`, `LeftDirInsert`, `RightDirInsert`, `UpDirInsert`, `Push`).
 `MotionTrack` требует отдельного контекста.
 
 Штатный сканер теперь вызывает `Notify(2)` в том же загруженном экземпляре, в котором проверяет

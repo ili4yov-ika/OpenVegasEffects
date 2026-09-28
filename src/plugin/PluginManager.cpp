@@ -1043,14 +1043,17 @@ private:
         // Notify(103) integrator. AttractTo, Follow and RepelFrom additionally
         // use the layer-state array and stable target FXID. Throw also uses
         // Notify(103), with its default impulse at simulation time zero.
-        // Typewriter, DropInByChar and StringFade use Notify(105) and
-        // per-glyph opacity/matrix application in TextRender. Remaining
-        // modules need more simulation or glyph-clipping support.
+        // Eleven text modules use Notify(105) with planar per-glyph matrices,
+        // opacity and no ClipValue at the probed animation times. The five
+        // directional modules still require native glyph clipping.
         static const QSet<QString> verifiedNativeBehaviors {
             QStringLiteral("downinsert"),
             QStringLiteral("acceleration"),
             QStringLiteral("attractto"),
+            QStringLiteral("centralspiral"),
+            QStringLiteral("cinemastyle"),
             QStringLiteral("drag"),
+            QStringLiteral("doomodesigns"),
             QStringLiteral("downroll"),
             QStringLiteral("drop"),
             QStringLiteral("dropinbychar"),
@@ -1063,9 +1066,13 @@ private:
             QStringLiteral("gravity"),
             QStringLiteral("leftroll"),
             QStringLiteral("positionmix"),
+            QStringLiteral("random"),
+            QStringLiteral("random2"),
             QStringLiteral("repelfrom"),
+            QStringLiteral("richtick"),
             QStringLiteral("rightroll"),
             QStringLiteral("rotatebylayer"),
+            QStringLiteral("shufflein"),
             QStringLiteral("stretchandzoomin"),
             QStringLiteral("stringfade"),
             QStringLiteral("tinyzoom"),
@@ -1074,6 +1081,7 @@ private:
             QStringLiteral("typewriter"),
             QStringLiteral("upinsert"),
             QStringLiteral("uproll"),
+            QStringLiteral("wavystyle"),
             QStringLiteral("zoomin"),
             QStringLiteral("zoomout")
         };

@@ -665,6 +665,33 @@ int main(int argc, char** argv)
                 return qAbs(m[10] - 1.0f) < 0.0001f
                        && qAbs(m[15] - 1.0f) < 0.0001f;
             };
+            static const QStringList planarTextBehaviors {
+                QStringLiteral("CentralSpiral"),
+                QStringLiteral("CinemaStyle"),
+                QStringLiteral("DoomoDesigns"),
+                QStringLiteral("Random"),
+                QStringLiteral("Random2"),
+                QStringLiteral("RichTick"),
+                QStringLiteral("ShuffleIn"),
+                QStringLiteral("WavyStyle")
+            };
+            if (planarTextBehaviors.contains(baseName, Qt::CaseInsensitive)) {
+                if (!ok || !same) {
+                    ++failures;
+                } else {
+                    for (int i = 0; i < result.transformations.size(); ++i) {
+                        if (result.clipValues.at(i).enabled
+                            || result.clipValues.at(i).secondary
+                            || !planarMatrix(result.transformations.at(i))
+                            || !qIsFinite(result.opacities.at(i))
+                            || result.opacities.at(i) < 0.0f
+                            || result.opacities.at(i) > 1.0f) {
+                            ++failures;
+                            break;
+                        }
+                    }
+                }
+            }
             if (probeFrame == 15
                 && baseName.compare(QStringLiteral("DropInByChar"),
                                     Qt::CaseInsensitive) == 0

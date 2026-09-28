@@ -2631,10 +2631,19 @@ bool nativeBehaviorSubObjectRenderingVerified(const core::Identifier& id)
     static const QSet<QString> textBehaviors {
         QStringLiteral("typewriter"),
         QStringLiteral("dropinbychar"),
-        QStringLiteral("stringfade")
+        QStringLiteral("stringfade"),
+        QStringLiteral("centralspiral"),
+        QStringLiteral("cinemastyle"),
+        QStringLiteral("doomodesigns"),
+        QStringLiteral("random"),
+        QStringLiteral("random2"),
+        QStringLiteral("richtick"),
+        QStringLiteral("shufflein"),
+        QStringLiteral("wavystyle")
     };
     // These modules use opacity and planar glyph matrices. Their probe output
-    // leaves the native clipping flag off at the checked default parameters.
+    // leaves the native clipping flag off at the checked default parameters
+    // across the start, midpoint and end of a 120-frame clip.
     return it != g_registry.constEnd() && it->behaviorRenderingVerified
            && textBehaviors.contains(
                QFileInfo(it->filePath).baseName().toLower());
