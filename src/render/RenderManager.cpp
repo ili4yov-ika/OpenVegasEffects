@@ -279,13 +279,16 @@ QImage RenderWorker::renderClip(const composition::Layer& layer, const compositi
                 break;
             }
         }
-        render::GlyphOpacityModifier glyphModifier;
+        render::GlyphModifier glyphModifier;
         if (hasGlyphBehavior) {
-            glyphModifier = [&](QVector<float>& opacities) {
+            glyphModifier = [&](QVector<render::GlyphRenderState>& glyphs) {
                 plugin::NativeSubObjectResult result;
-                result.transformations.resize(opacities.size());
-                result.clipValues.resize(opacities.size());
-                result.opacities = opacities;
+                result.transformations.resize(glyphs.size());
+                result.clipValues.resize(glyphs.size());
+                result.opacities.reserve(glyphs.size());
+                for (const auto& glyph : glyphs) {
+                    result.opacities.append(glyph.opacity);
+                }
                 const double fps = m_composition
                     ? double(m_composition->fpsNumerator())
                           / qMax(1, m_composition->fpsDenominator())
@@ -306,7 +309,24 @@ QImage RenderWorker::renderClip(const composition::Layer& layer, const compositi
                         canvasSize.width(), canvasSize.height(), fps,
                         fx.pluginId, resolved, layer.id);
                 }
-                opacities = result.opacities;
+                for (qsizetype i = 0; i < glyphs.size(); ++i) {
+                    const float* matrix = result.transformations.at(i).constData();
+                    if (qIsFinite(matrix[0]) && qIsFinite(matrix[1])
+                        && qIsFinite(matrix[4]) && qIsFinite(matrix[5])
+                        && qIsFinite(matrix[12]) && qIsFinite(matrix[13])) {
+                        // Native text matrices use Y-up. Qt's text layout is
+                        // Y-down, so reflect the off-diagonal terms as well
+                        // as the vertical translation.
+                        glyphs[i].transformation = QTransform(
+                            double(matrix[0]), -double(matrix[1]),
+                            -double(matrix[4]), double(matrix[5]),
+                            double(matrix[12]), -double(matrix[13]));
+                    }
+                    const float nativeOpacity = result.opacities.at(i);
+                    glyphs[i].opacity = qIsFinite(nativeOpacity)
+                                            ? qBound(0.0f, nativeOpacity, 1.0f)
+                                            : 1.0f;
+                }
             };
         }
         render::drawStyledText(painter, box, style, glyphModifier);

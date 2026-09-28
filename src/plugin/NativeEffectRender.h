@@ -58,13 +58,14 @@ struct NativeBehaviorResult
 };
 
 // BIFF's SubObjectTransformationAtTime (Notify 105) edits one 0x5c-byte
-// record per glyph. The trailing 0x18 bytes are the native ClipValue (an
-// enabled byte, three reserved bytes, and five floats). Keep all five values
-// until their distinct clipping semantics are recovered.
+// record per glyph. The trailing 0x18 bytes are the native ClipValue (a
+// clipping flag, three padding bytes, four floats, and one trailing flag).
+// Keep both flags until their exact combination rules are recovered.
 struct NativeSubObjectClipValue
 {
-    bool enabled = true;
-    float values[5] {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    bool enabled = false;
+    float values[4] {0.0f, 0.0f, 0.0f, 0.0f};
+    bool secondary = false;
 };
 
 struct NativeSubObjectResult

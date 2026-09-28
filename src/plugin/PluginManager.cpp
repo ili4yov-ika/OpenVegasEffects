@@ -1043,8 +1043,9 @@ private:
         // Notify(103) integrator. AttractTo, Follow and RepelFrom additionally
         // use the layer-state array and stable target FXID. Throw also uses
         // Notify(103), with its default impulse at simulation time zero.
-        // Typewriter uses Notify(105) and per-glyph opacity in TextRender.
-        // Remaining modules need more simulation or glyph-matrix support.
+        // Typewriter, DropInByChar and StringFade use Notify(105) and
+        // per-glyph opacity/matrix application in TextRender. Remaining
+        // modules need more simulation or glyph-clipping support.
         static const QSet<QString> verifiedNativeBehaviors {
             QStringLiteral("downinsert"),
             QStringLiteral("acceleration"),
@@ -1052,6 +1053,7 @@ private:
             QStringLiteral("drag"),
             QStringLiteral("downroll"),
             QStringLiteral("drop"),
+            QStringLiteral("dropinbychar"),
             QStringLiteral("expansion"),
             QStringLiteral("fadebehavior"),
             QStringLiteral("flyinfadeout"),
@@ -1065,6 +1067,7 @@ private:
             QStringLiteral("rightroll"),
             QStringLiteral("rotatebylayer"),
             QStringLiteral("stretchandzoomin"),
+            QStringLiteral("stringfade"),
             QStringLiteral("tinyzoom"),
             QStringLiteral("twirlbehavior"),
             QStringLiteral("throw"),

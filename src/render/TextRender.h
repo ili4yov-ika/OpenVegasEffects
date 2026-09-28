@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QRectF>
+#include <QTransform>
 #include <QVector>
 #include <functional>
 
@@ -23,13 +24,18 @@ namespace render {
 // `box` is the text box in the painter's current coordinates; the caller has
 // already applied the layer transform. The background, if the style asks for
 // one, is drawn behind the text and expanded by the style's own margins.
-// Called once after shaping, with one opacity per actual rendered glyph.
-// Native per-character Behaviors can edit this array without replacing Qt's
-// wrapping, kerning or script shaping.
-using GlyphOpacityModifier = std::function<void(QVector<float>&)>;
+struct GlyphRenderState
+{
+    QTransform transformation;
+    float opacity = 1.0f;
+};
+
+// Called once after shaping, with one state per rendered glyph. The transform
+// is relative to that glyph's baseline origin in the text box's coordinates.
+using GlyphModifier = std::function<void(QVector<GlyphRenderState>&)>;
 void drawStyledText(QPainter& painter, const QRectF& box,
                     const composition::TextStyle& style,
-                    const GlyphOpacityModifier& glyphOpacityModifier = {});
+                    const GlyphModifier& glyphModifier = {});
 
 // Bounding box the text actually occupies inside `box`, in the same
 // coordinates. Used for the background rectangle and worth having on its own so

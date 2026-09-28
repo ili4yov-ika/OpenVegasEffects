@@ -595,6 +595,10 @@ int main(int argc, char** argv)
     }
 
     if (behaviorSubObjectApi) {
+        bool frameSpecified = false;
+        const int requestedFrame = qEnvironmentVariableIntValue(
+            "OPENVEGAS_HFPL_PROBE_FRAME", &frameSpecified);
+        const int probeFrame = frameSpecified ? qBound(0, requestedFrame, 120) : 15;
         out << "file\tnotify105\tfirst-eight-opacity\tfirst-eight-clips\tfirst-four-records\tthread-match\n";
         int failures = 0;
         for (const QString& file : files) {
@@ -615,7 +619,7 @@ int main(int argc, char** argv)
             result.clipValues.resize(8);
             result.opacities.fill(1.0f, 8);
             const bool ok = openvegas::plugin::evaluateNativeSubObjectBehavior(
-                result, 15, 15, 120, 1920, 1080, 30.0, id,
+                result, probeFrame, probeFrame, 120, 1920, 1080, 30.0, id,
                 parameterValues, {});
             openvegas::plugin::NativeSubObjectResult threaded;
             threaded.transformations.resize(8);
@@ -624,7 +628,7 @@ int main(int argc, char** argv)
             bool threadOk = false;
             QThread* renderThread = QThread::create([&]() {
                 threadOk = openvegas::plugin::evaluateNativeSubObjectBehavior(
-                    threaded, 15, 15, 120, 1920, 1080, 30.0, id,
+                    threaded, probeFrame, probeFrame, 120, 1920, 1080, 30.0, id,
                     parameterValues, {});
                 openvegas::plugin::releaseNativeEffectThreadRenderer();
             });
@@ -645,10 +649,38 @@ int main(int argc, char** argv)
             }
             const bool typewriter = QFileInfo(file).baseName().compare(
                 QStringLiteral("Typewriter"), Qt::CaseInsensitive) == 0;
-            if (typewriter && (!ok || !same
-                               || result.opacities.at(0) <= 0.0f
-                               || result.opacities.at(0) >= 1.0f
-                               || result.opacities.at(1) != 0.0f)) {
+            if (typewriter && probeFrame == 15 && (!ok || !same
+                               || result.opacities.at(0) != 1.0f
+                               || result.opacities.at(4) <= 0.0f
+                               || result.opacities.at(4) >= 1.0f
+                               || result.opacities.at(5) != 0.0f)) {
+                ++failures;
+            }
+            const QString baseName = QFileInfo(file).baseName();
+            const auto planarMatrix = [](const QMatrix4x4& matrix) {
+                const float* m = matrix.constData();
+                for (const int index : {2, 3, 6, 7, 8, 9, 11, 14}) {
+                    if (qAbs(m[index]) > 0.0001f) return false;
+                }
+                return qAbs(m[10] - 1.0f) < 0.0001f
+                       && qAbs(m[15] - 1.0f) < 0.0001f;
+            };
+            if (probeFrame == 15
+                && baseName.compare(QStringLiteral("DropInByChar"),
+                                    Qt::CaseInsensitive) == 0
+                && (!ok || !same || result.clipValues.at(0).enabled
+                    || !planarMatrix(result.transformations.at(0))
+                    || result.opacities.at(0) != 1.0f
+                    || result.transformations.at(0).constData()[13] >= -1.0f)) {
+                ++failures;
+            }
+            if (probeFrame == 15
+                && baseName.compare(QStringLiteral("StringFade"),
+                                    Qt::CaseInsensitive) == 0
+                && (!ok || !same || result.clipValues.at(0).enabled
+                    || !planarMatrix(result.transformations.at(0))
+                    || qAbs(result.opacities.at(0) - 0.5f) > 0.01f
+                    || result.transformations.at(0).constData()[0] <= 1.0f)) {
                 ++failures;
             }
             QStringList opacities;
@@ -656,16 +688,17 @@ int main(int argc, char** argv)
             QStringList records;
             for (int i = 0; i < 8; ++i) {
                 opacities.append(QString::number(result.opacities.at(i)));
-                clips.append(result.clipValues.at(i).enabled
-                                 ? QStringLiteral("1") : QStringLiteral("0"));
+                const auto& clip = result.clipValues.at(i);
+                clips.append(QStringLiteral("%1/%2")
+                                 .arg(clip.enabled ? 1 : 0)
+                                 .arg(clip.secondary ? 1 : 0));
                 if (i < 4) {
-                    const auto& clip = result.clipValues.at(i);
                     const float* matrix = result.transformations.at(i).constData();
                     records.append(QStringLiteral("%1,%2,%3,%4,%5,%6,%7,%8")
                                        .arg(matrix[12]).arg(matrix[13])
                                        .arg(matrix[0]).arg(clip.values[0])
                                        .arg(clip.values[1]).arg(clip.values[2])
-                                       .arg(clip.values[3]).arg(clip.values[4]));
+                                       .arg(clip.values[3]).arg(clip.secondary ? 1 : 0));
                 }
             }
             out << QFileInfo(file).fileName() << '\t' << (ok ? 1 : 0)

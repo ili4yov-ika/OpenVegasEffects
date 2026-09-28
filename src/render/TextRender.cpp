@@ -94,6 +94,7 @@ struct TextGeometry
 {
     QPainterPath glyphs;
     QVector<QPainterPath> glyphPaths;
+    QVector<QPointF> glyphOrigins;
     QPainterPath decorations;
     QRectF bounds;
 };
@@ -165,6 +166,7 @@ TextGeometry layoutText(const QRectF& box, const TextStyle& style)
                                          .map(raw.pathForGlyph(indexes[i]));
                 result.glyphs.addPath(glyph);
                 result.glyphPaths.append(std::move(glyph));
+                result.glyphOrigins.append(pos);
             }
         }
         if (style.underline || style.strikethrough) {
@@ -191,6 +193,7 @@ TextGeometry layoutText(const QRectF& box, const TextStyle& style)
     const QTransform origin = QTransform::fromTranslate(box.left() + style.indentLeft, top);
     result.glyphs = origin.map(result.glyphs);
     for (QPainterPath& glyph : result.glyphPaths) glyph = origin.map(glyph);
+    for (QPointF& glyphOrigin : result.glyphOrigins) glyphOrigin = origin.map(glyphOrigin);
     result.decorations = origin.map(result.decorations);
     result.bounds = result.glyphs.boundingRect().united(result.decorations.boundingRect());
     return result;
@@ -205,7 +208,7 @@ QRectF styledTextBounds(const QRectF& box, const TextStyle& style)
 
 void drawStyledText(QPainter& painter, const QRectF& box,
                     const TextStyle& style,
-                    const GlyphOpacityModifier& glyphOpacityModifier)
+                    const GlyphModifier& glyphModifier)
 {
     if (style.text.isEmpty()) return;
     painter.save();
@@ -215,12 +218,23 @@ void drawStyledText(QPainter& painter, const QRectF& box,
                   qMax(0.01, style.verticalScale / 100.0));
     painter.translate(-box.center());
     const TextGeometry geometry = layoutText(effectiveTextBox(box, style), style);
-    QVector<float> glyphOpacities;
-    if (glyphOpacityModifier && !geometry.glyphPaths.isEmpty()) {
-        glyphOpacities.fill(1.0f, geometry.glyphPaths.size());
-        glyphOpacityModifier(glyphOpacities);
-        if (glyphOpacities.size() != geometry.glyphPaths.size()) {
-            glyphOpacities.clear();
+    QVector<GlyphRenderState> glyphStates;
+    QVector<QPainterPath> transformedGlyphs;
+    if (glyphModifier && !geometry.glyphPaths.isEmpty()) {
+        glyphStates.resize(geometry.glyphPaths.size());
+        glyphModifier(glyphStates);
+        if (glyphStates.size() != geometry.glyphPaths.size()) {
+            glyphStates.clear();
+        } else {
+            transformedGlyphs.reserve(glyphStates.size());
+            for (qsizetype i = 0; i < glyphStates.size(); ++i) {
+                const QPointF anchor = geometry.glyphOrigins.at(i);
+                const QTransform aroundAnchor =
+                    QTransform::fromTranslate(anchor.x(), anchor.y())
+                    * glyphStates.at(i).transformation
+                    * QTransform::fromTranslate(-anchor.x(), -anchor.y());
+                transformedGlyphs.append(aroundAnchor.map(geometry.glyphPaths.at(i)));
+            }
         }
     }
     if (style.backgroundEnabled && style.backgroundOpacity > 0 && !geometry.bounds.isEmpty()) {
@@ -237,13 +251,13 @@ void drawStyledText(QPainter& painter, const QRectF& box,
         painter.drawRoundedRect(plate, radius, radius);
     }
     const auto fill = [&] {
-        if (glyphOpacities.isEmpty()) {
+        if (glyphStates.isEmpty()) {
             painter.fillPath(geometry.glyphs, style.fontColor);
         } else {
             const qreal originalOpacity = painter.opacity();
-            for (qsizetype i = 0; i < geometry.glyphPaths.size(); ++i) {
-                painter.setOpacity(originalOpacity * qBound(0.0f, glyphOpacities[i], 1.0f));
-                painter.fillPath(geometry.glyphPaths[i], style.fontColor);
+            for (qsizetype i = 0; i < transformedGlyphs.size(); ++i) {
+                painter.setOpacity(originalOpacity * qBound(0.0f, glyphStates[i].opacity, 1.0f));
+                painter.fillPath(transformedGlyphs[i], style.fontColor);
             }
             painter.setOpacity(originalOpacity);
         }
@@ -259,13 +273,13 @@ void drawStyledText(QPainter& painter, const QRectF& box,
             QPen pen(it->color);
             pen.setWidthF(it->size * (style.strokeOrder == TextStyle::StrokeOrder::Centered ? 1.0 : 2.0));
             pen.setJoinStyle(Qt::RoundJoin);
-            if (glyphOpacities.isEmpty()) {
+            if (glyphStates.isEmpty()) {
                 painter.strokePath(geometry.glyphs, pen);
             } else {
                 const qreal originalOpacity = painter.opacity();
-                for (qsizetype i = 0; i < geometry.glyphPaths.size(); ++i) {
-                    painter.setOpacity(originalOpacity * qBound(0.0f, glyphOpacities[i], 1.0f));
-                    painter.strokePath(geometry.glyphPaths[i], pen);
+                for (qsizetype i = 0; i < transformedGlyphs.size(); ++i) {
+                    painter.setOpacity(originalOpacity * qBound(0.0f, glyphStates[i].opacity, 1.0f));
+                    painter.strokePath(transformedGlyphs[i], pen);
                 }
                 painter.setOpacity(originalOpacity);
             }

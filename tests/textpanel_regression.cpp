@@ -83,15 +83,36 @@ private slots:
         int glyphCount = 0;
         openvegas::render::drawStyledText(
             painter, QRectF(30, 40, 350, 260), style,
-            [&](QVector<float>& opacities) {
-                glyphCount = opacities.size();
-                if (opacities.size() == 2) opacities[1] = 0.0f;
+            [&](QVector<openvegas::render::GlyphRenderState>& glyphs) {
+                glyphCount = glyphs.size();
+                if (glyphs.size() == 2) glyphs[1].opacity = 0.0f;
             });
         painter.end();
         QCOMPARE(glyphCount, 2);
         const qint64 one = alphaSum(single);
         QVERIFY(one > 0);
         QVERIFY(one < both);
+
+        const auto rightmostInk = [](const QImage& image) {
+            for (int x = image.width() - 1; x >= 0; --x) {
+                for (int y = 0; y < image.height(); ++y) {
+                    if (qAlpha(image.pixel(x, y)) > 0) return x;
+                }
+            }
+            return -1;
+        };
+        QImage shifted(480, 360, QImage::Format_ARGB32_Premultiplied);
+        shifted.fill(Qt::transparent);
+        QPainter shiftedPainter(&shifted);
+        openvegas::render::drawStyledText(
+            shiftedPainter, QRectF(30, 40, 350, 260), style,
+            [](QVector<openvegas::render::GlyphRenderState>& glyphs) {
+                if (glyphs.size() == 2) {
+                    glyphs[0].transformation = QTransform::fromTranslate(100.0, 0.0);
+                }
+            });
+        shiftedPainter.end();
+        QVERIFY(rightmostInk(shifted) > rightmostInk(renderStyle(style)) + 25);
     }
 
     void missingAudioSurvivesProjectLoad()

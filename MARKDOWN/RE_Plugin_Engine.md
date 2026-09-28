@@ -760,8 +760,10 @@ Runtime собирает `Acceleration`, `Gravity` и `Drag` в один пок�
 `Follow` и `RepelFrom`, проверенными с layer-state массивом, и `Throw` с
 нулевым началом симуляции итог этой ветки — 26/43 Behavior. Отдельный
 `Notify(105)` исполняет 16 текстовых модулей с массивом 0x5c-byte записей символов;
-`Typewriter` подключён к посимвольной opacity в TextRender и повышает production-итог
-до 27/43. Для остальных 15 модулей ещё требуется применение матриц и ClipValue к
+`Typewriter`, `DropInByChar` и `StringFade` подключены к посимвольным opacity и
+2D-матрицам в TextRender и повышают production-итог до 29/43. Время для этого
+контекста передаётся в миллисекундах; ClipValue состоит из двух флагов и четырёх
+float. Для остальных 13 модулей ещё требуется применение ClipValue и проверка
 геометрии символов. `MotionTrack` удалён из whitelist после повторной проверки:
 он отвергает все четыре runtime-callback.
 

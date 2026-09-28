@@ -1426,6 +1426,7 @@ public:
             recordBytes[0x44] = result.clipValues[index].enabled ? 1 : 0;
             std::memcpy(recordBytes + 0x48, result.clipValues[index].values,
                         sizeof(result.clipValues[index].values));
+            recordBytes[0x58] = result.clipValues[index].secondary ? 1 : 0;
         }
         QByteArray context(0x78, '\0');
         static constexpr char nullLayerId[] =
@@ -1435,8 +1436,18 @@ public:
                                         : QByteArray(nullLayerId);
         const char* layerId = sourceId.constData();
         std::memcpy(context.data(), &layerId, sizeof(layerId));
-        std::memcpy(context.data() + 0x08, &timelineFrame, sizeof(timelineFrame));
-        std::memcpy(context.data() + 0x0c, &localFrame, sizeof(localFrame));
+        // The MC time fields are milliseconds, unlike the frame counts used
+        // by the caller. Typewriter.hfpl multiplies MC+0x0c by 0.001 before
+        // comparing it with the layer's duration in seconds.
+        const auto milliseconds = [frameRate](int frame) {
+            return qint32(qBound<qint64>(
+                qint64(0), qRound64(double(frame) * 1000.0 / qMax(0.001, frameRate)),
+                qint64(std::numeric_limits<qint32>::max())));
+        };
+        const qint32 timelineMs = milliseconds(timelineFrame);
+        const qint32 localMs = milliseconds(localFrame);
+        std::memcpy(context.data() + 0x08, &timelineMs, sizeof(timelineMs));
+        std::memcpy(context.data() + 0x0c, &localMs, sizeof(localMs));
         std::memcpy(context.data() + 0x18,
                     invocation.preBehaviorTransformation.data(),
                     16 * sizeof(float));
@@ -1471,6 +1482,7 @@ public:
             result.clipValues[index].enabled = recordBytes[0x44] != 0;
             std::memcpy(result.clipValues[index].values, recordBytes + 0x48,
                         sizeof(result.clipValues[index].values));
+            result.clipValues[index].secondary = recordBytes[0x58] != 0;
         }
         return true;
 #endif
@@ -2616,11 +2628,16 @@ bool nativeBehaviorSubObjectRenderingVerified(const core::Identifier& id)
 {
     QMutexLocker lock(&g_registryMutex);
     const auto it = g_registry.constFind(id.value());
-    // Typewriter is verified end-to-end: Notify(105) edits the per-glyph
-    // opacity at record+0x40, which TextRender composites independently.
+    static const QSet<QString> textBehaviors {
+        QStringLiteral("typewriter"),
+        QStringLiteral("dropinbychar"),
+        QStringLiteral("stringfade")
+    };
+    // These modules use opacity and planar glyph matrices. Their probe output
+    // leaves the native clipping flag off at the checked default parameters.
     return it != g_registry.constEnd() && it->behaviorRenderingVerified
-           && QFileInfo(it->filePath).baseName().compare(
-                  QStringLiteral("Typewriter"), Qt::CaseInsensitive) == 0;
+           && textBehaviors.contains(
+               QFileInfo(it->filePath).baseName().toLower());
 }
 
 bool evaluateNativeBehavior(NativeBehaviorResult& result, int timelineFrame,
