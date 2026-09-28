@@ -1487,7 +1487,8 @@ public:
             simulation = {};
             QByteArray simulationContext(0x80, '\0');
             const int objectIndex = simulationSourceIndex(composition, sourceLayerId);
-            const double currentTime = double(simulationFrame + 1) * timeStep;
+            // Throw's default impulse is emitted at t=0, before integration.
+            const double currentTime = double(simulationFrame) * timeStep;
             std::memcpy(simulationContext.data() + 0x00, &objectIndex,
                         sizeof(objectIndex));
             std::memcpy(simulationContext.data() + 0x18, &currentTime,
@@ -1668,7 +1669,7 @@ public:
                 }
 
                 QByteArray context(0x80, '\0');
-                const double currentTime = double(simulationFrame + 1) * timeStep;
+                const double currentTime = double(simulationFrame) * timeStep;
                 std::memcpy(context.data() + 0x00, &objectIndex,
                             sizeof(objectIndex));
                 std::memcpy(context.data() + 0x18, &currentTime,

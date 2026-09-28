@@ -608,9 +608,6 @@ int main(int argc, char** argv)
             if (parameter.type == QStringLiteral("layer")) {
                 values.append(targetId.value());
                 foundLayer = true;
-            } else if (QFileInfo(file).baseName().compare(QStringLiteral("Throw"), Qt::CaseInsensitive) == 0
-                       && parameter.name == QStringLiteral("accelerationTime")) {
-                values.append(QStringLiteral("1"));
             } else {
                 values.append(parameter.defaultValue);
             }
