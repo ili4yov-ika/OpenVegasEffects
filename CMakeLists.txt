@@ -511,24 +511,17 @@ if(WIN32 AND TARGET OpenVegasEffects)
     endif()
     if(_ov_windeployqt)
         if(CMAKE_CONFIGURATION_TYPES)
-            # Multi-config generators (Visual Studio, Xcode): one post-build
-            # rule per config, driving the matching --debug/--release flag.
-            foreach(_ov_cfg IN LISTS CMAKE_CONFIGURATION_TYPES)
-                string(TOLOWER "${_ov_cfg}" _ov_cfg_lower)
-                if(_ov_cfg_lower MATCHES "debug|relwithdebinfo")
-                    set(_ov_deploy_flag "--debug")
-                else()
-                    set(_ov_deploy_flag "--release")
-                endif()
-                add_custom_command(TARGET OpenVegasEffects POST_BUILD
-                    CONFIGURATIONS "${_ov_cfg}"
-                    COMMAND "${_ov_windeployqt}"
-                            ${_ov_deploy_flag} --compiler-runtime --no-translations
-                            "--dir=$<TARGET_FILE_DIR:OpenVegasEffects>"
-                            "$<TARGET_FILE:OpenVegasEffects>"
-                    COMMENT "Deploying Qt runtime (windeployqt) next to OpenVegasEffects.exe [${_ov_cfg}]"
-                    VERBATIM)
-            endforeach()
+            # TARGET POST_BUILD does not accept CONFIGURATIONS. Select the
+            # deployment mode at build time for Visual Studio/Xcode instead.
+            set(_ov_deploy_flag
+                "$<IF:$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>,--debug,--release>")
+            add_custom_command(TARGET OpenVegasEffects POST_BUILD
+                COMMAND "${_ov_windeployqt}"
+                        "${_ov_deploy_flag}" --compiler-runtime --no-translations
+                        "--dir=$<TARGET_FILE_DIR:OpenVegasEffects>"
+                        "$<TARGET_FILE:OpenVegasEffects>"
+                COMMENT "Deploying Qt runtime (windeployqt) next to OpenVegasEffects.exe"
+                VERBATIM)
         else()
             # Single-config generators (Ninja, Makefiles): a build type is set
             # at configure time, so map it to the matching flag here. The debug

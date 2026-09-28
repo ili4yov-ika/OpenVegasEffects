@@ -140,6 +140,15 @@ cmake --preset windows-msvc-debug
 cmake --build --preset windows-msvc-debug --parallel
 ```
 
+### GitHub Actions CI
+
+При push в `main`, pull request и ручном запуске workflow [CI](.github/workflows/ci.yml)
+собирает приложение MSVC 2022 с Qt 6.9.3, запускает шесть регрессионных
+наборов через CTest и проверяет каталоги переводов. Сборка выполняется без
+необязательного Qt WebEngine. Исходники libVLC находятся в репозитории; готовый
+runtime VLC для этих проверок не нужен, поэтому CI не проверяет воспроизведение
+медиа на реальном устройстве.
+
 ### Qt WebEngine (панель Learn)
 
 Референс рендерит Home/Learn через Qt WebEngine (в его пакете лежит `QtWebEngineProcess.exe`),

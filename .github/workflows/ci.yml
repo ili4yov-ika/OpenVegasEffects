@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows / MSVC 2022 / Qt 6.9.3
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.3'
+          arch: win64_msvc2022_64
+          archives: qtbase qtsvg qttools qttranslations
+          cache: true
+
+      - name: Validate translations
+        run: python tools/validate_translations.py
+
+      - name: Configure application
+        shell: pwsh
+        run: >-
+          cmake -S . -B build/ci-app -G "Visual Studio 17 2022" -A x64
+          -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+          -DOPENVEGAS_WITH_WEBENGINE=OFF
+
+      - name: Build application
+        run: cmake --build build/ci-app --config Release --parallel 2
+
+      - name: Configure regression tests
+        shell: pwsh
+        run: >-
+          cmake -S tests -B build/ci-tests -G "Visual Studio 17 2022" -A x64
+          -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+
+      - name: Build regression tests
+        run: cmake --build build/ci-tests --config Release --parallel 2
+
+      - name: Run regression tests
+        run: ctest --test-dir build/ci-tests -C Release --output-on-failure --timeout 120
