@@ -32,6 +32,10 @@ public:
     MediaAsset* assetByIdForEdit(const core::Identifier& id);
 
     core::Result importFile(const QString& filePath);
+    // Imports numbered stills as one video asset at `frameRate`; `assetPath`
+    // receives its path (first file + kImageSequenceMarker).
+    core::Result importImageSequence(const QStringList& files, double frameRate,
+                                     QString* assetPath = nullptr);
     // Keep an offline project's asset in Media so Relink Media can recover it.
     void registerMissingFile(const QString& filePath);
     // Imports a 3D model, parsing it with `settings` and keeping the geometry
@@ -45,6 +49,11 @@ public:
     void clear();
     // Commit a successfully parsed project; the staged manager is exclusively owned by the loader.
     void replaceProjectAssets(MediaManager&& staged);
+    // Takes `id` over from `other` - with its labels, proxy, trimmer points,
+    // sequence stills and, for a model, its geometry - unless an asset of the
+    // same file is already here. Used when composite shots are imported from
+    // another project. Returns the asset's path here.
+    QString adoptAsset(const MediaManager& other, const core::Identifier& id);
 
     QStringList supportedImportExtensions() const { return m_supportedExtensions; }
 
@@ -60,10 +69,13 @@ public:
     // thread - but the arrangement is kept, because it is what stops a slow
     // decode from stalling the compositor.
     //
-    // Frames are keyed by source frame number so scrubbing reuses what has
-    // already been decoded.
-    QImage videoFrame(const core::Identifier& id, int sourceFrame) const;
-    void putVideoFrame(const core::Identifier& id, int sourceFrame, const QImage& frame);
+    // Frames are keyed by their position in the source, in milliseconds, so
+    // scrubbing reuses what has already been decoded - and a shot at another
+    // frame rate (a nested one, or one being exported) asks for the same time
+    // the decoder reads, rather than a frame number counted at the rate of
+    // whichever shot happens to be open.
+    QImage videoFrame(const core::Identifier& id, int sourceMilliseconds) const;
+    void putVideoFrame(const core::Identifier& id, int sourceMilliseconds, const QImage& frame);
     // Most recently decoded frame for this asset, at whatever position, or a
     // null image when nothing has been decoded from it yet. The render worker
     // holds this while the frame it actually asked for is still being decoded:
@@ -71,7 +83,7 @@ public:
     // frame it misses is what put coloured bars over the footage.
     QImage lastVideoFrame(const core::Identifier& id) const;
     // Newest outstanding request, or false when there is nothing to decode.
-    bool takeVideoRequest(core::Identifier* id, int* sourceFrame);
+    bool takeVideoRequest(core::Identifier* id, int* sourceMilliseconds);
     void clearVideoFrames();
 
     // Geometry of an imported model, empty when the id is not a model asset.
@@ -84,7 +96,7 @@ public:
 
 private:
     static MediaKind kindForPath(const QString& filePath);
-    static QString frameKey(const core::Identifier& id, int sourceFrame);
+    static QString frameKey(const core::Identifier& id, int sourceMilliseconds);
 
     QVector<MediaAsset> m_assets;
     QStringList m_supportedExtensions;

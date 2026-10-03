@@ -13,13 +13,6 @@
 #include <QString>
 #include <QStringList>
 
-#ifdef OPENVEGAS_HAVE_WEBENGINE
-#include <QAbstractSocket>
-#include <QByteArray>
-#include <QFile>
-#include <QFileInfo>
-#include <QTcpSocket>
-#endif
 
 #include "app/AppMain.h"
 #include "app/Settings.h"
@@ -102,35 +95,6 @@ static bool acquireSingleInstanceLock(QSharedMemory* memory, const QString& appN
     return true;
 }
 
-#ifdef OPENVEGAS_HAVE_WEBENGINE
-// Reference behaviour (FUN_1402670b0 + the block at 0x1401c30bd): Qt WebEngine
-// remote debugging is switched on only when a config.ini sits next to the
-// executable. The port is a free one, obtained by binding a socket to port 0
-// and reading it back, then published through QTWEBENGINE_REMOTE_DEBUGGING
-// (reference: QTcpSocket::bind / QAbstractSocket::localPort / qputenv).
-// Must run before QApplication, as it does in the reference.
-static void enableWebEngineRemoteDebuggingIfRequested()
-{
-    wchar_t modulePath[MAX_PATH] = {};
-    if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) == 0) {
-        return;
-    }
-    const QFileInfo exeInfo(QString::fromWCharArray(modulePath));
-    if (!QFile::exists(exeInfo.absolutePath() + QStringLiteral("/config.ini"))) {
-        return;
-    }
-
-    QTcpSocket probe;
-    if (!probe.bind(0, QAbstractSocket::DontShareAddress)) {
-        return;
-    }
-    const quint16 port = probe.localPort();
-    probe.close();
-    if (port != 0) {
-        qputenv("QTWEBENGINE_REMOTE_DEBUGGING", QByteArray::number(port));
-    }
-}
-#endif
 
 // Qt's default handler converts the message with QString::toLocal8Bit(), i.e.
 // to the ANSI code page, while a Windows console decodes its own OEM page - so
@@ -162,8 +126,9 @@ int main(int argc, char** argv)
     Q_UNUSED(argc);
     Q_UNUSED(argv);
 
-    // Qt WebEngine requires a shared OpenGL context when the application also
-    // uses QOpenGLWidget, and the attribute has to be set before QApplication.
+    // Shared OpenGL contexts let the viewer's QOpenGLWidget move between
+    // docks and windows (the 360 Viewer hosts the same viewer) without losing
+    // its GL resources; the attribute has to be set before QApplication.
     // Reference main (FUN_1401c2ce0) sets exactly this pair in this position,
     // ahead of its QApplication constructor: AA_ShareOpenGLContexts (0x12) at
     // 1401c3014 and AA_UseDesktopOpenGL (0xf) at 1401c3021, both true. Asking
@@ -191,9 +156,6 @@ int main(int argc, char** argv)
         qputenv("QT_ENABLE_HIGHDPI_SCALING", "0");
     }
 
-#ifdef OPENVEGAS_HAVE_WEBENGINE
-    enableWebEngineRemoteDebuggingIfRequested();
-#endif
 
     QStringList rawArgs = commandLineArgumentsWide();
     enableConsoleIfRequested(rawArgs);

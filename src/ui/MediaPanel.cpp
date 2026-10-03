@@ -24,6 +24,11 @@
 #include <QUndoCommand>
 #include <QPainter>
 #include "ui/Theme.h"
+#include "ui/EffectPlacement.h"
+#include "ui/MediaSettingsDialog.h"
+#include <QApplication>
+#include <QDrag>
+#include <QMouseEvent>
 #include "app/Settings.h"
 #include <QSet>
 #include <QToolButton>
@@ -37,6 +42,9 @@ namespace openvegas {
 namespace ui {
 
 namespace {
+// Item data: a composite shot's id, on rows that list a shot.
+constexpr int kShotIdRole = Qt::UserRole + 3;
+
 class MediaLabelCommand : public QUndoCommand
 {
 public:
@@ -53,6 +61,72 @@ private:
     std::function<void(const QColor&)> m_apply;
     QColor m_before, m_after;
 };
+// One pixel aspect override change: (overridden, PAR) before and after.
+// What Media Properties edits on an asset (MediaOverrideOptions, a
+// sequence's rate, a still's alpha and aspect).
+struct MediaOverrides
+{
+    bool aspect = false;
+    int aspectKind = 0;
+    bool rate = false;
+    double rateValue = 0.0;
+    double sequenceRate = 0.0;
+    bool alpha = false;
+    int alphaMode = 0;
+    int levels = 0;
+    int space = 0;
+    bool hardware = true;
+    int audioStream = -1;
+
+    static MediaOverrides of(const media::MediaAsset& asset)
+    {
+        MediaOverrides o;
+        o.aspect = asset.overridesPixelAspect();
+        o.aspectKind = asset.pixelAspectOverride();
+        o.rate = asset.overridesFrameRate();
+        o.rateValue = asset.frameRateOverride();
+        o.sequenceRate = asset.sequenceFrameRate();
+        o.alpha = asset.overridesAlpha();
+        o.alphaMode = asset.alphaOverride();
+        o.levels = asset.colorLevels();
+        o.space = asset.colorSpace();
+        o.hardware = asset.hardwareDecoding();
+        o.audioStream = asset.audioStreamIndex();
+        return o;
+    }
+    void applyTo(media::MediaAsset& asset) const
+    {
+        asset.setPixelAspectOverride(aspect, aspectKind);
+        asset.setFrameRateOverride(rate, rateValue);
+        if (asset.isImageSequence()) asset.setSequenceFrameRate(sequenceRate);
+        asset.setAlphaOverride(alpha, alphaMode);
+        asset.setColorLevels(levels);
+        asset.setColorSpace(space);
+        asset.setHardwareDecoding(hardware);
+        asset.setAudioStreamIndex(audioStream);
+    }
+    bool sameAspect(const MediaOverrides& o) const { return aspect == o.aspect && aspectKind == o.aspectKind; }
+    bool sameRate(const MediaOverrides& o) const
+    {
+        return rate == o.rate && qFuzzyCompare(rateValue + 1.0, o.rateValue + 1.0)
+               && qFuzzyCompare(sequenceRate + 1.0, o.sequenceRate + 1.0);
+    }
+    bool sameAlpha(const MediaOverrides& o) const { return alpha == o.alpha && alphaMode == o.alphaMode; }
+};
+
+class MediaOverridesCommand : public QUndoCommand
+{
+public:
+    MediaOverridesCommand(std::function<void(const MediaOverrides&)> apply, MediaOverrides before,
+                          MediaOverrides after, const QString& text)
+        : QUndoCommand(text), m_apply(std::move(apply)), m_before(before), m_after(after) {}
+    void undo() override { m_apply(m_before); }
+    void redo() override { m_apply(m_after); }
+private:
+    std::function<void(const MediaOverrides&)> m_apply;
+    MediaOverrides m_before, m_after;
+};
+
 QString kindText(media::MediaKind kind)
 {
     switch (kind) {
@@ -186,9 +260,16 @@ MediaPanel::MediaPanel(QWidget* parent)
     connect(m_list, &QListWidget::customContextMenuRequested,
             this, &MediaPanel::showContextMenu);
     setAcceptDrops(true);
+    m_list->viewport()->installEventFilter(this);
 
     connect(m_list, &QListWidget::itemActivated, this, [this](QListWidgetItem* item) {
-        if (!item || !m_manager) {
+        if (!item) return;
+        // A composite shot opens in the Editor, as the reference's does.
+        if (const QString shot = item->data(kShotIdRole).toString(); !shot.isEmpty()) {
+            emit compositeShotActivated(shot);
+            return;
+        }
+        if (!m_manager || !item->data(Qt::UserRole).isValid()) {
             return;
         }
         const int index = item->data(Qt::UserRole).toInt();
@@ -224,9 +305,87 @@ void MediaPanel::setMediaLabel(const core::Identifier& id, const QColor& color)
     else { command->redo(); delete command; }
 }
 
+void MediaPanel::setMediaPixelAspect(const core::Identifier& id, bool overridden, int pixelAspect)
+{
+    if (!m_manager) return;
+    const media::MediaAsset current = m_manager->assetById(id);
+    if (!current.isValid()) return;
+    media::MediaAsset edited = current;
+    edited.setPixelAspectOverride(overridden, pixelAspect);
+    setMediaOverrides(id, edited);
+}
+
+void MediaPanel::setMediaOverrides(const core::Identifier& id, const media::MediaAsset& edited)
+{
+    if (!m_manager) return;
+    auto* asset = m_manager->assetByIdForEdit(id);
+    if (!asset) return;
+    const MediaOverrides before = MediaOverrides::of(*asset);
+    const MediaOverrides after = MediaOverrides::of(edited);
+    // The reference's History names (DataUtilities, FUN_14034cf70); several
+    // changes at once go in as one step named after the dialog.
+    const bool image = asset->kind() == media::MediaKind::Image;
+    QStringList titles;
+    if (!before.sameAspect(after))
+        titles << (image ? QCoreApplication::translate("DataUtilities", "Set Image Pixel Aspect Ratio")
+                         : QCoreApplication::translate("DataUtilities", "Set Media Pixel Aspect Ratio"));
+    if (!before.sameRate(after))
+        titles << QCoreApplication::translate("DataUtilities", "Set Media Frame Rate");
+    if (!before.sameAlpha(after))
+        titles << (image ? QCoreApplication::translate("DataUtilities", "Set Image Alpha")
+                         : QCoreApplication::translate("DataUtilities", "Set Media Alpha"));
+    if (before.levels != after.levels)
+        titles << QCoreApplication::translate("DataUtilities", "Set Media Color Levels");
+    if (before.space != after.space)
+        titles << QCoreApplication::translate("DataUtilities", "Set Media Color Space");
+    if (before.hardware != after.hardware)
+        titles << QCoreApplication::translate("DataUtilities", "Set Media Hardware Acceleration");
+    if (before.audioStream != after.audioStream)
+        titles << tr("Set Media Audio Stream");
+    if (titles.isEmpty()) return;
+    auto apply = [panel = QPointer<MediaPanel>(this), epoch = m_managerEpoch,
+                  id](const MediaOverrides& state) {
+        if (!panel || panel->m_managerEpoch != epoch || !panel->m_manager) return;
+        auto* target = panel->m_manager->assetByIdForEdit(id);
+        if (!target) return;
+        state.applyTo(*target);
+        panel->refresh();
+        emit panel->mediaMetadataModified();
+    };
+    const QString title = titles.size() == 1
+        ? titles.first()
+        : QCoreApplication::translate("biff::ui::media::MediaSettingsDialog", "Media Properties");
+    auto* command = new MediaOverridesCommand(std::move(apply), before, after, title);
+    if (m_undoStack) m_undoStack->push(command);
+    else { command->redo(); delete command; }
+}
+
+void MediaPanel::showMediaProperties(const core::Identifier& id)
+{
+    if (!m_manager) return;
+    const media::MediaAsset asset = m_manager->assetById(id);
+    if (!asset.isValid()) return;
+    MediaSettingsDialog dialog(asset, this);
+    if (dialog.exec() != QDialog::Accepted) return;
+    setMediaOverrides(id, dialog.result());
+    if (!dialog.relinkPath().isEmpty()) emit relinkRequested(asset.filePath(), dialog.relinkPath());
+}
+
 void MediaPanel::refresh()
 {
     rebuildList();
+}
+
+void MediaPanel::setCompositeShots(const QVector<CompositeShotEntry>& shots)
+{
+    m_shots = shots;
+    rebuildList();
+}
+
+QString MediaPanel::selectedCompositeShotId() const
+{
+    const QListWidgetItem* item = m_list ? m_list->currentItem() : nullptr;
+    return item ? item->data(kShotIdRole).toString() : QString();
 }
 
 QString MediaPanel::selectedFilePath() const
@@ -235,7 +394,7 @@ QString MediaPanel::selectedFilePath() const
         return QString();
     }
     QListWidgetItem* item = m_list->currentItem();
-    if (!item) {
+    if (!item || !item->data(Qt::UserRole).isValid()) {
         return QString();
     }
     const int index = item->data(Qt::UserRole).toInt();
@@ -266,6 +425,11 @@ QString MediaPanel::metadataText(const media::MediaAsset& asset) const
         meta += QStringLiteral("  %1x%2").arg(asset.frameSize().width()).arg(asset.frameSize().height());
     }
     meta += QStringLiteral("  %1").arg(formatDuration(asset.durationSeconds()));
+    // Non-square pixels: how much wider than tall each one is.
+    if (asset.pixelAspectValue() != 1.0)
+        meta += QStringLiteral("  PAR %1").arg(asset.pixelAspectValue(), 0, 'f', 2);
+    if (asset.proxyMode() == media::ProxyMode::Performance) meta += QStringLiteral("  ") + tr("[Proxy: Performance]");
+    if (asset.proxyMode() == media::ProxyMode::Quality) meta += QStringLiteral("  ") + tr("[Proxy: Quality]");
     return meta;
 }
 
@@ -277,7 +441,38 @@ void MediaPanel::rebuildList()
 
     const QString filter = m_search ? m_search->text().trimmed().toLower() : QString();
     const QString selectedPath = selectedFilePath();
+    const QString selectedShot = selectedCompositeShotId();
     m_list->clear();
+
+    // The project's composite shots come first, under their own heading once
+    // there is media beside them.
+    QVector<CompositeShotEntry> shots;
+    for (const CompositeShotEntry& shot : m_shots)
+        if (filter.isEmpty() || shot.name.toLower().contains(filter)) shots.append(shot);
+    std::sort(shots.begin(), shots.end(), [](const CompositeShotEntry& a, const CompositeShotEntry& b) {
+        return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
+    });
+    if (!shots.isEmpty() && m_groupMode != GroupMode::None && !m_manager->assets().isEmpty()) {
+        auto* header = new QListWidgetItem(tr("Composite Shots"), m_list);
+        header->setFlags(header->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsDragEnabled);
+    }
+    for (const CompositeShotEntry& shot : shots) {
+        QString meta = tr("Composite Shot");
+        if (shot.size.isValid()) meta += QStringLiteral("  %1x%2").arg(shot.size.width()).arg(shot.size.height());
+        meta += QStringLiteral("  %1").arg(formatDuration(shot.durationSeconds));
+        if (shot.primary) meta += QStringLiteral("  ") + tr("[Primary]");
+        auto* item = new QListWidgetItem(QIcon(QStringLiteral(":/icons/render-timeline.svg")),
+                                         shot.name + QStringLiteral("  ") + meta, m_list);
+        item->setData(kShotIdRole, shot.id);
+        item->setToolTip(shot.primary ? tr("%1 (primary composite shot for VEGAS integration)").arg(shot.name)
+                                      : shot.name);
+        if (shot.primary) {
+            QFont font = item->font();
+            font.setBold(true);
+            item->setFont(font);
+        }
+        if (shot.id == selectedShot) m_list->setCurrentItem(item);
+    }
 
     const QVector<media::MediaAsset> assets = m_manager->assets();
     QVector<int> indices;
@@ -327,14 +522,15 @@ void MediaPanel::rebuildList()
         item->setToolTip(asset.filePath());
         item->setData(Qt::UserRole + 1, asset.filePath()); // MIME payload on drag
         item->setData(Qt::UserRole + 2, asset.labelColor());
-        if (!QFileInfo::exists(asset.filePath())) item->setForeground(QColor(210, 80, 70));
-        if (m_thumbnailMode && asset.kind() == media::MediaKind::Image) {
-            const QFileInfo info(asset.filePath());
+        if (!QFileInfo::exists(asset.sourcePath())) item->setForeground(QColor(210, 80, 70));
+        if (m_thumbnailMode
+            && (asset.kind() == media::MediaKind::Image || asset.isImageSequence())) {
+            const QFileInfo info(asset.sourcePath());
             const QString key = QStringLiteral("media-thumb:%1:%2:%3")
                 .arg(info.absoluteFilePath()).arg(info.lastModified().toMSecsSinceEpoch()).arg(info.size());
             QPixmap thumbnail;
             if (!QPixmapCache::find(key, &thumbnail)) {
-                QImageReader reader(asset.filePath());
+                QImageReader reader(asset.sourcePath());
                 reader.setAutoTransform(true);
                 const QSize size = reader.size();
                 if (size.isValid()) reader.setScaledSize(size.scaled(QSize(72, 48), Qt::KeepAspectRatio));
@@ -375,12 +571,64 @@ void MediaPanel::createFolder()
 void MediaPanel::showContextMenu(const QPoint& position)
 {
     QListWidgetItem* item = m_list->itemAt(position);
+    if (item && !item->data(kShotIdRole).toString().isEmpty()) {
+        const QString id = item->data(kShotIdRole).toString();
+        bool primary = false;
+        for (const CompositeShotEntry& shot : m_shots)
+            if (shot.id == id) primary = shot.primary;
+        QMenu menu(this);
+        QAction* open = menu.addAction(tr("Open"));
+        QAction* properties = menu.addAction(tr("Composite Shot Properties..."));
+        // The reference's own entry (FUN_1407582d0): one primary shot per
+        // project, the one VEGAS Pro gets back.
+        QAction* setPrimary = menu.addAction(tr("Set Primary Composite Shot"));
+        setPrimary->setCheckable(true);
+        setPrimary->setChecked(primary);
+        setPrimary->setToolTip(tr("Set primary composite shot for VEGAS integration"));
+        // FUN_1407137d0: the shot on its own, as a .vegfxcs.
+        QAction* save = menu.addAction(tr("Save Composite Shot..."));
+        menu.addSeparator();
+        QAction* remove = menu.addAction(tr("Delete"));
+        menu.setToolTipsVisible(true);
+        QAction* chosen = menu.exec(m_list->viewport()->mapToGlobal(position));
+        if (chosen == open) emit compositeShotActivated(id);
+        else if (chosen == properties) emit compositeShotPropertiesRequested(id);
+        else if (chosen == setPrimary) emit primaryCompositeShotRequested(id, !primary);
+        else if (chosen == remove) emit compositeShotRemoveRequested(id);
+        else if (chosen == save) emit compositeShotSaveRequested(id);
+        return;
+    }
     if (!item || !item->data(Qt::UserRole + 1).isValid()) return;
     const QString oldPath = item->data(Qt::UserRole + 1).toString();
     const auto asset = m_manager->assetByFilePath(oldPath);
     if (!asset.isValid()) return;
     QMenu menu(this);
     QAction* relink = menu.addAction(tr("Relink Media..."));
+    // MediaActions "Properties": the MediaSettingsDialog.
+    QAction* properties = asset.kind() == media::MediaKind::Video
+                                  || asset.kind() == media::MediaKind::Image
+                                  || asset.kind() == media::MediaKind::Audio
+        ? menu.addAction(QCoreApplication::translate("biff::ui::media::MediaActions", "Properties"))
+        : nullptr;
+    if (properties) properties->setObjectName(QStringLiteral("mediaPropertiesAction"));
+    if (asset.kind() == media::MediaKind::Video && !asset.isImageSequence()) {
+        // Reference ProxyMediaMenu: None / Performance / Quality per asset.
+        QMenu* proxy = menu.addMenu(tr("Proxy"));
+        proxy->setObjectName(QStringLiteral("mediaProxyMenu"));
+        const struct { media::ProxyMode mode; const char* text; } modes[] = {
+            {media::ProxyMode::None, QT_TR_NOOP("None")},
+            {media::ProxyMode::Performance, QT_TR_NOOP("Performance")},
+            {media::ProxyMode::Quality, QT_TR_NOOP("Quality")},
+        };
+        for (const auto& entry : modes) {
+            QAction* action = proxy->addAction(tr(entry.text));
+            action->setCheckable(true);
+            action->setChecked(asset.proxyMode() == entry.mode);
+            connect(action, &QAction::triggered, this, [this, id = asset.id(), mode = entry.mode] {
+                emit proxyModeRequested(id, mode);
+            });
+        }
+    }
     QMenu* labels = menu.addMenu(tr("Media Label"));
     const char* names[] = {"Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "Pink"};
     const char* colors[] = {"#c94b4b", "#d9823b", "#d1b849", "#55a868", "#4aa6a6", "#4f78b8", "#8662b0", "#b95f8a"};
@@ -404,6 +652,10 @@ void MediaPanel::showContextMenu(const QPoint& position)
         if (color.isValid()) setMediaLabel(asset.id(), color);
     });
     QAction* chosen = menu.exec(m_list->viewport()->mapToGlobal(position));
+    if (chosen && chosen == properties) {
+        showMediaProperties(asset.id());
+        return;
+    }
     if (chosen != relink) return;
     const QString newPath = QFileDialog::getOpenFileName(this, tr("Relink Media"),
                                                          QFileInfo(oldPath).absolutePath());
@@ -419,6 +671,11 @@ void MediaPanel::removeSelected()
     if (!item) {
         return;
     }
+    if (const QString shot = item->data(kShotIdRole).toString(); !shot.isEmpty()) {
+        emit compositeShotRemoveRequested(shot);
+        return;
+    }
+    if (!item->data(Qt::UserRole).isValid()) return;
     const int index = item->data(Qt::UserRole).toInt();
     const QVector<media::MediaAsset> assets = m_manager->assets();
     if (index < 0 || index >= assets.size()) {
@@ -436,7 +693,52 @@ void MediaPanel::updateCount()
         return;
     }
     m_countLabel->setText(
-        tr("%1 item(s)").arg(m_manager->assets().size()));
+        tr("%1 item(s)").arg(m_manager->assets().size() + m_shots.size()));
+}
+
+QMimeData* MediaPanel::dragData(const QListWidgetItem* item) const
+{
+    if (!item) return nullptr;
+    if (const QString shot = item->data(kShotIdRole).toString(); !shot.isEmpty()) {
+        auto* mime = new QMimeData;
+        mime->setData(QString::fromLatin1(kCompositeShotMimeType), shot.toUtf8());
+        return mime;
+    }
+    const QString path = item->data(Qt::UserRole + 1).toString();
+    if (path.isEmpty()) return nullptr;
+    auto* mime = new QMimeData;
+    mime->setData(QString::fromLatin1(kMediaMimeType), path.toUtf8());
+    if (QFileInfo(path).isFile()) mime->setUrls({QUrl::fromLocalFile(path)});
+    return mime;
+}
+
+bool MediaPanel::eventFilter(QObject* watched, QEvent* event)
+{
+    if (m_list && watched == m_list->viewport()) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            const auto* press = static_cast<QMouseEvent*>(event);
+            m_dragStart = press->position().toPoint();
+            const QListWidgetItem* item = press->button() == Qt::LeftButton ? m_list->itemAt(m_dragStart) : nullptr;
+            m_dragRow = item ? m_list->row(item) : -1;
+        } else if (event->type() == QEvent::MouseMove && m_dragRow >= 0) {
+            const auto* move = static_cast<QMouseEvent*>(event);
+            if ((move->buttons() & Qt::LeftButton)
+                && (move->position().toPoint() - m_dragStart).manhattanLength()
+                       >= QApplication::startDragDistance()) {
+                QMimeData* mime = dragData(m_list->item(m_dragRow));
+                m_dragRow = -1;
+                if (mime) {
+                    auto* drag = new QDrag(this);
+                    drag->setMimeData(mime);
+                    drag->exec(Qt::CopyAction);
+                    return true;
+                }
+            }
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            m_dragRow = -1;
+        }
+    }
+    return QDockWidget::eventFilter(watched, event);
 }
 
 void MediaPanel::dragEnterEvent(QDragEnterEvent* event)

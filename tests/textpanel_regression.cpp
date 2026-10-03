@@ -150,6 +150,50 @@ private slots:
         QCOMPARE(empty, qint64(0));
     }
 
+    void multipleMediaAssetsSurviveImportAndProjectLoad()
+    {
+        using namespace openvegas;
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        media::MediaManager originalMedia;
+        composition::Composition original;
+        QStringList paths;
+        QVector<media::MediaAsset> snapshot;
+        for (int index = 0; index < 8; ++index) {
+            const QString path = directory.filePath(QStringLiteral("image-%1.png").arg(index));
+            QImage image(16 + index, 12 + index, QImage::Format_ARGB32);
+            image.fill(QColor(index * 20, 10, 30));
+            QVERIFY(image.save(path));
+            // Keep a shared copy alive across append/detach and reallocation.
+            snapshot = originalMedia.assets();
+            QVERIFY(originalMedia.importFile(path).isSuccess());
+            QCOMPARE(snapshot.size(), index);
+            QCOMPARE(originalMedia.assets().size(), index + 1);
+            const auto asset = originalMedia.assetByFilePath(path);
+            QVERIFY(asset.isValid());
+            QCOMPARE(asset.frameSize(), image.size());
+            original.addClip(QStringLiteral("Image %1").arg(index), asset.id(), index, 1.0);
+            paths.append(path);
+        }
+        for (const auto& path : paths) QVERIFY(originalMedia.importFile(path).isSuccess());
+        QCOMPARE(originalMedia.assets().size(), paths.size());
+        const QString projectPath = directory.filePath("multiple-media.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(projectPath, original, originalMedia).isSuccess());
+        media::MediaManager loadedMedia;
+        composition::Composition loaded;
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            QVERIFY(project::VegfxSerializer::loadFromFile(projectPath, &loaded, &loadedMedia).isSuccess());
+            QCOMPARE(loadedMedia.assets().size(), paths.size());
+            QCOMPARE(loaded.layers().size(), paths.size());
+            for (int index = 0; index < paths.size(); ++index) {
+                const auto asset = loadedMedia.assetByFilePath(paths[index]);
+                QVERIFY(asset.isValid());
+                QCOMPARE(asset.frameSize(), QSize(16 + index, 12 + index));
+                QCOMPARE(loaded.layers()[index].clips.first().mediaId, asset.id());
+            }
+        }
+    }
+
     void missingAudioSurvivesProjectLoad()
     {
         using namespace openvegas;

@@ -10,7 +10,7 @@
     <property name="title"><string>&amp;File</string></property>
     <widget class="QMenu" name="menuOpenRecent"><property name="title"><string>Open &amp;Recent</string></property></widget>
     <widget class="QMenu" name="menuRecord"><property name="title"><string>&amp;Record</string></property><addaction name="actionRecordVoiceover"/></widget>
-    <widget class="QMenu" name="menuImport"><property name="title"><string>&amp;Import</string></property><addaction name="actionImport"/></widget>
+    <widget class="QMenu" name="menuImport"><property name="title"><string>&amp;Import</string></property><addaction name="actionImport"/><addaction name="actionImportCompositeShot"/></widget>
     <addaction name="actionNew"/><addaction name="actionOpen"/><addaction name="menuOpenRecent"/>
     <addaction name="actionRecoveredSaves"/><addaction name="separator"/>
     <addaction name="actionSave"/><addaction name="actionSaveAs"/><addaction name="separator"/>
@@ -49,6 +49,7 @@
   <action name="actionProjectSettings"><property name="text"><string>Project &amp;Settings...</string></property></action>
   <action name="actionOptions"><property name="text"><string>&amp;Options...</string></property></action>
   <action name="actionExit"><property name="text"><string>E&amp;xit</string></property></action>
+  <action name="actionImportCompositeShot"><property name="text"><string>&amp;Composite Shot...</string></property><property name="toolTip"><string>Import composite shots from a composite shot file or another project</string></property></action>
   <action name="actionImport"><property name="text"><string>&amp;Import Media...</string></property><property name="shortcut"><string>Ctrl+I</string></property></action>
   <action name="actionRecordVoiceover"><property name="text"><string>Record &amp;Voiceover...</string></property></action>
   <action name="actionUndo"><property name="text"><string>&amp;Undo</string></property><property name="enabled"><bool>false</bool></property></action>

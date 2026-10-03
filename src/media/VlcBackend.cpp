@@ -159,6 +159,103 @@ bool resolve(NativeLibrary& library, const char* name, Fn& target)
     return target != nullptr;
 }
 
+// libvlc_media_track_t and libvlc_video_track_t as VLC 3.x lays them out (its
+// stable ABI): the union of track pointers follows six 32-bit fields, and a
+// video track starts with height, width, SAR and frame rate.
+struct Vlc3VideoTrack
+{
+    unsigned height;
+    unsigned width;
+    unsigned sarNum;
+    unsigned sarDen;
+    unsigned rateNum;
+    unsigned rateDen;
+};
+struct Vlc3Track
+{
+    uint32_t codec;
+    uint32_t originalFourcc;
+    int id;
+    int type;  // libvlc_track_type_t: 1 video
+    int profile;
+    int level;
+    void* details;
+    unsigned bitrate;
+    char* language;
+    char* description;
+};
+struct Vlc3AudioTrack { unsigned channels; unsigned rate; };
+const char* (*g_codecDescription)(int, uint32_t) = nullptr;
+
+QString trackCodec(int type, uint32_t code)
+{
+    const char* description = g_codecDescription ? g_codecDescription(type, code) : nullptr;
+    return description ? QString::fromUtf8(description) : codecFourcc(code);
+}
+unsigned (*g_vlc3TracksGet)(libvlc_media_t*, Vlc3Track***) = nullptr;
+void (*g_vlc3TracksRelease)(Vlc3Track**, unsigned) = nullptr;
+
+bool vlc3VideoTrackFormat(libvlc_media_t* media, unsigned* sarNum, unsigned* sarDen,
+                          unsigned* rateNum, unsigned* rateDen)
+{
+    Vlc3Track** tracks = nullptr;
+    const unsigned count = g_vlc3TracksGet(media, &tracks);
+    bool found = false;
+    for (unsigned i = 0; i < count && !found; ++i) {
+        if (!tracks[i] || tracks[i]->type != 1 || !tracks[i]->details) continue;
+        const auto* video = static_cast<const Vlc3VideoTrack*>(tracks[i]->details);
+        *sarNum = video->sarNum;
+        *sarDen = video->sarDen;
+        *rateNum = video->rateNum;
+        *rateDen = video->rateDen;
+        found = true;
+    }
+    if (tracks) g_vlc3TracksRelease(tracks, count);
+    return found;
+}
+
+void bindVlc3Tracks(VlcApi& api, NativeLibrary& library)
+{
+    if (resolve(library, "libvlc_media_tracks_get", g_vlc3TracksGet)
+        && resolve(library, "libvlc_media_tracks_release", g_vlc3TracksRelease)) {
+        api.videoTrackFormat = &vlc3VideoTrackFormat;
+        resolve(library, "libvlc_media_get_codec_description", g_codecDescription);
+        resolve(library, "libvlc_media_get_parsed_status", api.mediaParsedStatus);
+        api.mediaStreams = [](libvlc_media_t* media) {
+            MediaStreams result;
+            Vlc3Track** tracks = nullptr;
+            const unsigned count = g_vlc3TracksGet(media, &tracks);
+            for (unsigned i = 0; i < count; ++i) {
+                const auto* track = tracks[i];
+                if (!track) continue;
+                if (track->type == 1 && !result.hasVideo) {
+                    result.hasVideo = true;
+                    result.videoFormat = codecFourcc(track->originalFourcc ? track->originalFourcc : track->codec);
+                    result.videoCodec = trackCodec(1, track->codec);
+                    if (track->details) {
+                        const auto* video = static_cast<const Vlc3VideoTrack*>(track->details);
+                        result.videoSize = QSize(int(video->width), int(video->height));
+                    }
+                } else if (track->type == 0) {
+                    AudioStreamInfo audio;
+                    audio.format = codecFourcc(track->originalFourcc ? track->originalFourcc : track->codec);
+                    audio.codec = trackCodec(0, track->codec);
+                    audio.language = QString::fromUtf8(track->language ? track->language : "");
+                    audio.name = QString::fromUtf8(track->description ? track->description : "");
+                    if (track->details) {
+                        const auto* info = static_cast<const Vlc3AudioTrack*>(track->details);
+                        audio.channels = info->channels;
+                        audio.sampleRate = info->rate;
+                    }
+                    result.audio.append(audio);
+                }
+            }
+            if (tracks) g_vlc3TracksRelease(tracks, count);
+            return result;
+        };
+    }
+}
+
 VlcApi loadApi()
 {
     VlcApi api;
@@ -250,6 +347,7 @@ VlcApi loadApi()
         return api;
     }
 
+    if (!v4) bindVlc3Tracks(api, library);
     api.available = true;
     return api;
 }

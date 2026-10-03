@@ -177,25 +177,10 @@ if(IS_DIRECTORY "${OPENVEGAS_VLC_RUNTIME_DIR}")
 elseif(OPENVEGAS_VLC_RUNTIME_DIR AND NOT OPENVEGAS_VLC_RUNTIME_DIR STREQUAL _ov_default_vlc_runtime)
     message(FATAL_ERROR "OPENVEGAS_VLC_RUNTIME_DIR does not exist: ${OPENVEGAS_VLC_RUNTIME_DIR}")
 endif()
-# Qt WebEngine backs the Learn sidebar, mirroring the reference (which ships
-# QtWebEngineProcess.exe and imports Qt5WebEngineWidgets + Qt5WebChannel).
-# It is optional: on Windows Qt only builds WebEngine for the MSVC kits, so a
-# MinGW build simply drops the sidebar instead of failing to configure.
-option(OPENVEGAS_WITH_WEBENGINE
-    "Build the Learn sidebar on Qt WebEngine (requires an MSVC kit on Windows)" ON)
-
-set(OPENVEGAS_WEBENGINE_ENABLED OFF)
-if(OPENVEGAS_WITH_WEBENGINE)
-    find_package(Qt6 6.8 QUIET COMPONENTS WebEngineWidgets WebChannel Network)
-    if(Qt6WebEngineWidgets_FOUND AND Qt6WebChannel_FOUND AND Qt6Network_FOUND)
-        set(OPENVEGAS_WEBENGINE_ENABLED ON)
-        message(STATUS "Qt WebEngine found - Learn sidebar enabled")
-    else()
-        message(STATUS
-            "Qt WebEngine not found in this kit - Learn sidebar disabled. "
-            "Install the Qt WebEngine component and use an MSVC kit to enable it.")
-    endif()
-endif()
+# No Qt WebEngine: the reference uses it for its online Learn/Home pages and a
+# web Library view, neither of which this port ships (Learn and Library are
+# native widgets), so the application does not carry a Chromium runtime
+# (~900 MB in a Debug deploy).
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -251,14 +236,19 @@ add_executable(OpenVegasEffects WIN32
     src/plugin/EffectRender.h
     src/plugin/EffectRender.cpp
     src/media/MediaAsset.h
+    src/media/MediaStreamInfo.h
     src/media/MediaAsset.cpp
     src/media/AudioCapture.h
     src/media/AudioPlayer.h
+    src/media/AudioWaveform.h
+    src/media/ProxyMedia.h
     src/media/MediaManager.h
     src/media/MediaManager.cpp
     src/media/ExrImage.h
     src/media/AudioCapture.cpp
     src/media/AudioPlayer.cpp
+    src/media/AudioWaveform.cpp
+    src/media/ProxyMedia.cpp
     src/media/ExrImage.cpp
     src/media/VideoProbe.h
     src/media/VideoProbe.cpp
@@ -271,6 +261,7 @@ add_executable(OpenVegasEffects WIN32
     src/composition/TextStyle.h
     src/composition/TextStyle.cpp
     src/composition/Layer.h
+    src/composition/Transition.h
     src/composition/CompositionState.h
     src/composition/Composition.h
     src/composition/Composition.cpp
@@ -280,11 +271,17 @@ add_executable(OpenVegasEffects WIN32
     src/cache/CacheDB.cpp
     src/project/VegfxSerializer.h
     src/project/VegfxSerializer.cpp
+    src/project/VegfxMerge.h
+    src/project/VegfxMerge.cpp
     src/model3d/Mesh.h
     src/model3d/ModelImportSettings.h
     src/model3d/ModelLoader.h
     src/model3d/Renderer3D.h
+    src/render/AudioExport.h
+    src/render/FrameDiskCache.h
+    src/render/VideoEncoder.h
     src/render/RenderManager.h
+    src/render/TextGeometry.h
     src/render/TextRender.h
     src/model3d/AlembicReader.h
     src/model3d/AlembicReader.cpp
@@ -292,7 +289,11 @@ add_executable(OpenVegasEffects WIN32
     src/model3d/ModelImportSettings.cpp
     src/model3d/ModelLoader.cpp
     src/model3d/Renderer3D.cpp
+    src/render/AudioExport.cpp
+    src/render/FrameDiskCache.cpp
+    src/render/VideoEncoder.cpp
     src/render/RenderManager.cpp
+    src/render/TextGeometry.cpp
     src/render/TextRender.cpp
 src/ui/MainWindow.h
 src/ui/MainWindow.cpp
@@ -300,6 +301,30 @@ src/ui/Model3DSettingsDialog.h
 src/ui/Model3DSettingsDialog.cpp
 src/ui/OptionsDialog.h
 src/ui/OptionsDialog.cpp
+    src/ui/EffectPlacement.h
+    src/ui/PromptMessage.h
+    src/ui/CameraRule.h
+    src/ui/CameraRule.cpp
+    src/ui/AutoSave.h
+    src/ui/AutoSave.cpp
+    src/ui/ProjectSettingsDialog.h
+    src/ui/ProjectSettingsDialog.cpp
+    src/ui/RecoveredProjectsDialog.h
+    src/ui/RecoveredProjectsDialog.cpp
+    src/ui/ImportCompositionDialog.h
+    src/ui/ImportCompositionDialog.cpp
+    src/ui/CompositionSettingsDialog.h
+    src/ui/CompositionSettingsDialog.cpp
+    src/app/AVTemplates.h
+    src/app/AVTemplates.cpp
+    src/render/ExportJob.h
+    src/render/ExportJob.cpp
+    src/ui/ExportQueue.h
+    src/ui/ExportQueue.cpp
+    src/ui/ExportQueueView.h
+    src/ui/ExportQueueView.cpp
+    src/ui/PromptMessage.cpp
+    src/ui/TextureWarning.h
     src/ui/Theme.h
     src/ui/Theme.cpp
     src/ui/EffectsPanel.h
@@ -348,10 +373,10 @@ src/ui/OptionsDialog.cpp
     src/ui/TrackPanel.h
     src/ui/TrackPanel.cpp
     src/ui/LayoutPanel.h
+    src/ui/LayoutTransformCommand.h
     src/ui/LayoutPanel.cpp
     src/ui/LearnSidebar.h
     src/ui/LearnSidebar.cpp
-    resources/learn.qrc
     resources/icons.qrc
     src/ui/StartPanel.h
     src/ui/StartPanel.cpp
@@ -365,6 +390,17 @@ src/ui/OptionsDialog.cpp
     src/ui/EffectInspector.cpp
     src/ui/ViewerWidget.h
     src/ui/ViewerWidget.cpp
+    src/ui/ViewerOverlay.h
+    src/ui/Viewer360View.h
+    src/ui/Viewer360View.cpp
+    src/ui/TextTransformOverlay.h
+    src/ui/TextTransformOverlay.cpp
+    src/ui/NativeCustomUiOverlay.h
+    src/ui/NativeCustomUiOverlay.cpp
+    src/ui/NativeInstanceHost.h
+    src/ui/MediaSettingsDialog.h
+    src/ui/MediaSettingsDialog.cpp
+    src/ui/NativeInstanceHost.cpp
     src/ui/ViewerPanel.h
     src/ui/ViewerPanel.cpp
     src/ui/Preview360VideoPanel.h
@@ -398,6 +434,12 @@ if(TARGET Qt6::lrelease)
 else()
     message(STATUS "Qt LinguistTools not found - UI translations disabled")
 endif()
+
+# AUTOUIC writes ui_Layout.h beside its include directory, while some Qt/CMake
+# combinations declare ui/panels/ui_Layout.h as the Ninja byproduct. Also depend
+# on the form itself so one build updates the panel after a Designer edit.
+set_property(SOURCE src/ui/LayoutPanel.cpp APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/ui/panels/Layout.ui")
 
 target_include_directories(OpenVegasEffects PRIVATE src)
 
@@ -458,14 +500,6 @@ if(OPENVEGAS_OPENEXR_ENABLED)
     target_compile_definitions(OpenVegasEffects PRIVATE OPENVEGAS_HAVE_OPENEXR)
 endif()
 
-if(OPENVEGAS_WEBENGINE_ENABLED)
-    target_link_libraries(OpenVegasEffects PRIVATE
-        Qt6::WebEngineWidgets
-        Qt6::WebChannel
-        Qt6::Network)
-    target_compile_definitions(OpenVegasEffects PRIVATE OPENVEGAS_HAVE_WEBENGINE)
-endif()
-
 if(WIN32)
     target_link_libraries(OpenVegasEffects PRIVATE
         user32
@@ -504,7 +538,7 @@ endif()
 # the existing PATH, which also carries the dev-prompt CRT; Zed's MSVC run task
 # *replaces* PATH with just the Qt bin, which drops that CRT. Rather than lean
 # on every editor's PATH wiring, run windeployqt as a post-build step so the
-# build directory is self-contained (Qt DLLs + plugins + WebEngine + CRT).
+# build directory is self-contained (Qt DLLs + plugins + CRT).
 if(WIN32 AND TARGET OpenVegasEffects)
     if(TARGET Qt6::windeployqt)
         set(_ov_windeployqt "$<TARGET_FILE:Qt6::windeployqt>")

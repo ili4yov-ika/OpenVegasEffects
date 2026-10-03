@@ -137,7 +137,8 @@ private:
     QVector<QPushButton*> m_labelColors;
 
     // Auto Save page controls.
-    QSpinBox* m_autosaveSeconds = nullptr;
+    QSpinBox* m_autosaveSeconds = nullptr;   // minutes, despite the name
+    QLineEdit* m_autosavePath = nullptr;
     QCheckBox* m_autosaveEnabled = nullptr;
 
     // Cache page controls (reference keys Options/MediaCacheDB,

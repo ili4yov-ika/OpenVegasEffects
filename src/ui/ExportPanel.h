@@ -28,6 +28,10 @@ public:
 
     QString currentPreset() const;
     QString outputPath() const;
+    // The path a movie or sequence export of the contents goes to.
+    QString contentsOutputPath() const { return buildOutputPath(extensionForPreset()); }
+    // The export queue's view, shown above the progress log.
+    void setQueueWidget(QWidget* widget);
 
 public slots:
     void exportFrame();
@@ -35,6 +39,8 @@ public slots:
 signals:
     void exportFrameRequested(const QString& filePath);
     void exportContentsRequested(const QString& filePath);
+    // ExportTimelineMenu's "Add to Queue": the contents, with this preset.
+    void addToQueueRequested(const QString& filePath);
 
 private slots:
     void chooseDirectory();

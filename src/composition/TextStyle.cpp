@@ -50,6 +50,8 @@ enum Index
     IdxTextMode,
     IdxParagraphWidth,
     IdxParagraphHeight,
+    IdxParagraphOffsetX,
+    IdxParagraphOffsetY,
     IdxCount,
 };
 
@@ -180,6 +182,8 @@ TextStyle textStyleFromParameters(const QStringList& values)
                                                       style.paragraphSize.width())));
     style.paragraphSize.setHeight(qMax(1.0, readDouble(values, IdxParagraphHeight,
                                                        style.paragraphSize.height())));
+    style.paragraphOffset = QPointF(readDouble(values, IdxParagraphOffsetX, 0.0),
+                                    readDouble(values, IdxParagraphOffsetY, 0.0));
     // Pre-v2 styles stored expansion in pixels. Keep their visual size.
     if (values.size() <= IdxAdditionalOutlines) {
         style.backgroundExpansionX *= 100.0 / style.fontSize;
@@ -247,6 +251,8 @@ QStringList textStyleToParameters(const TextStyle& style)
                               ? QStringLiteral("Paragraph") : QStringLiteral("Point");
     values[IdxParagraphWidth] = number(style.paragraphSize.width());
     values[IdxParagraphHeight] = number(style.paragraphSize.height());
+    values[IdxParagraphOffsetX] = number(style.paragraphOffset.x());
+    values[IdxParagraphOffsetY] = number(style.paragraphOffset.y());
     return values;
 }
 

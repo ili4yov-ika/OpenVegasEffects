@@ -1,4 +1,5 @@
 #include "ui/Theme.h"
+#include "ui/TimelineRowDelegate.h"
 #include "ui/TimelineWidget.h"
 #include "plugin/PluginManager.h"
 #include "media/MediaManager.h"
@@ -10,15 +11,20 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QScrollBar>
+#include <QSet>
 #include <QSettings>
 #include <QSpinBox>
 #include <QSignalBlocker>
 #include <QToolButton>
 #include <QTreeWidgetItemIterator>
+#include <algorithm>
+#include <functional>
 
 namespace openvegas::ui {
 namespace {
@@ -36,6 +42,95 @@ QToolButton* iconButton(QWidget* parent, const QString& name, const QString& ico
     b->setFixedSize(20, 20); b->setAutoRaise(true); b->setToolTip(tip); b->setAccessibleName(tip);
     return b;
 }
+// A two-state header toggle: the reference swaps the icon rather than
+// painting a checked background (lock/unlock, video-on/off, two-d/three-d).
+QToolButton* toggleButton(QWidget* parent, const QString& name, bool on,
+                          const QString& onIcon, const QString& offIcon, const QString& tip) {
+    auto* b = iconButton(parent, name, on ? onIcon : offIcon, tip);
+    b->setCheckable(true); b->setChecked(on); b->setIconSize(QSize(16, 16));
+    QObject::connect(b, &QToolButton::toggled, b, [b, onIcon, offIcon](bool checked) {
+        b->setIcon(QIcon(":/icons/" + (checked ? onIcon : offIcon) + ".svg"));
+    });
+    return b;
+}
+
+// The reference's InLineEdit on the layer row: it reads "N. name [Kind]"
+// until double-clicked, then edits the bare name. Return or leaving the
+// field commits, Escape restores the label. While it only shows the label
+// a press falls through to the tree, so selecting (and Ctrl/Shift
+// multi-selecting) a layer by its name works like anywhere else on the row.
+class LayerNameEdit : public QLineEdit {
+public:
+    LayerNameEdit(const QString& label, const QString& name, bool editable, QWidget* parent)
+        : QLineEdit(parent), m_label(label), m_name(name), m_editable(editable) { showLabel(); }
+    std::function<void(const QString&)> renamed;
+    void beginEdit() {
+        if (!m_editable || !isReadOnly()) return;
+        setReadOnly(false); setFocusPolicy(Qt::StrongFocus); setCursor(Qt::IBeamCursor);
+        setText(m_name); selectAll(); setFocus(Qt::MouseFocusReason);
+    }
+protected:
+    void mousePressEvent(QMouseEvent* event) override {
+        if (isReadOnly()) { event->ignore(); return; }
+        QLineEdit::mousePressEvent(event);
+    }
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        if (isReadOnly()) { event->ignore(); return; }
+        QLineEdit::mouseReleaseEvent(event);
+    }
+    void mouseMoveEvent(QMouseEvent* event) override {
+        if (isReadOnly()) { event->ignore(); return; }
+        QLineEdit::mouseMoveEvent(event);
+    }
+    void mouseDoubleClickEvent(QMouseEvent* event) override {
+        if (isReadOnly()) { beginEdit(); return; }
+        QLineEdit::mouseDoubleClickEvent(event);
+    }
+    void keyPressEvent(QKeyEvent* event) override {
+        if (!isReadOnly() && event->key() == Qt::Key_Escape) { showLabel(); return; }
+        if (!isReadOnly() && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)) {
+            commit(); return;
+        }
+        QLineEdit::keyPressEvent(event);
+    }
+    void focusOutEvent(QFocusEvent* event) override {
+        if (!isReadOnly()) commit();
+        QLineEdit::focusOutEvent(event);
+    }
+private:
+    void commit() {
+        const QString value = text().trimmed();
+        showLabel();
+        // The rename rebuilds the tree later (scheduleRefresh is queued), so
+        // this widget is still alive when the callback returns.
+        if (!value.isEmpty() && value != m_name && renamed) renamed(value);
+    }
+    void showLabel() {
+        setReadOnly(true); setFocusPolicy(Qt::NoFocus); setCursor(Qt::ArrowCursor);
+        setText(m_label); setCursorPosition(0); deselect();
+    }
+    QString m_label, m_name;
+    bool m_editable = true;
+};
+
+// True when making `candidate` the parent of `child` would close a loop
+// (the candidate already hangs below the child, directly or further down).
+bool parentCycle(const composition::Composition& comp, int child, int candidate) {
+    if (child < 0 || candidate < 0 || child >= comp.layers().size() || candidate >= comp.layers().size())
+        return false;
+    const core::Identifier childId = comp.layers().at(child).id;
+    core::Identifier id = comp.layers().at(candidate).id;
+    QSet<QString> visited;
+    while (id.isValid()) {
+        if (id == childId || visited.contains(id.value())) return true;
+        visited.insert(id.value());
+        const auto it = std::find_if(comp.layers().cbegin(), comp.layers().cend(),
+                                     [&id](const composition::Layer& l) { return l.id == id; });
+        if (it == comp.layers().cend()) break;
+        id = it->parentLayerId;
+    }
+    return false;
+}
 }
 void TimelineWidget::rebuildTree()
 {
@@ -51,28 +146,43 @@ void TimelineWidget::rebuildTree()
     if (!m_comp) { m_rebuilding = false; syncLanes(); return; }
     for (int i = 0; i < m_comp->layers().size(); ++i) {
         const auto& layer = m_comp->layers()[i];
-        auto* item = new QTreeWidgetItem(m_tree, {QStringLiteral("%1. %2 [%3]").arg(i + 1).arg(layer.name,
-            QCoreApplication::translate("LayerKind", composition::layerKindName(layer.kind)))});
+        const QString label = QStringLiteral("%1. %2 [%3]").arg(i + 1).arg(layer.name,
+            QCoreApplication::translate("LayerKind", composition::layerKindName(layer.kind)));
+        auto* item = new QTreeWidgetItem(m_tree, {label});
         item->setData(0, Qt::UserRole, i);
         item->setFirstColumnSpanned(true);
+        // The row text stays for search and accessibility; the header widget
+        // draws it, so the delegate skips the item's own copy and the
+        // transparent header lets the row's selection colour show through.
+        item->setData(0, kTimelineHeaderRowRole, true);
         auto* header = new QWidget(m_tree);
         header->setObjectName("timelineLayerHeader");
-        header->setStyleSheet("QWidget#timelineLayerHeader { background:#222222; }");
-        auto* line = new QHBoxLayout(header); line->setContentsMargins(0, 0, 0, 0); line->setSpacing(3);
-        auto* lock = iconButton(header, QStringLiteral("timelineLock_%1").arg(i), layer.locked ? "lock-on" : "lock-off", tr("Lock layer"));
-        lock->setCheckable(true); lock->setChecked(layer.locked); line->addWidget(lock);
+        header->setStyleSheet(QStringLiteral(
+            "QWidget#timelineLayerHeader { background:transparent; }"
+            "QWidget#timelineLayerHeader QToolButton:checked { background:transparent; }"
+            "QWidget#timelineLayerHeader QToolButton:checked:hover { background:#454545; }"
+            "QWidget#timelineLayerHeader QComboBox::drop-down { border:0; width:16px; }"
+            "QWidget#timelineLayerHeader QComboBox::down-arrow { image:url(:/icons/caret-down.svg); width:12px; height:12px; }"));
+        auto* line = new QHBoxLayout(header); line->setContentsMargins(0, 0, 4, 0); line->setSpacing(3);
+        // Order and icons follow the reference row: lock (unlock/lock), video
+        // (video-on-checked/video-off), label, name, motion blur, two-d/three-d
+        // and the parent picker.
+        auto* lock = toggleButton(header, QStringLiteral("timelineLock_%1").arg(i), layer.locked,
+                                  QStringLiteral("layer-locked"), QStringLiteral("layer-unlocked"), tr("Lock layer"));
+        line->addWidget(lock);
         connect(lock, &QToolButton::clicked, this, [this, i](bool on) {
-            editLayer(i, tr("Lock layer"), [on](composition::Layer& l) { l.locked = on; }, true);
+            editLayer(i, on ? tr("Lock Layer") : tr("Unlock Layer"), [on](composition::Layer& l) { l.locked = on; }, true);
         });
-        auto* eye = iconButton(header, QStringLiteral("timelineVisible_%1").arg(i), layer.visible ? "eye-on" : "eye-off", tr("Layer visibility"));
-        eye->setStyleSheet("QToolButton:checked { background:transparent; }");
-        eye->setCheckable(true); eye->setChecked(layer.visible); eye->setEnabled(!layer.locked); line->addWidget(eye);
-        connect(eye, &QToolButton::clicked, this, [this, i, eye](bool on) {
+        auto* eye = toggleButton(header, QStringLiteral("timelineVisible_%1").arg(i), layer.visible,
+                                 QStringLiteral("layer-visible"), QStringLiteral("layer-hidden"), tr("Layer visibility"));
+        eye->setEnabled(!layer.locked); line->addWidget(eye);
+        connect(eye, &QToolButton::clicked, this, [this, i](bool on) {
             editLayer(i, tr("Layer visibility"), [on](composition::Layer& l) { l.visible = on; });
-            eye->setIcon(QIcon(on ? ":/icons/eye-on.svg" : ":/icons/eye-off.svg"));
         });
         auto* color = iconButton(header, QStringLiteral("timelineLabelColor_%1").arg(i), QString(), tr("Layer label color"));
-        color->setFixedSize(12, 12); color->setStyleSheet("background:" + layer.labelColor.name()); line->addWidget(color);
+        color->setFixedSize(14, 14);
+        color->setStyleSheet(QStringLiteral("QToolButton { background:%1; border:1px solid #1b1b1b; }").arg(layer.labelColor.name()));
+        line->addWidget(color);
         color->setEnabled(!layer.locked);
         connect(color, &QToolButton::clicked, this, [this, i, color] {
             QMenu menu(this);
@@ -96,28 +206,49 @@ void TimelineWidget::rebuildTree()
                 : chosen->data().value<QColor>();
             if (c.isValid()) editLayer(i, tr("Layer label color"), [c](composition::Layer& l) { l.labelColor = c; });
         });
-        auto* name = new QLineEdit(layer.name, header);
+        auto* name = new LayerNameEdit(label, layer.name, !layer.locked, header);
         name->setObjectName(QStringLiteral("timelineLayerName_%1").arg(i)); name->setMinimumWidth(30);
-        name->setToolTip(item->text(0)); name->setEnabled(!layer.locked); line->addWidget(name, 1);
-        connect(name, &QLineEdit::selectionChanged, this, [this, item, generation] {
-            if (!m_rebuilding && generation == m_treeGeneration) m_tree->setCurrentItem(item);
+        name->setToolTip(layer.locked ? label : tr("%1\nDouble-click to rename").arg(label));
+        line->addWidget(name, 1);
+        name->renamed = [this, i, generation](const QString& value) {
+            if (generation != m_treeGeneration) return;
+            editLayer(i, tr("Set Layer Name"), [value](composition::Layer& l) { l.name = value; }, true);
+        };
+        const bool sceneObject = layer.kind == composition::LayerKind::Model3D
+            || layer.kind == composition::LayerKind::Camera || layer.kind == composition::LayerKind::Light;
+        auto* blur = toggleButton(header, QStringLiteral("timelineMotionBlur_%1").arg(i), layer.motionBlur,
+                                  QStringLiteral("layer-motion-blur-on"), QStringLiteral("layer-motion-blur"),
+                                  tr("Motion Blur"));
+        blur->setEnabled(!layer.locked && layer.kind != composition::LayerKind::Camera
+                         && layer.kind != composition::LayerKind::Light);
+        line->addWidget(blur);
+        connect(blur, &QToolButton::clicked, this, [this, i](bool on) {
+            editLayer(i, tr("Set Layer Motion Blur"), [on](composition::Layer& l) { l.motionBlur = on; });
         });
-        connect(name, &QLineEdit::editingFinished, this, [this, i, name] {
-            if (name->text().trimmed().isEmpty()) { name->setText(m_comp->layers()[i].name); return; }
-            editLayer(i, tr("Rename layer"), [name](composition::Layer& l) { l.name = name->text(); });
+        auto* dimension = toggleButton(header, QStringLiteral("timelineDimension_%1").arg(i),
+                                       layer.dimension == composition::LayerDimension::ThreeD,
+                                       QStringLiteral("layer-3d"), QStringLiteral("layer-2d"),
+                                       tr("Layer Dimensions"));
+        dimension->setEnabled(!layer.locked && !sceneObject);
+        connect(dimension, &QToolButton::clicked, this, [this, i](bool on) {
+            setLayerDimension(i, on ? composition::LayerDimension::ThreeD : composition::LayerDimension::TwoD);
         });
-        auto* dimension = iconButton(header, QStringLiteral("timelineDimension_%1").arg(i), "effect-2d", tr("Layer dimension: 2D / 3D"));
-        dimension->setCheckable(true); dimension->setChecked(layer.dimension == composition::LayerDimension::ThreeD);
-        dimension->setEnabled(!layer.locked && layer.kind != composition::LayerKind::Model3D && layer.kind != composition::LayerKind::Camera && layer.kind != composition::LayerKind::Light);
-        connect(dimension, &QToolButton::clicked, this, [this, i](bool on) { editLayer(i, tr("Layer dimension"), [on](composition::Layer& l) {
-            l.dimension = on ? composition::LayerDimension::ThreeD : composition::LayerDimension::TwoD;
-        }, true); });
         line->addWidget(dimension);
-        auto* blend = new QComboBox(header); blend->setObjectName(QStringLiteral("timelineBlend_%1").arg(i));
-        blend->addItems(composition::blendModeNames()); blend->setCurrentText(layer.blendMode);
-        blend->setFixedWidth(112); blend->setEnabled(!layer.locked); line->addWidget(blend);
-        connect(blend, &QComboBox::currentTextChanged, this, [this, i](const QString& mode) {
-            editLayer(i, tr("Layer blend mode"), [mode](composition::Layer& l) { l.blendMode = mode; });
+        // Parent: "None" or any layer that would not end up below this one.
+        auto* parent = new QComboBox(header); parent->setObjectName(QStringLiteral("timelineParent_%1").arg(i));
+        parent->setToolTip(tr("Parent")); parent->setAccessibleName(tr("Parent"));
+        parent->addItem(tr("None"), -1);
+        for (int p = 0; p < m_comp->layers().size(); ++p) {
+            if (p == i || parentCycle(*m_comp, i, p)) continue;
+            parent->addItem(QStringLiteral("%1. %2").arg(p + 1).arg(m_comp->layers().at(p).name), p);
+            if (m_comp->layers().at(p).id == layer.parentLayerId) parent->setCurrentIndex(parent->count() - 1);
+        }
+        parent->setFixedWidth(112); parent->setEnabled(!layer.locked); line->addWidget(parent);
+        connect(parent, &QComboBox::activated, this, [this, i, parent](int index) {
+            const int p = parent->itemData(index).toInt();
+            if (!m_comp || (p >= 0 && (p >= m_comp->layers().size() || parentCycle(*m_comp, i, p)))) return;
+            const core::Identifier id = p >= 0 ? m_comp->layers().at(p).id : core::Identifier();
+            editLayer(i, tr("Set Layer Parent(s)"), [id](composition::Layer& l) { l.parentLayerId = id; }, true);
         });
         m_tree->setItemWidget(item, 0, header);
         const auto group = [this, item, i](const QString& text, const QString& name, bool plus) {
@@ -143,17 +274,38 @@ void TimelineWidget::rebuildTree()
                             target.motionTracks.append(track);
                         }, true);
                     });
-                } else if (name == "timelineAddMask_") {
-                    connect(add, &QToolButton::clicked, this, [this, i] {
-                        const QSizeF size(m_comp->width() * .5, m_comp->height() * .5);
-                        addMaskToLayer(i, composition::MaskShape::Rectangle,
-                            QRectF(QPointF((m_comp->width() - size.width()) * .5,
-                                          (m_comp->height() - size.height()) * .5), size));
-                    });
                 } else connect(add, &QToolButton::clicked, this, [this, i, name, add] { showEffectMenu(i, name == "timelineAddBehavior_", add); });
             }
             return row;
         };
+        // AssetLayerGroupFactory builds Tracks/Masks, Transform and Behaviors
+        // only for an asset with picture (AssetHadVideo) and adds an Audio
+        // group for one with sound (AssetHadAudio); a song gets just Effects
+        // and Audio.
+        bool hasPicture = true, hasSound = false;
+        if (layer.kind == composition::LayerKind::Media && m_media && !layer.clips.isEmpty()
+            && !layer.clips.first().nestedComposition) {
+            const auto asset = m_media->assetById(layer.clips.first().mediaId);
+            if (asset.isValid()) {
+                hasSound = asset.kind() == media::MediaKind::Audio
+                    || (asset.kind() == media::MediaKind::Video && !asset.isImageSequence());
+                hasPicture = asset.kind() != media::MediaKind::Audio;
+            }
+        }
+        const auto addAudio = [&] {
+            if (!hasSound) return;
+            auto* audio = group(tr("Audio"), QString(), false);
+            buildTransformRow(audio, i, composition::TransformProperty::AudioLevel);
+            audio->setExpanded(layer.transform.isAnimated(composition::TransformProperty::AudioLevel));
+        };
+        if (!hasPicture) {
+            auto* effects = group(tr("Effects"), "timelineAddEffect_", true);
+            for (int c = 0; c < layer.clips.size(); ++c) addEffectRows(effects, i, c, false);
+            effects->setExpanded(true);
+            addAudio();
+            item->setExpanded(true);
+            continue;
+        }
         auto* tracks = group(tr("Tracks"), "timelineAddTrack_", true);
         for (int t = 0; t < layer.motionTracks.size(); ++t) {
             const auto& track = layer.motionTracks.at(t);
@@ -202,7 +354,9 @@ void TimelineWidget::rebuildTree()
             });
         }
         tracks->setExpanded(!layer.motionTracks.isEmpty());
-        auto* masks = group(tr("Masks"), "timelineAddMask_", true);
+        // No "+" here: like the reference, masks are drawn with the Viewer's
+        // mask tools (ViewerWidget::maskCreationRequested → addMaskToLayer).
+        auto* masks = group(tr("Masks"), QString(), false);
         for (int m = 0; m < layer.masks.size(); ++m) {
             const auto& mask = layer.masks.at(m);
             auto* maskRow = new QTreeWidgetItem(masks, {mask.name});
@@ -264,6 +418,7 @@ void TimelineWidget::rebuildTree()
         }
         effects->setExpanded(true);
         behaviors->setExpanded(true);
+        addAudio();
         item->setExpanded(true);
     }
     for (QTreeWidgetItemIterator it(m_tree); *it; ++it) {
@@ -341,7 +496,9 @@ void TimelineWidget::addEffectRows(QTreeWidgetItem* parent, int l, int c, bool b
             }
             row->setBackground(0, QColor(53, 53, 53)); row->setBackground(1, QColor(53, 53, 53));
         }
-        effectRow->setExpanded(true);
+        // The reference lists an effect collapsed under its open group; its
+        // parameters unfold on demand (and stay as the user left them).
+        effectRow->setExpanded(false);
     }
 }
 }

@@ -44,6 +44,8 @@ struct ModuleRecord
     bool audioTransitionRenderingVerified = false;
     bool behaviorRenderingVerified = false;
     QVector<EffectParameterSpec> parameters;
+    bool audioTransition = false; // registered as an AudioTransitions module
+    bool geometryRenderingVerified = false;
 };
 
 struct BehaviorStackEntry
@@ -227,15 +229,28 @@ struct RenderInvocation
     qint32 height = 0;
     qint32 sampleRate = 48000;
     qint32 channels = 2;
+    // Dry layer PCM visible to GetAudioSamples/V2. audioStartSample is the
+    // layer-local frame of audioSamples[0]; frames outside it read as silence.
     const qint16* audioSamples = nullptr;
     qint32 audioFrameCount = 0;
     qint64 audioStartSample = 0;
+    // Filled by NotifySourceSamples during GetSampleRanges (Notify 12).
+    QVector<QPair<qint64, qint64>>* audioSampleRanges = nullptr;
     qint32 timelineFrame = 0;
     qint32 layerDurationFrames = 1;
     double frameRate = 30.0;
     const composition::Composition* composition = nullptr;
     core::Identifier sourceLayerId;
     std::array<float, 16> preBehaviorTransformation {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+    // GetPreBehaviorEffectTransformation (+0x300): the layer's world matrix
+    // without its Behaviors. The matrices the modules start from (the 0x80
+    // context's +0x18, Notify 105's) stay preBehaviorTransformation.
+    std::array<float, 16> layerWorldTransformation {
         1.0f, 0.0f, 0.0f, 0.0f,
         0.0f, 1.0f, 0.0f, 0.0f,
         0.0f, 0.0f, 1.0f, 0.0f,
@@ -386,8 +401,10 @@ int audioLayerInfoV2(quint64, const char*, qint32, void* info)
 int preBehaviorTransformation(quint64, const char*, qint32, float* matrix)
 {
     if (!matrix || !g_renderInvocation) return -5;
-    std::memcpy(matrix, g_renderInvocation->preBehaviorTransformation.data(),
-                sizeof(g_renderInvocation->preBehaviorTransformation));
+    // Tannen's FUN_18036a7d0: AbstractLayer::WorldTransformationAtTime of the
+    // layer, its own Behaviors left out.
+    std::memcpy(matrix, g_renderInvocation->layerWorldTransformation.data(),
+                sizeof(g_renderInvocation->layerWorldTransformation));
     return 0;
 }
 
@@ -628,6 +645,54 @@ int audioSamples(quint64, const char*, qint32 firstSample, qint32 endSample,
     return 0;
 }
 
+// Layer ID written to the audio RenderContext+0x08. It must differ from the
+// null FXID returned by LayerID(), which modules treat as "no layer picked".
+constexpr char kOwnAudioLayerId[] = "4f56414c-0000-0000-0000-000000000001";
+
+// PluginHostAPI::NotifySourceSamples (+0x2b8): called from GetSampleRanges
+// with a flat array of int64 values; every consecutive pair is one
+// [first, end) layer-local range the following Render expects in its buffer.
+void notifySourceSamples(quint64, quint32 count, const qint64* values)
+{
+    if (!g_renderInvocation || !g_renderInvocation->audioSampleRanges || !values) {
+        return;
+    }
+    for (quint32 i = 1; i < count; i += 2) {
+        g_renderInvocation->audioSampleRanges->append({values[i - 1], values[i]});
+    }
+}
+
+// PluginHostAPI::GetAudioSamplesV2 (+0x2b0). Unlike GetAudioSamples this
+// returns interleaved PCM16 with the layer's channel count. For the effect's
+// own layer Tannen reads the mixer's pre-effect samples at layer start plus
+// the requested frame, so positions here are layer-local as well.
+int audioSamplesV2(quint64, const char* layerId, qint64 firstSample,
+                   qint32 frameCount, void* destination, qint32 destinationBytes)
+{
+    if (destination && destinationBytes > 0) {
+        std::memset(destination, 0, size_t(destinationBytes));
+    }
+    if (frameCount < 1) return 0;
+    if (!g_renderInvocation || !destination) return -5;
+    if (!layerId || std::strcmp(layerId, kOwnAudioLayerId) != 0) return -4;
+    if (!g_renderInvocation->audioSamples) return -11;
+    const int channels = qMax(1, g_renderInvocation->channels);
+    const qint32 frames = qMin(frameCount,
+                               destinationBytes / qint32(channels * sizeof(qint16)));
+    auto* output = static_cast<qint16*>(destination);
+    for (qint32 frame = 0; frame < frames; ++frame) {
+        const qint64 sourceFrame = firstSample + frame
+                                   - g_renderInvocation->audioStartSample;
+        if (sourceFrame < 0 || sourceFrame >= g_renderInvocation->audioFrameCount) {
+            continue;
+        }
+        std::memcpy(output + qsizetype(frame) * channels,
+                    g_renderInvocation->audioSamples + sourceFrame * channels,
+                    size_t(channels) * sizeof(qint16));
+    }
+    return 0;
+}
+
 int copySourceTexture(void* renderContext, void* texture)
 {
     if (!texture) {
@@ -864,13 +929,335 @@ int hostOptions(quint64)
     return 1;
 }
 
+// What a custom UI call collected from the services the module called back:
+// Tannen keeps SetCursor's code in its host struct (+0x20) and reads it once
+// Notify returns.
+struct CustomUiCallState
+{
+    int cursor = 0;
+    bool redraw = false;
+    bool background = false;
+    int backgroundDelayMs = 0;
+    QHash<QString, bool> enabled;
+    QByteArray* serialized = nullptr;   // SerializeInstanceBytes target (Notify 5)
+};
+thread_local CustomUiCallState* g_customUiCall = nullptr;
+
+QMutex g_customUiRedrawMutex;
+std::function<void()> g_customUiRedrawHandler;
+
 int redrawCustomUi(quint64, const char*)
 {
     // The native host invalidates either the named custom control or all
-    // controls when the name is null. Rendering happens off the GUI thread in
-    // this port, so there is nothing to repaint synchronously; acknowledging
-    // the request matches the host's successful return value and keeps scope
-    // effects independent from QWidget ownership.
+    // controls when the name is null. Inside a viewer event the caller
+    // repaints afterwards; anywhere else (scopes while rendering, background
+    // processing) the request is passed to the GUI thread.
+    if (g_customUiCall) {
+        g_customUiCall->redraw = true;
+        return 0;
+    }
+    std::function<void()> handler;
+    {
+        QMutexLocker lock(&g_customUiRedrawMutex);
+        handler = g_customUiRedrawHandler;
+    }
+    if (handler && QCoreApplication::instance()) {
+        QMetaObject::invokeMethod(QCoreApplication::instance(), handler, Qt::QueuedConnection);
+    }
+    return 0;
+}
+
+int setCustomUiCursor(quint64, int code)
+{
+    if (g_customUiCall) g_customUiCall->cursor = code;
+    return 0;
+}
+
+int requestBackgroundProcessing(quint64, int milliseconds)
+{
+    if (g_customUiCall) {
+        g_customUiCall->background = true;
+        g_customUiCall->backgroundDelayMs = qMax(0, milliseconds);
+    }
+    return 0;
+}
+
+// --- Footage and tracking services (MotionTrack) ----------------------------
+
+QMutex g_sourceHostMutex;
+NativeSourceHost g_sourceHost;
+
+QMutex g_trackingMutex;
+QHash<QString, QHash<int, NativeTrackedFeatures>> g_trackedFeatures;
+
+NativeLayerInfo hostLayerInfo(const char* layerId)
+{
+    std::function<NativeLayerInfo(const QString&)> provider;
+    {
+        QMutexLocker lock(&g_sourceHostMutex);
+        provider = g_sourceHost.layerInfo;
+    }
+    return provider && layerId ? provider(QString::fromLatin1(layerId)) : NativeLayerInfo();
+}
+
+NativeAssetInfo hostAssetInfo(const char* layerId)
+{
+    std::function<NativeAssetInfo(const QString&)> provider;
+    {
+        QMutexLocker lock(&g_sourceHostMutex);
+        provider = g_sourceHost.assetInfo;
+    }
+    return provider && layerId ? provider(QString::fromLatin1(layerId)) : NativeAssetInfo();
+}
+
+// GetLayerInfoV2 for the calls made on a module's own instance (custom UI,
+// property changes, background processing): the layer as the host has it.
+// Rendering keeps the isolated answer of layerInfo().
+int instanceLayerInfo(quint64 host, const char* layerId, quint32 frame, void* info)
+{
+    if (!g_customUiCall) return layerInfo(host, layerId, frame, info);
+    if (!info) return -10;
+    std::memset(info, 0, 0xf0);
+    const NativeLayerInfo layer = hostLayerInfo(layerId);
+    if (!layer.valid) return -5;
+    // tagBiffLayerInfo: ID, +0x28 type, +0x2c start frame, +0x34 length,
+    // +0x41 visible, +0x6c/+0x70 source size, +0x74 the world matrix.
+    if (layerId) std::strncpy(static_cast<char*>(info), layerId, 0x27);
+    const qint32 type = layer.type, start = layer.startFrame,
+                 duration = qMax(1, layer.durationFrames);
+    const qint32 width = qMax(1, layer.size.width()), height = qMax(1, layer.size.height());
+    std::memcpy(static_cast<char*>(info) + 0x28, &type, sizeof(type));
+    std::memcpy(static_cast<char*>(info) + 0x2c, &start, sizeof(start));
+    std::memcpy(static_cast<char*>(info) + 0x34, &duration, sizeof(duration));
+    static_cast<char*>(info)[0x41] = 1;
+    std::memcpy(static_cast<char*>(info) + 0x6c, &width, sizeof(width));
+    std::memcpy(static_cast<char*>(info) + 0x70, &height, sizeof(height));
+    std::memcpy(static_cast<char*>(info) + 0x74, layer.world.data(), sizeof(layer.world));
+    return 0;
+}
+
+// GetAssetInfo returns tagBiffAssetInfo (0x20 bytes) through the hidden
+// result pointer: +0x00 frame count (-1), +0x08 frame rate, +0x10 the frame
+// the layer starts its footage at, +0x18 type (5 when there is no footage).
+void* assetInfoService(void* result, quint64, const char* layerId)
+{
+    if (!result) return result;
+    std::memset(result, 0, 0x20);
+    const NativeAssetInfo asset = hostAssetInfo(layerId);
+    const qint32 frameCount = asset.valid ? asset.frameCount : -1;
+    const double frameRate = asset.valid ? asset.frameRate : 0.0;
+    const qint32 start = asset.valid ? asset.startFrame : 0;
+    const qint32 type = asset.valid ? asset.type : 5;
+    std::memcpy(static_cast<char*>(result) + 0x00, &frameCount, sizeof(frameCount));
+    std::memcpy(static_cast<char*>(result) + 0x08, &frameRate, sizeof(frameRate));
+    std::memcpy(static_cast<char*>(result) + 0x10, &start, sizeof(start));
+    std::memcpy(static_cast<char*>(result) + 0x18, &type, sizeof(type));
+    return result;
+}
+
+int assetTextureService(quint64, void*, const char* layerId, qint32 frame, void* texture)
+{
+    if (!texture) return -10;
+    std::memset(texture, 0, 0x34);
+    QOpenGLContext* context = QOpenGLContext::currentContext();
+    if (!context || !g_renderInvocation || !g_renderInvocation->scratchPool || !layerId) return -4;
+    std::function<QImage(const QString&, int)> provider;
+    {
+        QMutexLocker lock(&g_sourceHostMutex);
+        provider = g_sourceHost.assetFrame;
+    }
+    const QImage frameImage = provider ? provider(QString::fromLatin1(layerId), frame) : QImage();
+    if (frameImage.isNull()) return -4;
+    // Top row first, as the effect path uploads its source: the module's
+    // layer pixels run downwards, matching the viewer's pointer positions
+    // (checked with a still top half and a moving bottom half - a lasso
+    // around the top tracks nothing only this way round).
+    const QImage rgba = frameImage.convertToFormat(QImage::Format_RGBA8888);
+    auto* gl = context->extraFunctions();
+    GLuint id = 0;
+    gl->glGenTextures(1, &id);
+    gl->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    gl->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    gl->glBindTexture(GL_TEXTURE_2D, id);
+    gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // Rows as they are stored (top first), as the source textures of the
+    // effect path are uploaded.
+    gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, rgba.width(), rgba.height(), 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, rgba.constBits());
+    // In the scratch pool: ClearReservedTexture (+0x120) gives it back.
+    g_renderInvocation->scratchPool->textures.append(
+        {id, rgba.width(), rgba.height(), GL_RGBA8, GL_RGBA, 0, true});
+    // tagBiffTexture as GetAssetTexture fills it: name, GL_TEXTURE_2D, format,
+    // allocated and visible size, then the UV extent and two unit scales.
+    const qint32 fields[7] = {qint32(id), qint32(GL_TEXTURE_2D), qint32(GL_RGBA),
+                              rgba.width(), rgba.height(), rgba.width(), rgba.height()};
+    std::memcpy(texture, fields, sizeof(fields));
+    const float unit[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    std::memcpy(static_cast<char*>(texture) + 0x24, unit, sizeof(unit));
+    return 0;
+}
+
+void saveTrackingData(quint64, const char* layerId, qint32 frame, qint32 count,
+                      const float* from, const float* to, const float* affine)
+{
+    if (count <= 0 || !from || !to) return;
+    const NativeAssetInfo asset = hostAssetInfo(layerId);
+    if (!asset.valid || asset.key.isEmpty()) return;
+    QMutexLocker lock(&g_trackingMutex);
+    QHash<int, NativeTrackedFeatures>& frames = g_trackedFeatures[asset.key];
+    // AbstractAsset keeps the first features stored for a frame.
+    if (frames.contains(frame) && !frames.value(frame).from.isEmpty()) return;
+    NativeTrackedFeatures features;
+    features.from.reserve(count);
+    features.to.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        features.from.append(QPointF(from[2 * i], from[2 * i + 1]));
+        features.to.append(QPointF(to[2 * i], to[2 * i + 1]));
+    }
+    if (affine) std::copy(affine, affine + 6, features.affine.begin());
+    frames.insert(frame, features);
+}
+
+int numberOfFeatures(quint64, const char* layerId, qint32 frame)
+{
+    const NativeAssetInfo asset = hostAssetInfo(layerId);
+    int count = 0;
+    if (asset.valid && !asset.key.isEmpty()) {
+        QMutexLocker lock(&g_trackingMutex);
+        count = int(g_trackedFeatures.value(asset.key).value(frame).from.size());
+    }
+    if (qEnvironmentVariableIsSet("OPENVEGAS_HFPL_TRACKING_TRACE")) {
+        std::fprintf(stderr, "[hfpl-tracking] features %s frame %d = %d\n", layerId ? layerId : "-",
+                     frame, count);
+        std::fflush(stderr);
+    }
+    return count;
+}
+
+void trackingData(quint64, const char* layerId, qint32 frame, float* from, float* to,
+                  float* affine)
+{
+    const NativeAssetInfo asset = hostAssetInfo(layerId);
+    NativeTrackedFeatures features;
+    if (asset.valid && !asset.key.isEmpty()) {
+        QMutexLocker lock(&g_trackingMutex);
+        features = g_trackedFeatures.value(asset.key).value(frame);
+    }
+    if (qEnvironmentVariableIsSet("OPENVEGAS_HFPL_TRACKING_TRACE")) {
+        std::fprintf(stderr, "[hfpl-tracking] data %s frame %d (%d points)\n", layerId ? layerId : "-",
+                     frame, int(features.from.size()));
+        std::fflush(stderr);
+    }
+    if (affine) std::copy(features.affine.cbegin(), features.affine.cend(), affine);
+    for (qsizetype i = 0; i < features.from.size(); ++i) {
+        if (from) { from[2 * i] = float(features.from[i].x()); from[2 * i + 1] = float(features.from[i].y()); }
+        if (to) { to[2 * i] = float(features.to[i].x()); to[2 * i + 1] = float(features.to[i].y()); }
+    }
+}
+
+// SetPropertyState: byte 0 of tagPropertyState is whether the control is
+// enabled.
+int setPropertyState(quint64, const char* key, const unsigned char* state)
+{
+    if (!key || !state) return -12;
+    if (g_customUiCall) g_customUiCall->enabled.insert(QString::fromLatin1(key), state[0] != 0);
+    return 0;
+}
+
+// SetIntValue / SetComboBoxValue (host, key, frame, value, mode).
+int setIntegerParameter(quint64, const char* key, qint32, qint32 value, qint32)
+{
+    const int index = parameterIndex(key);
+    if (index < 0) return -5;
+    const auto& spec = g_renderInvocation->module->parameters.at(index);
+    QString text = QString::number(value);
+    // A combo box keeps its item text.
+    const QStringList items = spec.choices;
+    if (!items.isEmpty() && value >= 0 && value < items.size()) text = items.at(value);
+    g_renderInvocation->valueOverrides.insert(index, text);
+    return 0;
+}
+
+// TranslateString/TranslateStringN/StringArgI/StringArgF (+0x3e0..+0x3f8):
+// the module's UTF-16 buffer rewritten in place, cut to its capacity -
+// MotionTrack builds "Footage Analysis : %1.%2% (frame %3 of %4)" this way.
+void writeWideBuffer(wchar_t* buffer, qint32 capacity, const QString& text)
+{
+    if (!buffer || capacity <= 0) return;
+    const std::wstring wide = text.toStdWString();
+    const qsizetype count = qMin<qsizetype>(qsizetype(wide.size()), capacity - 1);
+    std::copy(wide.cbegin(), wide.cbegin() + count, buffer);
+    buffer[count] = L'\0';
+}
+
+QByteArray translationContext()
+{
+    // The reference translates with the plugin's own context.
+    return g_renderInvocation && g_renderInvocation->module
+               ? QFileInfo(g_renderInvocation->module->filePath).completeBaseName().toUtf8()
+               : QByteArray("Plugin");
+}
+
+void translateString(quint64, wchar_t* buffer, qint32 capacity)
+{
+    if (!buffer || capacity <= 0) return;
+    const QByteArray source = QString::fromWCharArray(buffer).toUtf8();
+    writeWideBuffer(buffer, capacity,
+                    QCoreApplication::translate(translationContext().constData(), source.constData()));
+}
+
+void translateStringN(quint64, wchar_t* buffer, qint32 capacity, qint32 count)
+{
+    if (!buffer || capacity <= 0) return;
+    const QByteArray source = QString::fromWCharArray(buffer).toUtf8();
+    writeWideBuffer(buffer, capacity,
+                    QCoreApplication::translate(translationContext().constData(), source.constData(),
+                                                nullptr, count));
+}
+
+void stringArgI(quint64, wchar_t* buffer, qint32 capacity, qint32 value)
+{
+    if (!buffer || capacity <= 0) return;
+    writeWideBuffer(buffer, capacity, QString::fromWCharArray(buffer).arg(value));
+}
+
+void stringArgF(quint64, wchar_t* buffer, qint32 capacity, float value)
+{
+    if (!buffer || capacity <= 0) return;
+    writeWideBuffer(buffer, capacity, QString::fromWCharArray(buffer).arg(double(value)));
+}
+
+// SerializeInstanceBytes, put at api+0x110 for Notify(5).
+int serializeInstanceBytes(quint64, const unsigned char* bytes, qint32 size)
+{
+    if (!g_customUiCall || !g_customUiCall->serialized || size < 0) return -10;
+    if (bytes && size > 0) g_customUiCall->serialized->append(reinterpret_cast<const char*>(bytes), size);
+    return 0;
+}
+
+// PluginHostAPI::CreateCustomUIControl: a viewer control declared during
+// Notify(2). The viewer gives every module with custom UI the whole canvas,
+// so there is nothing to allocate per control.
+int createCustomUiControl(quint64, const wchar_t*, const char*, int, const wchar_t*, double,
+                          int, int, int, int)
+{
+    return 0;
+}
+
+// PluginHostAPI::GetLayerPixelTransform: the product of what the layer's
+// enabled 2D effects do to its pixels (their pixel-data transforms, vtable
+// +0x180), written as a 4x4 matrix - identity when none moves them, which is
+// all the port's effects.
+int layerPixelTransform(quint64, const char*, int, float* matrix)
+{
+    if (matrix) {
+        static constexpr float identity[16] {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        std::copy(identity, identity + 16, matrix);
+    }
     return 0;
 }
 
@@ -1123,8 +1510,14 @@ void installCpuServices(NativePluginRuntime& runtime)
     putService(runtime.apiBlock(), 0x268, reinterpret_cast<void*>(&stringParameterLength));
     putService(runtime.apiBlock(), 0x270, reinterpret_cast<void*>(&stringParameter));
     putService(runtime.apiBlock(), 0x278, reinterpret_cast<void*>(&setStringParameter));
+    putService(runtime.apiBlock(), 0x2b0, reinterpret_cast<void*>(&audioSamplesV2));
+    putService(runtime.apiBlock(), 0x2b8, reinterpret_cast<void*>(&notifySourceSamples));
     putService(runtime.apiBlock(), 0x340, reinterpret_cast<void*>(&point3dParameter));
     putService(runtime.apiBlock(), 0x350, reinterpret_cast<void*>(&hostOptions));
+    putService(runtime.apiBlock(), 0x3e0, reinterpret_cast<void*>(&translateString));
+    putService(runtime.apiBlock(), 0x3e8, reinterpret_cast<void*>(&translateStringN));
+    putService(runtime.apiBlock(), 0x3f0, reinterpret_cast<void*>(&stringArgI));
+    putService(runtime.apiBlock(), 0x3f8, reinterpret_cast<void*>(&stringArgF));
 }
 
 void installBehaviorServices(NativePluginRuntime& runtime)
@@ -1155,6 +1548,14 @@ void installBehaviorServices(NativePluginRuntime& runtime)
                reinterpret_cast<void*>(&layerPosition));
     putService(runtime.apiBlock(), 0x330,
                reinterpret_cast<void*>(&layerAnchorPoint));
+    // Position3D parameters (created through +0x370, BendGeometry's
+    // "centerPos") are read like the plain 3D points at +0x340.
+    putService(runtime.apiBlock(), 0x378,
+               reinterpret_cast<void*>(&point3dParameter));
+    putService(runtime.apiBlock(), 0x2c8, reinterpret_cast<void*>(&redrawCustomUi));
+    putService(runtime.apiBlock(), 0x388, reinterpret_cast<void*>(&setCustomUiCursor));
+    putService(runtime.apiBlock(), 0x398, reinterpret_cast<void*>(&requestBackgroundProcessing));
+    putService(runtime.apiBlock(), 0x400, reinterpret_cast<void*>(&layerPixelTransform));
     putService(runtime.apiBlock(), 0x360,
                reinterpret_cast<void*>(&numberOfBehaviorLayers));
     putService(runtime.apiBlock(), 0x368,
@@ -1176,7 +1577,9 @@ public:
     bool processEffect(QVector<qint16>& samples, int channels, int sampleRate,
                        qint64 startSample, const QString& id,
                        const ModuleRecord& record,
-                       const QStringList& parameterValues)
+                       const QStringList& parameterValues,
+                       const QVector<qint16>* sourceSamples,
+                       qint64 sourceStartSample, const NativeAudioLayer& layer)
     {
         if (channels <= 0 || sampleRate <= 0 || samples.isEmpty()
             || samples.size() % channels != 0) {
@@ -1185,37 +1588,122 @@ public:
         NativePluginRuntime* runtime = runtimeFor(id, record);
         if (!runtime) return false;
 
+        // Without an explicit source the block itself is all the host knows.
+        QVector<qint16> blockSource;
+        if (!sourceSamples || sourceSamples->size() % channels != 0) {
+            blockSource = samples;
+            sourceSamples = &blockSource;
+            sourceStartSample = startSample;
+        }
         const qint32 frameCount = samples.size() / channels;
-        const qint32 channelCount = channels;
-        const qint32 parameterStart = qint32(qBound<qint64>(
-            qint64(0), startSample,
-            qint64(std::numeric_limits<qint32>::max())));
-        const qint32 parameterEnd = qint32(qMin<qint64>(
-            qint64(std::numeric_limits<qint32>::max()),
-            qint64(parameterStart) + qMax(0, frameCount - 1)));
-        void* samplePointer = samples.data();
+        const double frameRate = qMax(0.001, layer.frameRate);
+
+        // Layout from Tannen PluginAudioEffect::Render/GetSampleRanges
+        // (0x180341f80/0x180341e60), confirmed by the fields each module reads:
+        // +0x08 layer ID, +0x10 channels, +0x14 sample rate, +0x20 PCM16
+        // buffer, +0x28 input frames, +0x2c output frames, +0x30 frame for
+        // GetLayerInfoV2, +0x34/+0x38 milliseconds of +0x48/+0x40, +0x40
+        // output start, +0x48 first input frame, +0x58 earliest usable frame.
         QByteArray context(0x80, '\0');
+        const char* layerId = kOwnAudioLayerId;
+        const qint32 channelCount = channels;
+        const qint32 frame = qint32(qBound<qint64>(
+            qint64(0), qint64(std::floor(double(startSample) * frameRate / sampleRate)),
+            qint64(std::numeric_limits<qint32>::max())));
+        // Every GetSampleRanges clamps its request with max(first, +0x58), but
+        // Equaliser's Render then assumes the buffer starts at start - half
+        // without reading +0x48. Clamping to the layer start would shift its
+        // first blocks; frames before the layer are silence anyway.
+        const qint64 earliestSample = std::numeric_limits<qint64>::min();
+        std::memcpy(context.data() + 0x08, &layerId, sizeof(layerId));
         std::memcpy(context.data() + 0x10, &channelCount, sizeof(channelCount));
         std::memcpy(context.data() + 0x14, &sampleRate, sizeof(sampleRate));
-        std::memcpy(context.data() + 0x20, &samplePointer, sizeof(samplePointer));
         std::memcpy(context.data() + 0x2c, &frameCount, sizeof(frameCount));
-        std::memcpy(context.data() + 0x30, &sampleRate, sizeof(sampleRate));
-        std::memcpy(context.data() + 0x34, &parameterStart, sizeof(parameterStart));
-        std::memcpy(context.data() + 0x38, &parameterEnd, sizeof(parameterEnd));
+        std::memcpy(context.data() + 0x30, &frame, sizeof(frame));
         std::memcpy(context.data() + 0x40, &startSample, sizeof(startSample));
-        // These positions describe discontinuity between consecutive blocks,
-        // not the block range. Equal values select ordinary contiguous input;
-        // a difference asks effects such as Balance to shift their history.
-        std::memcpy(context.data() + 0x48, &startSample, sizeof(startSample));
-        return notifyRender(*runtime, context, record, parameterValues,
-                            sampleRate, channels);
+        std::memcpy(context.data() + 0x58, &earliestSample, sizeof(earliestSample));
+        const auto setInputStart = [&](qint64 inputStart) {
+            const qint32 inputMs = milliseconds(inputStart, sampleRate);
+            const qint32 outputMs = milliseconds(startSample, sampleRate);
+            std::memcpy(context.data() + 0x34, &inputMs, sizeof(inputMs));
+            std::memcpy(context.data() + 0x38, &outputMs, sizeof(outputMs));
+            std::memcpy(context.data() + 0x48, &inputStart, sizeof(inputStart));
+        };
+        setInputStart(startSample);
+
+        RenderInvocation invocation;
+        invocation.module = &record;
+        invocation.values = &parameterValues;
+        invocation.sampleRate = sampleRate;
+        invocation.channels = channels;
+        invocation.frameRate = frameRate;
+        invocation.layerDurationFrames = qMax<qint64>(
+            1, qint64(std::ceil(double(layer.durationSamples) * frameRate / sampleRate)));
+        invocation.audioSamples = sourceSamples->constData();
+        invocation.audioFrameCount = qint32(qMin<qint64>(
+            sourceSamples->size() / channels, std::numeric_limits<qint32>::max()));
+        invocation.audioStartSample = sourceStartSample;
+
+        // GetSampleRanges. Modules without message 12 return 2 and read the
+        // output range itself; so do modules that publish no range.
+        QVector<QPair<qint64, qint64>> ranges;
+        invocation.audioSampleRanges = &ranges;
+        const int rangesResult = notify(*runtime, context, invocation, 12);
+        invocation.audioSampleRanges = nullptr;
+        if (runtime->lastFaultCode() != 0) {
+            return reportFailure(*runtime, record, 12, rangesResult);
+        }
+        qint64 inputFrames = 0;
+        for (const auto& range : std::as_const(ranges)) {
+            inputFrames += qMax<qint64>(0, range.second - range.first);
+        }
+        if (rangesResult != 1 || inputFrames <= 0) {
+            ranges = {{startSample, startSample + frameCount}};
+            inputFrames = frameCount;
+        }
+        // A corrupt request must not turn into an unbounded allocation.
+        constexpr qint64 maximumInputFrames = qint64(1) << 25;
+        if (inputFrames > maximumInputFrames) {
+            qWarning().noquote() << "Native HFPL audio source range is too large:"
+                                 << record.filePath << inputFrames;
+            return false;
+        }
+
+        // The host concatenates the requested ranges into the render buffer;
+        // the module writes its output frames back to the start of it.
+        QVector<qint16> buffer(qsizetype(qMax<qint64>(inputFrames, frameCount)) * channels,
+                               qint16(0));
+        qint16* write = buffer.data();
+        for (const auto& range : std::as_const(ranges)) {
+            for (qint64 position = range.first; position < range.second; ++position) {
+                const qint64 sourceFrame = position - sourceStartSample;
+                if (sourceFrame >= 0 && sourceFrame < invocation.audioFrameCount) {
+                    std::memcpy(write, sourceSamples->constData() + sourceFrame * channels,
+                                size_t(channels) * sizeof(qint16));
+                }
+                write += channels;
+            }
+        }
+        void* bufferPointer = buffer.data();
+        const qint32 inputFrameCount = qint32(inputFrames);
+        std::memcpy(context.data() + 0x20, &bufferPointer, sizeof(bufferPointer));
+        std::memcpy(context.data() + 0x28, &inputFrameCount, sizeof(inputFrameCount));
+        setInputStart(ranges.constFirst().first);
+        const int renderResult = notify(*runtime, context, invocation, 10);
+        if (renderResult != 1 || runtime->lastFaultCode() != 0) {
+            return reportFailure(*runtime, record, 10, renderResult);
+        }
+        std::memcpy(samples.data(), buffer.constData(),
+                    size_t(samples.size()) * sizeof(qint16));
+        return true;
     }
 
     bool processTransition(QVector<qint16>& output,
                            const QVector<qint16>& from,
                            const QVector<qint16>& to, int channels,
                            qint32 sampleOffset, qint32 totalTransitionSamples,
-                           const QString& id, const ModuleRecord& record,
+                           qint32 cutSample, const QString& id,
+                           const ModuleRecord& record,
                            const QStringList& parameterValues)
     {
         if (channels <= 0 || from.isEmpty() || to.isEmpty()
@@ -1226,67 +1714,83 @@ public:
         NativePluginRuntime* runtime = runtimeFor(id, record);
         if (!runtime) return false;
 
-        const qint32 fromFrames = from.size() / channels;
-        const qint32 toFrames = to.size() / channels;
-        const qint32 outputFrames = qMin(fromFrames, toFrames);
+        const qint32 outputFrames = qMin(from.size(), to.size()) / channels;
         output.resize(outputFrames * channels);
-        const qint32 channelCount = channels;
-        const qint32 transitionCurrent = qMax(0, sampleOffset);
-        const qint32 transitionDuration = qMax(1, totalTransitionSamples);
-        const void* fromPointer = from.constData();
-        const void* toPointer = to.constData();
-        void* outputPointer = output.data();
-        QByteArray context(0x70, '\0');
-        std::memcpy(context.data() + 0x0c, &channelCount, sizeof(channelCount));
-        std::memcpy(context.data() + 0x18, &fromPointer, sizeof(fromPointer));
-        std::memcpy(context.data() + 0x20, &fromFrames, sizeof(fromFrames));
-        std::memcpy(context.data() + 0x28, &toPointer, sizeof(toPointer));
-        std::memcpy(context.data() + 0x30, &toFrames, sizeof(toFrames));
-        std::memcpy(context.data() + 0x38, &outputPointer, sizeof(outputPointer));
-        std::memcpy(context.data() + 0x40, &outputFrames, sizeof(outputFrames));
-        std::memcpy(context.data() + 0x44, &transitionCurrent,
-                    sizeof(transitionCurrent));
-        std::memcpy(context.data() + 0x48, &transitionDuration,
-                    sizeof(transitionDuration));
-        std::memcpy(context.data() + 0x4c, &transitionDuration,
-                    sizeof(transitionDuration));
-        return notifyRender(*runtime, context, record, parameterValues,
-                            48000, channels);
+        const qint32 duration = qMax(1, totalTransitionSamples);
+        const qint32 cut = qBound(0, cutSample < 0 ? duration / 2 : cutSample, duration);
+        const qint32 offset = qMax(0, sampleOffset);
+        // Tannen PluginAudioTransition::Render (0x180345940) context: +0x08
+        // side (2 = outgoing object before the edit point, 1 = incoming one
+        // after it), +0x0c channels, A/B/output at +0x18/+0x28/+0x38 with
+        // their frame counts, +0x44 position and +0x48 length in one unit,
+        // +0x4c length in samples, +0x50 edit point in the +0x48 unit. Fade
+        // dips A to silence before the edit point and raises B after it, so a
+        // block crossing the edit point is rendered as two calls.
+        const qint32 split = qBound(0, cut - offset, outputFrames);
+        const qint32 parts[2][2] = {{0, split}, {split, outputFrames}};
+        for (const auto& part : parts) {
+            const qint32 first = part[0];
+            const qint32 frames = part[1] - part[0];
+            if (frames <= 0) continue;
+            const qint32 side = offset + first < cut ? 2 : 1;
+            const qint32 channelCount = channels;
+            const qint32 position = offset + first;
+            const void* fromPointer = from.constData() + qsizetype(first) * channels;
+            const void* toPointer = to.constData() + qsizetype(first) * channels;
+            void* outputPointer = output.data() + qsizetype(first) * channels;
+            QByteArray context(0x70, '\0');
+            std::memcpy(context.data() + 0x08, &side, sizeof(side));
+            std::memcpy(context.data() + 0x0c, &channelCount, sizeof(channelCount));
+            std::memcpy(context.data() + 0x18, &fromPointer, sizeof(fromPointer));
+            std::memcpy(context.data() + 0x20, &frames, sizeof(frames));
+            std::memcpy(context.data() + 0x28, &toPointer, sizeof(toPointer));
+            std::memcpy(context.data() + 0x30, &frames, sizeof(frames));
+            std::memcpy(context.data() + 0x38, &outputPointer, sizeof(outputPointer));
+            std::memcpy(context.data() + 0x40, &frames, sizeof(frames));
+            std::memcpy(context.data() + 0x44, &position, sizeof(position));
+            std::memcpy(context.data() + 0x48, &duration, sizeof(duration));
+            std::memcpy(context.data() + 0x4c, &duration, sizeof(duration));
+            std::memcpy(context.data() + 0x50, &cut, sizeof(cut));
+            RenderInvocation invocation;
+            invocation.module = &record;
+            invocation.values = &parameterValues;
+            invocation.sampleRate = 48000;
+            invocation.channels = channels;
+            invocation.audioSamples = from.constData();
+            invocation.audioFrameCount = from.size() / channels;
+            const int result = notify(*runtime, context, invocation, 10);
+            if (result != 1 || runtime->lastFaultCode() != 0) {
+                return reportFailure(*runtime, record, 10, result);
+            }
+        }
+        return true;
     }
 
 private:
-    bool notifyRender(NativePluginRuntime& runtime, QByteArray& context,
-                      const ModuleRecord& record,
-                      const QStringList& parameterValues, int sampleRate,
-                      int channels)
+    static qint32 milliseconds(qint64 sample, int sampleRate)
+    {
+        return qint32(qBound<qint64>(
+            qint64(std::numeric_limits<qint32>::min()),
+            qint64(std::floor(double(sample) * 1000.0 / sampleRate)),
+            qint64(std::numeric_limits<qint32>::max())));
+    }
+
+    int notify(NativePluginRuntime& runtime, QByteArray& context,
+               RenderInvocation& invocation, int message)
     {
         void* contextPointer = context.data();
         std::memcpy(runtime.apiBlock().data() + 0x20, &contextPointer,
                     sizeof(contextPointer));
-        RenderInvocation invocation;
-        invocation.module = &record;
-        invocation.values = &parameterValues;
-        invocation.sampleRate = sampleRate;
-        invocation.channels = channels;
-        invocation.audioSamples = static_cast<const qint16*>(
-            *reinterpret_cast<void* const*>(context.constData() + 0x20));
-        std::memcpy(&invocation.audioFrameCount, context.constData() + 0x2c,
-                    sizeof(invocation.audioFrameCount));
-        invocation.audioStartSample = 0;
-        if (context.size() >= 0x48) {
-            std::memcpy(&invocation.audioStartSample, context.constData() + 0x40,
-                        sizeof(invocation.audioStartSample));
-        }
         RenderInvocation* previousInvocation = g_renderInvocation;
         g_renderInvocation = &invocation;
         if (qEnvironmentVariableIsSet("OPENVEGAS_HFPL_RENDER_DIAGNOSTIC_STUBS")) {
             resetNativePluginDiagnosticServiceOffset();
         }
-        const int result = runtime.notify(10);
+        const int result = runtime.notify(message);
         if (qEnvironmentVariableIsSet("OPENVEGAS_HFPL_RENDER_TRACE")) {
             std::fprintf(stderr,
-                         "[hfpl-audio] notify=%d fault=0x%08lx rva=0x%llx access=0x%llx service=0x%llx trace=%s\n",
-                         result, runtime.lastFaultCode(),
+                         "[hfpl-audio] message=%d notify=%d fault=0x%08lx rva=0x%llx access=0x%llx service=0x%llx trace=%s\n",
+                         message, result, runtime.lastFaultCode(),
                          static_cast<unsigned long long>(runtime.lastFaultInstructionRva()),
                          static_cast<unsigned long long>(runtime.lastFaultAccessAddress()),
                          static_cast<unsigned long long>(
@@ -1295,11 +1799,16 @@ private:
             std::fflush(stderr);
         }
         g_renderInvocation = previousInvocation;
-        if (result == 1 && runtime.lastFaultCode() == 0) return true;
+        return result;
+    }
+
+    static bool reportFailure(NativePluginRuntime& runtime, const ModuleRecord& record,
+                              int message, int result)
+    {
         qWarning().noquote()
-            << QStringLiteral("Native HFPL audio Notify(10) failed for %1: result=%2, "
-                              "fault=0x%3, instructionRva=0x%4, service=0x%5, %6")
-                   .arg(record.filePath).arg(result)
+            << QStringLiteral("Native HFPL audio Notify(%1) failed for %2: result=%3, "
+                              "fault=0x%4, instructionRva=0x%5, service=0x%6, %7")
+                   .arg(message).arg(record.filePath).arg(result)
                    .arg(quint32(runtime.lastFaultCode()), 8, 16, QLatin1Char('0'))
                    .arg(runtime.lastFaultInstructionRva(), 0, 16)
                    .arg(lastNativePluginDiagnosticServiceOffset(), 0, 16)
@@ -1358,9 +1867,192 @@ private:
     QHash<NativePluginRuntime*, std::shared_ptr<QByteArray>> m_fallbackInstanceStates;
 };
 
+static_assert(sizeof(NativeGeometryVertex) == 0x20, "Geometry vertex is 32 bytes");
+static_assert(sizeof(NativeGeometryTriangle) == 0x14, "Geometry triangle is 0x14 bytes");
+
+// Receives the module's tagBiffGeometryShape through tagBiffGeometryMC+0x08.
+// Flux's callback stores it in the holder at MC+0x18; the module frees its
+// copy when Notify returns, so the batches are read here.
+struct GeometrySink
+{
+    bool received = false;
+    QVector<NativeGeometryBatch> geometry;
+};
+
+void receiveGeometryShape(void* context, const void* shape)
+{
+    if (!context || !shape) return;
+    GeometrySink* sink = nullptr;
+    std::memcpy(&sink, static_cast<const char*>(context) + 0x18, sizeof(sink));
+    if (!sink) return;
+    const char* records = nullptr;
+    qint32 count = 0;
+    std::memcpy(&records, shape, sizeof(records));
+    std::memcpy(&count, static_cast<const char*>(shape) + 0x08, sizeof(count));
+    static constexpr qint32 limit = 10000000;
+    if (count < 0 || count > limit || (count > 0 && !records)) return;
+    QVector<NativeGeometryBatch> geometry;
+    geometry.reserve(count);
+    for (qint32 index = 0; index < count; ++index) {
+        const char* record = records + qsizetype(index) * 0x80;
+        const auto pointerAt = [record](int offset) {
+            const char* pointer = nullptr;
+            std::memcpy(&pointer, record + offset, sizeof(pointer));
+            return pointer;
+        };
+        const auto countAt = [record](int offset) {
+            qint32 value = 0;
+            std::memcpy(&value, record + offset, sizeof(value));
+            return value;
+        };
+        const char* vertices = pointerAt(0x00);
+        const qint32 vertexCount = countAt(0x08);
+        const char* triangles = pointerAt(0x10);
+        const qint32 triangleCount = countAt(0x18);
+        const char* polygons = pointerAt(0x20);
+        const qint32 polygonCount = countAt(0x28);
+        if (vertexCount < 0 || vertexCount > limit || triangleCount < 0
+            || triangleCount > limit || polygonCount < 0 || polygonCount > limit
+            || (vertexCount && !vertices) || (triangleCount && !triangles)
+            || (polygonCount && !polygons)) {
+            return;
+        }
+        NativeGeometryBatch batch;
+        batch.vertices.resize(vertexCount);
+        if (vertexCount) {
+            std::memcpy(batch.vertices.data(), vertices,
+                        size_t(vertexCount) * sizeof(NativeGeometryVertex));
+        }
+        batch.triangles.resize(triangleCount);
+        if (triangleCount) {
+            std::memcpy(batch.triangles.data(), triangles,
+                        size_t(triangleCount) * sizeof(NativeGeometryTriangle));
+        }
+        batch.polygons.resize(polygonCount);
+        for (qint32 p = 0; p < polygonCount; ++p) {
+            const char* entry = polygons + qsizetype(p) * 0x18;
+            const qint32* indices = nullptr;
+            qint32 size = 0;
+            NativeGeometryPolygon& polygon = batch.polygons[p];
+            std::memcpy(&indices, entry, sizeof(indices));
+            std::memcpy(&size, entry + 0x08, sizeof(size));
+            std::memcpy(&polygon.material, entry + 0x0c, sizeof(qint32));
+            std::memcpy(&polygon.group, entry + 0x10, sizeof(qint32));
+            std::memcpy(&polygon.flags, entry + 0x14, sizeof(quint32));
+            if (size < 0 || size > limit || (size && !indices)) return;
+            polygon.indices = QVector<qint32>(indices, indices + size);
+        }
+        std::memcpy(batch.extents, record + 0x2c, sizeof(batch.extents));
+        std::memcpy(batch.matrix, record + 0x3c, sizeof(batch.matrix));
+        geometry.append(std::move(batch));
+    }
+    sink->geometry = std::move(geometry);
+    sink->received = true;
+}
+
 class BehaviorThreadRenderer
 {
 public:
+    // tagBiffGeometryMC (0x30 bytes, Flux FUN_1804d94e0): +0x00 the shape,
+    // +0x08 the result callback, +0x10/+0x14 times (modules read their
+    // parameters at +0x14), +0x18 the holder the callback fills. Context type
+    // 5 at api+0x498, as PluginFile::ProcessGeometry sets it.
+    bool processGeometry(QVector<NativeGeometryBatch>& geometry, int timelineFrame,
+                         int localFrame, int layerDurationFrames, double frameRate,
+                         const QString& id, const ModuleRecord& record,
+                         const QStringList& parameterValues)
+    {
+#ifndef Q_OS_WIN
+        Q_UNUSED(geometry);
+        Q_UNUSED(timelineFrame);
+        Q_UNUSED(localFrame);
+        Q_UNUSED(layerDurationFrames);
+        Q_UNUSED(frameRate);
+        Q_UNUSED(id);
+        Q_UNUSED(record);
+        Q_UNUSED(parameterValues);
+        return false;
+#else
+        RenderInvocation invocation;
+        invocation.module = &record;
+        invocation.values = &parameterValues;
+        invocation.timelineFrame = timelineFrame;
+        invocation.layerDurationFrames = qMax(1, layerDurationFrames);
+        invocation.frameRate = qMax(0.001, frameRate);
+        RenderInvocation* previousInvocation = g_renderInvocation;
+        g_renderInvocation = &invocation;
+        NativePluginRuntime* runtime = runtimeFor(id, record);
+        if (!runtime) {
+            g_renderInvocation = previousInvocation;
+            return false;
+        }
+        // Modules may write through the input pointers before copying, so
+        // they get a private copy rather than the caller's arrays.
+        QVector<NativeGeometryBatch> input = geometry;
+        QByteArray records(input.size() * 0x80, '\0');
+        QVector<QByteArray> polygonRecords(input.size());
+        for (qsizetype index = 0; index < input.size(); ++index) {
+            NativeGeometryBatch& batch = input[index];
+            char* record = records.data() + index * 0x80;
+            QByteArray& polygons = polygonRecords[index];
+            polygons = QByteArray(batch.polygons.size() * 0x18, '\0');
+            for (qsizetype p = 0; p < batch.polygons.size(); ++p) {
+                NativeGeometryPolygon& polygon = batch.polygons[p];
+                char* entry = polygons.data() + p * 0x18;
+                qint32* indices = polygon.indices.data();
+                const qint32 size = qint32(polygon.indices.size());
+                std::memcpy(entry, &indices, sizeof(indices));
+                std::memcpy(entry + 0x08, &size, sizeof(size));
+                std::memcpy(entry + 0x0c, &polygon.material, sizeof(qint32));
+                std::memcpy(entry + 0x10, &polygon.group, sizeof(qint32));
+                std::memcpy(entry + 0x14, &polygon.flags, sizeof(quint32));
+            }
+            void* vertices = batch.vertices.data();
+            void* triangles = batch.triangles.data();
+            void* polygonPointer = polygons.data();
+            const qint32 vertexCount = qint32(batch.vertices.size());
+            const qint32 triangleCount = qint32(batch.triangles.size());
+            const qint32 polygonCount = qint32(batch.polygons.size());
+            std::memcpy(record + 0x00, &vertices, sizeof(vertices));
+            std::memcpy(record + 0x08, &vertexCount, sizeof(vertexCount));
+            std::memcpy(record + 0x10, &triangles, sizeof(triangles));
+            std::memcpy(record + 0x18, &triangleCount, sizeof(triangleCount));
+            std::memcpy(record + 0x20, &polygonPointer, sizeof(polygonPointer));
+            std::memcpy(record + 0x28, &polygonCount, sizeof(polygonCount));
+            std::memcpy(record + 0x2c, batch.extents, sizeof(batch.extents));
+            std::memcpy(record + 0x3c, batch.matrix, sizeof(batch.matrix));
+        }
+        QByteArray shape(0x10, '\0');
+        void* recordPointer = records.data();
+        const qint32 batchCount = qint32(input.size());
+        std::memcpy(shape.data(), &recordPointer, sizeof(recordPointer));
+        std::memcpy(shape.data() + 0x08, &batchCount, sizeof(batchCount));
+
+        GeometrySink sink;
+        QByteArray context(0x30, '\0');
+        void* shapePointer = shape.data();
+        void* callback = reinterpret_cast<void*>(&receiveGeometryShape);
+        GeometrySink* sinkPointer = &sink;
+        std::memcpy(context.data() + 0x00, &shapePointer, sizeof(shapePointer));
+        std::memcpy(context.data() + 0x08, &callback, sizeof(callback));
+        std::memcpy(context.data() + 0x10, &timelineFrame, sizeof(timelineFrame));
+        std::memcpy(context.data() + 0x14, &localFrame, sizeof(localFrame));
+        std::memcpy(context.data() + 0x18, &sinkPointer, sizeof(sinkPointer));
+        void* contextPointer = context.data();
+        std::memcpy(runtime->apiBlock().data() + 0x20, &contextPointer,
+                    sizeof(contextPointer));
+        const qint32 capability = 5;
+        std::memcpy(runtime->apiBlock().data() + 0x498, &capability, sizeof(capability));
+        const int notifyResult = runtime->notify(101);
+        g_renderInvocation = previousInvocation;
+        if (notifyResult != 1 || runtime->lastFaultCode() != 0 || !sink.received) {
+            return false;
+        }
+        geometry = std::move(sink.geometry);
+        return true;
+#endif
+    }
+
     ~BehaviorThreadRenderer()
     {
         for (const auto& runtime : std::as_const(m_runtimes)) {
@@ -1494,9 +2186,11 @@ public:
                   const QString& id, const ModuleRecord& record,
                   const QStringList& parameterValues,
                   const composition::Composition* composition,
-                  const core::Identifier& sourceLayerId)
+                  const core::Identifier& sourceLayerId,
+                  const NativeBehaviorLayer& layer)
     {
 #ifndef Q_OS_WIN
+        Q_UNUSED(layer);
         Q_UNUSED(result);
         Q_UNUSED(timelineFrame);
         Q_UNUSED(localFrame);
@@ -1522,6 +2216,7 @@ public:
         invocation.frameRate = qMax(0.001, frameRate);
         invocation.composition = composition;
         invocation.sourceLayerId = sourceLayerId;
+        invocation.layerWorldTransformation = layer.world;
         RenderInvocation* previousInvocation = g_renderInvocation;
         g_renderInvocation = &invocation;
         NativePluginRuntime* runtime = runtimeFor(id, record);
@@ -1537,17 +2232,45 @@ public:
                                         : QByteArray(nullLayerId);
         const char* layerId = sourceId.constData();
 
+        // The matrix the module writes starts as identity (Tannen fills the
+        // MC's matrix so before the call); the result is the Behaviors' own
+        // transformation, applied on top of the layer's.
         std::array<float, 16> matrix = invocation.preBehaviorTransformation;
         float* matrixPointer = matrix.data();
         QByteArray transformationContext(0x80, '\0');
         std::memcpy(transformationContext.data() + 0x00, &layerId,
                     sizeof(layerId));
-        std::memcpy(transformationContext.data() + 0x08, &timelineFrame,
-                    sizeof(timelineFrame));
-        std::memcpy(transformationContext.data() + 0x0c, &localFrame,
-                    sizeof(localFrame));
+        // tagBiffBehaviorMC/OMC times are milliseconds, as everywhere in
+        // Project.dll (VisualObject::TransformationAtTime) and as Notify(105)
+        // has them: with frames the reveal/conceal modules ran 1000/fps
+        // times too slow (FlyInFlyOut grew from 0.5 to 0.57 over a 120-frame
+        // layer instead of reaching 1.0 at its 25 % mark, frame 30).
+        const auto milliseconds = [&invocation](int frame) {
+            return qint32(qBound<qint64>(
+                qint64(0), qRound64(double(frame) * 1000.0 / invocation.frameRate),
+                qint64(std::numeric_limits<qint32>::max())));
+        };
+        const qint32 timeField = milliseconds(timelineFrame);
+        const qint32 localField = milliseconds(localFrame);
+        std::memcpy(transformationContext.data() + 0x08, &timeField,
+                    sizeof(timeField));
+        std::memcpy(transformationContext.data() + 0x0c, &localField,
+                    sizeof(localField));
         std::memcpy(transformationContext.data() + 0x18, &matrixPointer,
                     sizeof(matrixPointer));
+        // +0x20..+0x2c the layer's bounds, +0x30/+0x34 the composition's
+        // size: Drop, the Rolls and the Inserts move the layer out of the
+        // frame by them, and do nothing with zeros.
+        std::memcpy(transformationContext.data() + 0x20, layer.bounds.data(),
+                    sizeof(layer.bounds));
+        const qint32 compositionWidth = layer.composition.isValid()
+                                            ? layer.composition.width() : canvasWidth;
+        const qint32 compositionHeight = layer.composition.isValid()
+                                             ? layer.composition.height() : canvasHeight;
+        std::memcpy(transformationContext.data() + 0x30, &compositionWidth,
+                    sizeof(compositionWidth));
+        std::memcpy(transformationContext.data() + 0x34, &compositionHeight,
+                    sizeof(compositionHeight));
         void* contextPointer = transformationContext.data();
         std::memcpy(runtime->apiBlock().data() + 0x20, &contextPointer,
                     sizeof(contextPointer));
@@ -1561,10 +2284,10 @@ public:
         float opacity = 1.0f;
         QByteArray opacityContext(0x80, '\0');
         std::memcpy(opacityContext.data() + 0x00, &layerId, sizeof(layerId));
-        std::memcpy(opacityContext.data() + 0x08, &timelineFrame,
-                    sizeof(timelineFrame));
-        std::memcpy(opacityContext.data() + 0x0c, &localFrame,
-                    sizeof(localFrame));
+        std::memcpy(opacityContext.data() + 0x08, &timeField,
+                    sizeof(timeField));
+        std::memcpy(opacityContext.data() + 0x0c, &localField,
+                    sizeof(localField));
         std::memcpy(opacityContext.data() + 0x18, &opacity, sizeof(opacity));
         contextPointer = opacityContext.data();
         std::memcpy(runtime->apiBlock().data() + 0x20, &contextPointer,
@@ -1574,6 +2297,9 @@ public:
                     sizeof(opacityCapability));
         const int opacityResult = runtime->notify(104);
         const bool opacityOk = opacityResult == 1 && runtime->lastFaultCode() == 0;
+        // The module writes its opacity into the context (PluginFile::
+        // OpacityAtTime puts 1.0 there itself when the module declines).
+        std::memcpy(&opacity, opacityContext.constData() + 0x18, sizeof(opacity));
 
         struct SimulationAccumulator {
             float acceleration[3] {0.0f, 0.0f, 0.0f};
@@ -1934,9 +2660,10 @@ public:
 
     bool render(QImage& image, const QString& id, const ModuleRecord& record,
                 const QStringList& parameterValues, const QImage* secondInput = nullptr,
-                float transitionProgress = 0.0f)
+                float transitionProgress = 0.0f, const NativeFrameTime& time = {})
     {
 #ifndef Q_OS_WIN
+        Q_UNUSED(time);
         Q_UNUSED(image);
         Q_UNUSED(id);
         Q_UNUSED(record);
@@ -2212,6 +2939,22 @@ public:
                         sizeof(transforms));
             std::memcpy(frameBlock.data() + 0x60, &frameWidth, sizeof(frameWidth));
             std::memcpy(frameBlock.data() + 0x64, &frameHeight, sizeof(frameHeight));
+            // The time: milliseconds at +0x6c/+0x70, frames at +0x98/+0x9c,
+            // the layer's length at +0xa0. Plugin2DEffect::Render holds a
+            // layer frame past the end on the last one, scaling its time.
+            // Before the layer it is held on its first frame; the shot's
+            // time moves by the same amount.
+            const double msPerFrame = 1000.0 / qMax(0.001, time.frameRate);
+            const qint32 length = qMax(1, time.layerFrames);
+            const qint32 layerFrame = qBound(0, time.layerFrame, length - 1);
+            const qint32 frame = time.frame + (layerFrame - time.layerFrame);
+            const qint32 timeMs = qint32(qRound64(frame * msPerFrame));
+            const qint32 layerMs = qint32(qRound64(layerFrame * msPerFrame));
+            std::memcpy(frameBlock.data() + 0x6c, &timeMs, sizeof(timeMs));
+            std::memcpy(frameBlock.data() + 0x70, &layerMs, sizeof(layerMs));
+            std::memcpy(frameBlock.data() + 0x98, &frame, sizeof(frame));
+            std::memcpy(frameBlock.data() + 0x9c, &layerFrame, sizeof(layerFrame));
+            std::memcpy(frameBlock.data() + 0xa0, &length, sizeof(length));
         }
         void* framePointer = frameBlock.data();
         std::memcpy(runtime->apiBlock().data() + 0x20, &framePointer,
@@ -2303,6 +3046,199 @@ public:
             std::fflush(stderr);
         }
         return ok;
+#endif
+    }
+
+    // One custom UI message (PluginFile::CustomUI*): the 0xa8-byte context at
+    // api+0x20, the event at api+0x18, context type 4. With `overlay` the
+    // module draws into a transparent area-sized target that is read back.
+    // How the call hands the module its context (api+0x20, type at +0x498):
+    // the viewer's custom UI block (4), the behaviour render context (0) or
+    // the TransformationAtTime block (6); None leaves both empty (Notify 5/6).
+    enum class Context { CustomUi, Render, Transformation, None };
+
+    NativeCustomUiResult customUi(int message, const QString& id, const ModuleRecord& record,
+                                  const QStringList& values, const NativeCustomUiView& view,
+                                  const QByteArray& event, QImage* overlay,
+                                  Context contextKind = Context::CustomUi,
+                                  const std::function<void(char* api)>& prepare = {},
+                                  QByteArray* serialized = nullptr, float* matrix = nullptr)
+    {
+        NativeCustomUiResult result;
+#ifndef Q_OS_WIN
+        Q_UNUSED(message); Q_UNUSED(id); Q_UNUSED(record); Q_UNUSED(values);
+        Q_UNUSED(view); Q_UNUSED(event); Q_UNUSED(overlay); Q_UNUSED(contextKind);
+        Q_UNUSED(prepare); Q_UNUSED(serialized); Q_UNUSED(matrix);
+        return result;
+#else
+        if (!ensureContext() || !m_context.makeCurrent(m_surface.data())) return result;
+        // One instance per effect: MotionTrack keeps its analysis there.
+        const QString runtimeKey = view.instanceKey.isEmpty()
+                                       ? id : id + QLatin1Char(':') + view.instanceKey;
+        NativePluginRuntime* runtime = runtimeFor(runtimeKey, record);
+        if (!runtime) return result;
+        const int width = qMax(1, view.area.width());
+        const int height = qMax(1, view.area.height());
+        // What the overlay is drawn into: the canvas, or the area itself.
+        const int targetWidth = view.target.isEmpty() ? width : view.target.width();
+        const int targetHeight = view.target.isEmpty() ? height : view.target.height();
+
+        static constexpr char kNullLayerId[] = "00000000-0000-0000-0000-000000000000";
+        const QByteArray layerId = view.layerId.isValid() ? view.layerId.value().toLatin1()
+                                                          : QByteArray(kNullLayerId);
+        QByteArray context(0xb0, '\0');
+        const char* layerPointer = layerId.constData();
+        std::memcpy(context.data() + 0x00, &layerPointer, sizeof(layerPointer));
+        const qint32 areaWidth = width, areaHeight = height;
+        std::memcpy(context.data() + 0x10, &areaWidth, sizeof(areaWidth));
+        std::memcpy(context.data() + 0x14, &areaHeight, sizeof(areaHeight));
+        std::memcpy(context.data() + 0x18, &view.zoomX, sizeof(double));
+        std::memcpy(context.data() + 0x20, &view.zoomY, sizeof(double));
+        // CustomUIRender's three trailing doubles (+0x28..+0x38) and the
+        // other messages' zero there.
+        if (message == 1003) {
+            std::memcpy(context.data() + 0x28, &view.zoomX, sizeof(double));
+            std::memcpy(context.data() + 0x30, &view.zoomY, sizeof(double));
+            std::memcpy(context.data() + 0x38, &view.pixelRatio, sizeof(double));
+        }
+        std::memcpy(context.data() + 0x40, &view.frame, sizeof(qint32));
+        std::memcpy(context.data() + 0x44, &view.parameterFrame, sizeof(qint32));
+        std::memcpy(context.data() + 0x48, &view.frame, sizeof(qint32));
+        std::memcpy(context.data() + 0x4c, &view.layerFrame, sizeof(qint32));
+        std::memcpy(context.data() + 0x50, &view.layerFrameEnd, sizeof(qint32));
+        // CustomUIRender's matrix takes layer pixels (Y down) to clip space:
+        // the modules draw with it as is (identity drew nothing at all). The
+        // view's matrix takes layer pixels to area pixels; the area-sized
+        // target adds its own orthographic step.
+        std::array<float, 16> uiMatrix = view.matrix;
+        if (message == 1003) {
+            QMatrix4x4 ortho;
+            ortho.ortho(0.0f, float(targetWidth), float(targetHeight), 0.0f, -1.0f, 1.0f);
+            const QMatrix4x4 clip = ortho * QMatrix4x4(view.matrix.data()).transposed();
+            std::copy(clip.constData(), clip.constData() + 16, uiMatrix.begin());
+        }
+        std::memcpy(context.data() + 0x54, uiMatrix.data(), 16 * sizeof(float));
+        std::memcpy(context.data() + 0x98, &view.pixelRatio, sizeof(double));
+        context[0xa0] = 1;
+        qint32 capability = 4;
+        // The behaviour render context PluginBehaviorEffect builds for
+        // property changes and background processing.
+        QByteArray renderer(0x40, '\0');
+        if (contextKind == Context::Render) {
+            context = QByteArray(0xc8, '\0');
+            void* rendererPointer = renderer.data();
+            std::memcpy(context.data() + 0x00, &rendererPointer, sizeof(rendererPointer));
+            std::memcpy(context.data() + 0x08, &layerPointer, sizeof(layerPointer));
+            const float aspect = 1.0f;
+            std::memcpy(context.data() + 0x24, &aspect, sizeof(aspect));
+            context[0x28] = 1;
+            std::memcpy(context.data() + 0x60, &areaWidth, sizeof(areaWidth));
+            std::memcpy(context.data() + 0x64, &areaHeight, sizeof(areaHeight));
+            const double msPerFrame = 1000.0 / qMax(0.001, view.frameRate);
+            const qint32 timeMs = qint32(std::lround(view.frame * msPerFrame));
+            const qint32 layerMs = qint32(std::lround(view.layerFrame * msPerFrame));
+            std::memcpy(context.data() + 0x6c, &timeMs, sizeof(timeMs));
+            std::memcpy(context.data() + 0x70, &layerMs, sizeof(layerMs));
+            std::memcpy(context.data() + 0x98, &view.frame, sizeof(qint32));
+            std::memcpy(context.data() + 0x9c, &view.layerFrame, sizeof(qint32));
+            const qint32 length = qMax(1, view.layerFrameEnd);
+            std::memcpy(context.data() + 0xa0, &length, sizeof(length));
+            capability = 0;
+        } else if (contextKind == Context::Transformation) {
+            // tagBiffBehaviorMC for TransformationAtTime: layer ID, the time
+            // and the layer time in milliseconds (MotionTrack's transform
+            // index is time x rate / 1000), and the matrix the module writes.
+            context = QByteArray(0x80, '\0');
+            std::memcpy(context.data() + 0x00, &layerPointer, sizeof(layerPointer));
+            const double msPerFrame = 1000.0 / qMax(0.001, view.frameRate);
+            const qint32 timeMs = qint32(std::lround(view.frame * msPerFrame));
+            const qint32 layerMs = qint32(std::lround(view.layerFrame * msPerFrame));
+            std::memcpy(context.data() + 0x08, &timeMs, sizeof(timeMs));
+            std::memcpy(context.data() + 0x0c, &layerMs, sizeof(layerMs));
+            std::memcpy(context.data() + 0x18, &matrix, sizeof(matrix));
+            capability = 6;
+        }
+
+        QByteArray eventBlock = event.isEmpty() ? QByteArray(0x30, '\0') : event;
+        void* eventPointer = eventBlock.data();
+        void* contextPointer = contextKind == Context::None ? nullptr : context.data();
+        std::memcpy(runtime->apiBlock().data() + 0x18, &eventPointer, sizeof(eventPointer));
+        std::memcpy(runtime->apiBlock().data() + 0x20, &contextPointer, sizeof(contextPointer));
+        if (contextKind == Context::None) capability = 0;
+        std::memcpy(runtime->apiBlock().data() + 0x498, &capability, sizeof(capability));
+        if (prepare) prepare(runtime->apiBlock().data());
+
+        auto* gl = m_context.extraFunctions();
+        std::unique_ptr<QOpenGLFramebufferObject> target;
+        if (overlay) {
+            QOpenGLFramebufferObjectFormat format;
+            format.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
+            format.setTextureTarget(GL_TEXTURE_2D);
+            format.setInternalTextureFormat(GL_RGBA8);
+            target = std::make_unique<QOpenGLFramebufferObject>(QSize(targetWidth, targetHeight), format);
+            if (!target->isValid() || !target->bind()) return result;
+            gl->glViewport(0, 0, targetWidth, targetHeight);
+            gl->glDisable(GL_SCISSOR_TEST);
+            gl->glDisable(GL_DEPTH_TEST);
+            gl->glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            gl->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        }
+
+        m_scratchPool.releaseAll();
+        m_scratchVboPool.releaseAll();
+        m_scratchRenderbufferPool.releaseAll();
+        RenderInvocation invocation {&record, &values, &m_scratchPool, &m_scratchVboPool,
+                                     &m_scratchRenderbufferPool, width, height};
+        invocation.timelineFrame = view.frame;
+        invocation.sourceLayerId = view.layerId;
+        RenderInvocation* previousInvocation = g_renderInvocation;
+        g_renderInvocation = &invocation;
+        CustomUiCallState state;
+        state.serialized = serialized;
+        CustomUiCallState* previousCall = g_customUiCall;
+        g_customUiCall = &state;
+        const int notifyResult = runtime->notify(message);
+        g_customUiCall = previousCall;
+        g_renderInvocation = previousInvocation;
+        // The blocks die with this call; the module must not keep them.
+        void* none = nullptr;
+        std::memcpy(runtime->apiBlock().data() + 0x18, &none, sizeof(none));
+        std::memcpy(runtime->apiBlock().data() + 0x20, &none, sizeof(none));
+        std::memcpy(runtime->apiBlock().data() + 0x30, &none, sizeof(none));
+        std::memcpy(runtime->apiBlock().data() + 0x110, &none, sizeof(none));
+
+        const bool clean = runtime->lastFaultCode() == 0;
+        if (qEnvironmentVariableIsSet("OPENVEGAS_HFPL_CUSTOMUI_TRACE")) {
+            std::fprintf(stderr, "[hfpl-instance] Notify(%d) = %d fault=0x%x %s\n", message,
+                         notifyResult, unsigned(runtime->lastFaultCode()),
+                         qPrintable(runtime->errorString()));
+            std::fflush(stderr);
+        }
+        result.handled = clean && notifyResult == 1;
+        result.redraw = state.redraw;
+        result.cursor = state.cursor;
+        result.backgroundRequested = state.background;
+        result.backgroundDelayMs = state.backgroundDelayMs;
+        result.enabled = state.enabled;
+        result.values = invocation.valueOverrides;
+        if (overlay && clean && m_context.makeCurrent(m_surface.data()) && target->bind()) {
+            QImage drawn(targetWidth, targetHeight, QImage::Format_RGBA8888);
+            gl->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            gl->glReadPixels(0, 0, targetWidth, targetHeight, GL_RGBA, GL_UNSIGNED_BYTE, drawn.bits());
+            if (gl->glGetError() == GL_NO_ERROR) {
+                // GL rows run bottom-up; the module draws in a Y-down view.
+                *overlay = drawn.mirrored(false, true);
+            }
+        }
+        if (target) {
+            gl->glFinish();
+            target->release();
+        }
+        m_scratchPool.releaseAll();
+        m_scratchVboPool.releaseAll();
+        m_scratchRenderbufferPool.releaseAll();
+        return result;
 #endif
     }
 
@@ -2418,7 +3354,30 @@ private:
         putService(runtime->apiBlock(), 0x118,
                    reinterpret_cast<void*>(&sourceTexture));
         putService(runtime->apiBlock(), 0x128,
-                   reinterpret_cast<void*>(&layerInfo));
+                   reinterpret_cast<void*>(&instanceLayerInfo));
+        // Footage, tracked features and the setters MotionTrack uses from its
+        // own instance (CreateAPI slots 0x15, 0x32, 0x35, 0x76..0x7a).
+        putService(runtime->apiBlock(), 0xa8, reinterpret_cast<void*>(&setPropertyState));
+        putService(runtime->apiBlock(), 0x190, reinterpret_cast<void*>(&setIntegerParameter));
+        putService(runtime->apiBlock(), 0x1a8, reinterpret_cast<void*>(&setIntegerParameter));
+        putService(runtime->apiBlock(), 0x3b0, reinterpret_cast<void*>(&saveTrackingData));
+        putService(runtime->apiBlock(), 0x3b8, reinterpret_cast<void*>(&numberOfFeatures));
+        putService(runtime->apiBlock(), 0x3c0, reinterpret_cast<void*>(&trackingData));
+        putService(runtime->apiBlock(), 0x3c8, reinterpret_cast<void*>(&assetInfoService));
+        putService(runtime->apiBlock(), 0x3d0, reinterpret_cast<void*>(&assetTextureService));
+        // The behaviour transform getters, for TransformationAtTime on the
+        // instance (MotionTrack composes with them).
+        putService(runtime->apiBlock(), 0x300, reinterpret_cast<void*>(&preBehaviorTransformation));
+        putService(runtime->apiBlock(), 0x308, reinterpret_cast<void*>(&originTransformation));
+        putService(runtime->apiBlock(), 0x310, reinterpret_cast<void*>(&layerEulerAngles));
+        putService(runtime->apiBlock(), 0x318, reinterpret_cast<void*>(&layerOrientation));
+        putService(runtime->apiBlock(), 0x320, reinterpret_cast<void*>(&layerScale));
+        putService(runtime->apiBlock(), 0x328, reinterpret_cast<void*>(&layerPosition));
+        putService(runtime->apiBlock(), 0x330, reinterpret_cast<void*>(&layerAnchorPoint));
+        putService(runtime->apiBlock(), 0x3e0, reinterpret_cast<void*>(&translateString));
+        putService(runtime->apiBlock(), 0x3e8, reinterpret_cast<void*>(&translateStringN));
+        putService(runtime->apiBlock(), 0x3f0, reinterpret_cast<void*>(&stringArgI));
+        putService(runtime->apiBlock(), 0x3f8, reinterpret_cast<void*>(&stringArgF));
         putService(runtime->apiBlock(), 0x130,
                    reinterpret_cast<void*>(&layerTextureV2));
         putService(runtime->apiBlock(), 0x138,
@@ -2445,6 +3404,15 @@ private:
                    reinterpret_cast<void*>(&hostOptions));
         putService(runtime->apiBlock(), 0x2c8,
                    reinterpret_cast<void*>(&redrawCustomUi));
+        // Viewer custom UI (CreateAPI slots 0x58, 0x71, 0x73, 0x80).
+        putService(runtime->apiBlock(), 0x2c0,
+                   reinterpret_cast<void*>(&createCustomUiControl));
+        putService(runtime->apiBlock(), 0x388,
+                   reinterpret_cast<void*>(&setCustomUiCursor));
+        putService(runtime->apiBlock(), 0x398,
+                   reinterpret_cast<void*>(&requestBackgroundProcessing));
+        putService(runtime->apiBlock(), 0x400,
+                   reinterpret_cast<void*>(&layerPixelTransform));
         putService(runtime->apiBlock(), 0x268,
                    reinterpret_cast<void*>(&stringParameterLength));
         putService(runtime->apiBlock(), 0x270,
@@ -2573,7 +3541,14 @@ void registerNativeAudioTransitionModule(
     QMutexLocker lock(&g_registryMutex);
     g_registry.insert(id.value(), {filePath, dependencyDirectory,
                                    false, false, false, renderingVerified, false,
-                                   parameters});
+                                   parameters, true});
+}
+
+bool isAudioTransition(const core::Identifier& id)
+{
+    QMutexLocker lock(&g_registryMutex);
+    const auto it = g_registry.constFind(id.value());
+    return it != g_registry.constEnd() && it->audioTransition;
 }
 
 void registerNativeBehaviorModule(
@@ -2587,10 +3562,405 @@ void registerNativeBehaviorModule(
                                    renderingVerified, parameters});
 }
 
+void registerNativeGeometryModule(
+    const core::Identifier& id, const QString& filePath,
+    const QString& dependencyDirectory, bool renderingVerified,
+    const QVector<EffectParameterSpec>& parameters)
+{
+    QMutexLocker lock(&g_registryMutex);
+    ModuleRecord record;
+    record.filePath = filePath;
+    record.dependencyDirectory = dependencyDirectory;
+    record.parameters = parameters;
+    record.geometryRenderingVerified = renderingVerified;
+    g_registry.insert(id.value(), record);
+}
+
 bool nativeEffectFrameRenderingVerified(const core::Identifier& id)
 {
     QMutexLocker lock(&g_registryMutex);
     return g_registry.value(id.value()).frameRenderingVerified;
+}
+
+bool nativeGeometryRenderingVerified(const core::Identifier& id)
+{
+    QMutexLocker lock(&g_registryMutex);
+    return g_registry.value(id.value()).geometryRenderingVerified;
+}
+
+namespace {
+
+// The modules that answer the viewer's custom UI messages. Any registration
+// will do: MotionTrack is listed as an unverified Behavior.
+bool customUiRecord(const core::Identifier& id, ModuleRecord* record)
+{
+    static const QSet<QString> modules {QStringLiteral("motiontrack"),
+                                        QStringLiteral("bendgeometry")};
+    QMutexLocker lock(&g_registryMutex);
+    const auto it = g_registry.constFind(id.value());
+    if (it == g_registry.constEnd()
+        || !modules.contains(QFileInfo(it->filePath).baseName().toLower())) {
+        return false;
+    }
+    if (record) *record = it.value();
+    return true;
+}
+
+NativeCustomUiResult runCustomUi(int message, const core::Identifier& id,
+                                 const QStringList& values, const NativeCustomUiView& view,
+                                 const QByteArray& event = {}, QImage* overlay = nullptr)
+{
+    ModuleRecord record;
+    if (!customUiRecord(id, &record)) return {};
+    if (!g_threadRenderer) g_threadRenderer = std::make_unique<ThreadRenderer>();
+    return g_threadRenderer->customUi(message, id.value(), record, values, view, event, overlay);
+}
+
+} // namespace
+
+bool nativeEffectHasCustomUi(const core::Identifier& id)
+{
+    return customUiRecord(id, nullptr);
+}
+
+NativeCustomUiResult nativeCustomUiSetup(const core::Identifier& id, const QStringList& values,
+                                         const NativeCustomUiView& view)
+{
+    return runCustomUi(1001, id, values, view);
+}
+
+NativeCustomUiResult nativeCustomUiShutdown(const core::Identifier& id, const QStringList& values,
+                                            const NativeCustomUiView& view)
+{
+    return runCustomUi(1002, id, values, view);
+}
+
+NativeCustomUiResult nativeCustomUiMouse(const core::Identifier& id, const QStringList& values,
+                                         const NativeCustomUiView& view, NativeCustomUiMouse type,
+                                         const NativeCustomUiPointer& pointer)
+{
+    QByteArray event(0x30, '\0');
+    // Layer pixels, Y down (MotionTrack maps the point into layer space by
+    // its pixel transform alone): the target position taken back through the
+    // view's matrix.
+    const QTransform toTarget(view.matrix[0], view.matrix[1], view.matrix[4], view.matrix[5],
+                              view.matrix[12], view.matrix[13]);
+    const QPointF layerPoint = toTarget.inverted().map(QPointF(pointer.position));
+    const qint32 x = qint32(std::lround(layerPoint.x())), y = qint32(std::lround(layerPoint.y()));
+    const double pressed = pointer.pressed ? 1.0 : 0.0;
+    const qint32 fields[4] = {pointer.button, pointer.buttons, pointer.modifiers, pointer.clicks};
+    std::memcpy(event.data() + 0x00, &x, sizeof(x));
+    std::memcpy(event.data() + 0x04, &y, sizeof(y));
+    std::memcpy(event.data() + 0x08, &pressed, sizeof(pressed));
+    std::memcpy(event.data() + 0x20, fields, sizeof(fields));
+    return runCustomUi(1004 + int(type), id, values, view, event);
+}
+
+NativeCustomUiResult nativeCustomUiKey(const core::Identifier& id, const QStringList& values,
+                                       const NativeCustomUiView& view, NativeCustomUiKey type,
+                                       quint32 keysym, const QString& text)
+{
+    // CustomUIKeyEvent: +0x10 the key, +0x18 the text as a C string.
+    const QByteArray utf8 = text.toUtf8();
+    QByteArray event(0x30, '\0');
+    const qint32 key = qint32(keysym);
+    const char* textPointer = utf8.constData();
+    std::memcpy(event.data() + 0x10, &key, sizeof(key));
+    std::memcpy(event.data() + 0x18, &textPointer, sizeof(textPointer));
+    return runCustomUi(1007 + int(type), id, values, view, event);
+}
+
+NativeCustomUiResult nativeCustomUiFocus(const core::Identifier& id, const QStringList& values,
+                                         const NativeCustomUiView& view, bool gained)
+{
+    return runCustomUi(gained ? 1010 : 1011, id, values, view);
+}
+
+NativeCustomUiResult nativeCustomUiHasContextMenu(const core::Identifier& id,
+                                                  const QStringList& values,
+                                                  const NativeCustomUiView& view)
+{
+    return runCustomUi(1012, id, values, view);
+}
+
+NativeCustomUiResult nativeCustomUiContextMenu(const core::Identifier& id,
+                                               const QStringList& values,
+                                               const NativeCustomUiView& view)
+{
+    return runCustomUi(1013, id, values, view);
+}
+
+QImage nativeCustomUiRender(const core::Identifier& id, const QStringList& values,
+                            const NativeCustomUiView& view, NativeCustomUiResult* result)
+{
+    QImage overlay;
+    const NativeCustomUiResult outcome = runCustomUi(1003, id, values, view, {}, &overlay);
+    if (result) *result = outcome;
+    return outcome.handled ? overlay : QImage();
+}
+
+namespace {
+
+NativeCustomUiResult runInstanceCall(int message, const core::Identifier& id,
+                                     const QStringList& values, const NativeCustomUiView& view,
+                                     const QByteArray& event, ThreadRenderer::Context context,
+                                     const std::function<void(char*)>& prepare = {},
+                                     QByteArray* serialized = nullptr, float* matrix = nullptr)
+{
+    ModuleRecord record;
+    if (!customUiRecord(id, &record)) return {};
+    if (!g_threadRenderer) g_threadRenderer = std::make_unique<ThreadRenderer>();
+    return g_threadRenderer->customUi(message, id.value(), record, values, view, event, nullptr,
+                                      context, prepare, serialized, matrix);
+}
+
+} // namespace
+
+NativeCustomUiResult nativePropertyChanged(const core::Identifier& id, const QStringList& values,
+                                           const NativeCustomUiView& view, const QString& key)
+{
+    // PluginFile::NotifyPropertyChanged: {key, 0, 0, frame, 1, 0}.
+    const QByteArray name = key.toLatin1();
+    const char* namePointer = name.constData();
+    QByteArray event(0x30, '\0');
+    std::memcpy(event.data() + 0x00, &namePointer, sizeof(namePointer));
+    std::memcpy(event.data() + 0x14, &view.frame, sizeof(qint32));
+    const qint32 one = 1;
+    std::memcpy(event.data() + 0x18, &one, sizeof(one));
+    return runInstanceCall(7, id, values, view, event, ThreadRenderer::Context::Render);
+}
+
+NativeCustomUiResult nativeBackgroundProcess(const core::Identifier& id, const QStringList& values,
+                                             const NativeCustomUiView& view)
+{
+    return runInstanceCall(18, id, values, view, {}, ThreadRenderer::Context::Render);
+}
+
+QByteArray nativeInstanceData(const core::Identifier& id, const QStringList& values,
+                              const NativeCustomUiView& view)
+{
+    QByteArray bytes;
+    const auto prepare = [](char* api) {
+        void* callback = reinterpret_cast<void*>(&serializeInstanceBytes);
+        std::memcpy(api + 0x110, &callback, sizeof(callback));
+    };
+    const NativeCustomUiResult result = runInstanceCall(
+        5, id, values, view, {}, ThreadRenderer::Context::None, prepare, &bytes);
+    return result.handled ? bytes : QByteArray();
+}
+
+NativeCustomUiResult nativeRestoreInstanceData(const core::Identifier& id,
+                                               const QStringList& values,
+                                               const NativeCustomUiView& view,
+                                               const QByteArray& data)
+{
+    QByteArray bytes = data;
+    const auto prepare = [&bytes](char* api) {
+        void* pointer = bytes.data();
+        const qint32 size = qint32(bytes.size());
+        std::memcpy(api + 0x30, &pointer, sizeof(pointer));
+        std::memcpy(api + 0x38, &size, sizeof(size));
+    };
+    return runInstanceCall(6, id, values, view, {}, ThreadRenderer::Context::None, prepare);
+}
+
+bool nativeInstanceTransformation(const core::Identifier& id, const QStringList& values,
+                                  const NativeCustomUiView& view, int frame, int layerFrame,
+                                  std::array<float, 16>* matrix)
+{
+    if (!matrix) return false;
+    std::array<float, 16> result {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    NativeCustomUiView at = view;
+    at.frame = frame;
+    at.layerFrame = layerFrame;
+    const bool ok = runInstanceCall(102, id, values, at, {}, ThreadRenderer::Context::Transformation,
+                                    {}, nullptr, result.data()).handled;
+    if (!ok) return false;
+    // The module works in its layer pixels, Y down; the port's layer space
+    // has Y up. Flip, apply, flip back: a move down comes out as -Y.
+    QMatrix4x4 flip;
+    flip.scale(1.0f, -1.0f, 1.0f);
+    const QMatrix4x4 converted = flip * QMatrix4x4(result.data()).transposed() * flip;
+    std::copy(converted.constData(), converted.constData() + 16, matrix->begin());
+    return true;
+}
+
+bool nativeBehaviorUsesInstance(const core::Identifier& id)
+{
+    QMutexLocker lock(&g_registryMutex);
+    const auto it = g_registry.constFind(id.value());
+    return it != g_registry.constEnd()
+           && QFileInfo(it->filePath).baseName().compare(QStringLiteral("MotionTrack"),
+                                                        Qt::CaseInsensitive) == 0;
+}
+
+QVector<EffectParameterSpec> nativeParameters(const core::Identifier& id)
+{
+    QMutexLocker lock(&g_registryMutex);
+    const auto it = g_registry.constFind(id.value());
+    return it == g_registry.constEnd() ? QVector<EffectParameterSpec>() : it->parameters;
+}
+
+namespace {
+struct InstanceTransforms
+{
+    int firstFrame = 0;
+    QVector<std::array<float, 16>> matrices;
+};
+QMutex g_instanceTransformsMutex;
+QHash<QString, InstanceTransforms> g_instanceTransforms;
+} // namespace
+
+void setNativeInstanceTransforms(const QString& instanceKey, int firstFrame,
+                                 const QVector<std::array<float, 16>>& matrices)
+{
+    QMutexLocker lock(&g_instanceTransformsMutex);
+    g_instanceTransforms.insert(instanceKey, {firstFrame, matrices});
+}
+
+bool nativeInstanceTransformAt(const QString& instanceKey, int frame,
+                               std::array<float, 16>* matrix)
+{
+    QMutexLocker lock(&g_instanceTransformsMutex);
+    const auto it = g_instanceTransforms.constFind(instanceKey);
+    if (it == g_instanceTransforms.constEnd() || it->matrices.isEmpty() || !matrix) return false;
+    // Before or after the clip the layer keeps its first or last placement.
+    const int index = qBound(0, frame - it->firstFrame, int(it->matrices.size()) - 1);
+    *matrix = it->matrices.at(index);
+    return true;
+}
+
+namespace {
+QMutex g_controlStatesMutex;
+QHash<QString, QHash<QString, bool>> g_controlStates;
+} // namespace
+
+void setNativeControlStates(const QString& instanceKey, const QHash<QString, bool>& states)
+{
+    QMutexLocker lock(&g_controlStatesMutex);
+    QHash<QString, bool>& current = g_controlStates[instanceKey];
+    for (auto it = states.cbegin(); it != states.cend(); ++it) current.insert(it.key(), it.value());
+}
+
+bool nativeControlShown(const QString& instanceKey, const QString& key)
+{
+    QMutexLocker lock(&g_controlStatesMutex);
+    const auto it = g_controlStates.constFind(instanceKey);
+    return it == g_controlStates.constEnd() || it->value(key, true);
+}
+
+void clearNativeControlStates(const QString& instanceKey)
+{
+    QMutexLocker lock(&g_controlStatesMutex);
+    if (instanceKey.isEmpty()) g_controlStates.clear();
+    else g_controlStates.remove(instanceKey);
+}
+
+void clearNativeInstanceTransforms(const QString& instanceKey)
+{
+    QMutexLocker lock(&g_instanceTransformsMutex);
+    if (instanceKey.isEmpty()) g_instanceTransforms.clear();
+    else g_instanceTransforms.remove(instanceKey);
+}
+
+void setNativeSourceHost(NativeSourceHost host)
+{
+    QMutexLocker lock(&g_sourceHostMutex);
+    g_sourceHost = std::move(host);
+}
+
+QHash<int, NativeTrackedFeatures> nativeTrackedFeatures(const QString& assetKey)
+{
+    QMutexLocker lock(&g_trackingMutex);
+    return g_trackedFeatures.value(assetKey);
+}
+
+void clearNativeTrackedFeatures(const QString& assetKey)
+{
+    QMutexLocker lock(&g_trackingMutex);
+    if (assetKey.isEmpty()) g_trackedFeatures.clear();
+    else g_trackedFeatures.remove(assetKey);
+}
+
+void setNativeCustomUiRedrawHandler(std::function<void()> handler)
+{
+    QMutexLocker lock(&g_customUiRedrawMutex);
+    g_customUiRedrawHandler = std::move(handler);
+}
+
+quint32 nativeKeysym(int qtKey, const QString& text)
+{
+    switch (qtKey) {
+    case Qt::Key_Shift: return 0xffe1;
+    case Qt::Key_Control: return 0xffe3;
+    case Qt::Key_Meta: return 0xffeb;
+    case Qt::Key_Alt: return 0xffe9;
+    case Qt::Key_Escape: return 0xff1b;
+    case Qt::Key_Tab: return 0xff09;
+    case Qt::Key_Backspace: return 0xff08;
+    case Qt::Key_Return: return 0xff0d;
+    case Qt::Key_Enter: return 0xff8d;
+    case Qt::Key_Insert: return 0xff63;
+    case Qt::Key_Delete: return 0xffff;
+    case Qt::Key_Home: return 0xff50;
+    case Qt::Key_Left: return 0xff51;
+    case Qt::Key_Up: return 0xff52;
+    case Qt::Key_Right: return 0xff53;
+    case Qt::Key_Down: return 0xff54;
+    case Qt::Key_PageUp: return 0xff55;
+    case Qt::Key_PageDown: return 0xff56;
+    case Qt::Key_End: return 0xff57;
+    case Qt::Key_Space: return 0x20;
+    default: break;
+    }
+    if (qtKey >= Qt::Key_F1 && qtKey <= Qt::Key_F35) return 0xffbe + quint32(qtKey - Qt::Key_F1);
+    // Printable keys are their Latin-1 code, lower case as X11 reports them
+    // without Shift.
+    if (!text.isEmpty() && text.at(0).unicode() >= 0x20 && text.at(0).unicode() < 0x100) {
+        return text.at(0).toLower().unicode();
+    }
+    if (qtKey >= Qt::Key_A && qtKey <= Qt::Key_Z) return 'a' + quint32(qtKey - Qt::Key_A);
+    if (qtKey >= 0x20 && qtKey < 0x7f) return quint32(qtKey);
+    return 0;
+}
+
+int nativeCursorShape(int code)
+{
+    switch (code) {
+    case 1: return Qt::ArrowCursor;
+    case 2: return Qt::CrossCursor;
+    case 3: return Qt::SizeAllCursor;
+    case 4: return Qt::PointingHandCursor;
+    case 6: return Qt::SizeVerCursor;
+    case 7: return Qt::SizeBDiagCursor;
+    case 8: return Qt::SizeHorCursor;
+    case 9: return Qt::SizeFDiagCursor;
+    case 20: return Qt::OpenHandCursor;
+    default: return -1;
+    }
+}
+
+bool applyNativeGeometryEffect(QVector<NativeGeometryBatch>& geometry,
+                               const core::Identifier& id,
+                               const QStringList& parameterValues,
+                               int timelineFrame, int localFrame,
+                               int layerDurationFrames, double frameRate)
+{
+    ModuleRecord record;
+    {
+        QMutexLocker lock(&g_registryMutex);
+        const auto it = g_registry.constFind(id.value());
+        if (it == g_registry.constEnd() || !it->geometryRenderingVerified) {
+            return false;
+        }
+        record = it.value();
+    }
+    if (!g_behaviorThreadRenderer) {
+        g_behaviorThreadRenderer = std::make_unique<BehaviorThreadRenderer>();
+    }
+    return g_behaviorThreadRenderer->processGeometry(
+        geometry, timelineFrame, localFrame, layerDurationFrames, frameRate,
+        id.value(), record, parameterValues);
 }
 
 bool nativeVideoTransitionRenderingVerified(const core::Identifier& id)
@@ -2660,7 +4030,8 @@ bool evaluateNativeBehavior(NativeBehaviorResult& result, int timelineFrame,
                             const core::Identifier& id,
                             const QStringList& parameterValues,
                             const composition::Composition* composition,
-                            const core::Identifier& sourceLayerId)
+                            const core::Identifier& sourceLayerId,
+                            const NativeBehaviorLayer& layer)
 {
     ModuleRecord record;
     {
@@ -2677,7 +4048,7 @@ bool evaluateNativeBehavior(NativeBehaviorResult& result, int timelineFrame,
     return g_behaviorThreadRenderer->evaluate(
         result, timelineFrame, localFrame, layerDurationFrames,
         canvasWidth, canvasHeight, frameRate, true, id.value(), record,
-        parameterValues, composition, sourceLayerId);
+        parameterValues, composition, sourceLayerId, layer);
 }
 
 bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame,
@@ -2686,7 +4057,8 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
                                  const core::Identifier& id,
                                  const QStringList& parameterValues,
                                  const composition::Composition* composition,
-                                 const core::Identifier& sourceLayerId)
+                                 const core::Identifier& sourceLayerId,
+                                 const NativeBehaviorLayer& layer)
 {
     ModuleRecord record;
     {
@@ -2703,7 +4075,7 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
     return g_behaviorThreadRenderer->evaluate(
         result, timelineFrame, localFrame, layerDurationFrames,
         canvasWidth, canvasHeight, frameRate, false, id.value(), record,
-        parameterValues, composition, sourceLayerId);
+        parameterValues, composition, sourceLayerId, layer);
 }
 
 bool evaluateNativeSubObjectBehavior(
@@ -2761,7 +4133,7 @@ bool simulateNativeBehaviorStack(
 }
 
 bool applyNativeEffectToImage(QImage& image, const core::Identifier& id,
-                              const QStringList& parameterValues)
+                              const QStringList& parameterValues, const NativeFrameTime& time)
 {
     ModuleRecord record;
     {
@@ -2777,7 +4149,8 @@ bool applyNativeEffectToImage(QImage& image, const core::Identifier& id,
     if (!g_threadRenderer) {
         g_threadRenderer = std::make_unique<ThreadRenderer>();
     }
-    return g_threadRenderer->render(image, id.value(), record, parameterValues);
+    return g_threadRenderer->render(image, id.value(), record, parameterValues, nullptr, 0.0f,
+                                    time);
 }
 
 bool applyNativeVideoTransition(QImage& output, const QImage& from, const QImage& to,
@@ -2811,7 +4184,10 @@ bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,
                             int sampleRate, qint64 startSample,
                             const core::Identifier& id,
                             const QStringList& parameterValues,
-                            const QString& instanceKey)
+                            const QString& instanceKey,
+                            const QVector<qint16>* sourceSamples,
+                            qint64 sourceStartSample,
+                            const NativeAudioLayer& layer)
 {
     ModuleRecord record;
     {
@@ -2826,8 +4202,38 @@ bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,
     return g_audioThreadRenderer->processEffect(
         interleavedSamples, channels, sampleRate, startSample,
         instanceKey.isEmpty() ? id.value() : id.value() + QLatin1Char(':') + instanceKey,
-        record,
-        parameterValues);
+        record, parameterValues, sourceSamples, sourceStartSample, layer);
+}
+
+bool applyNativeAudioEffectBlocks(
+    QVector<qint16>& interleavedSamples, int channels, int sampleRate,
+    qint64 startSample, const core::Identifier& id,
+    const std::function<QStringList(qint64 frameOffset)>& parameterValuesAt,
+    const QString& instanceKey, int blockFrames, const NativeAudioLayer& layer)
+{
+    if (channels <= 0 || blockFrames <= 0 || !parameterValuesAt
+        || interleavedSamples.size() % channels != 0) {
+        return false;
+    }
+    // Source ranges (Equaliser, Echo, reverbs, Reverse) read the dry signal,
+    // so later blocks must not see earlier processed output.
+    const QVector<qint16> sourceSamples = interleavedSamples;
+    const qsizetype blockSamples = qsizetype(blockFrames) * channels;
+    for (qsizetype offset = 0; offset < interleavedSamples.size();
+         offset += blockSamples) {
+        const qsizetype count = qMin(blockSamples, interleavedSamples.size() - offset);
+        QVector<qint16> block = sourceSamples.mid(offset, count);
+        const qint64 frameOffset = offset / channels;
+        if (!applyNativeAudioEffect(block, channels, sampleRate,
+                                    startSample + frameOffset, id,
+                                    parameterValuesAt(frameOffset), instanceKey,
+                                    &sourceSamples, startSample, layer)) {
+            return false;
+        }
+        std::memcpy(interleavedSamples.data() + offset, block.constData(),
+                    size_t(count) * sizeof(qint16));
+    }
+    return true;
 }
 
 bool applyNativeAudioTransition(QVector<qint16>& output,
@@ -2835,7 +4241,8 @@ bool applyNativeAudioTransition(QVector<qint16>& output,
                                 const QVector<qint16>& to, int channels,
                                 qint32 sampleOffset, qint32 totalTransitionSamples,
                                 const core::Identifier& id,
-                                const QStringList& parameterValues)
+                                const QStringList& parameterValues,
+                                qint32 cutSample)
 {
     ModuleRecord record;
     {
@@ -2850,7 +4257,7 @@ bool applyNativeAudioTransition(QVector<qint16>& output,
     }
     return g_audioThreadRenderer->processTransition(
         output, from, to, channels, sampleOffset, totalTransitionSamples,
-        id.value(), record, parameterValues);
+        cutSample, id.value(), record, parameterValues);
 }
 
 void releaseNativeEffectThreadRenderer()

@@ -1,5 +1,8 @@
 @echo off
 setlocal
+rem CMake stores localized /showIncludes prefixes in UTF-8. Use the same
+rem code page when launched directly by Ninja from VS Code or Qt Creator.
+chcp 65001 >nul
 rem Discard a developer environment supplied by a different VS installation.
 set "VSCMD_VER="
 set "VSINSTALLDIR="

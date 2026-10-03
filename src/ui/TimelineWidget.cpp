@@ -1,14 +1,23 @@
 #include "ui/TimelineWidget.h"
 #include "ui_Timeline.h"
 #include "composition/CompositionState.h"
+#include "composition/Transition.h"
 #include "ui/TimelineRowDelegate.h"
 
+#include "app/Settings.h"
+#include "media/AudioWaveform.h"
+#include "ui/EffectPlacement.h"
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include "media/MediaManager.h"
 #include "ui/TimelineValueGraphView.h"
 #include "model3d/Mesh.h"
 
 #include "plugin/PluginManager.h"
 #include <QCoreApplication>
+#include <QSettings>
 #include <QTreeWidgetItemIterator>
 
 #include <QHBoxLayout>
@@ -159,6 +168,8 @@ QString transformValueText(const composition::Layer& layer, composition::Transfo
         return QString::number(t.rotationXAt(frame), 'f', 1) + degree;
     case composition::TransformProperty::RotationY:
         return QString::number(t.rotationYAt(frame), 'f', 1) + degree;
+    case composition::TransformProperty::AudioLevel:
+        return QString::number(t.valueAt(prop, 0, frame), 'f', 1) + QStringLiteral(" dB");
     case composition::TransformProperty::AnchorPoint:
     case composition::TransformProperty::Position:
     case composition::TransformProperty::Scale:
@@ -195,6 +206,7 @@ TimelineCanvas::TimelineCanvas(QWidget* parent)
     setMouseTracking(true);
     setMinimumHeight(120);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setAcceptDrops(true); // effects and transitions from the Effects panel
 
     m_hScroll = new QScrollBar(Qt::Horizontal, this);
     m_hScroll->setObjectName(QStringLiteral("timelineHScroll"));
@@ -520,11 +532,37 @@ void TimelineCanvas::paintEvent(QPaintEvent* event)
                 // the previous one ended.
                 const int cx = static_cast<int>(clip.startSeconds * pps);
                 const int cw = qMax(1, static_cast<int>(clip.durationSeconds * pps));
-                const bool selected = (lane.layerIndex == m_selLayer && c == m_selClip);
+                // The reference tints every shot of the selected layer slate
+                // (#60737d) and leaves the rest neutral grey; the clip picked
+                // within that layer additionally gets a light outline.
+                const bool layerSelected = lane.layerIndex == m_selLayer;
+                const bool selected = layerSelected && c == m_selClip;
                 painter.fillRect(cx, y + 1, cw, lane.height - 2,
-                                 selected ? QColor(143, 163, 175) : QColor(82, 83, 84));
+                                 layerSelected ? QColor(96, 115, 125) : QColor(80, 80, 80));
+                if (selected && layer.clips.size() > 1) {
+                    painter.setPen(QColor(143, 163, 175));
+                    painter.setBrush(Qt::NoBrush);
+                    painter.drawRect(cx, y + 1, cw - 1, lane.height - 3);
+                }
                 painter.setPen(selected ? QColor(200, 255, 200) : QColor(220, 220, 225));
+                drawClipWaveform(painter, clip, QRect(cx, y + 1, cw, lane.height - 2), pps);
 
+                painter.setPen(QColor(34, 34, 34));
+            }
+            // Transitions span the cut (or the faded clip edge); drawn over the
+            // clips as the usual NLE diagonal so their extent is visible.
+            const auto windows = composition::transitionWindows(
+                layer, 0.5 / qMax(1.0, frameRate()), nullptr);
+            for (const composition::TransitionWindow& window : windows) {
+                const QRectF band(window.start * pps, y + 1,
+                                  qMax(2.0, (window.end - window.start) * pps), lane.height - 2);
+                painter.fillRect(band, QColor(214, 170, 60, 110));
+                painter.setPen(QColor(240, 210, 120));
+                if (window.fromClip >= 0 && window.toClip < 0) {
+                    painter.drawLine(band.topLeft(), band.bottomRight());
+                } else {
+                    painter.drawLine(band.bottomLeft(), band.topRight());
+                }
                 painter.setPen(QColor(34, 34, 34));
             }
         }
@@ -534,6 +572,61 @@ void TimelineCanvas::paintEvent(QPaintEvent* event)
     const int contentH = qMax(contentBottom, usableHeight());
     painter.setPen(QColor(255, 255, 255));
     painter.drawLine(playheadX, 0, playheadX, contentH);
+}
+
+void TimelineCanvas::setWaveformSource(std::shared_ptr<media::MediaManager> media,
+                                       media::WaveformCache* cache)
+{
+    m_media = std::move(media);
+    if (m_waveforms != cache) {
+        if (m_waveforms) m_waveforms->disconnect(this);
+        m_waveforms = cache;
+        if (m_waveforms) {
+            connect(m_waveforms, &media::WaveformCache::peaksReady, this,
+                    qOverload<>(&QWidget::update));
+        }
+    }
+    update();
+}
+
+void TimelineCanvas::drawClipWaveform(QPainter& painter, const composition::Clip& clip,
+                                      const QRect& rect, double pps)
+{
+    if (!m_media || !m_waveforms || rect.height() < 6 || pps <= 0.0) return;
+    const media::MediaAsset asset = m_media->assetById(clip.mediaId);
+    if (asset.kind() != media::MediaKind::Audio && asset.kind() != media::MediaKind::Video) return;
+    const media::WaveformPeaks* peaks = m_waveforms->peaks(asset.filePath(), asset.audioStreamIndex());
+    if (!peaks) return;
+    // Options > General "Audio Waveforms" and "Log waveform". Older settings
+    // hold the translated item text rather than the English one.
+    const QSettings settings = app::Settings::optionSettings();
+    const QString style = settings.value(QStringLiteral("Options/AudioWaveforms")).toString();
+    const bool peak = style == QLatin1String("Peak Amplitude")
+        || style == QCoreApplication::translate("openvegas::ui::OptionsDialog", "Peak Amplitude");
+    const bool logarithmic = settings.value(QStringLiteral("Options/LogWaveform"), true).toBool();
+    // Only the visible part of the clip is sampled, one column per pixel;
+    // slip (source start) and rate stretch (speed) map it onto the media.
+    const int left = qMax(rect.left(), m_hOffset);
+    const int right = qMin(rect.right() + 1, m_hOffset + width());
+    if (right <= left) return;
+    const double speed = clip.speed > 0.0 ? clip.speed : 1.0;
+    const auto sourceAt = [&](int x) {
+        return clip.sourceStartSeconds + (x / pps - clip.startSeconds) * speed;
+    };
+    const QVector<float> heights = media::waveformColumns(
+        *peaks, sourceAt(left), sourceAt(right), right - left,
+        peak ? media::WaveformStyle::Peak : media::WaveformStyle::Rms, logarithmic);
+    const double middle = rect.center().y() + 0.5;
+    const double half = rect.height() * 0.5 - 1.0;
+    painter.save();
+    painter.setPen(QColor(172, 214, 236, 170));
+    for (int column = 0; column < heights.size(); ++column) {
+        const double extent = heights.at(column) * half;
+        if (extent < 0.5) continue;
+        const int x = left + column;
+        painter.drawLine(QPointF(x + 0.5, middle - extent), QPointF(x + 0.5, middle + extent));
+    }
+    painter.restore();
 }
 
 void TimelineCanvas::setLanes(const QVector<TimelineLane>& lanes)
@@ -776,6 +869,21 @@ void TimelineCanvas::contextMenuEvent(QContextMenuEvent* event)
     int laneIndex = -1;
     int frame = -1;
     if (!keyFrameAt(event->pos(), &laneIndex, &frame)) {
+        // A composite-shot clip offers the reference's AssetPreRenderMenu.
+        int layerIndex = -1, clipIndex = -1;
+        if (m_comp && clipAt(event->pos(), &layerIndex, &clipIndex, nullptr)
+            && m_comp->layers().at(layerIndex).clips.at(clipIndex).nestedComposition) {
+            QMenu menu(this);
+            QMenu* preRender = menu.addMenu(tr("Pre-Render"));
+            preRender->setObjectName(QStringLiteral("timelinePreRenderMenu"));
+            QAction* make = preRender->addAction(tr("Make Pre-Render(s)"));
+            QAction* remove = preRender->addAction(tr("Remove Pre-Render(s)"));
+            QAction* chosen = menu.exec(event->globalPos());
+            if (chosen == make || chosen == remove) {
+                emit shotPreRenderRequested(layerIndex, clipIndex, chosen == make);
+            }
+            return;
+        }
         QWidget::contextMenuEvent(event);
         return;
     }
@@ -882,6 +990,19 @@ void TimelineCanvas::mousePressEvent(QMouseEvent* event)
 
         int layerIndex = -1;
         int clipIndex = -1;
+        int effectIndex = -1;
+        if (transitionHandleAt(event->pos(), &layerIndex, &clipIndex, &effectIndex)) {
+            if (m_comp->layers()[layerIndex].locked) return;
+            m_transitionLayer = layerIndex;
+            m_transitionClip = clipIndex;
+            m_transitionEffect = effectIndex;
+            m_selLayer = layerIndex;
+            m_selClip = clipIndex;
+            emit clipSelected(layerIndex, clipIndex);
+            update();
+            event->accept();
+            return;
+        }
         ClipEdge edge = ClipEdge::None;
         if (clipAt(event->pos(), &layerIndex, &clipIndex, &edge)) {
             if (m_comp->layers()[layerIndex].locked) return;
@@ -929,6 +1050,13 @@ void TimelineCanvas::mouseMoveEvent(QMouseEvent* event)
         event->accept();
         return;
     }
+    if (m_transitionLayer >= 0) {
+        if (dragTransitionTo(timeAtX(event->pos().x()))) {
+            update();
+        }
+        event->accept();
+        return;
+    }
 
     if (event->buttons() & Qt::LeftButton) {
         m_playhead = timeAtX(event->pos().x());
@@ -969,7 +1097,141 @@ void TimelineCanvas::mouseReleaseEvent(QMouseEvent* event)
         event->accept();
         return;
     }
+    if (m_transitionLayer >= 0) {
+        m_transitionLayer = m_transitionClip = m_transitionEffect = -1;
+        emit clipsEdited();
+        event->accept();
+        return;
+    }
     QWidget::mouseReleaseEvent(event);
+}
+
+void TimelineCanvas::dragEnterEvent(QDragEnterEvent* event)
+{
+    const QMimeData* mime = event->mimeData();
+    if (mime->hasFormat(QString::fromLatin1(kEffectMimeType))
+        || mime->hasFormat(QString::fromLatin1(kMediaMimeType))
+        || mime->hasFormat(QString::fromLatin1(kCompositeShotMimeType))) {
+        event->acceptProposedAction();
+    }
+}
+
+void TimelineCanvas::dragMoveEvent(QDragMoveEvent* event)
+{
+    int layerIndex = -1, clipIndex = -1;
+    const QPoint pos = event->position().toPoint();
+    // Media and composite shots land anywhere: they make a layer of their own.
+    if (m_comp && (event->mimeData()->hasFormat(QString::fromLatin1(kMediaMimeType))
+                   || event->mimeData()->hasFormat(QString::fromLatin1(kCompositeShotMimeType)))) {
+        event->acceptProposedAction();
+        return;
+    }
+    if (event->mimeData()->hasFormat(QString::fromLatin1(kEffectMimeType))
+        && clipAt(pos, &layerIndex, &clipIndex, nullptr)
+        && !m_comp->layers().at(layerIndex).locked) {
+        event->acceptProposedAction();
+    } else {
+        event->ignore();
+    }
+}
+
+void TimelineCanvas::dropEvent(QDropEvent* event)
+{
+    int layerIndex = -1, clipIndex = -1;
+    const QPoint pos = event->position().toPoint();
+    const QMimeData* mime = event->mimeData();
+    const bool media = mime->hasFormat(QString::fromLatin1(kMediaMimeType));
+    if (m_comp && (media || mime->hasFormat(QString::fromLatin1(kCompositeShotMimeType)))) {
+        // Above the layer whose rows it is let go over (its property rows
+        // included), below them all past the last row, on top above the first.
+        int above = -1;
+        int bottom = 0;
+        for (const TimelineLane& lane : m_lanes) {
+            bottom = qMax(bottom, lane.y + lane.height);
+            if (lane.y > pos.y()) break;
+            if (lane.layerIndex >= 0) above = lane.layerIndex;
+        }
+        if (!m_lanes.isEmpty() && pos.y() >= bottom) above = m_comp->layers().size();
+        const double seconds = qMax(0.0, timeAtX(pos.x()));
+        event->acceptProposedAction();
+        if (media)
+            emit mediaDropped(QString::fromUtf8(mime->data(QString::fromLatin1(kMediaMimeType))), above, seconds);
+        else
+            emit compositeShotDropped(QString::fromUtf8(mime->data(QString::fromLatin1(kCompositeShotMimeType))),
+                                      above, seconds);
+        return;
+    }
+    const QByteArray id = event->mimeData()->data(QString::fromLatin1(kEffectMimeType));
+    if (id.isEmpty() || !clipAt(pos, &layerIndex, &clipIndex, nullptr)
+        || m_comp->layers().at(layerIndex).locked) {
+        event->ignore();
+        return;
+    }
+    event->acceptProposedAction();
+    m_selLayer = layerIndex;
+    m_selClip = clipIndex;
+    emit clipSelected(layerIndex, clipIndex);
+    emit effectDropped(layerIndex, clipIndex, QString::fromUtf8(id), timeAtX(pos.x()));
+    update();
+}
+
+bool TimelineCanvas::transitionHandleAt(const QPoint& pos, int* layerIndex, int* clipIndex,
+                                        int* effectIndex) const
+{
+    if (!m_comp || m_tool != EditorTool::Select) return false;
+    constexpr int kGrab = 4;
+    for (const TimelineLane& lane : m_lanes) {
+        if (lane.isParameterRow() || lane.isTransformRow()) continue;
+        if (lane.layerIndex < 0 || lane.layerIndex >= m_comp->layers().size()) continue;
+        if (pos.y() < lane.y || pos.y() >= lane.y + lane.height) continue;
+        const composition::Layer& layer = m_comp->layers().at(lane.layerIndex);
+        const double tolerance = 0.5 / qMax(1.0, frameRate());
+        for (const auto& window : composition::transitionWindows(layer, tolerance, nullptr)) {
+            // Only edges that are not also a clip edge: those stay trim
+            // handles. An overlap transition is sized by the clips themselves.
+            const composition::Clip& owner = layer.clips.at(window.ownerClip);
+            const bool atStartOfClip = qAbs(window.start - owner.startSeconds) <= tolerance;
+            const bool atEndOfClip = qAbs(window.end - owner.endSeconds()) <= tolerance;
+            const bool overlap = window.fromClip >= 0 && window.toClip >= 0 && atStartOfClip;
+            if (overlap) continue;
+            const bool left = !atStartOfClip && qAbs(pos.x() - xForTime(window.start)) <= kGrab;
+            const bool right = !atEndOfClip && qAbs(pos.x() - xForTime(window.end)) <= kGrab;
+            if (left || right) {
+                *layerIndex = lane.layerIndex;
+                *clipIndex = window.ownerClip;
+                *effectIndex = window.effectIndex;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool TimelineCanvas::dragTransitionTo(double seconds)
+{
+    if (!m_comp || m_transitionLayer < 0 || m_transitionLayer >= m_comp->layers().size()) {
+        return false;
+    }
+    composition::Layer& layer = m_comp->layerRef(m_transitionLayer);
+    if (m_transitionClip < 0 || m_transitionClip >= layer.clips.size()) return false;
+    composition::Clip& clip = layer.clips[m_transitionClip];
+    if (m_transitionEffect < 0 || m_transitionEffect >= clip.effects.size()) return false;
+    composition::Effect& effect = clip.effects[m_transitionEffect];
+    const double tolerance = 0.5 / qMax(1.0, frameRate());
+    double length = effect.transitionSeconds;
+    if (effect.transitionEdge == composition::TransitionEdge::Out) {
+        length = clip.endSeconds() - seconds;
+    } else if (composition::transitionPredecessor(layer, m_transitionClip, tolerance) < 0) {
+        length = seconds - clip.startSeconds;
+    } else {
+        length = 2.0 * qAbs(seconds - clip.startSeconds); // centred on the cut
+    }
+    // Whole frames, at least one, and never longer than the clip.
+    const double fps = qMax(1.0, frameRate());
+    length = qBound(1.0 / fps, qRound(length * fps) / fps, qMax(1.0 / fps, clip.durationSeconds));
+    if (qFuzzyCompare(length, effect.transitionSeconds)) return false;
+    effect.transitionSeconds = length;
+    return true;
 }
 
 void TimelineCanvas::setTool(EditorTool tool)
@@ -1302,7 +1564,9 @@ void TimelineCanvas::updateToolCursor(const QPoint& pos)
 {
     // The pointer says what the tool will do before the button goes down,
     // which is the only hint the strip's icons do not already give.
-    if (keyFrameAt(pos, nullptr, nullptr)) {
+    int transitionLayer = -1, transitionClip = -1, transitionEffect = -1;
+    if (keyFrameAt(pos, nullptr, nullptr)
+        || transitionHandleAt(pos, &transitionLayer, &transitionClip, &transitionEffect)) {
         setCursor(Qt::SizeHorCursor);
         return;
     }
@@ -1461,6 +1725,9 @@ TimelineWidget::TimelineWidget(QWidget* parent)
         QWidget#timelineEditorPage QTreeWidget { background:#222222; border:0; outline:0; }
         QWidget#timelineEditorPage QTreeWidget::item { height:23px; padding:0; border-bottom:1px solid #242424; }
         QWidget#timelineEditorPage QTreeWidget::item:selected { background:#566873; }
+        QWidget#timelineEditorPage QTreeWidget::branch { background:#222222; }
+        QWidget#timelineEditorPage QTreeWidget::branch:has-children:closed { image:url(:/icons/caret-right.svg); }
+        QWidget#timelineEditorPage QTreeWidget::branch:has-children:open { image:url(:/icons/caret-down.svg); }
         QWidget#timelineEditorPage QToolButton { padding:0; border:0; border-radius:0; background:transparent; }
         QWidget#timelineEditorPage QToolButton:hover { background:#454545; }
         QWidget#timelineEditorPage QToolButton:checked { background:#009fdb; }
@@ -1479,7 +1746,8 @@ TimelineWidget::TimelineWidget(QWidget* parent)
         QTabBar#timelineCompositionTabs::tab:hover { color:#e0e0e0; background:#303030; }
         QTabBar#timelineCompositionTabs::tab:selected { color:#ffffff; background:#222222; border-bottom:1px solid #12b0ff; }
         QTabBar#timelineCompositionTabs[startPageActive="true"]::tab:selected { color:#a9a9a9; background:#1b1b1b; border-bottom:0; }
-        QTabBar#timelineCompositionTabs::close-button { subcontrol-position:right; width:12px; height:12px; }
+        QTabBar#timelineCompositionTabs::close-button { subcontrol-position:right; width:12px; height:12px; image:url(:/icons/tab-close.svg); }
+        QTabBar#timelineCompositionTabs::close-button:hover { background:#454545; }
         QSlider#timelineZoomSlider::groove:horizontal { height:3px; background:#111111; border:1px solid #363636; }
         QSlider#timelineZoomSlider::handle:horizontal { width:8px; margin:-4px 0; background:#d1d1d1; border-radius:4px; }
     )"));
@@ -1547,7 +1815,7 @@ TimelineWidget::TimelineWidget(QWidget* parent)
         connect(action, &QAction::triggered, this, [this, kind] { emit newLayerRequested(kind); });
     }
     m_newLayerButton->setMenu(layerMenu);
-    form.toolButtonMakeCompositeShot->setIcon(QIcon(QStringLiteral(":/icons/link.svg")));
+    form.toolButtonMakeCompositeShot->setIcon(QIcon(QStringLiteral(":/icons/make-composite.svg")));
     connect(form.toolButtonMakeCompositeShot, &QToolButton::clicked,
             this, &TimelineWidget::makeCompositeShotRequested);
 
@@ -1601,8 +1869,8 @@ TimelineWidget::TimelineWidget(QWidget* parent)
     const ToolDef visibleTools[] = {
         {EditorTool::Select, form.toolButtonPointer, "pointer", QKeySequence(Qt::Key_V)},
         {EditorTool::Hand, form.toolButtonHand, "hand", QKeySequence(Qt::Key_H)},
-        {EditorTool::Slice, form.toolButtonSlice, "slice", QKeySequence(Qt::Key_C)},
-        {EditorTool::Stretch, form.toolButtonStretch, "stretch", QKeySequence(Qt::Key_S)},
+        {EditorTool::Slice, form.toolButtonSlice, "timeline-slice", QKeySequence(Qt::Key_C)},
+        {EditorTool::Stretch, form.toolButtonStretch, "timeline-stretch", QKeySequence(Qt::Key_S)},
     };
     m_toolButtons.resize(9);
     for (const auto& def : visibleTools) {
@@ -1678,6 +1946,21 @@ TimelineWidget::TimelineWidget(QWidget* parent)
     connect(m_canvas, &TimelineCanvas::timeScrubbed, this,
             [this](double time) { setPlayheadPosition(time); emit timeScrubbed(time); });
     connect(m_canvas, &TimelineCanvas::clipSelected, this, &TimelineWidget::clipSelected);
+    connect(m_canvas, &TimelineCanvas::shotPreRenderRequested, this,
+            &TimelineWidget::shotPreRenderRequested);
+    connect(m_canvas, &TimelineCanvas::mediaDropped, this, &TimelineWidget::mediaDropped);
+    connect(m_canvas, &TimelineCanvas::compositeShotDropped, this, &TimelineWidget::compositeShotDropped);
+    connect(m_canvas, &TimelineCanvas::effectDropped, this,
+            [this](int layerIndex, int clipIndex, const QString& pluginId, double seconds) {
+        if (!m_pluginManager) return;
+        const plugin::EffectSpec spec = m_pluginManager->spec(plugin::PluginId(pluginId));
+        if (!spec.id.isValid()) return;
+        editLayer(layerIndex, tr("Add %1").arg(spec.displayName),
+                  [spec, clipIndex, seconds](composition::Layer& layer) {
+            if (clipIndex < 0 || clipIndex >= layer.clips.size()) return;
+            addEffectToClip(layer.clips[clipIndex], spec, seconds);
+        }, true);
+    });
     connect(m_canvas, &TimelineCanvas::keyFrameDragged, this, &TimelineWidget::keyFramesChanged);
     connect(m_canvas, &TimelineCanvas::keyFramesEdited, this,
             [this] { finishModelEdit(tr("Move keyframe"), true); });
@@ -1873,6 +2156,8 @@ void TimelineWidget::selectLayer(int layerIndex)
 void TimelineWidget::setMediaManager(std::shared_ptr<media::MediaManager> media)
 {
     m_media = std::move(media);
+    if (!m_waveforms) m_waveforms = new media::WaveformCache(this);
+    if (m_canvas) m_canvas->setWaveformSource(m_media, m_waveforms);
     rebuildTree();
 }
 
@@ -1913,7 +2198,7 @@ QWidget* TimelineWidget::buildToolStrip(QWidget* parent)
          "toolButtonPointer", QKeySequence(Qt::Key_V)},
         {EditorTool::Hand, "hand", QT_TR_NOOP("Hand / pan (H)"),
          "toolButtonHand", QKeySequence(Qt::Key_H)},
-        {EditorTool::Slice, "slice", QT_TR_NOOP("Slice (C)"),
+        {EditorTool::Slice, "timeline-slice", QT_TR_NOOP("Slice (C)"),
          "toolButtonSlice", QKeySequence(Qt::Key_C)},
         {EditorTool::Slip, "slip", QT_TR_NOOP("Slip edit (Y)"),
          "toolButtonSlip", QKeySequence(Qt::Key_Y)},
@@ -1923,7 +2208,7 @@ QWidget* TimelineWidget::buildToolStrip(QWidget* parent)
          "toolButtonRipple", QKeySequence(Qt::Key_R)},
         {EditorTool::Roll, "roll", QT_TR_NOOP("Roll edit (E)"),
          "toolButtonRoll", QKeySequence(Qt::Key_E)},
-        {EditorTool::Stretch, "stretch", QT_TR_NOOP("Rate stretch (S)"),
+        {EditorTool::Stretch, "timeline-stretch", QT_TR_NOOP("Rate stretch (S)"),
          "toolButtonStretch", QKeySequence(Qt::Key_S)},
         {EditorTool::TrackSelect, "track-select-forward",
          QT_TR_NOOP("Track select forwards (A)"), "toolButtonTrackSelect",

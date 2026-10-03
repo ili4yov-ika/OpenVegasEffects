@@ -1,12 +1,26 @@
 #pragma once
+#include <QApplication>
 #include <QStyledItemDelegate>
 #include <QPainter>
 namespace openvegas::ui {
+// Set on rows whose whole first column is covered by a transparent item
+// widget (the layer header): only the row background and selection are
+// painted, the text stays in the model for search and accessibility.
+constexpr int kTimelineHeaderRowRole = Qt::UserRole + 5;
 class TimelineRowDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
     void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
         const auto row = index.siblingAtColumn(0);
+        if (row.data(kTimelineHeaderRowRole).toBool()) {
+            QStyleOptionViewItem opt(option);
+            initStyleOption(&opt, index);
+            opt.text.clear(); opt.icon = QIcon();
+            const QWidget* widget = option.widget;
+            (widget ? widget->style() : QApplication::style())
+                ->drawControl(QStyle::CE_ItemViewItem, &opt, painter, widget);
+            return;
+        }
         if (!row.data(Qt::UserRole + 3).isValid() && !row.data(Qt::UserRole + 4).isValid()) {
             QStyledItemDelegate::paint(painter, option, index); return;
         }

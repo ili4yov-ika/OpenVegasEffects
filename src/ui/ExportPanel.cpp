@@ -58,6 +58,11 @@ ExportPanel::ExportPanel(QWidget* parent)
     connect(m_ui->pushButtonExportContents, &QPushButton::clicked, this, [this] {
         emit exportContentsRequested(buildOutputPath(extensionForPreset()));
     });
+    connect(m_ui->pushButtonAddToQueue, &QPushButton::clicked, this, [this] {
+        emit addToQueueRequested(buildOutputPath(extensionForPreset()));
+        QSettings settings = exportSettings();
+        settings.setValue(kSettingKey, exportDirectory());
+    });
 
     // Restore the last-used export directory (reference ExportDirectory setting).
     const QSettings settings = exportSettings();
@@ -74,6 +79,13 @@ ExportPanel::ExportPanel(QWidget* parent)
 ExportPanel::~ExportPanel()
 {
     delete m_ui;
+}
+
+void ExportPanel::setQueueWidget(QWidget* widget)
+{
+    if (!widget) return;
+    // Above the progress log, which keeps the space it has.
+    m_ui->rootLayout->insertWidget(m_ui->rootLayout->indexOf(m_ui->plainTextProgress), widget, 3);
 }
 
 QString ExportPanel::exportDirectory() const

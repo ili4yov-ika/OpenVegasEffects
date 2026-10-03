@@ -21,6 +21,12 @@ struct VideoInfo
     bool valid = false;
     double durationSeconds = 0.0;
     QSize frameSize;
+    // The stream's sample aspect ratio - width of a pixel over its height:
+    // 10/11 for 4:3 NTSC DV, 4/3 for anamorphic HDV - and its frame rate (0
+    // when the container does not say).
+    double pixelAspect = 1.0;
+    double frameRate = 0.0;
+    MediaStreams streams;
 };
 
 // Reads duration and resolution from a video file.
@@ -28,12 +34,13 @@ struct VideoInfo
 // libVLC parses a file without opening a player: libvlc_media_parse_with_options
 // reads the container and its track list, and the call is bounded by a timeout,
 // so a file the demuxer cannot handle fails instead of hanging the caller. The
-// resolution needs a player, which is why this opens one briefly with video
-// rendered into nothing.
+// resolution normally comes from the parsed video track; a player with discarded
+// pictures is only opened when the track list has no dimensions. Audio-only
+// imports set includeVideo=false and never open this fallback video player.
 //
 // Unlike the Qt Multimedia version this replaced, it does not need an event
 // loop and does not have to run on the GUI thread.
-VideoInfo probeVideo(const QString& filePath, int timeoutMs = 4000);
+VideoInfo probeVideo(const QString& filePath, int timeoutMs = 4000, bool includeVideo = true);
 
 // A video file held open for repeated frame reads.
 //
@@ -49,7 +56,9 @@ VideoInfo probeVideo(const QString& filePath, int timeoutMs = 4000);
 class VideoDecoder
 {
 public:
-    explicit VideoDecoder(const QString& filePath, int timeoutMs = 4000);
+    // `allowHardware` false keeps this file off the GPU decoder whatever
+    // Options says (the asset's "Use hardware decoding if available").
+    explicit VideoDecoder(const QString& filePath, int timeoutMs = 4000, bool allowHardware = true);
     ~VideoDecoder();
 
     VideoDecoder(const VideoDecoder&) = delete;
@@ -77,6 +86,7 @@ private:
 
     QString m_filePath;
     int m_timeoutMs;
+    bool m_allowHardware = true;
     bool m_ready = false;
 
     libvlc_media_player_t* m_player = nullptr;

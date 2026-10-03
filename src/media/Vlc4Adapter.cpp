@@ -30,6 +30,11 @@ struct Functions {
     decltype(&::libvlc_parser_destroy) parserDestroy = nullptr;
     decltype(&::libvlc_parser_queue) parserQueue = nullptr;
     decltype(&::libvlc_parser_task_release) taskRelease = nullptr;
+    decltype(&::libvlc_media_get_tracklist) tracklist = nullptr;
+    decltype(&::libvlc_media_get_codec_description) codecDescription = nullptr;
+    decltype(&::libvlc_media_tracklist_count) tracklistCount = nullptr;
+    decltype(&::libvlc_media_tracklist_at) tracklistAt = nullptr;
+    decltype(&::libvlc_media_tracklist_delete) tracklistDelete = nullptr;
 } f;
 ::libvlc_media_player_t* native(libvlc_media_player_t* p) { return reinterpret_cast<::libvlc_media_player_t*>(p); }
 ::libvlc_media_t* native(libvlc_media_t* m) { return reinterpret_cast<::libvlc_media_t*>(m); }
@@ -134,6 +139,67 @@ bool bindVlc4(VlcApi& api, const std::function<void*(const char*)>& resolve) {
     api.libvlc_media_get_duration = [](libvlc_media_t* media) -> libvlc_time_t { return f.duration(native(media)) / 1000; };
     api.libvlc_media_player_set_time = [](libvlc_media_player_t* player, libvlc_time_t time) { f.setTime(native(player), time * 1000, false); };
     api.libvlc_media_player_set_position = [](libvlc_media_player_t* player, float position) { f.setPosition(native(player), position, false); };
+    // Track details are optional: without them media are taken as square.
+    if (symbol(resolve, "libvlc_media_get_tracklist", f.tracklist)
+        && symbol(resolve, "libvlc_media_tracklist_count", f.tracklistCount)
+        && symbol(resolve, "libvlc_media_tracklist_at", f.tracklistAt)
+        && symbol(resolve, "libvlc_media_tracklist_delete", f.tracklistDelete)) {
+        symbol(resolve, "libvlc_media_get_codec_description", f.codecDescription);
+        api.mediaStreams = [](libvlc_media_t* media) {
+            MediaStreams result;
+            for (const auto type : {libvlc_track_video, libvlc_track_audio}) {
+                auto* list = f.tracklist(native(media), type);
+                if (!list) continue;
+                for (size_t i = 0; i < f.tracklistCount(list); ++i) {
+                    const auto* track = f.tracklistAt(list, i);
+                    if (!track) continue;
+                    const QString format = codecFourcc(track->i_original_fourcc
+                                                       ? track->i_original_fourcc : track->i_codec);
+                    const char* description = f.codecDescription
+                        ? f.codecDescription(type, track->i_codec) : nullptr;
+                    const QString codec = description ? QString::fromUtf8(description)
+                                                       : codecFourcc(track->i_codec);
+                    if (type == libvlc_track_video && !result.hasVideo) {
+                        result.hasVideo = true;
+                        result.videoFormat = format;
+                        result.videoCodec = codec;
+                        if (track->u.video)
+                            result.videoSize = QSize(int(track->u.video->i_width), int(track->u.video->i_height));
+                    } else if (type == libvlc_track_audio) {
+                        AudioStreamInfo audio;
+                        audio.format = format;
+                        audio.codec = codec;
+                        audio.language = QString::fromUtf8(track->psz_language ? track->psz_language : "");
+                        audio.name = QString::fromUtf8(track->psz_description ? track->psz_description : "");
+                        if (track->u.audio) {
+                            audio.channels = track->u.audio->i_channels;
+                            audio.sampleRate = track->u.audio->i_rate;
+                        }
+                        result.audio.append(audio);
+                    }
+                }
+                f.tracklistDelete(list);
+            }
+            return result;
+        };
+        api.videoTrackFormat = [](libvlc_media_t* media, unsigned* sarNum, unsigned* sarDen,
+                                  unsigned* rateNum, unsigned* rateDen) -> bool {
+            ::libvlc_media_tracklist_t* list = f.tracklist(native(media), libvlc_track_video);
+            if (!list) return false;
+            bool found = false;
+            for (size_t i = 0; i < f.tracklistCount(list) && !found; ++i) {
+                const ::libvlc_media_track_t* track = f.tracklistAt(list, i);
+                if (!track || !track->u.video) continue;
+                *sarNum = track->u.video->i_sar_num;
+                *sarDen = track->u.video->i_sar_den;
+                *rateNum = track->u.video->i_frame_rate_num;
+                *rateDen = track->u.video->i_frame_rate_den;
+                found = true;
+            }
+            f.tracklistDelete(list);
+            return found;
+        };
+    }
     api.libvlc_media_parse_with_options = [](libvlc_media_t* media, int, int timeoutMs) -> int {
         ::libvlc_parser_cfg config{}; config.timeout = int64_t(timeoutMs) * 1000;
         auto* parser = f.parserNew(reinterpret_cast<::libvlc_instance_t*>(vlcInstance()), &config);

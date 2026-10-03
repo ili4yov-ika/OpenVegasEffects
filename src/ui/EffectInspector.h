@@ -16,6 +16,7 @@ class QUndoStack;
 
 namespace openvegas {
 namespace plugin { class PluginManager; }
+namespace media { class MediaManager; }
 namespace ui {
 
 // Inspector for the currently selected timeline layer/clip. It intentionally
@@ -30,14 +31,21 @@ public:
     void setPluginManager(plugin::PluginManager* pluginManager);
     void setComposition(std::shared_ptr<composition::Composition> comp);
     void setUndoStack(QUndoStack* stack) { m_undoStack = stack; }
+    // Layer sizes for the particle-texture warning come from the media.
+    void setMediaManager(std::shared_ptr<media::MediaManager> media) { m_mediaManager = std::move(media); }
     void setSelection(int layerIndex, int clipIndex);
     void refresh();
+    // The shown values read again, editors kept (a module set some itself).
+    void refreshValues();
     void setCurrentTime(double seconds);
 
 signals:
     void effectParamsChanged();
     void keyFramesChanged();
     void motionTrackingRequested(int layerIndex, int trackIndex);
+    // The user set an effect parameter here (not undo/redo): modules that
+    // live on an instance of their own are told (Notify 7).
+    void effectParameterEdited(int layerIndex, int clipIndex, int effectIndex, int parameterIndex);
 
 private:
     using TransformProp = composition::TransformProperty;
@@ -47,7 +55,9 @@ private:
     void buildEffects(const composition::Layer& layer, bool behaviors = false);
     void buildTransformSection(const composition::Layer& layer, int frame);
     void applySearch();
-    void refreshValues();
+    // Rows of controls a native module switched off are hidden, the others
+    // shown again (plugin::nativeControlShown).
+    void applyControlStates();
     void updateHeader();
 
     composition::Layer* layerRef();
@@ -58,7 +68,8 @@ private:
     static double transformValue(const composition::Layer& layer, TransformProp prop,
                                  int axis, int frame);
 
-    void editModel(const QString& title, const QString& mergeKey,
+    // False when the edit changed nothing (or the layer is locked).
+    bool editModel(const QString& title, const QString& mergeKey,
                    const std::function<void(composition::Layer&)>& edit,
                    bool keyFrames = false, bool rebuild = false);
     void applyParamValue(int effectIndex, int paramIndex, const QVariant& value);
@@ -68,6 +79,7 @@ private:
 
     plugin::PluginManager* m_pluginManager = nullptr;
     std::shared_ptr<composition::Composition> m_comp;
+    std::shared_ptr<media::MediaManager> m_mediaManager;
     QUndoStack* m_undoStack = nullptr;
     int m_layerIndex = -1;
     int m_clipIndex = -1;

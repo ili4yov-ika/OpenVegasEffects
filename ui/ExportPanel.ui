@@ -61,6 +61,12 @@
       </widget>
      </item>
      <item>
+      <widget class="QPushButton" name="pushButtonAddToQueue">
+       <property name="text"><string>Add to Queue</string></property>
+       <property name="toolTip"><string>Queue the shot's contents for export with this preset</string></property>
+      </widget>
+     </item>
+     <item>
       <spacer name="buttonSpacer">
        <property name="orientation"><enum>Qt::Horizontal</enum></property>
        <property name="sizeHint" stdset="0">

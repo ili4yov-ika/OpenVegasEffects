@@ -1,5 +1,10 @@
 #include "ui/TimelineWidget.h"
 #include "composition/CompositionState.h"
+#include "ui/CameraRule.h"
+#include "ui/EffectPlacement.h"
+#include "ui/TextureWarning.h"
+#include "ui/Theme.h"
+#include "ui/CompositionSettingsDialog.h"
 #include "ui/TimelineParameterEditor.h"
 #include "ui/TimelineValueGraphView.h"
 #include "plugin/PluginManager.h"
@@ -12,32 +17,29 @@
 #include <QPolygonF>
 #include <QSettings>
 #include <QScrollBar>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDoubleSpinBox>
+#include <QPixmap>
+#include <QToolButton>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QGroupBox>
 
 namespace openvegas::ui {
 namespace {
 using namespace composition;
-struct CompositionSettings {
-    QString name;
-    int width, height, numerator, denominator;
-    double duration;
-    explicit CompositionSettings(const Composition& c)
-        : name(c.name()), width(c.width()), height(c.height()), numerator(c.fpsNumerator()),
-          denominator(c.fpsDenominator()), duration(c.durationSeconds()) {}
-    void apply(Composition& c) const {
-        c.setName(name); c.setSize(width, height); c.setFrameRate(numerator, denominator); c.setDurationSeconds(duration);
-    }
-};
+// The shot's Composite Shot Properties, taken whole for Undo.
+using CompositionSettings = CompositionSettingsDialog::Values;
 class CompositionSettingsEdit : public QUndoCommand {
 public:
     CompositionSettingsEdit(std::shared_ptr<Composition> comp, CompositionSettings before,
                             CompositionSettings after, std::function<void()> notify)
         : QUndoCommand(QObject::tr("Composition properties")), m_comp(std::move(comp)),
           m_before(before), m_after(after), m_notify(std::move(notify)) {}
-    void undo() override { m_before.apply(*m_comp); m_notify(); }
-    void redo() override { m_after.apply(*m_comp); m_notify(); }
+    void undo() override { CompositionSettingsDialog::apply(m_before, *m_comp); m_notify(); }
+    void redo() override { CompositionSettingsDialog::apply(m_after, *m_comp); m_notify(); }
 private:
     std::shared_ptr<Composition> m_comp;
     CompositionSettings m_before, m_after;
@@ -87,11 +89,45 @@ void TimelineWidget::finishModelEdit(const QString& title, bool rebuild)
     m_canvas->update(); m_valueGraphView->update();
     emit keyFramesChanged();
 }
+int TimelineWidget::addEffect(int layerIndex, int clipIndex, const plugin::EffectSpec& spec,
+                              double seconds)
+{
+    if (!m_comp || layerIndex < 0 || layerIndex >= m_comp->layers().size()
+        || m_comp->layers()[layerIndex].locked) {
+        return -1;
+    }
+    int added = -1;
+    editLayer(layerIndex, tr("Add %1").arg(spec.displayName),
+              [&](composition::Layer& layer) {
+        if (clipIndex < 0 || clipIndex >= layer.clips.size()) return;
+        added = addEffectToClip(layer.clips[clipIndex], spec, seconds);
+    }, true);
+    return added;
+}
+
 void TimelineWidget::editLayer(int index, const QString& title,
     const std::function<void(composition::Layer&)>& edit, bool rebuild)
 {
     if (m_rebuilding || !m_comp || index < 0 || index >= m_comp->layers().size()) return;
     beginModelEdit(); edit(m_comp->layerRef(index)); finishModelEdit(title, rebuild);
+}
+void TimelineWidget::setLayerDimension(int index, composition::LayerDimension dimension)
+{
+    if (m_rebuilding || !m_comp || index < 0 || index >= m_comp->layers().size()
+        || m_comp->layers()[index].locked) return;
+    bool addCamera = false;
+    if (dimension == LayerDimension::ThreeD && !compositionIs3D(*m_comp)) {
+        if (!confirmAddCamera(this, AddCameraReason::SetDimension)) {
+            scheduleRefresh();   // the toggle goes back to what the layer is
+            return;
+        }
+        addCamera = true;
+    }
+    // One record for both, as the reference's "Set Layer Dimension(s)" does.
+    beginModelEdit();
+    if (addCamera) m_comp->insertLayer(m_comp->layers().size(), newCameraLayer(*m_comp));
+    m_comp->layerRef(index).dimension = dimension;
+    finishModelEdit(QCoreApplication::translate("CompositionTools", "Set Layer Dimension(s)"), true);
 }
 void TimelineWidget::scheduleRefresh()
 {
@@ -174,7 +210,8 @@ void TimelineWidget::buildParameterEditor(QTreeWidgetItem* row, int layerIndex, 
         return value.isValid() ? value : QVariant(param.defaultValue);
     };
     const int generation = m_treeGeneration;
-    const auto write = [this, row, layerIndex, clipIndex, effectIndex, p, param, read, generation](QVariant value) {
+    const auto write = [this, row, layerIndex, clipIndex, effectIndex, p, param, read, generation,
+                        spec](QVariant value) {
         if (m_rebuilding || generation != m_treeGeneration) return;
         if (read().toString() == value.toString() || m_comp->layers()[layerIndex].locked) return;
         m_tree->setCurrentItem(row);
@@ -189,6 +226,9 @@ void TimelineWidget::buildParameterEditor(QTreeWidgetItem* row, int layerIndex, 
                 effect.parameterValues[p] = value.toString();
             }
         });
+        if (param.type == "layer") {
+            warnIfOversizedTexture(window(), spec, *m_comp, value.toString(), m_media.get());
+        }
     };
     auto* editor = timelineParameterEditor(m_tree, param,
         QStringLiteral("timelineParam_%1_%2_%3_%4").arg(layerIndex).arg(clipIndex).arg(effectIndex).arg(p), read, write, m_valueReaders);
@@ -198,41 +238,51 @@ void TimelineWidget::buildParameterEditor(QTreeWidgetItem* row, int layerIndex, 
 
 void TimelineWidget::buildTransformRows(QTreeWidgetItem* parent, int index)
 {
+    for (auto prop : composition::transformPropertiesFor(m_comp->layers()[index].dimension))
+        buildTransformRow(parent, index, prop);
+}
+
+void TimelineWidget::buildTransformRow(QTreeWidgetItem* parent, int index,
+                                       composition::TransformProperty prop)
+{
     const auto& layer = m_comp->layers()[index];
-    for (auto prop : composition::transformPropertiesFor(layer.dimension)) {
-        auto* row = new QTreeWidgetItem(parent, {QCoreApplication::translate("Transform", composition::transformPropertyName(prop, layer.dimension))});
-        row->setData(0, Qt::UserRole, index);
-        row->setData(0, Qt::UserRole + 4, int(prop));
-        if (layer.transform.curve(prop, 0)) row->setIcon(0, QIcon(":/icons/key-frame-off.svg"));
-        auto* axes = new QWidget(m_tree);
-        auto* layout = new QHBoxLayout(axes); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(2);
-        for (int axis = 0; axis < composition::axisCount(prop, layer.dimension); ++axis) {
-            plugin::EffectParameterSpec spec;
-            spec.type = "double"; spec.decimals = 1; spec.displayName = row->text(0);
-            if (prop == composition::TransformProperty::Opacity || prop == composition::TransformProperty::Scale) spec.unit = "%";
-            if (prop == composition::TransformProperty::Opacity) { spec.minimum = 0; spec.maximum = 100; }
-            auto read = [this, index, prop, axis]() -> QVariant {
-                const auto& l = m_comp->layers()[index];
-                return prop == composition::TransformProperty::Opacity ? l.transform.opacityAt(currentFrame(), l.opacity) * 100.
-                    : l.transform.valueAt(prop, axis, currentFrame());
-            };
-            const int generation = m_treeGeneration;
-            auto write = [this, row, index, prop, axis, read, generation](QVariant value) {
-                if (m_rebuilding || generation != m_treeGeneration) return;
-                if (read().toDouble() == value.toDouble() || m_comp->layers()[index].locked) return;
-                m_tree->setCurrentItem(row);
-                editLayer(index, tr("Set %1").arg(row->text(0)), [=](composition::Layer& l) {
-                    auto* curve = l.transform.curve(prop, axis);
-                    if (curve && !curve->isEmpty()) curve->set(currentFrame(), value.toDouble());
-                    else composition::setLayerTransformValue(l, prop, axis, value.toDouble());
-                });
-            };
-            layout->addWidget(timelineParameterEditor(axes, spec,
-                QStringLiteral("timelineTransform_%1_%2_%3").arg(index).arg(int(prop)).arg(axis), read, write, m_valueReaders), 1);
+    auto* row = new QTreeWidgetItem(parent, {QCoreApplication::translate("Transform", composition::transformPropertyName(prop, layer.dimension))});
+    row->setData(0, Qt::UserRole, index);
+    row->setData(0, Qt::UserRole + 4, int(prop));
+    if (layer.transform.curve(prop, 0)) row->setIcon(0, QIcon(":/icons/key-frame-off.svg"));
+    auto* axes = new QWidget(m_tree);
+    auto* layout = new QHBoxLayout(axes); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(2);
+    for (int axis = 0; axis < composition::axisCount(prop, layer.dimension); ++axis) {
+        plugin::EffectParameterSpec spec;
+        spec.type = "double"; spec.decimals = 1; spec.displayName = row->text(0);
+        if (prop == composition::TransformProperty::Opacity || prop == composition::TransformProperty::Scale) spec.unit = "%";
+        if (prop == composition::TransformProperty::Opacity) { spec.minimum = 0; spec.maximum = 100; }
+        // The reference edits Level with a FloatEditor in "dB"; its range
+        // comes from the property and is not recovered, so it is wide.
+        if (prop == composition::TransformProperty::AudioLevel) {
+            spec.unit = "dB"; spec.minimum = -100; spec.maximum = 20;
         }
-        axes->setEnabled(!layer.locked);
-        m_tree->setItemWidget(row, 1, axes);
+        auto read = [this, index, prop, axis]() -> QVariant {
+            const auto& l = m_comp->layers()[index];
+            return prop == composition::TransformProperty::Opacity ? l.transform.opacityAt(currentFrame(), l.opacity) * 100.
+                : l.transform.valueAt(prop, axis, currentFrame());
+        };
+        const int generation = m_treeGeneration;
+        auto write = [this, row, index, prop, axis, read, generation](QVariant value) {
+            if (m_rebuilding || generation != m_treeGeneration) return;
+            if (read().toDouble() == value.toDouble() || m_comp->layers()[index].locked) return;
+            m_tree->setCurrentItem(row);
+            editLayer(index, tr("Set %1").arg(row->text(0)), [=](composition::Layer& l) {
+                auto* curve = l.transform.curve(prop, axis);
+                if (curve && !curve->isEmpty()) curve->set(currentFrame(), value.toDouble());
+                else composition::setLayerTransformValue(l, prop, axis, value.toDouble());
+            });
+        };
+        layout->addWidget(timelineParameterEditor(axes, spec,
+            QStringLiteral("timelineTransform_%1_%2_%3").arg(index).arg(int(prop)).arg(axis), read, write, m_valueReaders), 1);
     }
+    axes->setEnabled(!layer.locked);
+    m_tree->setItemWidget(row, 1, axes);
 }
 
 QVector<composition::KeyFrameList*> TimelineWidget::selectedCurves()
@@ -307,9 +357,7 @@ void TimelineWidget::showEffectMenu(int layer, bool behaviors, QWidget* anchor)
         connect(action, &QAction::triggered, this, [this, layer, clip, spec] {
             editLayer(layer, tr("Add %1").arg(spec.displayName), [spec, clip](composition::Layer& l) {
                 if (clip < 0 || clip >= l.clips.size()) return;
-                composition::Effect e; e.pluginId = spec.id; e.name = spec.displayName;
-                for (const auto& param : spec.parameters) e.parameterValues.append(param.defaultValue);
-                l.clips[clip].effects.append(e);
+                ui::addEffectToClip(l.clips[clip], spec, l.clips[clip].startSeconds);
             }, true);
         });
     }
@@ -321,33 +369,15 @@ void TimelineWidget::showEffectMenu(int layer, bool behaviors, QWidget* anchor)
 void TimelineWidget::editCompositionProperties()
 {
     if (!m_comp) return;
-    QDialog dialog(this); dialog.setWindowTitle(tr("Composite Shot Properties"));
-    dialog.setObjectName("timelineCompositionProperties");
-    auto* form = new QFormLayout(&dialog);
-    auto* name = new QLineEdit(m_comp->name(), &dialog); name->setObjectName("compositionName");
-    form->addRow(tr("Name"), name);
-    const auto integer = [&](const QString& label, const char* object, int value, int maximum) {
-        auto* editor = new QSpinBox(&dialog); editor->setObjectName(object);
-        editor->setRange(1, maximum); editor->setValue(value); form->addRow(label, editor); return editor;
-    };
-    auto* width = integer(tr("Width (px)"), "compositionWidth", m_comp->width(), 16384);
-    auto* height = integer(tr("Height (px)"), "compositionHeight", m_comp->height(), 16384);
-    auto* numerator = integer(tr("Frame rate numerator"), "compositionFpsNumerator", m_comp->fpsNumerator(), 240000);
-    auto* denominator = integer(tr("Frame rate denominator"), "compositionFpsDenominator", m_comp->fpsDenominator(), 10000);
-    auto* duration = new QDoubleSpinBox(&dialog); duration->setObjectName("compositionDuration");
-    duration->setDecimals(3); duration->setRange(.001, 86400); duration->setValue(m_comp->durationSeconds());
-    form->addRow(tr("Duration (seconds)"), duration);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    form->addRow(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    const CompositionSettings before = CompositionSettingsDialog::fromComposition(*m_comp);
+    // Match Timeline takes the editor timeline's format; without one set,
+    // the shot's own.
+    CompositionSettings timeline = before;
+    if (m_matchFormat.width > 0) timeline = m_matchFormat;
+    CompositionSettingsDialog dialog(before, timeline, this);
     if (dialog.exec() != QDialog::Accepted) return;
-    CompositionSettings before(*m_comp), after(before);
-    after.name = name->text().trimmed().isEmpty() ? before.name : name->text().trimmed();
-    after.width = width->value(); after.height = height->value(); after.duration = duration->value();
-    after.numerator = numerator->value(); after.denominator = denominator->value();
-    if (after.name == before.name && after.width == before.width && after.height == before.height
-        && after.duration == before.duration && after.numerator == before.numerator && after.denominator == before.denominator) return;
+    const CompositionSettings after = dialog.values();
+    if (after == before) return;
     const QPointer<TimelineWidget> self(this);
     auto notify = [self] {
         if (!self) return;
@@ -357,7 +387,15 @@ void TimelineWidget::editCompositionProperties()
         emit self->compositionPropertiesChanged();
     };
     if (m_undoStack) m_undoStack->push(new CompositionSettingsEdit(m_comp, before, after, notify));
-    else { after.apply(*m_comp); notify(); }
+    else { CompositionSettingsDialog::apply(after, *m_comp); notify(); }
+}
+
+void TimelineWidget::setMatchFormat(int width, int height, int fpsNumerator, int fpsDenominator)
+{
+    m_matchFormat.width = width;
+    m_matchFormat.height = height;
+    m_matchFormat.fpsNumerator = fpsNumerator;
+    m_matchFormat.fpsDenominator = qMax(1, fpsDenominator);
 }
 
 void TimelineWidget::setCompositionDuration(double seconds)
@@ -369,11 +407,12 @@ void TimelineWidget::setCompositionDuration(double seconds)
                            ? double(m_comp->fpsNumerator()) / m_comp->fpsDenominator()
                            : 30.0;
     const double duration = qMax(fps > 0.0 ? 1.0 / fps : 0.001, seconds);
-    CompositionSettings before(*m_comp), after(before);
-    if (qFuzzyCompare(before.duration + 1.0, duration + 1.0)) {
+    const CompositionSettings before = CompositionSettingsDialog::fromComposition(*m_comp);
+    CompositionSettings after = before;
+    if (qFuzzyCompare(before.durationSeconds + 1.0, duration + 1.0)) {
         return;
     }
-    after.duration = duration;
+    after.durationSeconds = duration;
     const QPointer<TimelineWidget> self(this);
     auto notify = [self] {
         if (!self) return;
@@ -386,7 +425,7 @@ void TimelineWidget::setCompositionDuration(double seconds)
     if (m_undoStack) {
         m_undoStack->push(new CompositionSettingsEdit(m_comp, before, after, notify));
     } else {
-        after.apply(*m_comp);
+        CompositionSettingsDialog::apply(after, *m_comp);
         notify();
     }
 }

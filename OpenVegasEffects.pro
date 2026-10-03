@@ -7,16 +7,7 @@
 
 QT       += core gui widgets opengl openglwidgets sql svg xml
 
-# Qt WebEngine backs the Learn sidebar (reference ships QtWebEngineProcess.exe
-# and imports Qt5WebEngineWidgets + Qt5WebChannel). Optional: Qt only builds
-# WebEngine for the MSVC kits on Windows, so a MinGW build drops the sidebar.
-# Additional qmake arguments: CONFIG+=no_webengine for a build without Learn.
-!no_webengine:qtHaveModule(webenginewidgets):qtHaveModule(webchannel) {
-    QT      += webenginewidgets webchannel network
-    DEFINES += OPENVEGAS_HAVE_WEBENGINE
-} else {
-    message("Qt WebEngine unavailable or disabled - Learn sidebar disabled")
-}
+# No Qt WebEngine: the Learn sidebar is a native widget (see CMakeLists.txt).
 CONFIG   += c++17 warn_on lrelease embed_translations
 # Qt Creator's MSVC build step uses Makefile.Debug/Makefile.Release. Generate
 # both instead of leaving obsolete sub-makefiles after a qmake refresh.
@@ -66,6 +57,7 @@ HEADERS += \
     src/composition/Layer.h \
     src/composition/MotionTracker.h \
     src/composition/TextStyle.h \
+    src/composition/Transition.h \
     src/core/Identifier.h \
     src/core/Log.h \
     src/core/Result.h \
@@ -74,8 +66,11 @@ HEADERS += \
     src/license/LicenseTypes.h \
     src/license/OpenLicenseManager.h \
     src/media/MediaAsset.h \
+    src/media/MediaStreamInfo.h \
     src/media/AudioCapture.h \
     src/media/AudioPlayer.h \
+    src/media/AudioWaveform.h \
+    src/media/ProxyMedia.h \
     src/media/PcmWave.h \
     src/media/ExrImage.h \
     src/media/VideoProbe.h \
@@ -89,12 +84,17 @@ HEADERS += \
     src/plugin/PluginId.h \
     src/plugin/PluginManager.h \
     src/project/VegfxSerializer.h \
+    src/project/VegfxMerge.h \
     src/model3d/Mesh.h \
     src/model3d/ModelImportSettings.h \
     src/model3d/ModelLoader.h \
     src/model3d/AlembicReader.h \
     src/model3d/Renderer3D.h \
+    src/render/AudioExport.h \
+    src/render/FrameDiskCache.h \
+    src/render/VideoEncoder.h \
     src/render/RenderManager.h \
+    src/render/TextGeometry.h \
     src/render/TextRender.h \
     src/ui/AboutDialog.h \
     src/ui/AudioMetersPanel.h \
@@ -105,12 +105,26 @@ HEADERS += \
     src/ui/HistoryPanel.h \
     src/ui/LayerPanel.h \
     src/ui/LayoutPanel.h \
+    src/ui/LayoutTransformCommand.h \
     src/ui/LearnSidebar.h \
     src/ui/StartPanel.h \
     src/ui/LibraryPanel.h \
     src/ui/MainWindow.h \
     src/ui/Model3DSettingsDialog.h \
     src/ui/OptionsDialog.h \
+    src/ui/EffectPlacement.h \
+    src/ui/PromptMessage.h \
+    src/ui/CameraRule.h \
+    src/ui/AutoSave.h \
+    src/ui/ProjectSettingsDialog.h \
+    src/ui/RecoveredProjectsDialog.h \
+    src/ui/ImportCompositionDialog.h \
+    src/ui/CompositionSettingsDialog.h \
+    src/app/AVTemplates.h \
+    src/render/ExportJob.h \
+    src/ui/ExportQueue.h \
+    src/ui/ExportQueueView.h \
+    src/ui/TextureWarning.h \
     src/ui/MediaPanel.h \
     src/ui/Preview360VideoPanel.h \
     src/ui/TextPanel.h \
@@ -128,6 +142,11 @@ HEADERS += \
     src/ui/TimelineValueGraphView.h \
     src/ui/TimelineWidget.h \
     src/ui/ViewerWidget.h \
+    src/ui/ViewerOverlay.h \
+    src/ui/Viewer360View.h \
+    src/ui/TextTransformOverlay.h \
+    src/ui/NativeCustomUiOverlay.h     src/ui/NativeInstanceHost.h \
+    src/ui/MediaSettingsDialog.h \
     src/ui/ViewerPanel.h \
     src/ui/ViewerTransportBar.h \
     src/ui/ViewScaleButton.h
@@ -148,6 +167,8 @@ SOURCES += \
     src/media/MediaAsset.cpp \
     src/media/AudioCapture.cpp \
     src/media/AudioPlayer.cpp \
+    src/media/AudioWaveform.cpp \
+    src/media/ProxyMedia.cpp \
     src/media/ExrImage.cpp \
     src/media/VideoProbe.cpp \
     src/media/Vlc4Adapter.cpp \
@@ -158,12 +179,17 @@ SOURCES += \
     src/plugin/NativePlugin.cpp \
     src/plugin/PluginManager.cpp \
     src/project/VegfxSerializer.cpp \
+    src/project/VegfxMerge.cpp \
     src/model3d/AlembicReader.cpp \
     src/model3d/Mesh.cpp \
     src/model3d/ModelImportSettings.cpp \
     src/model3d/ModelLoader.cpp \
     src/model3d/Renderer3D.cpp \
+    src/render/AudioExport.cpp \
+    src/render/FrameDiskCache.cpp \
+    src/render/VideoEncoder.cpp \
     src/render/RenderManager.cpp \
+    src/render/TextGeometry.cpp \
     src/render/TextRender.cpp \
     src/ui/AboutDialog.cpp \
     src/ui/AudioMetersPanel.cpp \
@@ -180,6 +206,17 @@ SOURCES += \
     src/ui/MainWindow.cpp \
     src/ui/Model3DSettingsDialog.cpp \
     src/ui/OptionsDialog.cpp \
+    src/ui/PromptMessage.cpp \
+    src/ui/CameraRule.cpp \
+    src/ui/AutoSave.cpp \
+    src/ui/ProjectSettingsDialog.cpp \
+    src/ui/RecoveredProjectsDialog.cpp \
+    src/ui/ImportCompositionDialog.cpp \
+    src/ui/CompositionSettingsDialog.cpp \
+    src/app/AVTemplates.cpp \
+    src/render/ExportJob.cpp \
+    src/ui/ExportQueue.cpp \
+    src/ui/ExportQueueView.cpp \
     src/ui/MediaPanel.cpp \
     src/ui/Preview360VideoPanel.cpp \
     src/ui/TextPanel.cpp \
@@ -194,6 +231,10 @@ SOURCES += \
     src/ui/TimelineTreeRows.cpp \
     src/ui/TimelineWidget.cpp \
     src/ui/ViewerWidget.cpp \
+    src/ui/Viewer360View.cpp \
+    src/ui/TextTransformOverlay.cpp \
+    src/ui/NativeCustomUiOverlay.cpp     src/ui/NativeInstanceHost.cpp \
+    src/ui/MediaSettingsDialog.cpp \
     src/ui/ViewerPanel.cpp \
     src/ui/ViewerTransportBar.cpp \
     src/ui/ViewScaleButton.cpp
@@ -219,7 +260,7 @@ FORMS += \
     ui/panels/Trimmer.ui \
     ui/panels/Viewer.ui
 
-RESOURCES += resources/learn.qrc resources/icons.qrc
+RESOURCES += resources/icons.qrc
 
 TRANSLATIONS += \
     translations/openvegaseffects_ru.ts \

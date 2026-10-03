@@ -2,7 +2,11 @@
 #include "ui_Controls.h"
 
 #include "composition/CompositionState.h"
+#include "plugin/NativeEffectRender.h"
 #include "plugin/PluginManager.h"
+#include "ui/CameraRule.h"
+#include "ui/EffectPlacement.h"
+#include "ui/TextureWarning.h"
 #include "ui/TimelineParameterEditor.h"
 
 #include <QCheckBox>
@@ -38,6 +42,11 @@
 namespace openvegas::ui {
 namespace {
 constexpr double kPi = 3.14159265358979323846;
+// A parameter row's effect instance ("<layer ID>/<clip>/<effect>") and
+// control key, and whether its native module switched the control off.
+constexpr int kModuleHiddenRole = Qt::UserRole + 7;
+constexpr int kInstanceKeyRole = Qt::UserRole + 8;
+constexpr int kControlKeyRole = Qt::UserRole + 9;
 QString itemPath(QTreeWidgetItem* item)
 {
     QStringList result;
@@ -370,6 +379,32 @@ void EffectInspector::buildLayerProperties(const composition::Layer& layer)
                           && layer.kind != composition::LayerKind::Light);
     addRow(tr("Dimension"), dimension, "controlsLayerDimension");
     connect(dimension, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (index && m_comp && !compositionIs3D(*m_comp)) {
+            // A camera has to come first (CameraRule); both go in one record.
+            if (!confirmAddCamera(this, AddCameraReason::SetDimension)) {
+                QTimer::singleShot(0, this, [self = QPointer<EffectInspector>(this)] {
+                    if (self) self->refresh();
+                });
+                return;
+            }
+            const auto* layer = layerRef();
+            if (!layer || layer->locked) return;
+            const auto before = m_comp->layers();
+            m_comp->insertLayer(m_comp->layers().size(), newCameraLayer(*m_comp));
+            m_comp->layerRef(m_layerIndex).dimension = composition::LayerDimension::ThreeD;
+            const QPointer<EffectInspector> self(this);
+            const auto notify = [self] {
+                if (!self) return; self->refresh(); emit self->effectParamsChanged(); emit self->keyFramesChanged();
+            };
+            if (m_undoStack) {
+                m_undoStack->push(new LayerStackCommand(
+                    m_comp, before, m_comp->layers(),
+                    QCoreApplication::translate("CompositionTools", "Set Layer Dimension(s)"), notify));
+            }
+            // Deferred: refresh() rebuilds the tree this combo box lives in.
+            QTimer::singleShot(0, this, notify);
+            return;
+        }
         editModel(tr("Layer dimension"), "layer-dimension", [=](composition::Layer& l) {
             l.dimension = index ? composition::LayerDimension::ThreeD : composition::LayerDimension::TwoD;
         }, false, true);
@@ -391,8 +426,9 @@ void EffectInspector::buildMasks(const composition::Layer& layer)
     m_tree->setItemWidget(root, 1, add);
     connect(add, &QToolButton::clicked, this, [this] {
         if (!m_comp) return;
-        const QRectF bounds(m_comp->width() * .25, m_comp->height() * .25,
-                            m_comp->width() * .5, m_comp->height() * .5);
+        const QSize space = m_comp->displaySize();
+        const QRectF bounds(space.width() * .25, space.height() * .25,
+                            space.width() * .5, space.height() * .5);
         editModel(tr("Add mask"), "add-mask", [bounds](composition::Layer& target) {
             composition::LayerMask mask;
             mask.name = QObject::tr("Mask %1").arg(target.masks.size() + 1);
@@ -514,9 +550,8 @@ void EffectInspector::buildEffects(const composition::Layer& layer, bool behavio
             connect(action, &QAction::triggered, this, [this, spec] {
                 editModel(tr("Add %1").arg(spec.displayName), "add-effect", [=](composition::Layer& l) {
                     if (m_clipIndex < 0 || m_clipIndex >= l.clips.size()) return;
-                    composition::Effect effect; effect.pluginId = spec.id; effect.name = spec.displayName;
-                    for (const auto& param : spec.parameters) effect.parameterValues.append(param.defaultValue);
-                    l.clips[m_clipIndex].effects.append(effect);
+                    ui::addEffectToClip(l.clips[m_clipIndex], spec,
+                                        l.clips[m_clipIndex].startSeconds);
                 }, false, true);
             });
         }
@@ -579,6 +614,46 @@ void EffectInspector::buildEffects(const composition::Layer& layer, bool behavio
             }
             if (presetGuard) presetGuard->setCurrentIndex(0);
         });
+
+        if (effect.isTransition()) {
+            // Transition::Length and which edge the transition sits on.
+            auto* edgeItem = new QTreeWidgetItem(effectItem, {tr("Edge")});
+            auto* edge = new QComboBox(m_tree);
+            edge->setObjectName(QStringLiteral("controlsTransitionEdge_%1").arg(e));
+            edge->addItem(tr("Start of clip"), int(composition::TransitionEdge::In));
+            edge->addItem(tr("End of clip"), int(composition::TransitionEdge::Out));
+            edge->setCurrentIndex(effect.transitionEdge == composition::TransitionEdge::Out ? 1 : 0);
+            edge->setEnabled(!layer.locked);
+            m_tree->setItemWidget(edgeItem, 1, edge);
+            connect(edge, &QComboBox::activated, this, [this, edge, e](int index) {
+                const auto value = composition::TransitionEdge(edge->itemData(index).toInt());
+                editModel(tr("Move transition"), QStringLiteral("transition-edge-%1").arg(e),
+                          [=](composition::Layer& l) {
+                    if (m_clipIndex < 0 || m_clipIndex >= l.clips.size()
+                        || e >= l.clips[m_clipIndex].effects.size()) return;
+                    l.clips[m_clipIndex].effects[e].transitionEdge = value;
+                });
+            });
+            auto* lengthItem = new QTreeWidgetItem(effectItem, {tr("Duration")});
+            auto* length = new QDoubleSpinBox(m_tree);
+            length->setObjectName(QStringLiteral("controlsTransitionLength_%1").arg(e));
+            length->setRange(0.0, qMax(0.0, clip.durationSeconds));
+            length->setDecimals(3);
+            length->setSingleStep(0.1);
+            length->setSuffix(tr(" s"));
+            length->setValue(effect.transitionSeconds);
+            length->setEnabled(!layer.locked);
+            m_tree->setItemWidget(lengthItem, 1, length);
+            connect(length, &QDoubleSpinBox::valueChanged, this, [this, e](double seconds) {
+                editModel(tr("Change transition duration"),
+                          QStringLiteral("transition-length-%1").arg(e),
+                          [=](composition::Layer& l) {
+                    if (m_clipIndex < 0 || m_clipIndex >= l.clips.size()
+                        || e >= l.clips[m_clipIndex].effects.size()) return;
+                    l.clips[m_clipIndex].effects[e].transitionSeconds = seconds;
+                });
+            });
+        }
 
         if (effect.pluginId.value() == QLatin1String("openvegas.builtin.color-wheels")
             && spec.parameters.size() >= 12) {
@@ -643,6 +718,10 @@ void EffectInspector::buildEffects(const composition::Layer& layer, bool behavio
             auto* row = new QTreeWidgetItem(parent, {param.displayName});
             row->setData(0, Qt::UserRole, m_layerIndex); row->setData(0, Qt::UserRole + 1, m_clipIndex);
             row->setData(0, Qt::UserRole + 2, e); row->setData(0, Qt::UserRole + 3, p);
+            // A native module can switch a control off (SetPropertyState).
+            row->setData(0, kInstanceKeyRole,
+                         QStringLiteral("%1/%2/%3").arg(layer.id.value()).arg(m_clipIndex).arg(e));
+            row->setData(0, kControlKeyRole, param.name);
             auto* wrapper = new QWidget(m_tree); auto* layout = new QHBoxLayout(wrapper);
             layout->setContentsMargins(0, 0, 1, 0); layout->setSpacing(2);
             const QString object = QStringLiteral("controlsParam_%1_%2_%3_%4").arg(m_layerIndex).arg(m_clipIndex).arg(e).arg(p);
@@ -670,7 +749,13 @@ void EffectInspector::buildEffects(const composition::Layer& layer, bool behavio
                 slider->setEnabled(!layer.locked && spec.renderable); layout->addWidget(slider, 2);
             }
             auto* editor = timelineParameterEditor(wrapper, param, object, read,
-                [this, e, p](QVariant value) { applyParamValue(e, p, value); }, m_valueReaders);
+                [this, e, p, spec, isLayer = param.type == "layer"](QVariant value) {
+                    applyParamValue(e, p, value);
+                    if (isLayer && m_comp) {
+                        warnIfOversizedTexture(window(), spec, *m_comp, value.toString(),
+                                               m_mediaManager.get());
+                    }
+                }, m_valueReaders);
             editor->setEnabled(!layer.locked && spec.renderable);
             editor->setMaximumWidth(145);
             layout->addWidget(editor, 1);
@@ -770,6 +855,10 @@ void EffectInspector::applySearch()
     if (!m_tree || !m_search) return;
     const QString filter = m_search->text().trimmed();
     std::function<bool(QTreeWidgetItem*)> visit = [&](QTreeWidgetItem* item) {
+        if (item->data(0, kModuleHiddenRole).toBool()) {
+            item->setHidden(true);
+            return false;
+        }
         const bool own = filter.isEmpty() || item->text(0).contains(filter, Qt::CaseInsensitive);
         bool child = false;
         for (int i = 0; i < item->childCount(); ++i) child |= visit(item->child(i));
@@ -783,7 +872,25 @@ void EffectInspector::applySearch()
 void EffectInspector::refreshValues()
 {
     for (const auto& reader : m_valueReaders) reader();
+    applyControlStates();
     updateHeader();
+}
+
+void EffectInspector::applyControlStates()
+{
+    if (!m_tree) return;
+    bool changed = false;
+    for (QTreeWidgetItemIterator it(m_tree); *it; ++it) {
+        QTreeWidgetItem* item = *it;
+        const QVariant instance = item->data(0, kInstanceKeyRole);
+        if (!instance.isValid()) continue;
+        const bool off = !plugin::nativeControlShown(instance.toString(),
+                                                     item->data(0, kControlKeyRole).toString());
+        if (item->data(0, kModuleHiddenRole).toBool() == off) continue;
+        item->setData(0, kModuleHiddenRole, off);
+        changed = true;
+    }
+    if (changed) applySearch();
 }
 
 void EffectInspector::setCurrentTime(double seconds)
@@ -843,18 +950,18 @@ double EffectInspector::transformValue(const composition::Layer& layer, Transfor
     return layer.transform.valueAt(prop, axis, frame);
 }
 
-void EffectInspector::editModel(const QString& title, const QString& mergeKey,
+bool EffectInspector::editModel(const QString& title, const QString& mergeKey,
                                 const std::function<void(composition::Layer&)>& edit,
                                 bool keyFrames, bool rebuild)
 {
     const auto* layer = layerRef();
-    if (!layer || layer->locked) return;
+    if (!layer || layer->locked) return false;
     const auto before = m_comp->layers();
     // Re-acquire through the non-const accessor after taking the implicitly
     // shared snapshot, so QVector detaches before the edit touches its storage.
     edit(m_comp->layerRef(m_layerIndex));
     const auto after = m_comp->layers();
-    if (composition::layerState(before) == composition::layerState(after)) return;
+    if (composition::layerState(before) == composition::layerState(after)) return false;
     const QPointer<EffectInspector> self(this);
     if (m_undoStack) m_undoStack->push(new ControlsEditCommand(m_comp, before, after, title, mergeKey, [self] {
         if (!self) return; self->refresh(); emit self->effectParamsChanged(); emit self->keyFramesChanged();
@@ -864,13 +971,14 @@ void EffectInspector::editModel(const QString& title, const QString& mergeKey,
     if (rebuild) {
         QTimer::singleShot(0, this, [self] { if (self) self->refresh(); });
     } else refreshValues();
+    return true;
 }
 
 void EffectInspector::applyParamValue(int effectIndex, int paramIndex, const QVariant& raw)
 {
     const QVariant value = typedValue(effectIndex, paramIndex, raw);
     const bool animated = effectAt(effectIndex) && effectAt(effectIndex)->isAnimated(paramIndex);
-    editModel(tr("Edit effect parameter"), QStringLiteral("parameter-%1-%2").arg(effectIndex).arg(paramIndex),
+    const bool edited = editModel(tr("Edit effect parameter"), QStringLiteral("parameter-%1-%2").arg(effectIndex).arg(paramIndex),
               [=](composition::Layer& layer) {
         auto& effect = layer.clips[m_clipIndex].effects[effectIndex];
         auto curve = effect.animation.find(paramIndex);
@@ -880,6 +988,7 @@ void EffectInspector::applyParamValue(int effectIndex, int paramIndex, const QVa
             effect.parameterValues[paramIndex] = value.toString();
         }
     }, animated);
+    if (edited) emit effectParameterEdited(m_layerIndex, m_clipIndex, effectIndex, paramIndex);
 }
 
 void EffectInspector::toggleParamKeyFrame(int effectIndex, int paramIndex, bool on)

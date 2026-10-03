@@ -1,15 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-    Layout panel - right dock, tab group Effects | Controls | Layout | Track
-    (objName "LayoutPanel").
-
-    Static-layout capture of src/ui/LayoutPanel.cpp (buildTransformWidget +
-    buildAlignmentWidget + the 3x3 direction picker). Object names follow the
-    reference; glyph icons and behavior are dynamic.
-
-    Nothing is wired: the form is not added to CMakeLists.txt / the .pro and
-    is not loaded anywhere. See ui/panels/README.md for the seam.
--->
+<!-- Working Layout panel form; behavior and original icon states are connected by LayoutPanel.cpp. -->
 <ui version="4.0">
  <class>openvegas::ui::LayoutPanel</class>
  <widget class="QDockWidget" name="LayoutPanel">
@@ -17,326 +7,1451 @@
    <string>Layout</string>
   </property>
   <widget class="QWidget" name="layoutContentWidget">
-   <layout class="QVBoxLayout" name="layoutRootLayout">
-    <property name="spacing"><number>8</number></property>
-    <property name="leftMargin"><number>6</number></property>
-    <property name="topMargin"><number>6</number></property>
-    <property name="rightMargin"><number>6</number></property>
-    <property name="bottomMargin"><number>6</number></property>
+   <layout class="QVBoxLayout" name="layoutScrollRoot">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
     <item>
-     <widget class="QWidget" name="TransformWidget">
-      <layout class="QVBoxLayout" name="transformOuter">
-       <property name="spacing"><number>6</number></property>
-       <property name="leftMargin"><number>0</number></property>
-       <property name="topMargin"><number>0</number></property>
-       <property name="rightMargin"><number>0</number></property>
-       <property name="bottomMargin"><number>0</number></property>
-       <item>
-        <!-- Mirror / rotate row. -->
-        <widget class="QWidget" name="widget">
-         <layout class="QHBoxLayout" name="buttonLayout">
-          <property name="spacing"><number>3</number></property>
-          <property name="leftMargin"><number>0</number></property>
-          <property name="topMargin"><number>0</number></property>
-          <property name="rightMargin"><number>0</number></property>
-          <property name="bottomMargin"><number>0</number></property>
-          <item>
-           <widget class="QToolButton" name="toolButtonMirrorVertical">
-            <property name="toolTip"><string>Mirror Vertical</string></property>
-            <property name="autoRaise"><bool>true</bool></property>
-            <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-            <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QToolButton" name="toolButtonMirrorHorizontal">
-            <property name="toolTip"><string>Mirror Horizontal</string></property>
-            <property name="autoRaise"><bool>true</bool></property>
-            <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-            <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QToolButton" name="toolButtonCounterClockWise">
-            <property name="toolTip"><string>Rotate 90 Degrees Counter Clockwise</string></property>
-            <property name="autoRaise"><bool>true</bool></property>
-            <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-            <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QToolButton" name="toolButtonClockWise">
-            <property name="toolTip"><string>Rotate 90 Degrees Clockwise</string></property>
-            <property name="autoRaise"><bool>true</bool></property>
-            <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-            <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="groupBoxAlignment">
-         <property name="title"><string notr="true"></string></property>
-         <layout class="QGridLayout" name="transformGrid">
-          <property name="horizontalSpacing"><number>6</number></property>
-          <property name="verticalSpacing"><number>4</number></property>
-          <property name="leftMargin"><number>8</number></property>
-          <property name="topMargin"><number>8</number></property>
-          <property name="rightMargin"><number>8</number></property>
-          <property name="bottomMargin"><number>8</number></property>
-          <!-- widgetDirection: 3x3 anchor handles. -->
-          <item row="0" column="0" rowspan="4">
-           <widget class="QWidget" name="widgetDirection">
-            <property name="styleSheet">
-             <string notr="true">QToolButton { border:1px solid palette(mid); background:palette(base); } QToolButton:checked { border:1px solid palette(highlight); background:palette(highlight); } QToolButton:hover { border:1px solid palette(highlight); }</string>
-            </property>
-            <layout class="QGridLayout" name="directionGrid">
-             <property name="spacing"><number>3</number></property>
-             <property name="leftMargin"><number>2</number></property>
-             <property name="topMargin"><number>2</number></property>
-             <property name="rightMargin"><number>2</number></property>
-             <property name="bottomMargin"><number>2</number></property>
-             <item row="0" column="0"><widget class="QToolButton" name="directionTopLeft"><property name="checkable"><bool>true</bool></property><property name="direction" stdset="0"><number>0</number></property><property name="minimumSize"><size><width>9</width><height>9</height></size></property><property name="maximumSize"><size><width>9</width><height>9</height></size></property></widget></item>
-             <item row="0" column="1"><widget class="QToolButton" name="directionTop"><property name="checkable"><bool>true</bool></property><property name="direction" stdset="0"><number>1</number></property><property name="minimumSize"><size><width>9</width><height>9</height></size></property><property name="maximumSize"><size><width>9</width><height>9</height></size></property></widget></item>
-             <item row="0" column="2"><widget class="QToolButton" name="directionTopRight"><property name="checkable"><bool>true</bool></property><property name="direction" stdset="0"><number>2</number></property><property name="minimumSize"><size><width>9</width><height>9</height></size></property><property name="maximumSize"><size><width>9</width><height>9</height></size></property></widget></item>
-             <item row="1" column="0"><widget class="QToolButton" name="directionLeft"><property name="checkable"><bool>true</bool></property><property name="direction" stdset="0"><number>3</number></property><property name="minimumSize"><size><width>9</width><height>9</height></size></property><property name="maximumSize"><size><width>9</width><height>9</height></size></property></widget></item>
-             <item row="1" column="1"><widget class="QToolButton" name="directionCenter"><property name="checkable"><bool>true</bool></property><property name="direction" stdset="0"><number>4</number></property><property name="minimumSize"><size><width>9</width><height>9</height></size></property><property name="maximumSize"><size><width>9</width><height>9</height></size></property></widget></item>
-             <item row="1" column="2"><widget class="QToolButton" name="directionRight"><property name="checkable"><bool>true</bool></property><property name="direction" stdset="0"><number>5</number></property><property name="minimumSize"><size><width>9</width><height>9</height></size></property><property name="maximumSize"><size><width>9</width><height>9</height></size></property></widget></item>
-             <item row="2" column="0"><widget class="QToolButton" name="directionBottomLeft"><property name="checkable"><bool>true</bool></property><property name="direction" stdset="0"><number>6</number></property><property name="minimumSize"><size><width>9</width><height>9</height></size></property><property name="maximumSize"><size><width>9</width><height>9</height></size></property></widget></item>
-             <item row="2" column="1"><widget class="QToolButton" name="directionBottom"><property name="checkable"><bool>true</bool></property><property name="direction" stdset="0"><number>7</number></property><property name="minimumSize"><size><width>9</width><height>9</height></size></property><property name="maximumSize"><size><width>9</width><height>9</height></size></property></widget></item>
-             <item row="2" column="2"><widget class="QToolButton" name="directionBottomRight"><property name="checkable"><bool>true</bool></property><property name="direction" stdset="0"><number>8</number></property><property name="minimumSize"><size><width>9</width><height>9</height></size></property><property name="maximumSize"><size><width>9</width><height>9</height></size></property></widget></item>
-            </layout>
-           </widget>
-          </item>
-          <item row="0" column="1"><widget class="QLabel" name="label"><property name="text"><string>X:</string></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
-          <item row="0" column="2"><widget class="QDoubleSpinBox" name="spinBoxX"><property name="decimals"><number>1</number></property><property name="minimum"><double>-100000.000000000000000</double></property><property name="maximum"><double>100000.000000000000000</double></property><property name="singleStep"><double>1.000000000000000</double></property></widget></item>
-          <item row="1" column="1"><widget class="QLabel" name="label_2"><property name="text"><string>Y:</string></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
-          <item row="1" column="2"><widget class="QDoubleSpinBox" name="spinBoxY"><property name="decimals"><number>1</number></property><property name="minimum"><double>-100000.000000000000000</double></property><property name="maximum"><double>100000.000000000000000</double></property><property name="singleStep"><double>1.000000000000000</double></property></widget></item>
-          <item row="2" column="1"><widget class="QLabel" name="label_3"><property name="text"><string>Width:</string></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
-          <item row="2" column="2"><widget class="QDoubleSpinBox" name="spinBoxWidth"><property name="decimals"><number>1</number></property><property name="minimum"><double>-100000.000000000000000</double></property><property name="maximum"><double>100000.000000000000000</double></property><property name="singleStep"><double>1.000000000000000</double></property></widget></item>
-          <item row="3" column="1"><widget class="QLabel" name="label_4"><property name="text"><string>Height:</string></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property></widget></item>
-          <item row="3" column="2"><widget class="QDoubleSpinBox" name="spinBoxHeight"><property name="decimals"><number>1</number></property><property name="minimum"><double>-100000.000000000000000</double></property><property name="maximum"><double>100000.000000000000000</double></property><property name="singleStep"><double>1.000000000000000</double></property></widget></item>
-          <!-- Scale link chain down the side of Width/Height. -->
-          <item row="2" column="3" rowspan="2">
-           <widget class="QToolButton" name="toolButtonScaleLinked">
-            <property name="toolTip"><string>Keep width and height in proportion</string></property>
-            <property name="autoRaise"><bool>true</bool></property>
-            <property name="checkable"><bool>true</bool></property>
-            <property name="special-style" stdset="0">
-             <string notr="true">property-scale-linked</string>
-            </property>
-            <property name="minimumSize"><size><width>22</width><height>40</height></size></property>
-            <property name="maximumSize"><size><width>22</width><height>40</height></size></property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-    </item>
-    <item>
-     <widget class="QWidget" name="AlignmentWidget">
-      <layout class="QVBoxLayout" name="alignmentOuter">
-       <property name="spacing"><number>0</number></property>
-       <property name="leftMargin"><number>0</number></property>
-       <property name="topMargin"><number>0</number></property>
-       <property name="rightMargin"><number>0</number></property>
-       <property name="bottomMargin"><number>0</number></property>
-       <item>
-        <widget class="QGroupBox" name="groupBox">
-         <property name="title"><string>Alignment</string></property>
-         <layout class="QVBoxLayout" name="boxLayout">
-          <property name="spacing"><number>6</number></property>
-          <property name="leftMargin"><number>8</number></property>
-          <property name="topMargin"><number>8</number></property>
-          <property name="rightMargin"><number>8</number></property>
-          <property name="bottomMargin"><number>8</number></property>
-          <item>
-           <widget class="QWidget" name="widgetAlignTarget">
-            <layout class="QHBoxLayout" name="targetLayout">
-             <property name="spacing"><number>6</number></property>
-             <property name="leftMargin"><number>0</number></property>
-             <property name="topMargin"><number>0</number></property>
-             <property name="rightMargin"><number>0</number></property>
-             <property name="bottomMargin"><number>0</number></property>
-             <item>
-              <widget class="QLabel" name="labelAlignTo">
-               <property name="text"><string>Align to:</string></property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QComboBox" name="comboBoxAlignTo">
-               <item><property name="text"><string>Selection</string></property></item>
-               <item><property name="text"><string>Timeline</string></property></item>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
-           <widget class="QWidget" name="widgetAlignment">
-            <layout class="QHBoxLayout" name="alignLayout">
-             <property name="spacing"><number>3</number></property>
-             <property name="leftMargin"><number>0</number></property>
-             <property name="topMargin"><number>0</number></property>
-             <property name="rightMargin"><number>0</number></property>
-             <property name="bottomMargin"><number>0</number></property>
-             <item>
-              <widget class="QToolButton" name="toolButtonAlignHorizontalLeft">
-               <property name="toolTip"><string>Align Horizontal Left</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="toolButtonAlignHorizontalCenter">
-               <property name="toolTip"><string>Align Horizontal Center</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="toolButtonAlignHorizontalRight">
-               <property name="toolTip"><string>Align Horizontal Right</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="alignGroupSpacer">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size><width>10</width><height>16</height></size>
-               </property>
-              </spacer>
-             </item>
-             <item>
-              <widget class="QToolButton" name="toolButtonAlignVerticalTop">
-               <property name="toolTip"><string>Align Vertical Top</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="toolButtonAlignVerticalMiddle">
-               <property name="toolTip"><string>Align Vertical Middle</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="toolButtonAlignVerticalBottom">
-               <property name="toolTip"><string>Align Vertical Bottom</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="labelDistribute">
-            <property name="text"><string>Distribute Objects:</string></property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QWidget" name="widgetDistribute">
-            <layout class="QHBoxLayout" name="distributeLayout">
-             <property name="spacing"><number>3</number></property>
-             <property name="leftMargin"><number>0</number></property>
-             <property name="topMargin"><number>0</number></property>
-             <property name="rightMargin"><number>0</number></property>
-             <property name="bottomMargin"><number>0</number></property>
-             <item>
-              <widget class="QToolButton" name="toolButtonDistributeTop">
-               <property name="toolTip"><string>Distribute Top</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="toolButtonDistributeVertically">
-               <property name="toolTip"><string>Distribute Vertically</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="toolButtonDistributeBottom">
-               <property name="toolTip"><string>Distribute Bottom</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="distributeGroupSpacer">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size><width>10</width><height>16</height></size>
-               </property>
-              </spacer>
-             </item>
-             <item>
-              <widget class="QToolButton" name="toolButtonDistributeLeft">
-               <property name="toolTip"><string>Distribute Left</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="toolButtonDistributeHorizontally">
-               <property name="toolTip"><string>Distribute Horizontally</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QToolButton" name="toolButtonDistributeRight">
-               <property name="toolTip"><string>Distribute  Right</string></property>
-               <property name="autoRaise"><bool>true</bool></property>
-               <property name="minimumSize"><size><width>16</width><height>16</height></size></property>
-               <property name="maximumSize"><size><width>16</width><height>16</height></size></property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-    </item>
-    <item>
-     <spacer name="layoutBottomSpacer">
-      <property name="orientation">
-       <enum>Qt::Vertical</enum>
+     <widget class="QScrollArea" name="layoutScrollArea">
+      <property name="frameShape">
+       <enum>QFrame::NoFrame</enum>
       </property>
-      <property name="sizeHint" stdset="0">
-       <size><width>20</width><height>40</height></size>
+      <property name="widgetResizable">
+       <bool>true</bool>
       </property>
-     </spacer>
+      <property name="horizontalScrollBarPolicy">
+       <enum>Qt::ScrollBarAlwaysOff</enum>
+      </property>
+      <widget class="QWidget" name="layoutScrollContent">
+       <layout class="QVBoxLayout" name="layoutRootLayout">
+        <item>
+         <widget class="QWidget" name="TransformWidget">
+          <layout class="QVBoxLayout" name="transformOuter">
+           <item>
+            <widget class="QWidget" name="widget">
+             <layout class="QHBoxLayout" name="buttonLayout">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QToolButton" name="toolButtonMirrorVertical">
+                <property name="toolTip">
+                 <string>Mirror Vertical</string>
+                </property>
+                <property name="autoRaise">
+                 <bool>true</bool>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>24</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>24</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="iconSize">
+                 <size>
+                  <width>16</width>
+                  <height>16</height>
+                 </size>
+                </property>
+                <property name="focusPolicy">
+                 <enum>Qt::NoFocus</enum>
+                </property>
+                <property name="layoutIcon" stdset="0">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QToolButton" name="toolButtonMirrorHorizontal">
+                <property name="toolTip">
+                 <string>Mirror Horizontal</string>
+                </property>
+                <property name="autoRaise">
+                 <bool>true</bool>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>24</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>24</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="iconSize">
+                 <size>
+                  <width>16</width>
+                  <height>16</height>
+                 </size>
+                </property>
+                <property name="focusPolicy">
+                 <enum>Qt::NoFocus</enum>
+                </property>
+                <property name="layoutIcon" stdset="0">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="orientationPairSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeType">
+                 <enum>QSizePolicy::Fixed</enum>
+                </property>
+                <property name="sizeHint">
+                 <size>
+                  <width>10</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="QToolButton" name="toolButtonCounterClockWise">
+                <property name="toolTip">
+                 <string>Rotate 90 Degrees Counter Clockwise</string>
+                </property>
+                <property name="autoRaise">
+                 <bool>true</bool>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>24</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>24</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="iconSize">
+                 <size>
+                  <width>16</width>
+                  <height>16</height>
+                 </size>
+                </property>
+                <property name="focusPolicy">
+                 <enum>Qt::NoFocus</enum>
+                </property>
+                <property name="layoutIcon" stdset="0">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QToolButton" name="toolButtonClockWise">
+                <property name="toolTip">
+                 <string>Rotate 90 Degrees Clockwise</string>
+                </property>
+                <property name="autoRaise">
+                 <bool>true</bool>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>24</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>24</width>
+                  <height>24</height>
+                 </size>
+                </property>
+                <property name="iconSize">
+                 <size>
+                  <width>16</width>
+                  <height>16</height>
+                 </size>
+                </property>
+                <property name="focusPolicy">
+                 <enum>Qt::NoFocus</enum>
+                </property>
+                <property name="layoutIcon" stdset="0">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <property name="spacing">
+               <number>0</number>
+              </property>
+              <item>
+               <spacer name="orientationEndSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeType">
+                 <enum>QSizePolicy::Expanding</enum>
+                </property>
+                <property name="sizeHint">
+                 <size>
+                  <width>20</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="groupBoxAlignment">
+             <property name="title">
+              <string notr="true" />
+             </property>
+             <layout class="QGridLayout" name="transformGrid">
+              <item row="0" column="0">
+               <widget class="QWidget" name="widgetDirection">
+                <layout class="QGridLayout" name="directionGrid">
+                 <item row="0" column="0">
+                  <widget class="QToolButton" name="directionTopLeft">
+                   <property name="checkable">
+                    <bool>true</bool>
+                   </property>
+                   <property name="direction" stdset="0">
+                    <number>0</number>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QToolButton" name="directionTop">
+                   <property name="checkable">
+                    <bool>true</bool>
+                   </property>
+                   <property name="direction" stdset="0">
+                    <number>1</number>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="2">
+                  <widget class="QToolButton" name="directionTopRight">
+                   <property name="checkable">
+                    <bool>true</bool>
+                   </property>
+                   <property name="direction" stdset="0">
+                    <number>2</number>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QToolButton" name="directionLeft">
+                   <property name="checkable">
+                    <bool>true</bool>
+                   </property>
+                   <property name="direction" stdset="0">
+                    <number>3</number>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QToolButton" name="directionCenter">
+                   <property name="checkable">
+                    <bool>true</bool>
+                   </property>
+                   <property name="direction" stdset="0">
+                    <number>4</number>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="2">
+                  <widget class="QToolButton" name="directionRight">
+                   <property name="checkable">
+                    <bool>true</bool>
+                   </property>
+                   <property name="direction" stdset="0">
+                    <number>5</number>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="0">
+                  <widget class="QToolButton" name="directionBottomLeft">
+                   <property name="checkable">
+                    <bool>true</bool>
+                   </property>
+                   <property name="direction" stdset="0">
+                    <number>6</number>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="1">
+                  <widget class="QToolButton" name="directionBottom">
+                   <property name="checkable">
+                    <bool>true</bool>
+                   </property>
+                   <property name="direction" stdset="0">
+                    <number>7</number>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="2">
+                  <widget class="QToolButton" name="directionBottomRight">
+                   <property name="checkable">
+                    <bool>true</bool>
+                   </property>
+                   <property name="direction" stdset="0">
+                    <number>8</number>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <property name="spacing">
+                  <number>0</number>
+                 </property>
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                 <item row="3" column="0" colspan="3">
+                  <spacer name="directionBottomSpacer">
+                   <property name="orientation">
+                    <enum>Qt::Vertical</enum>
+                   </property>
+                   <property name="sizeType">
+                    <enum>QSizePolicy::Expanding</enum>
+                   </property>
+                   <property name="sizeHint">
+                    <size>
+                     <width>0</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+                <property name="minimumSize">
+                 <size>
+                  <width>72</width>
+                  <height>72</height>
+                 </size>
+                </property>
+                <property name="maximumSize">
+                 <size>
+                  <width>72</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+               </widget>
+              </item>
+              <property name="leftMargin">
+               <number>6</number>
+              </property>
+              <property name="topMargin">
+               <number>6</number>
+              </property>
+              <property name="rightMargin">
+               <number>6</number>
+              </property>
+              <property name="bottomMargin">
+               <number>6</number>
+              </property>
+              <property name="horizontalSpacing">
+               <number>6</number>
+              </property>
+              <property name="verticalSpacing">
+               <number>6</number>
+              </property>
+              <item row="0" column="1">
+               <spacer name="transformMiddleSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeType">
+                 <enum>QSizePolicy::Expanding</enum>
+                </property>
+                <property name="sizeHint">
+                 <size>
+                  <width>12</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item row="0" column="2">
+               <layout class="QGridLayout" name="transformNumericGrid">
+                <property name="spacing">
+                 <number>6</number>
+                </property>
+                <item row="0" column="0">
+                 <widget class="QLabel" name="label">
+                  <property name="text">
+                   <string>X:</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QDoubleSpinBox" name="spinBoxX">
+                  <property name="decimals">
+                   <number>1</number>
+                  </property>
+                  <property name="minimum">
+                   <double>-100000.000000000000000</double>
+                  </property>
+                  <property name="maximum">
+                   <double>100000.000000000000000</double>
+                  </property>
+                  <property name="singleStep">
+                   <double>1.000000000000000</double>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>100</width>
+                    <height>22</height>
+                   </size>
+                  </property>
+                  <property name="keyboardTracking">
+                   <bool>false</bool>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="label_2">
+                  <property name="text">
+                   <string>Y:</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QDoubleSpinBox" name="spinBoxY">
+                  <property name="decimals">
+                   <number>1</number>
+                  </property>
+                  <property name="minimum">
+                   <double>-100000.000000000000000</double>
+                  </property>
+                  <property name="maximum">
+                   <double>100000.000000000000000</double>
+                  </property>
+                  <property name="singleStep">
+                   <double>1.000000000000000</double>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>100</width>
+                    <height>22</height>
+                   </size>
+                  </property>
+                  <property name="keyboardTracking">
+                   <bool>false</bool>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="label_3">
+                  <property name="text">
+                   <string>Width:</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <widget class="QDoubleSpinBox" name="spinBoxWidth">
+                  <property name="decimals">
+                   <number>1</number>
+                  </property>
+                  <property name="maximum">
+                   <double>100000.000000000000000</double>
+                  </property>
+                  <property name="singleStep">
+                   <double>1.000000000000000</double>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>100</width>
+                    <height>22</height>
+                   </size>
+                  </property>
+                  <property name="keyboardTracking">
+                   <bool>false</bool>
+                  </property>
+                  <property name="minimum">
+                   <double>1.000000000000000</double>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="0">
+                 <widget class="QLabel" name="label_4">
+                  <property name="text">
+                   <string>Height:</string>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="1">
+                 <widget class="QDoubleSpinBox" name="spinBoxHeight">
+                  <property name="decimals">
+                   <number>1</number>
+                  </property>
+                  <property name="maximum">
+                   <double>100000.000000000000000</double>
+                  </property>
+                  <property name="singleStep">
+                   <double>1.000000000000000</double>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>100</width>
+                    <height>22</height>
+                   </size>
+                  </property>
+                  <property name="keyboardTracking">
+                   <bool>false</bool>
+                  </property>
+                  <property name="minimum">
+                   <double>1.000000000000000</double>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="2" rowspan="2">
+                 <widget class="QToolButton" name="toolButtonScaleLinked">
+                  <property name="toolTip">
+                   <string>Keep width and height in proportion</string>
+                  </property>
+                  <property name="autoRaise">
+                   <bool>true</bool>
+                  </property>
+                  <property name="checkable">
+                   <bool>true</bool>
+                  </property>
+                  <property name="special-style" stdset="0">
+                   <string notr="true">property-scale-linked</string>
+                  </property>
+                  <property name="minimumSize">
+                   <size>
+                    <width>24</width>
+                    <height>24</height>
+                   </size>
+                  </property>
+                  <property name="maximumSize">
+                   <size>
+                    <width>24</width>
+                    <height>24</height>
+                   </size>
+                  </property>
+                  <property name="iconSize">
+                   <size>
+                    <width>16</width>
+                    <height>16</height>
+                   </size>
+                  </property>
+                  <property name="focusPolicy">
+                   <enum>Qt::NoFocus</enum>
+                  </property>
+                  <property name="layoutIcon" stdset="0">
+                   <bool>true</bool>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <property name="spacing">
+            <number>6</number>
+           </property>
+           <property name="leftMargin">
+            <number>8</number>
+           </property>
+           <property name="topMargin">
+            <number>8</number>
+           </property>
+           <property name="rightMargin">
+            <number>8</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="AlignmentWidget">
+          <layout class="QVBoxLayout" name="alignmentOuter">
+           <item>
+            <widget class="QGroupBox" name="groupBox">
+             <property name="title">
+              <string />
+             </property>
+             <layout class="QVBoxLayout" name="boxLayout">
+              <item>
+               <widget class="QLabel" name="layoutAlignmentHeading">
+                <property name="text">
+                 <string>Alignment</string>
+                </property>
+                <property name="heading" stdset="0">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QWidget" name="widgetAlignTarget">
+                <layout class="QHBoxLayout" name="targetLayout">
+                 <property name="spacing">
+                  <number>6</number>
+                 </property>
+                 <item>
+                  <widget class="QLabel" name="labelAlignTo">
+                   <property name="text">
+                    <string>Align to:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QComboBox" name="comboBoxAlignTo">
+                   <item>
+                    <property name="text">
+                     <string>Selection</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>Timeline</string>
+                    </property>
+                   </item>
+                  </widget>
+                 </item>
+                 <property name="leftMargin">
+                  <number>8</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>8</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>3</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>3</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QWidget" name="widgetAlignment">
+                <layout class="QHBoxLayout" name="alignLayout">
+                 <item>
+                  <widget class="QToolButton" name="toolButtonAlignHorizontalLeft">
+                   <property name="toolTip">
+                    <string>Align Horizontal Left</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="toolButtonAlignHorizontalCenter">
+                   <property name="toolTip">
+                    <string>Align Horizontal Center</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="toolButtonAlignHorizontalRight">
+                   <property name="toolTip">
+                    <string>Align Horizontal Right</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="alignGroupSpacer">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeType">
+                    <enum>QSizePolicy::Expanding</enum>
+                   </property>
+                   <property name="sizeHint">
+                    <size>
+                     <width>20</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="toolButtonAlignVerticalTop">
+                   <property name="toolTip">
+                    <string>Align Vertical Top</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="toolButtonAlignVerticalMiddle">
+                   <property name="toolTip">
+                    <string>Align Vertical Middle</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="toolButtonAlignVerticalBottom">
+                   <property name="toolTip">
+                    <string>Align Vertical Bottom</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <property name="leftMargin">
+                  <number>8</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>8</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>3</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>3</number>
+                 </property>
+                 <property name="spacing">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="labelDistribute">
+                <property name="text">
+                 <string>Distribute Objects:</string>
+                </property>
+                <property name="indent">
+                 <number>8</number>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QWidget" name="widgetDistribute">
+                <layout class="QHBoxLayout" name="distributeLayout">
+                 <item>
+                  <widget class="QToolButton" name="toolButtonDistributeTop">
+                   <property name="toolTip">
+                    <string>Distribute Top</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="toolButtonDistributeVertically">
+                   <property name="toolTip">
+                    <string>Distribute Vertically</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="toolButtonDistributeBottom">
+                   <property name="toolTip">
+                    <string>Distribute Bottom</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="distributeGroupSpacer">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeType">
+                    <enum>QSizePolicy::Expanding</enum>
+                   </property>
+                   <property name="sizeHint">
+                    <size>
+                     <width>20</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="toolButtonDistributeLeft">
+                   <property name="toolTip">
+                    <string>Distribute Left</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="toolButtonDistributeHorizontally">
+                   <property name="toolTip">
+                    <string>Distribute Horizontally</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QToolButton" name="toolButtonDistributeRight">
+                   <property name="toolTip">
+                    <string>Distribute  Right</string>
+                   </property>
+                   <property name="autoRaise">
+                    <bool>true</bool>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>24</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="iconSize">
+                    <size>
+                     <width>16</width>
+                     <height>16</height>
+                    </size>
+                   </property>
+                   <property name="focusPolicy">
+                    <enum>Qt::NoFocus</enum>
+                   </property>
+                   <property name="layoutIcon" stdset="0">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <property name="leftMargin">
+                  <number>8</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>8</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>3</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>3</number>
+                 </property>
+                 <property name="spacing">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <property name="spacing">
+               <number>0</number>
+              </property>
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+             </layout>
+            </widget>
+           </item>
+           <property name="spacing">
+            <number>6</number>
+           </property>
+           <property name="leftMargin">
+            <number>8</number>
+           </property>
+           <property name="topMargin">
+            <number>8</number>
+           </property>
+           <property name="rightMargin">
+            <number>8</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <spacer name="layoutBottomSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <property name="spacing">
+         <number>0</number>
+        </property>
+        <property name="leftMargin">
+         <number>0</number>
+        </property>
+        <property name="topMargin">
+         <number>0</number>
+        </property>
+        <property name="rightMargin">
+         <number>0</number>
+        </property>
+        <property name="bottomMargin">
+         <number>0</number>
+        </property>
+       </layout>
+      </widget>
+     </widget>
     </item>
    </layout>
   </widget>
  </widget>
- <resources/>
- <connections/>
+ <resources />
+ <connections />
 </ui>

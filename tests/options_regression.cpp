@@ -1,6 +1,7 @@
 #include "ui/OptionsDialog.h"
 #include "ui/Theme.h"
 #include "app/Settings.h"
+#include "ui/PromptMessage.h"
 
 #include <QAction>
 #include <QApplication>
@@ -16,7 +17,9 @@
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QTableWidget>
+#include <QMessageBox>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QtTest>
 
 #include <memory>
@@ -70,6 +73,70 @@ private slots:
         for (const QString& objectName : required) {
             QVERIFY2(dialog.findChild<QWidget*>(objectName), qPrintable(objectName));
         }
+    }
+
+    void promptsRememberChoiceAndFollowOptions()
+    {
+        const QString key = QStringLiteral("MediaMismatchPrompt");
+        QSettings settings = app::Settings::optionSettings();
+        settings.remove(ui::promptSettingKey(key));
+        settings.remove(ui::promptSettingKey(key) + QStringLiteral("Answer"));
+        settings.sync();
+        QVERIFY(ui::promptEnabled(key));
+        // Answer the box: tick "Do not show this again" and choose No.
+        int shown = 0;
+        const auto answerWith = [&](QMessageBox::StandardButton button, bool remember) {
+            QTimer::singleShot(0, [&shown, button, remember] {
+                auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+                if (!box) return;
+                ++shown;
+                if (remember) box->checkBox()->setChecked(true);
+                box->button(button)->click();
+            });
+        };
+        const auto ask = [&] {
+            return ui::showPrompt(nullptr, key, QMessageBox::Question, QStringLiteral("Title"),
+                                  QStringLiteral("Text"), QMessageBox::Yes | QMessageBox::No,
+                                  QMessageBox::Yes);
+        };
+        answerWith(QMessageBox::No, false);
+        QCOMPARE(ask(), QMessageBox::No);
+        QCOMPARE(shown, 1);
+        QVERIFY(ui::promptEnabled(key));
+        answerWith(QMessageBox::No, true);
+        QCOMPARE(ask(), QMessageBox::No);
+        QCOMPARE(shown, 2);
+        QVERIFY(!ui::promptEnabled(key));
+        // Skipped from now on, with the remembered answer.
+        QCOMPARE(ask(), QMessageBox::No);
+        QCOMPARE(shown, 2);
+
+        // The Options page shows the prompt as off and turning it on again
+        // brings the box back.
+        {
+            ui::OptionsDialog dialog;
+            auto* check = dialog.findChild<QCheckBox*>(QStringLiteral("checkBoxMediaMismatchPrompt"));
+            QVERIFY(check);
+            QVERIFY(!check->isChecked());
+            check->setChecked(true);
+            auto* ok = dialog.findChild<QPushButton*>(QStringLiteral("btnOK"));
+            QVERIFY(ok);
+            ok->click();
+        }
+        QVERIFY(ui::promptEnabled(key));
+        answerWith(QMessageBox::Yes, false);
+        QCOMPARE(ask(), QMessageBox::Yes);
+        QCOMPARE(shown, 3);
+
+        // An answer outside `rememberable` (Exit on a startup warning) is
+        // returned but never stored.
+        const QString gpu = QStringLiteral("GPUWarning");
+        answerWith(QMessageBox::Abort, true);
+        QCOMPARE(ui::showPrompt(nullptr, gpu, QMessageBox::Warning, QStringLiteral("GPU"),
+                                QStringLiteral("Text"), QMessageBox::Ignore | QMessageBox::Abort,
+                                QMessageBox::Ignore, {}, QMessageBox::Ignore),
+                 QMessageBox::Abort);
+        QVERIFY(ui::promptEnabled(gpu));
     }
 
     void dependentEditorsFollowTheirToggles()

@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QStringList>
+#include "media/MediaStreamInfo.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -103,6 +104,18 @@ struct VlcApi
 
     int (*libvlc_audio_set_volume)(libvlc_media_player_t*, int volume) = nullptr;
     void (*libvlc_audio_set_mute)(libvlc_media_player_t*, int mute) = nullptr;
+
+    // A parsed media's video codec and all audio stream descriptions.
+    MediaStreams (*mediaStreams)(libvlc_media_t*) = nullptr;
+    // VLC 3 parsing is asynchronous; 4 means done, 1/2/3 terminal failures.
+    int (*mediaParsedStatus)(libvlc_media_t*) = nullptr;
+
+    // The first video track of a parsed media: its sample aspect ratio and
+    // frame rate (libvlc_video_track_t). VLC 3 reads them through
+    // libvlc_media_tracks_get, VLC 4 through libvlc_media_get_tracklist; null
+    // when neither is there. False without a video track.
+    bool (*videoTrackFormat)(libvlc_media_t*, unsigned* sarNum, unsigned* sarDen,
+                             unsigned* rateNum, unsigned* rateDen) = nullptr;
 };
 
 bool bindVlc4(VlcApi& api, const std::function<void*(const char*)>& resolve);

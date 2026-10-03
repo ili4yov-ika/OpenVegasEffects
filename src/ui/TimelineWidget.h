@@ -9,6 +9,8 @@
 #include <memory>
 
 #include "composition/Composition.h"
+#include "ui/CompositionSettingsDialog.h"
+#include "plugin/EffectSpec.h"
 
 class QHBoxLayout;
 class QLabel;
@@ -21,6 +23,7 @@ class QTabBar;
 class QToolButton;
 class QVBoxLayout;
 class QMouseEvent;
+class QPainter;
 class QScrollBar;
 class QSplitter;
 class QTreeWidgetItem;
@@ -30,6 +33,7 @@ class QSlider;
 namespace openvegas {
 namespace media {
 class MediaManager;
+class WaveformCache;
 }
 namespace plugin {
 class PluginManager;
@@ -122,6 +126,10 @@ public:
     // tree row so an expanded effect pushes the track rows down in step.
     void setLanes(const QVector<TimelineLane>& lanes);
     void setSelection(int layer, int clip) { m_selLayer = layer; m_selClip = clip; update(); }
+    // Media lookup and peak cache for the waveforms drawn inside audio and
+    // video clips; without them clips are drawn plain.
+    void setWaveformSource(std::shared_ptr<media::MediaManager> media,
+                           media::WaveformCache* cache);
 
     // Scroll offset in content pixels, clamped to the scroll bar's range.
     void setScrollOffset(int contentX);
@@ -154,8 +162,19 @@ signals:
     void keyFrameDragged();
     // The drag finished - a good moment to rebuild the rows and their values.
     void keyFramesEdited();
+    // An Effects panel row was dropped on a clip at a composition time.
+    void effectDropped(int layerIndex, int clipIndex, const QString& pluginId, double seconds);
+    // A Media panel row dropped at a composition time, above the layer it
+    // was let go over (-1: on top).
+    void mediaDropped(const QString& filePath, int layerIndex, double seconds);
+    void compositeShotDropped(const QString& shotId, int layerIndex, double seconds);
+    // Make (or remove) the pre-render of a composite-shot clip's shot.
+    void shotPreRenderRequested(int layerIndex, int clipIndex, bool make);
 
 protected:
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
@@ -166,6 +185,14 @@ protected:
 
 private:
     void pickClipAt(const QPoint& pos);
+    void drawClipWaveform(QPainter& painter, const composition::Clip& clip, const QRect& rect,
+                          double pps);
+    // A transition window edge that sets its length (not one shared with a
+    // clip edge, which stays a trim handle).
+    bool transitionHandleAt(const QPoint& pos, int* layerIndex, int* clipIndex,
+                            int* effectIndex) const;
+    // Resizes the dragged transition so its moving edge sits at `seconds`.
+    bool dragTransitionTo(double seconds);
 
     // Which part of which clip is under a point. `edge` says whether the
     // pointer is over the clip's left or right trim handle, which is what
@@ -219,6 +246,12 @@ private:
     void scrollTo(int value);
     void ensurePlayheadVisible();
 
+    std::shared_ptr<media::MediaManager> m_media;
+    media::WaveformCache* m_waveforms = nullptr;
+    // Transition whose length is being dragged (-1 when none).
+    int m_transitionLayer = -1;
+    int m_transitionClip = -1;
+    int m_transitionEffect = -1;
     std::shared_ptr<composition::Composition> m_comp;
     QVector<TimelineLane> m_lanes;
     double m_playhead = 0.0;
@@ -357,11 +390,17 @@ public slots:
     // Drops the "New Layer" list, for the reference's Ctrl+Alt+N.
     void openNewLayerMenu();
     void editCompositionProperties();
+    // The editor timeline's format, which Composite Shot Properties' Match
+    // Timeline takes.
+    void setMatchFormat(int width, int height, int fpsNumerator, int fpsDenominator);
     // Applies the Viewer transport's Timeline Duration edit through the same
     // composition command path as Composite Shot Properties.
     void setCompositionDuration(double seconds);
     void selectAllRows();
     void addMaskToLayer(int layerIndex, composition::MaskShape shape, const QRectF& bounds);
+    // The row's 2D/3D toggle. Going 3D in a shot without a camera first asks
+    // to add one (CameraRule); Cancel leaves the layer as it was.
+    void setLayerDimension(int layerIndex, composition::LayerDimension dimension);
     void addFreehandMaskToLayer(int layerIndex, const QVector<QPointF>& points);
     void setMotionTrackData(int layerIndex, int trackIndex,
                             const composition::KeyFrameList& xCurve,
@@ -390,8 +429,18 @@ signals:
     void compositionPropertiesChanged();
     void motionTrackingRequested(int layerIndex, int trackIndex);
     void makeCompositeShotRequested();
+    // Make (or remove) the pre-render of a composite-shot clip's shot.
+    void shotPreRenderRequested(int layerIndex, int clipIndex, bool make);
     void compositionTabActivated(int index);
     void compositionTabCloseRequested(int index);
+    void mediaDropped(const QString& filePath, int layerIndex, double seconds);
+    void compositeShotDropped(const QString& shotId, int layerIndex, double seconds);
+
+public:
+    // Adds an effect from the Effects panel to a clip as one undoable edit; a
+    // transition lands on the clip edge nearer `seconds`. Returns the new
+    // effect's index, or -1 when the clip is missing or its layer locked.
+    int addEffect(int layerIndex, int clipIndex, const plugin::EffectSpec& spec, double seconds);
 
 private:
     void beginModelEdit();
@@ -404,6 +453,7 @@ private:
     void updateKeyButtons();
     void showEffectMenu(int layer, bool behaviors, QWidget* anchor);
     void buildTransformRows(QTreeWidgetItem* parent, int layer);
+    void buildTransformRow(QTreeWidgetItem* parent, int layer, composition::TransformProperty prop);
     void buildParameterEditor(QTreeWidgetItem* row, int layer, int clip, int effect, int parameter);
     QVector<composition::KeyFrameList*> selectedCurves();
     QUndoStack* m_undoStack = nullptr;
@@ -443,10 +493,12 @@ private:
     QSplitter* m_splitter = nullptr;
     plugin::PluginManager* m_pluginManager = nullptr;
     std::shared_ptr<media::MediaManager> m_media;
+    media::WaveformCache* m_waveforms = nullptr;
     TimelineCanvas* m_canvas = nullptr;
     QLineEdit* m_timecode = nullptr;
     QLineEdit* m_search = nullptr;
     std::shared_ptr<composition::Composition> m_comp;
+    CompositionSettingsDialog::Values m_matchFormat{QString(), 0};
     EditorTool m_tool = EditorTool::Select;
     QVector<QToolButton*> m_toolButtons;
     QToolButton* m_snapButton = nullptr;

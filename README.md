@@ -36,7 +36,7 @@
 | SQLite-кэш (`CacheDB`) | Done |
 | Фоновый render-воркер (placeholder) | Каркас |
 | UI: MainWindow + доки (Effects panel, Viewer, Timeline) | Done (каркас) |
-| Learn sidebar на Qt WebEngine (+ мост QWebChannel) | Done (каркас, MSVC-кит) |
+| Learn sidebar (нативные виджеты, без Qt WebEngine) | Done |
 
 Подробности и план — [`MARKDOWN/ARCHITECTURE.md`](MARKDOWN/ARCHITECTURE.md).
 
@@ -47,7 +47,6 @@
 | Слой | Выбор |
 |------|--------|
 | Язык / UI | C++17, Qt 6 (Widgets, UI строится в коде) |
-| Web-поверхности | Qt WebEngine + WebChannel (опционально, только MSVC-кит) |
 | Сборка | CMake 3.21+ (предпочтительно) и `OpenVegasEffects.pro` |
 | Компиляторы | MSVC 2022, LLVM‑MinGW (Clang), MinGW, GCC |
 | Медиа | **libVLC** — видеокадры, PCM мастер-микс, аудиовыход и запись voiceover |
@@ -59,8 +58,8 @@
 
 ## Сборка и запуск
 
-Требуется **Qt 6.8+** (Core/Gui/Widgets/OpenGLWidgets/Sql). Опционально —
-**Qt WebEngine + WebChannel + Network** для панели Learn. Перед rebuild на
+Требуется **Qt 6.8+** (Core/Gui/Widgets/OpenGLWidgets/Sql). Qt WebEngine не
+нужен. Перед rebuild на
 Windows закройте `OpenVegas Effects.exe`, если линковка падает из‑за занятого
 файла.
 
@@ -144,37 +143,20 @@ cmake --build --preset windows-msvc-debug --parallel
 
 При push в `main`, pull request и ручном запуске workflow [CI](.github/workflows/ci.yml)
 собирает приложение MSVC 2022 с Qt 6.9.3, запускает шесть регрессионных
-наборов через CTest и проверяет каталоги переводов. Сборка выполняется без
-необязательного Qt WebEngine. Аудиотесты используют libVLC 3.0.24 с официального
+наборов через CTest и проверяет каталоги переводов. Аудиотесты используют libVLC 3.0.24 с официального
 сервера VideoLAN (архив закреплён SHA-256) и выход `dummy`, поэтому они
 проверяют декодирование и мастер-микс без звукового устройства runner.
 
-### Qt WebEngine (панель Learn)
+### Панель Learn (без Qt WebEngine)
 
-Референс рендерит Home/Learn через Qt WebEngine (в его пакете лежит `QtWebEngineProcess.exe`),
-здесь это панель **Learn** — `QWebEngineView` + мост `QWebChannel`, страница берётся из ресурса
-`resources/learn.qrc`. Включается в меню **Window → Toggle Learn Sidebar**, состояние
-запоминается.
-
-Зависимость **опциональная**: на Windows Qt собирает WebEngine только для MSVC-китов, в
-`mingw_64` его нет. Сборка сама определяет наличие модуля:
-
-```
--- Qt WebEngine found - Learn sidebar enabled            # MSVC-кит
--- Qt WebEngine not found in this kit - Learn sidebar disabled   # MinGW-кит
-```
-
-Отключить принудительно: `cmake --preset windows-msvc-debug -DOPENVEGAS_WITH_WEBENGINE=OFF`.
-В qmake наличие модулей проверяется автоматически; для принудительного отключения
-добавьте `CONFIG+=no_webengine` в дополнительные аргументы qmake.
-Признак в коде — `OPENVEGAS_HAVE_WEBENGINE`.
-
-Из коробки в build-каталоге всё работает: `QtWebEngineProcess.exe` (в Debug — `…Processd.exe`)
-и ресурсы Chromium берутся из Qt-префикса. Для дистрибутива их обязан разложить `windeployqt`.
-
-**Remote debugging** повторяет поведение референса: если рядом с exe лежит `config.ini`,
-приложение занимает свободный порт и выставляет `QTWEBENGINE_REMOTE_DEBUGGING` (в референсе —
-`QTcpSocket::bind(0)` → `localPort()` → `qputenv`, до конструктора `QApplication`).
+Референс показывает через Qt WebEngine онлайн-уроки VEGAS в Home/Learn и веб-версию Library
+(страница встроенного сервера на `localhost`; в его пакете лежат `QtWebEngineProcess.exe` и
+ресурсы Chromium). Уроков в порте нет, а Library — нативная панель, поэтому WebEngine
+убран: панель **Learn** — обычные виджеты с теми же действиями (уроки в системном браузере,
+новый композитный кадр, импорт медиа). Включается в меню **Window → Toggle Learn Sidebar**,
+состояние запоминается (`learnSidebarIsOpen`). Справка тоже открывается в системном браузере,
+лицензия веб-компонентов не использует. Панель теперь есть и в MinGW-сборках (раньше она
+требовала MSVC-кит), а Debug-каталог развёртывания стал меньше примерно на 900 МБ.
 
 ### OpenEXR (экспорт кадра в `.exr`)
 
@@ -213,6 +195,11 @@ OpenEXR.
 `STL1001` при смешивании компилятора VS 2022 с заголовками VS 2026, даже если
 CMake Tools выбрал окружение более новой Visual Studio. Для существующего
 каталога сборки один раз выполните configure, чтобы обновить правила Ninja.
+Launcher также включает UTF-8 (`chcp 65001`): иначе русские строки
+`/showIncludes` могут не совпасть с префиксом CMake, Ninja пропустит зависимости
+заголовков и смешает несовместимые объектные файлы после изменения классов.
+Если каталог уже собирался с неверной кодовой страницей, после configure
+выполните `cmake --build build/Windows_MSVC-x64 --target clean` и полную сборку.
 Из обычного терминала используйте:
 
 ```bat

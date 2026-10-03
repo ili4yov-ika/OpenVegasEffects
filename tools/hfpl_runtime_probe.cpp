@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
+#include <QPainter>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
 #include <QOpenGLDebugLogger>
@@ -16,6 +17,7 @@
 
 #include <cstring>
 #include <array>
+#include <QElapsedTimer>
 #include <cmath>
 
 #include "plugin/NativePlugin.h"
@@ -530,7 +532,7 @@ int main(int argc, char** argv)
     const QStringList args = app.arguments();
     if (args.size() < 2 || args.size() > 4) {
         err << "Usage: hfpl_runtime_probe <plugin-or-directory> [dependency-directory] "
-               "[message[,message...]|metadata|parameters|render|transition|audio|audio-transition|behavior|behavior-stack|behavior-subobject]\n";
+               "[message[,message...]|metadata|parameters|render|transition|audio|audio-transition|render-time|behavior|behavior-curve|behavior-stack|behavior-subobject|geometry|customui|track]\n";
         return 2;
     }
 
@@ -575,6 +577,15 @@ int main(int argc, char** argv)
                                       && args.at(3).compare(
                                              QStringLiteral("behavior-subobject"),
                                              Qt::CaseInsensitive) == 0;
+    const bool geometryApi = args.size() == 4
+                             && args.at(3).compare(QStringLiteral("geometry"),
+                                                   Qt::CaseInsensitive) == 0;
+    const bool customUiApi = args.size() == 4
+                             && args.at(3).compare(QStringLiteral("customui"),
+                                                   Qt::CaseInsensitive) == 0;
+    const bool trackApi = args.size() == 4
+                          && args.at(3).compare(QStringLiteral("track"),
+                                                Qt::CaseInsensitive) == 0;
     const bool rendererApi = args.size() == 4
                              && (args.at(3).compare(QStringLiteral("render"),
                                                    Qt::CaseInsensitive) == 0
@@ -584,7 +595,8 @@ int main(int argc, char** argv)
                                                      Qt::CaseInsensitive) == 0;
     if (args.size() == 4 && !metadataOnly && !parametersOnly && !rendererApi
         && !audioApi && !audioTransitionApi && !behaviorApi && !behaviorGraphApi
-        && !behaviorStackApi && !behaviorSubObjectApi) {
+        && !behaviorStackApi && !behaviorSubObjectApi && !geometryApi && !customUiApi
+        && !trackApi) {
         for (const QString& value : args.at(3).split(QLatin1Char(','), Qt::SkipEmptyParts)) {
             bool ok = false;
             const int message = value.toInt(&ok, 0);
@@ -918,6 +930,84 @@ int main(int argc, char** argv)
         return ok ? 0 : 1;
     }
 
+    if (args.size() == 4 && args.at(3) == QLatin1String("render-time")) {
+        // Whether a 2D effect moves by itself: a 64x64 pattern through the
+        // module with its defaults at frame 0 and at frame 30 (layer frame
+        // 30 of 120, 30 fps), and the pixels that differ between them.
+        out << "file\trendered\tchanged-by-time\n";
+        for (const QString& file : files) {
+            const QString dependencyDir = QFileInfo(args.at(2)).absoluteFilePath();
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+            QStringList values;
+            for (const auto& parameter : metadata.parameters) values.append(parameter.defaultValue);
+            const openvegas::core::Identifier id(QStringLiteral("probe.native.time"));
+            openvegas::plugin::clearNativeEffectModules();
+            openvegas::plugin::registerNativeEffectModule(id, file, dependencyDir, true,
+                                                          metadata.parameters);
+            QImage pattern(64, 64, QImage::Format_RGBA8888);
+            for (int y = 0; y < pattern.height(); ++y)
+                for (int x = 0; x < pattern.width(); ++x)
+                    pattern.setPixelColor(x, y, QColor((x * 23 + ((x / 4 + y / 4) % 2 ? 97 : 11)) % 256,
+                                                       (y * 31 + 40) % 256, ((x + y) * 13) % 256));
+            const auto renderAt = [&](int frame, bool* ok) {
+                QImage image = pattern;
+                openvegas::plugin::NativeFrameTime time;
+                time.frame = frame;
+                time.layerFrame = frame;
+                time.layerFrames = 120;
+                *ok = openvegas::plugin::applyNativeEffectToImage(image, id, values, time);
+                return image;
+            };
+            bool first = false, second = false;
+            const QImage a = renderAt(0, &first);
+            const QImage b = renderAt(30, &second);
+            int changed = 0;
+            for (int y = 0; y < a.height(); ++y)
+                for (int x = 0; x < a.width(); ++x)
+                    if (a.pixel(x, y) != b.pixel(x, y)) ++changed;
+            out << QFileInfo(file).baseName() << '\t' << (first && second ? 1 : 0) << '\t'
+                << changed << '\n';
+            out.flush();
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        }
+        return 0;
+    }
+
+    if (args.size() == 4 && args.at(3) == QLatin1String("behavior-curve")) {
+        // A behaviour's result over a 120-frame layer at 30 fps: a 400x100
+        // layer standing at (300, 100) in a 1920x1080 frame (non-identity
+        // matrix entries and the opacity at a few frames).
+        for (const QString& file : files) {
+            const QString dependencyDir = QFileInfo(args.at(2)).absoluteFilePath();
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+            QStringList values;
+            for (const auto& parameter : metadata.parameters) values.append(parameter.defaultValue);
+            const openvegas::core::Identifier id(QStringLiteral("probe.native.curve"));
+            openvegas::plugin::clearNativeEffectModules();
+            openvegas::plugin::registerNativeBehaviorModule(id, file, dependencyDir, true, metadata.parameters);
+            out << QFileInfo(file).baseName();
+            for (int frame : {0, 5, 15, 30, 60, 90, 105, 119}) {
+                openvegas::plugin::NativeBehaviorResult r;
+                openvegas::plugin::NativeBehaviorLayer layer;
+                layer.world[12] = 300.0f;
+                layer.world[13] = 100.0f;
+                layer.bounds = {-200.0f, -50.0f, 200.0f, 50.0f};
+                layer.composition = QSize(1920, 1080);
+                const bool ok = openvegas::plugin::evaluateNativeBehaviorFrame(
+                    r, frame, frame, 120, 1920, 1080, 30.0, id, values, nullptr, {}, layer);
+                const float* m = r.transformation.constData();
+                out << "  f" << frame << (ok ? "" : "!") << " o=" << QString::number(r.opacity, 'f', 2) << " m=";
+                static const float identity[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+                for (int i = 0; i < 16; ++i)
+                    if (std::abs(m[i] - identity[i]) > 0.005f) out << i << ':' << QString::number(m[i], 'g', 3) << ' ';
+            }
+            out << '\n';
+            out.flush();
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        }
+        return 0;
+    }
+
     if (behaviorApi) {
         out << "file\trendered\tbehavior\n";
         int failures = 0;
@@ -981,6 +1071,456 @@ int main(int argc, char** argv)
         return failures == 0 ? 0 : 1;
     }
 
+    if (geometryApi) {
+        // A 100x100 square with a 50x50 hole, both loops double-sided, as
+        // Flux hands a glyph outline to Geometry modules (Notify 101).
+        const auto squareShape = [] {
+            openvegas::plugin::NativeGeometryBatch batch;
+            const auto loop = [&batch](float minimum, float maximum, bool reverse) {
+                const float corners[4][2] = {{minimum, minimum}, {maximum, minimum},
+                                             {maximum, maximum}, {minimum, maximum}};
+                openvegas::plugin::NativeGeometryPolygon polygon;
+                for (int corner = 0; corner < 4; ++corner) {
+                    const int source = reverse ? 3 - corner : corner;
+                    openvegas::plugin::NativeGeometryVertex vertex;
+                    vertex.position[0] = corners[source][0];
+                    vertex.position[1] = corners[source][1];
+                    vertex.uv[0] = corners[source][0] / 100.0f;
+                    vertex.uv[1] = corners[source][1] / 100.0f;
+                    polygon.indices.append(qint32(batch.vertices.size()));
+                    batch.vertices.append(vertex);
+                }
+                batch.polygons.append(polygon);
+            };
+            loop(0.0f, 100.0f, false);
+            loop(25.0f, 75.0f, true);
+            batch.extents[0] = 0.0f;
+            batch.extents[1] = 100.0f;
+            batch.extents[2] = 0.0f;
+            batch.extents[3] = 100.0f;
+            return QVector<openvegas::plugin::NativeGeometryBatch> {batch};
+        };
+        const auto describe = [](const QVector<openvegas::plugin::NativeGeometryBatch>& shape) {
+            QStringList parts;
+            for (const auto& batch : shape) {
+                float minimum[3] {1e30f, 1e30f, 1e30f};
+                float maximum[3] {-1e30f, -1e30f, -1e30f};
+                for (const auto& vertex : batch.vertices) {
+                    for (int axis = 0; axis < 3; ++axis) {
+                        minimum[axis] = qMin(minimum[axis], vertex.position[axis]);
+                        maximum[axis] = qMax(maximum[axis], vertex.position[axis]);
+                    }
+                }
+                QStringList flags;
+                for (const auto& polygon : batch.polygons) {
+                    flags.append(QStringLiteral("%1:%2").arg(polygon.indices.size())
+                                     .arg(polygon.flags));
+                }
+                parts.append(QStringLiteral("v=%1 t=%2 p=%3[%4] box=(%5,%6,%7)-(%8,%9,%10)")
+                                 .arg(batch.vertices.size()).arg(batch.triangles.size())
+                                 .arg(batch.polygons.size()).arg(flags.join(QLatin1Char(' ')))
+                                 .arg(minimum[0], 0, 'f', 1).arg(minimum[1], 0, 'f', 1)
+                                 .arg(minimum[2], 0, 'f', 1).arg(maximum[0], 0, 'f', 1)
+                                 .arg(maximum[1], 0, 'f', 1).arg(maximum[2], 0, 'f', 1));
+            }
+            return parts.join(QStringLiteral(" | "));
+        };
+        // Defaults leave Extrude/Bevel at zero depth and RotateGeometry at
+        // zero angles; OPENVEGAS_HFPL_PROBE_VALUES=name=value;... overrides.
+        QHash<QString, QString> overrides {
+            {QStringLiteral("extrusion"), QStringLiteral("20")},
+            {QStringLiteral("bevelSize"), QStringLiteral("5")},
+            {QStringLiteral("yRotation"), QStringLiteral("90")},
+        };
+        for (const QString& pair : qEnvironmentVariable("OPENVEGAS_HFPL_PROBE_VALUES")
+                                       .split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
+            const qsizetype equals = pair.indexOf(QLatin1Char('='));
+            if (equals > 0) overrides.insert(pair.left(equals), pair.mid(equals + 1));
+        }
+        out << "file\tnotify101\tparameters\tbefore\tafter\tthread-match\n";
+        int failures = 0;
+        for (const QString& file : files) {
+            const QString dependencyDir = args.size() >= 3
+                                              ? QFileInfo(args.at(2)).absoluteFilePath()
+                                              : inferredDependencyDirectory(file);
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(
+                file, dependencyDir);
+            QStringList parameterValues;
+            QStringList parameterNames;
+            for (const auto& parameter : metadata.parameters) {
+                parameterValues.append(overrides.value(parameter.name, parameter.defaultValue));
+                parameterNames.append(parameter.name + QLatin1Char('=')
+                                      + parameterValues.constLast());
+            }
+            const openvegas::core::Identifier id(QStringLiteral("probe.native.geometry"));
+            openvegas::plugin::clearNativeEffectModules();
+            openvegas::plugin::registerNativeGeometryModule(
+                id, file, dependencyDir, true, metadata.parameters);
+            auto shape = squareShape();
+            const QString before = describe(shape);
+            const bool ok = openvegas::plugin::applyNativeGeometryEffect(
+                shape, id, parameterValues, 15, 15, 120, 30.0);
+            auto threaded = squareShape();
+            bool threadOk = false;
+            QThread* renderThread = QThread::create([&]() {
+                threadOk = openvegas::plugin::applyNativeGeometryEffect(
+                    threaded, id, parameterValues, 15, 15, 120, 30.0);
+                openvegas::plugin::releaseNativeEffectThreadRenderer();
+            });
+            renderThread->start();
+            renderThread->wait();
+            delete renderThread;
+            const QString after = describe(shape);
+            const bool same = ok == threadOk && after == describe(threaded);
+            out << QDir::toNativeSeparators(file) << '\t' << (ok ? 1 : 0) << '\t'
+                << parameterNames.join(QLatin1Char(',')) << '\t' << before << '\t'
+                << after << '\t' << (same ? 1 : 0) << '\n';
+            if (!ok || !same) ++failures;
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        }
+        out.flush();
+        return failures == 0 ? 0 : 1;
+    }
+
+    if (trackApi) {
+        // MotionTrack's analysis as the host drives it: "Motion From" set to a
+        // footage layer (Notify 7), then Notify(18) for as long as the module
+        // asks for background processing. The footage is a random texture
+        // drifting 2 px right and 1 px down a frame.
+        out << "file\tstep\thandled\tbackground\tdelay\tstatus\tframes\n";
+        int failures = 0;
+        constexpr int kFrames = 30;
+        const QSize kSize(320, 180);
+        static const QString sourceLayer = QStringLiteral("11111111-2222-3333-4444-000000000001");
+        static const QString ownLayer = QStringLiteral("11111111-2222-3333-4444-000000000002");
+        QImage texture(kSize.width() + 2 * kFrames + 8, kSize.height() + kFrames + 8,
+                       QImage::Format_RGBA8888);
+        quint32 seed = 12345u;
+        for (int y = 0; y < texture.height(); ++y) {
+            for (int x = 0; x < texture.width(); ++x) {
+                seed = seed * 1664525u + 1013904223u;
+                const int v = int((seed >> 24) & 0xff);
+                texture.setPixelColor(x, y, QColor(v, v, v));
+            }
+        }
+        texture = texture.scaled(texture.size() * 1, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        // Blurred noise: corners KLT likes.
+        {
+            QImage reduced = texture.scaled(texture.width() / 4, texture.height() / 4,
+                                          Qt::IgnoreAspectRatio, Qt::FastTransformation);
+            texture = reduced.scaled(texture.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        }
+        openvegas::plugin::NativeSourceHost host;
+        host.layerInfo = [](const QString& id) {
+            openvegas::plugin::NativeLayerInfo info;
+            if (id == sourceLayer || id == ownLayer) {
+                info.valid = true; info.type = 0; info.startFrame = 0; info.durationFrames = kFrames;
+                info.size = QSize(320, 180);
+
+            }
+            return info;
+        };
+        host.assetInfo = [](const QString& id) {
+            openvegas::plugin::NativeAssetInfo info;
+            if (id == sourceLayer) {
+                info.valid = true; info.frameCount = kFrames; info.frameRate = 30.0;
+                info.type = 0; info.key = QStringLiteral("probe-footage");
+            }
+            return info;
+        };
+        int requested = 0;
+        host.assetFrame = [&texture, &requested, kSize](const QString& id, int frame) {
+            if (id != sourceLayer || frame < 0 || frame >= kFrames) return QImage();
+            ++requested;
+            QImage picture = texture.copy(QRect(QPoint(2 * kFrames - 2 * frame, kFrames - frame), kSize));
+            if (qEnvironmentVariableIsSet("OPENVEGAS_PROBE_STILL_TOP")) {
+                // The top half holds still: only the bottom half moves.
+                QPainter painter(&picture);
+                painter.drawImage(QPoint(0, 0), texture.copy(QRect(QPoint(2 * kFrames, kFrames),
+                                                                   QSize(kSize.width(), kSize.height() / 2))));
+            }
+            return picture;
+        };
+        openvegas::plugin::setNativeSourceHost(host);
+        for (const QString& file : files) {
+            const QString dependencyDir = args.size() >= 3
+                                              ? QFileInfo(args.at(2)).absoluteFilePath()
+                                              : inferredDependencyDirectory(file);
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+            QStringList values;
+            int sourceIndex = -1, statusIndex = -1;
+            for (int i = 0; i < metadata.parameters.size(); ++i) {
+                values.append(metadata.parameters.at(i).defaultValue);
+                if (metadata.parameters.at(i).name == QLatin1String("motionFromLayer")) sourceIndex = i;
+                if (metadata.parameters.at(i).name == QLatin1String("analysisStatus")) statusIndex = i;
+            }
+            if (sourceIndex < 0) {
+                out << QDir::toNativeSeparators(file) << "\tparameters\t0\t0\t0\tno motionFromLayer\t0\n";
+                ++failures;
+                continue;
+            }
+            values[sourceIndex] = sourceLayer;
+            const openvegas::core::Identifier id(QStringLiteral("probe.native.track"));
+            openvegas::plugin::clearNativeEffectModules();
+            openvegas::plugin::clearNativeTrackedFeatures();
+            openvegas::plugin::registerNativeBehaviorModule(id, file, dependencyDir, false,
+                                                             metadata.parameters);
+            openvegas::plugin::NativeCustomUiView view;
+            view.layerId = openvegas::core::Identifier(ownLayer);
+            view.area = kSize;
+            view.layerFrameEnd = kFrames;
+            view.frameRate = 30.0;
+            view.instanceKey = QStringLiteral("probe");
+            QString status;
+            const auto apply = [&](const openvegas::plugin::NativeCustomUiResult& result) {
+                for (auto it = result.values.cbegin(); it != result.values.cend(); ++it)
+                    if (it.key() >= 0 && it.key() < values.size()) values[it.key()] = it.value();
+                if (statusIndex >= 0) status = values.at(statusIndex);
+            };
+            const auto report = [&](const QString& step,
+                                    const openvegas::plugin::NativeCustomUiResult& result) {
+                out << QDir::toNativeSeparators(file) << '\t' << step << '\t'
+                    << (result.handled ? 1 : 0) << '\t' << (result.backgroundRequested ? 1 : 0)
+                    << '\t' << result.backgroundDelayMs << '\t' << status << '\t'
+                    << openvegas::plugin::nativeTrackedFeatures(QStringLiteral("probe-footage")).size();
+                // Controls the module enabled or disabled (SetPropertyState).
+                for (auto it = result.enabled.cbegin(); it != result.enabled.cend(); ++it)
+                    out << '\t' << it.key() << (it.value() ? "=on" : "=off");
+                out << '\n';
+                out.flush();
+            };
+            // OPENVEGAS_PROBE_NO_SETUP: the application's instance host sends
+            // property changes before the viewer ever sets the custom UI up.
+            if (!qEnvironmentVariableIsSet("OPENVEGAS_PROBE_NO_SETUP"))
+                report(QStringLiteral("setup"), openvegas::plugin::nativeCustomUiSetup(id, values, view));
+            auto result = openvegas::plugin::nativePropertyChanged(id, values, view,
+                                                                    QStringLiteral("motionFromLayer"));
+            apply(result);
+            report(QStringLiteral("motionFromLayer"), result);
+            QString lastStatus = status;
+            int calls = 0;
+            QElapsedTimer clock;
+            clock.start();
+            // Values the module changed itself come back as property changes,
+            // as Tannen notifies them.
+            // Values the module sets itself are not echoed back as property
+            // changes (it asks for the work it needs on its own).
+            const auto changed = [&](const openvegas::plugin::NativeCustomUiResult& from) {
+                for (auto it = from.values.cbegin(); it != from.values.cend(); ++it) {
+                    const QString key = metadata.parameters.value(it.key()).name;
+                    if (key.isEmpty() || key == QLatin1String("analysisStatus")) continue;
+                    report(QStringLiteral("set %1=%2").arg(key, it.value()), from);
+                }
+            };
+            const auto runBackground = [&]() {
+                while (result.backgroundRequested && calls < 20000 && clock.elapsed() < 180000) {
+                    if (result.backgroundDelayMs > 0)
+                        QThread::msleep(quint32(qMin(result.backgroundDelayMs, 200)));
+                    result = openvegas::plugin::nativeBackgroundProcess(id, values, view);
+                    apply(result);
+                    ++calls;
+                    if (status != lastStatus || !result.handled) {
+                        report(QStringLiteral("background %1").arg(calls), result);
+                        lastStatus = status;
+                    }
+                    changed(result);
+                }
+            };
+            runBackground();
+            if (status.contains(QLatin1String("Draw"), Qt::CaseInsensitive)) {
+                // Draw around the middle of the frame, as the viewer would
+                // deliver it: press, a closed path of moves, release.
+                openvegas::plugin::NativeCustomUiPointer pointer;
+                pointer.button = 1; pointer.buttons = 1; pointer.clicks = 1; pointer.pressed = true;
+                // The loop has to close by crossing its own start, as a hand
+                // drawing around an area does.
+                QVector<QPoint> path {{100, 50}, {160, 50}, {220, 50}, {220, 90}, {220, 130},
+                                      {160, 130}, {100, 130}, {100, 90}, {100, 60}, {130, 40}};
+                if (qEnvironmentVariableIsSet("OPENVEGAS_PROBE_LASSO_TOP"))   // canvas pixels, Y down
+                    path = {{100, 15}, {160, 15}, {220, 15}, {220, 40}, {220, 70}, {160, 70},
+                            {100, 70}, {100, 40}, {100, 25}, {130, 8}};
+                pointer.position = path.first();
+                auto step = openvegas::plugin::nativeCustomUiMouse(
+                    id, values, view, openvegas::plugin::NativeCustomUiMouse::Press, pointer);
+                apply(step);
+                report(QStringLiteral("press"), step);
+                for (const QPoint& point : path) {
+                    pointer.position = point;
+                    step = openvegas::plugin::nativeCustomUiMouse(
+                        id, values, view, openvegas::plugin::NativeCustomUiMouse::Move, pointer);
+                    apply(step);
+                }
+                pointer.pressed = false; pointer.buttons = 0;
+                step = openvegas::plugin::nativeCustomUiMouse(
+                    id, values, view, openvegas::plugin::NativeCustomUiMouse::Release, pointer);
+                apply(step);
+                report(QStringLiteral("release"), step);
+                {
+                    openvegas::plugin::NativeCustomUiResult drawn;
+                    const QImage overlay = openvegas::plugin::nativeCustomUiRender(id, values, view, &drawn);
+                    int inside = 0, outside = 0;
+                    for (int y = 0; y < overlay.height(); ++y)
+                        for (int x = 0; x < overlay.width(); ++x)
+                            if (qAlpha(overlay.pixel(x, y)) > 0)
+                                (QRect(100, 50, 121, 81).contains(x, y) ? inside : outside)++;
+                    overlay.save(QDir::temp().filePath(QStringLiteral("motiontrack-selection.png")));
+                    out << QDir::toNativeSeparators(file) << "\tselection overlay\t" << overlay.width()
+                        << 'x' << overlay.height() << " inside=" << inside << " outside=" << outside << '\n';
+                }
+                if (step.backgroundRequested) result = step;
+                changed(step);
+                runBackground();
+                {
+                    openvegas::plugin::NativeCustomUiResult drawn;
+                    const QImage overlay = openvegas::plugin::nativeCustomUiRender(id, values, view, &drawn);
+                    QHash<QRgb, int> colors;
+                    for (int y = 0; y < overlay.height(); ++y)
+                        for (int x = 0; x < overlay.width(); ++x)
+                            if (qAlpha(overlay.pixel(x, y)) > 0) ++colors[overlay.pixel(x, y)];
+                    overlay.save(QDir::temp().filePath(QStringLiteral("motiontrack-final.png")));
+                    out << QDir::toNativeSeparators(file) << "\tfinal overlay colours";
+                    for (auto it = colors.cbegin(); it != colors.cend(); ++it)
+                        if (it.value() > 20) out << ' ' << Qt::hex << it.key() << Qt::dec << '=' << it.value();
+                    out << '\n';
+                }
+            }
+            report(QStringLiteral("done after %1 calls, %2 frames read").arg(calls).arg(requested),
+                   result);
+            std::array<float, 16> matrix {};
+            std::array<float, 16> last {};
+            bool transformed = false;
+            for (int frame : {0, 10, 20, 29}) {
+                if (openvegas::plugin::nativeInstanceTransformation(id, values, view, frame, frame, &matrix)) {
+                    last = matrix;
+                    transformed = true;
+                    out << QDir::toNativeSeparators(file) << "\ttransform " << frame << '\t';
+                    for (float v : matrix) out << v << ' ';
+                    out << '\n';
+                } else {
+                    out << QDir::toNativeSeparators(file) << "\ttransform " << frame << "\tnone\n";
+                }
+            }
+            const auto tracked = openvegas::plugin::nativeTrackedFeatures(QStringLiteral("probe-footage"));
+            double dx = 0, dy = 0; int points = 0;
+            for (auto it = tracked.cbegin(); it != tracked.cend(); ++it) {
+                for (qsizetype i = 0; i < it->from.size(); ++i) {
+                    dx += it->to[i].x() - it->from[i].x();
+                    dy += it->to[i].y() - it->from[i].y();
+                    ++points;
+                }
+            }
+            out << QDir::toNativeSeparators(file) << "\tfeatures\t" << tracked.size() << " frames, "
+                << points << " points, mean step " << (points ? dx / points : 0.0) << ", "
+                << (points ? dy / points : 0.0) << '\n';
+            for (int frame : {0, 1, 15}) {
+                const auto it = tracked.constFind(frame);
+                if (it == tracked.cend()) continue;
+                out << QDir::toNativeSeparators(file) << "\tframe " << frame << " affine";
+                for (float v : it->affine) out << ' ' << v;
+                if (!it->from.isEmpty())
+                    out << " first " << it->from.first().x() << ',' << it->from.first().y() << " -> "
+                        << it->to.first().x() << ',' << it->to.first().y();
+                out << '\n';
+            }
+            const QByteArray data = openvegas::plugin::nativeInstanceData(id, values, view);
+            out << QDir::toNativeSeparators(file) << "\tinstance data\t" << data.size() << " bytes\n";
+            if (tracked.size() < kFrames / 2) ++failures;
+            // The footage moved 2 px right and 1 px down a frame: by frame 29
+            // the layer follows it 58 px right and 29 px down (Y up). With
+            // OPENVEGAS_PROBE_STILL_TOP/LASSO_TOP the tracked area holds still.
+            const bool stillTop = qEnvironmentVariableIsSet("OPENVEGAS_PROBE_STILL_TOP");
+            const double wantX = stillTop ? 0.0 : 58.0, wantY = stillTop ? 0.0 : -29.0;
+            const bool followed = transformed && std::abs(last[12] - wantX) < 1.0
+                                  && std::abs(last[13] - wantY) < 1.0;
+            out << QDir::toNativeSeparators(file) << "	result	"
+                << (followed ? "follows the footage" : "WRONG") << '\n';
+            if (!followed) ++failures;
+            openvegas::plugin::nativeCustomUiShutdown(id, values, view);
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        }
+        openvegas::plugin::setNativeSourceHost({});
+        out.flush();
+        return failures == 0 ? 0 : 1;
+    }
+
+    if (customUiApi) {
+        // The viewer's custom UI messages on a 640x360 canvas, as the Viewer
+        // sends them while the effect is selected (Notify 1001..1013).
+        out << "file\tstep\thandled\tredraw\tcursor\tbackground\textra\n";
+        int failures = 0;
+        for (const QString& file : files) {
+            const QString dependencyDir = args.size() >= 3
+                                              ? QFileInfo(args.at(2)).absoluteFilePath()
+                                              : inferredDependencyDirectory(file);
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+            QStringList values;
+            for (const auto& parameter : metadata.parameters) values.append(parameter.defaultValue);
+            const openvegas::core::Identifier id(QStringLiteral("probe.native.customui"));
+            openvegas::plugin::clearNativeEffectModules();
+            openvegas::plugin::registerNativeBehaviorModule(id, file, dependencyDir, false,
+                                                             metadata.parameters);
+            if (!openvegas::plugin::nativeEffectHasCustomUi(id)) {
+                out << QDir::toNativeSeparators(file) << "\tregistry\t0\t0\t0\t0\tno custom UI\n";
+                continue;
+            }
+            openvegas::plugin::NativeCustomUiView view;
+            view.area = QSize(640, 360);
+            view.frame = view.parameterFrame = view.layerFrame = 15;
+            view.layerFrameEnd = 120;
+            const auto report = [&](const char* step,
+                                    const openvegas::plugin::NativeCustomUiResult& result,
+                                    const QString& extra = QString()) {
+                out << QDir::toNativeSeparators(file) << '\t' << step << '\t'
+                    << (result.handled ? 1 : 0) << '\t' << (result.redraw ? 1 : 0) << '\t'
+                    << result.cursor << '\t' << (result.backgroundRequested ? 1 : 0) << '\t'
+                    << extra << '\n';
+            };
+            report("setup", openvegas::plugin::nativeCustomUiSetup(id, values, view));
+            report("focus", openvegas::plugin::nativeCustomUiFocus(id, values, view, true));
+            const quint32 control = openvegas::plugin::nativeKeysym(Qt::Key_Control, QString());
+            const auto ctrlDown = openvegas::plugin::nativeCustomUiKey(
+                id, values, view, openvegas::plugin::NativeCustomUiKey::Press, control, QString());
+            report("ctrl-down", ctrlDown);
+            report("ctrl-up", openvegas::plugin::nativeCustomUiKey(
+                id, values, view, openvegas::plugin::NativeCustomUiKey::Release, control, QString()));
+            openvegas::plugin::NativeCustomUiPointer pointer;
+            pointer.position = QPoint(320, 180);
+            report("move", openvegas::plugin::nativeCustomUiMouse(
+                id, values, view, openvegas::plugin::NativeCustomUiMouse::Move, pointer));
+            pointer.pressed = true; pointer.button = 1; pointer.buttons = 1; pointer.clicks = 1;
+            report("press", openvegas::plugin::nativeCustomUiMouse(
+                id, values, view, openvegas::plugin::NativeCustomUiMouse::Press, pointer));
+            pointer.position = QPoint(360, 200);
+            report("drag", openvegas::plugin::nativeCustomUiMouse(
+                id, values, view, openvegas::plugin::NativeCustomUiMouse::Move, pointer));
+            pointer.pressed = false; pointer.buttons = 0;
+            report("release", openvegas::plugin::nativeCustomUiMouse(
+                id, values, view, openvegas::plugin::NativeCustomUiMouse::Release, pointer));
+            openvegas::plugin::NativeCustomUiResult drawn;
+            const QImage overlay = openvegas::plugin::nativeCustomUiRender(id, values, view, &drawn);
+            if (!overlay.isNull())
+                overlay.save(QDir::temp().filePath(QFileInfo(file).completeBaseName() + QStringLiteral("-customui.png")));
+            int painted = 0;
+            for (int y = 0; y < overlay.height(); ++y)
+                for (int x = 0; x < overlay.width(); ++x)
+                    if (qAlpha(overlay.pixel(x, y)) > 0) ++painted;
+            report("render", drawn, QStringLiteral("%1x%2 painted=%3")
+                                        .arg(overlay.width()).arg(overlay.height()).arg(painted));
+            report("context", openvegas::plugin::nativeCustomUiHasContextMenu(id, values, view));
+            report("blur", openvegas::plugin::nativeCustomUiFocus(id, values, view, false));
+            report("shutdown", openvegas::plugin::nativeCustomUiShutdown(id, values, view));
+            // MotionTrack sets its Ctrl state and asks for a redraw.
+            if (QFileInfo(file).baseName().compare(QStringLiteral("MotionTrack"),
+                                                   Qt::CaseInsensitive) == 0
+                && !ctrlDown.redraw) {
+                ++failures;
+            }
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        }
+        out.flush();
+        return failures == 0 ? 0 : 1;
+    }
+
     if (audioApi || audioTransitionApi) {
         out << "file\trendered\taudio\n";
         int failures = 0;
@@ -1005,29 +1545,43 @@ int main(int argc, char** argv)
             }
 
             constexpr int channels = 2;
-            constexpr int frameCount = 2048;
+            // Effects get half a second so reverbs, Echo and Reverse have a
+            // layer long enough for their GetSampleRanges requests.
+            const int frameCount = audioTransitionApi ? 2048 : 24000;
             QVector<qint16> from(frameCount * channels);
             QVector<qint16> to(frameCount * channels);
             for (int frame = 0; frame < frameCount; ++frame) {
-                const qint16 left = qint16(((frame * 97) % 24000) - 12000);
-                const qint16 right = qint16(9000 - ((frame * 53) % 18000));
+                const qint16 left = qint16(audioTransitionApi
+                    ? ((frame * 97) % 24000) - 12000
+                    : std::lround(6000.0 * std::sin(frame * 0.0576)
+                                  + 3000.0 * std::sin(frame * 0.1701)));
+                const qint16 right = qint16(audioTransitionApi
+                    ? 9000 - ((frame * 53) % 18000)
+                    : std::lround(5000.0 * std::sin(frame * 0.0333)
+                                  + 2500.0 * std::sin(frame * 0.2618)));
                 from[frame * channels] = left;
                 from[frame * channels + 1] = right;
                 to[frame * channels] = qint16(-left / 2);
                 to[frame * channels + 1] = qint16(-right / 2);
             }
+            const openvegas::plugin::NativeAudioLayer layer {frameCount, 30.0};
+            const auto renderEffect = [&](QVector<qint16>& samples, int blockFrames,
+                                          const QString& instanceKey) {
+                return openvegas::plugin::applyNativeAudioEffectBlocks(
+                    samples, channels, 48000, 0, id,
+                    [&](qint64) { return parameterValues; }, instanceKey,
+                    blockFrames, layer);
+            };
             QVector<qint16> rendered = from;
+            QElapsedTimer renderTimer;
+            renderTimer.start();
             bool ok = audioTransitionApi
                           ? openvegas::plugin::applyNativeAudioTransition(
                                 rendered, from, to, channels, 0, frameCount, id,
                                 parameterValues)
-                          : openvegas::plugin::applyNativeAudioEffect(
-                                rendered, channels, 48000, 0, id, parameterValues);
-            if (ok && !audioTransitionApi) {
-                rendered = from;
-                ok = openvegas::plugin::applyNativeAudioEffect(
-                    rendered, channels, 48000, frameCount, id, parameterValues);
-            }
+                          : renderEffect(rendered, 480, {});
+            // Realtime budget: frameCount/48 ms of audio in 480-frame blocks.
+            const qint64 renderMs = renderTimer.elapsed();
             const auto checksum = [](const QVector<qint16>& values) {
                 quint64 sum = 1469598103934665603ULL;
                 for (qint16 value : values) {
@@ -1045,21 +1599,43 @@ int main(int argc, char** argv)
                                  ? openvegas::plugin::applyNativeAudioTransition(
                                        threaded, from, to, channels, 0, frameCount,
                                        id, parameterValues)
-                                 : openvegas::plugin::applyNativeAudioEffect(
-                                       threaded, channels, 48000, 0, id,
-                                       parameterValues);
-                if (threadedOk && !audioTransitionApi) {
-                    threaded = from;
-                    threadedOk = openvegas::plugin::applyNativeAudioEffect(
-                        threaded, channels, 48000, frameCount, id,
-                        parameterValues);
-                }
+                                 : renderEffect(threaded, 480, {});
                 openvegas::plugin::releaseNativeEffectThreadRenderer();
             });
             renderThread->start();
             renderThread->wait();
             delete renderThread;
             ok = ok && threadedOk && mainChecksum == checksum(threaded);
+            // Realtime uses 480-frame blocks, offline export may use larger
+            // ones. With exact source ranges the result should not depend on
+            // the block size; the difference is reported rather than fatal.
+            // Silence from a non-silent input means the ranges were wrong.
+            QString blockComparison;
+            if (ok && !audioTransitionApi) {
+                QVector<qint16> large = from;
+                const bool largeOk = renderEffect(large, 4096,
+                                                  QStringLiteral("probe-large"));
+                int maxDifference = 0;
+                for (int i = 0; i < large.size() && i < rendered.size(); ++i) {
+                    maxDifference = qMax(maxDifference,
+                                         qAbs(int(large.at(i)) - int(rendered.at(i))));
+                }
+                const auto rms = [](const QVector<qint16>& values) {
+                    double sum = 0.0;
+                    for (qint16 value : values) sum += double(value) * value;
+                    return values.isEmpty() ? 0.0 : std::sqrt(sum / values.size());
+                };
+                const double inputRms = rms(from);
+                const double outputRms = rms(rendered);
+                blockComparison = QStringLiteral(";large=%1;maxdiff=%2;rms=%3->%4;ms=%5/%6")
+                                      .arg(largeOk ? QStringLiteral("ok")
+                                                   : QStringLiteral("failed"))
+                                      .arg(maxDifference)
+                                      .arg(inputRms, 0, 'f', 1)
+                                      .arg(outputRms, 0, 'f', 1)
+                                      .arg(renderMs).arg(frameCount / 48);
+                ok = largeOk && outputRms > 1.0;
+            }
             out << QDir::toNativeSeparators(file) << '\t' << (ok ? 1 : 0)
                 << '\t' << QStringLiteral("0x%1;thread=0x%2;first=%3,%4;last=%5,%6")
                                   .arg(mainChecksum, 16, 16, QLatin1Char('0'))
@@ -1067,7 +1643,7 @@ int main(int argc, char** argv)
                                   .arg(rendered.value(0)).arg(rendered.value(1))
                                   .arg(rendered.value(rendered.size() - 2))
                                   .arg(rendered.value(rendered.size() - 1))
-                << '\n';
+                << blockComparison << '\n';
             if (!ok) ++failures;
             openvegas::plugin::releaseNativeEffectThreadRenderer();
         }

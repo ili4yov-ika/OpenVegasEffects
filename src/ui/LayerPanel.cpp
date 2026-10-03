@@ -1,4 +1,5 @@
 #include "ui/LayerPanel.h"
+#include "ui/CameraRule.h"
 #include "ui/Theme.h"
 #include "composition/CompositionState.h"
 #include "render/RenderManager.h"
@@ -122,6 +123,25 @@ void LayerPanel::buildEditor(QFormLayout* form)
     connect(m_dimension, &QComboBox::currentIndexChanged, this, [this](int index) {
         if (m_updating || index < 0) return;
         const auto value = composition::LayerDimension(m_dimension->itemData(index).toInt());
+        const int row = selectedLayer();
+        if (value == composition::LayerDimension::ThreeD && m_composition && row >= 0
+            && row < m_composition->layers().size() && !m_composition->layers().at(row).locked
+            && !compositionIs3D(*m_composition)) {
+            // A camera has to come first (CameraRule); both go in one record.
+            if (!confirmAddCamera(this, AddCameraReason::SetDimension)) { refresh(); return; }
+            const auto before = m_composition->layers();
+            m_composition->insertLayer(m_composition->layers().size(), newCameraLayer(*m_composition));
+            m_composition->layerRef(row).dimension = value;
+            QPointer<LayerPanel> panel(this);
+            const auto changed = [panel] { if (panel) { panel->refresh(); emit panel->layersModified(); } };
+            if (m_undoStack) {
+                m_undoStack->push(new LayerStackCommand(
+                    m_composition, before, m_composition->layers(),
+                    QCoreApplication::translate("CompositionTools", "Set Layer Dimension(s)"), changed));
+            }
+            changed();
+            return;
+        }
         editLayer(tr("Set Layer Dimension"), [value](auto& l) { l.dimension = value; });
     });
     connect(m_parent, &QComboBox::currentIndexChanged, this, [this](int index) {
@@ -306,7 +326,9 @@ void LayerPanel::requestPreview()
     if (!snapshot) { m_previewFrame = {}; m_preview->setText(tr("Invalid Layer Type")); return; }
     if (!m_previewRenderer || !m_media) return;
     m_previewRenderer->setComposition(snapshot);
-    QSize size(snapshot->width(), snapshot->height());
+    // At the shot's square shape (width x PAR), since the panel shows the
+    // picture as it is, not as stored.
+    QSize size = snapshot->displaySize();
     if (size.width() > 960 || size.height() > 540) size.scale(QSize(960,540), Qt::KeepAspectRatio);
     m_previewRenderer->requestFrame(m_previewGeneration, m_time, size, true);
 }

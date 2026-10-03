@@ -42,6 +42,30 @@ struct Light
     double ambient = 0.25;
 };
 
+// A composite shot's fog (CompositionAsset/RenderSettings Fog*), applied the
+// way Flux's ComputeFoggedFragment does to every 3D fragment: by its distance
+// d from the eye, the surface keeps the share
+//   Linear          (far - d) / (far - near)
+//   Exponential     exp(-density * d * 0.001)
+//   Exponential^2   exp(-density^2 * d^2 * 0.001)
+// of its colour, clamped to 0..1, and the rest becomes the fog colour
+// (mix(fogColor * alpha, colour, factor), alpha kept).
+struct Fog
+{
+    enum class Falloff { Linear = 0, Exponential = 1, ExponentialSquared = 2 };
+    bool enabled = false;
+    double nearDistance = 900.0;
+    double farDistance = 2000.0;
+    double density = 1.0;
+    Falloff falloff = Falloff::Linear;
+    QColor color = Qt::black;
+
+    // Share of the surface's own colour left at `distance`; 1 without fog.
+    double factor(double distance) const;
+    // Fogs one straight-alpha RGBA pixel seen at `distance`.
+    void apply(uchar* rgba, double distance) const;
+};
+
 // How the model is drawn. The reference's viewer offers the same choice
 // between a solid preview and a wireframe one while a model is being placed.
 enum class ShadingMode
@@ -57,7 +81,7 @@ enum class ShadingMode
 // Depth is resolved with a z-buffer, so faces do not depend on draw order.
 QImage renderMesh(const Mesh& mesh, const QMatrix4x4& modelMatrix, const Camera& camera,
                   const QSize& canvas, const Light& light, ShadingMode mode,
-                  double opacity = 1.0);
+                  double opacity = 1.0, const Fog& fog = Fog());
 
 // Camera that frames a bounding sphere of `radius` about `centre` head-on.
 // Used for a preview of the model on its own.

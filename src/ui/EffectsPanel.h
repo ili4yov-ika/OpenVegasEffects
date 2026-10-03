@@ -40,6 +40,9 @@ signals:
     // Committing to it: double-click applies the effect to the current clip.
     void effectActivated(const plugin::EffectSpec& spec);
 
+protected:
+    bool eventFilter(QObject* object, QEvent* event) override;
+
 private:
     void rebuildTree();
     void applyFilter();
@@ -56,6 +59,7 @@ private:
     QLabel* m_itemCount = nullptr;
     QVector<plugin::EffectSpec> m_effects;
     QSet<QString> m_favourites;
+    QPoint m_dragStart; // press position in the tree viewport
 };
 
 } // namespace ui

@@ -1106,7 +1106,28 @@ private:
         const bool verifiedBehavior =
             spec.kind == PluginKind::BehaviorEffect && native.lifecycleCompatible
             && verifiedNativeBehaviors.contains(nativeBaseName);
-        if (spec.kind == PluginKind::VideoTransition) {
+        // MotionTrack runs on its own instance on the GUI thread (property
+        // changes, background analysis, the viewer's lasso) and the renderer
+        // reads the matrices that instance gives - checked by the probe's
+        // track mode.
+        const bool instanceBehavior =
+            spec.kind == PluginKind::BehaviorEffect && native.lifecycleCompatible
+            && nativeBaseName == QLatin1String("motiontrack");
+        // Notify(101) on host text geometry, checked by the probe's geometry
+        // mode (walls, bevels, bend and rotation of a square with a hole).
+        static const QSet<QString> verifiedNativeGeometry {
+            QStringLiteral("bendgeometry"),
+            QStringLiteral("bevel"),
+            QStringLiteral("extrude"),
+            QStringLiteral("rotategeometry")
+        };
+        const bool verifiedGeometry =
+            spec.kind == PluginKind::GeometryEffect && native.lifecycleCompatible
+            && verifiedNativeGeometry.contains(nativeBaseName);
+        if (spec.kind == PluginKind::GeometryEffect) {
+            registerNativeGeometryModule(spec.id, filePath, dependencyDir, verifiedGeometry,
+                                         spec.parameters);
+        } else if (spec.kind == PluginKind::VideoTransition) {
             registerNativeVideoTransitionModule(spec.id, filePath, dependencyDir,
                                                 verifiedVideoTransition,
                                                 spec.parameters);
@@ -1125,13 +1146,10 @@ private:
                                        verifiedFrameRenderer, spec.parameters);
         }
         spec.renderable = verifiedFrameRenderer || verifiedVideoTransition
-                          || verifiedAudioEffect || verifiedBehavior;
+                          || verifiedAudioEffect || verifiedAudioTransition
+                          || verifiedBehavior || verifiedGeometry || instanceBehavior;
         if (spec.renderable) {
             spec.unavailableReason.clear();
-        } else if (verifiedAudioTransition) {
-            spec.unavailableReason =
-                QStringLiteral("The native audio-transition CPU renderer is available, but "
-                               "timeline audio-overlap editing is not connected yet.");
         } else if (spec.kind == PluginKind::BehaviorEffect) {
             spec.unavailableReason =
                 QStringLiteral("This Behavior uses the simulation or per-text-object ABI; "

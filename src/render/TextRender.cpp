@@ -99,12 +99,34 @@ struct TextGeometry
     QRectF bounds;
 };
 
+// `canvas` is centred on the layer origin. Point text keeps it (only its centre
+// matters); paragraph text gets its own box, offset in Y-up layer space.
 QRectF effectiveTextBox(const QRectF& canvas, const TextStyle& style)
 {
     if (style.textMode != TextStyle::TextMode::Paragraph) return canvas;
     const QSizeF size(qMin(canvas.width(), qMax(1.0, style.paragraphSize.width())),
                       qMin(canvas.height(), qMax(1.0, style.paragraphSize.height())));
-    return QRectF(canvas.center() - QPointF(size.width() / 2.0, size.height() / 2.0), size);
+    const QPointF centre = canvas.center()
+        + QPointF(style.paragraphOffset.x(), -style.paragraphOffset.y());
+    return QRectF(centre - QPointF(size.width() / 2.0, size.height() / 2.0), size);
+}
+
+// Where a point-text line starts relative to the origin, as a fraction of its
+// width: Flux's line layout (FUN_180519ca0) gives point text no width to
+// align in, so Left and the justified-left kinds start at the origin, Center
+// and Center Justify centre on it, Right and Right Justify end on it.
+double pointLineAnchor(TextStyle::AlignH align)
+{
+    switch (align) {
+    case TextStyle::AlignH::Center:
+    case TextStyle::AlignH::CenterJustify: return 0.5;
+    case TextStyle::AlignH::Right:
+    case TextStyle::AlignH::RightJustify: return 1.0;
+    case TextStyle::AlignH::Left:
+    case TextStyle::AlignH::LeftJustify:
+    case TextStyle::AlignH::Justify: break;
+    }
+    return 0.0;
 }
 
 // Both fill and outlines use the same shaped, wrapped glyph runs. Rebuilding a
@@ -113,6 +135,7 @@ TextGeometry layoutText(const QRectF& box, const TextStyle& style)
 {
     TextGeometry result;
     result.glyphs.setFillRule(Qt::WindingFill);
+    const bool point = style.textMode != TextStyle::TextMode::Paragraph;
     const QFont baseFont = fontFor(style);
     QFont font = baseFont;
     const bool script = style.script != TextStyle::Script::None;
@@ -123,16 +146,17 @@ TextGeometry layoutText(const QRectF& box, const TextStyle& style)
     const double width = qMax(1.0, box.width() - style.indentLeft - style.indentRight);
     const double leading = metrics.height() * qMax(1.0, style.lineSpacing) / 100.0;
     double y = 0;
+    // Baseline of the first line, from the top of the laid-out text.
+    double firstBaseline = -1.0;
     const QStringList paragraphs = applyCaps(style.text, style.caps).split(QLatin1Char('\n'));
     for (const QString& paragraph : paragraphs) {
-        y += style.spaceBeforeParagraph;
+        // The reference adds the gap before a paragraph from the second one on.
+        if (firstBaseline >= 0.0) y += style.spaceBeforeParagraph;
         QTextLayout layout(paragraph, font);
-        QTextOption option(horizontalAlignment(style.alignH));
-        option.setWrapMode(style.textMode == TextStyle::TextMode::Paragraph
-                               ? QTextOption::WrapAtWordBoundaryOrAnywhere
-                               : QTextOption::NoWrap);
+        QTextOption option(point ? Qt::AlignLeft : horizontalAlignment(style.alignH));
+        option.setWrapMode(point ? QTextOption::NoWrap : QTextOption::WrapAtWordBoundaryOrAnywhere);
         layout.setTextOption(option);
-        if (style.alignH == TextStyle::AlignH::Justify)
+        if (!point && style.alignH == TextStyle::AlignH::Justify)
             layout.setFlags(Qt::TextJustificationForced);
         layout.beginLayout();
         int lineNumber = 0;
@@ -140,15 +164,29 @@ TextGeometry layoutText(const QRectF& box, const TextStyle& style)
             QTextLine line = layout.createLine();
             if (!line.isValid()) break;
             const double indent = lineNumber == 0 ? style.indentFirstLine : 0.0;
-            line.setLineWidth(qMax(1.0, width - indent));
-            line.setPosition(QPointF(indent, y));
+            if (point) {
+                // Point text: x = 0 is the origin and nothing wraps. The width
+                // aligned is Flux's (FUN_180517f20): trailing spaces and the
+                // last glyph's tracking do not count.
+                line.setNumColumns(qMax(1, int(paragraph.size())));
+                int end = line.textStart() + line.textLength();
+                while (end > line.textStart() && paragraph.at(end - 1).isSpace()) --end;
+                double aligned = qAbs(line.cursorToX(end) - line.cursorToX(line.textStart()));
+                if (end > line.textStart()) aligned -= font.letterSpacing();
+                line.setPosition(QPointF(indent - qMax(0.0, aligned) * pointLineAnchor(style.alignH), y));
+            } else {
+                line.setLineWidth(qMax(1.0, width - indent));
+                line.setPosition(QPointF(indent, y));
+            }
+            if (firstBaseline < 0.0) firstBaseline = y + line.ascent();
             y += leading;
             ++lineNumber;
         }
         layout.endLayout();
+        if (lineNumber == 0 && firstBaseline < 0.0) firstBaseline = y + metrics.ascent();
         // Alignment flags are alternatives in QTextLayout. OR-ing Center/Right
         // into Justify disables justification instead of aligning the last line.
-        if (lineNumber > 0 && (style.alignH == TextStyle::AlignH::CenterJustify
+        if (!point && lineNumber > 0 && (style.alignH == TextStyle::AlignH::CenterJustify
                               || style.alignH == TextStyle::AlignH::RightJustify)) {
             QTextLine last = layout.lineAt(lineNumber - 1);
             const double remaining = qMax(0.0, last.width() - last.naturalTextWidth());
@@ -185,12 +223,21 @@ TextGeometry layoutText(const QRectF& box, const TextStyle& style)
         }
         y += style.spaceAfterParagraph;
     }
-    const double available = box.height() - style.indentTop - style.indentBottom;
+    double left = box.left() + style.indentLeft;
     double top = box.top() + style.indentTop;
-    if (style.alignV == TextStyle::AlignV::Middle) top += (available - y) / 2.0;
-    else if (style.alignV == TextStyle::AlignV::Bottom) top += available - y;
+    if (point) {
+        // FUN_18051ca80 returns 0 for point text: the first baseline is the
+        // layer origin whatever the vertical alignment says, and the indents
+        // apply to paragraph boxes only.
+        left = box.center().x();
+        top = box.center().y() - qMax(0.0, firstBaseline);
+    } else {
+        const double available = box.height() - style.indentTop - style.indentBottom;
+        if (style.alignV == TextStyle::AlignV::Middle) top += (available - y) / 2.0;
+        else if (style.alignV == TextStyle::AlignV::Bottom) top += available - y;
+    }
     top -= style.fontSize * style.baselineShift / 100.0;
-    const QTransform origin = QTransform::fromTranslate(box.left() + style.indentLeft, top);
+    const QTransform origin = QTransform::fromTranslate(left, top);
     result.glyphs = origin.map(result.glyphs);
     for (QPainterPath& glyph : result.glyphPaths) glyph = origin.map(glyph);
     for (QPointF& glyphOrigin : result.glyphOrigins) glyphOrigin = origin.map(glyphOrigin);
@@ -204,6 +251,32 @@ TextGeometry layoutText(const QRectF& box, const TextStyle& style)
 QRectF styledTextBounds(const QRectF& box, const TextStyle& style)
 {
     return style.text.isEmpty() ? QRectF() : layoutText(effectiveTextBox(box, style), style).bounds;
+}
+
+QVector<GlyphOutline> styledTextOutlines(const QRectF& box, const TextStyle& style)
+{
+    QVector<GlyphOutline> outlines;
+    if (style.text.isEmpty()) return outlines;
+    const TextGeometry geometry = layoutText(effectiveTextBox(box, style), style);
+    // The same scale about the box centre that drawStyledText applies.
+    const QTransform scale = QTransform::fromTranslate(-box.center().x(), -box.center().y())
+        * QTransform::fromScale(qMax(0.01, style.horizontalScale / 100.0),
+                                qMax(0.01, style.verticalScale / 100.0))
+        * QTransform::fromTranslate(box.center().x(), box.center().y());
+    const QFontMetricsF metrics(fontFor(style));
+    outlines.reserve(geometry.glyphPaths.size() + 1);
+    for (qsizetype i = 0; i < geometry.glyphPaths.size(); ++i) {
+        const double baseline = geometry.glyphOrigins.at(i).y();
+        const QLineF line = scale.map(QLineF(0.0, baseline - metrics.ascent(),
+                                             0.0, baseline + metrics.descent()));
+        outlines.append({scale.map(geometry.glyphPaths.at(i)), line.y1(), line.y2()});
+    }
+    if (!geometry.decorations.isEmpty()) {
+        const QPainterPath decorations = scale.map(geometry.decorations);
+        const QRectF bounds = decorations.boundingRect();
+        outlines.append({decorations, bounds.top(), bounds.bottom()});
+    }
+    return outlines;
 }
 
 void drawStyledText(QPainter& painter, const QRectF& box,

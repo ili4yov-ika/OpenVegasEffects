@@ -37,7 +37,7 @@
 - Экспорт/сервер: `biff::ui::exporter::Server`, `VegasEffectsServer`, `VegasEffectsRenderClient`, `HitFilmRenderClient`; `QLocalServer`/`QLocalSocket` (named-pipe IPC)
 - Лицензия: `"License is empty, no server request is required."`, `"License out of date. Requesting new license..."`
 - WebEngine: импорты `Qt5WebEngineWidgets.dll` + `Qt5WebChannel.dll` (JS↔C++ мост), `QTWEBENGINE_REMOTE_DEBUGGING`,
-  runtime helper `QtWebEngineProcess.exe` в пакете (HTML-поверхности: Home/learning sidebar).
+  runtime helper `QtWebEngineProcess.exe` в пакете (HTML-поверхности: Home/learning sidebar и веб-Library).
 
 ---
 
@@ -196,36 +196,38 @@ else
 - `Composition::clipAt(layer, clip)` — неконстантный доступ для редактирования параметров эффекта.
 - `LayerPanel.{h,cpp}` — панель «Track/Layer» (Type 1024): дерево слоёв (Name, Vis, Mute, Blend combo, Opacity), тулбар +/↑/↓/Del; `bindModel(Composition)`, сигнал `layersModified`; закреплена справа tabified с Effect/Controls/History/Library. `Composition::{swapLayers, layerRef}` для переупорядочивания и редактуры полей (`Layer::visible/muted`).
 
-### Learn Sidebar (QtWebEngine) — портирован
+### Learn Sidebar — портирован без Qt WebEngine
 
 Референс держит Home/Learn как HTML-поверхности: в пакете лежит `QtWebEngineProcess.exe`,
 в импортах — `Qt5WebEngineWidgets.dll` + `Qt5WebChannel.dll` (мост JS↔C++). Строки поверхности:
 `learnWebViewSpace` (`1412c0e68`), `learnSidebarIsOpen` (`1412c10d0`), «Learn Sidebar» (`1412cb418`),
 «Toggle Learn Sidebar» (`1412d0908`), `learn-onboarding` (`1412cdce0`), `learnSidebarAnimationWidth`
 (`1414dde8a`), `learnCheckBoxWidget`, `learnSeparatorBar`, событие `LearnCheckBoxToggled` (`1414e627e`).
+Содержимое — онлайн-уроки VEGAS (обучающие страницы с их сайта); без сети показывается
+`OfflineWidget` с текстом «Go online to explore amazing tutorials…».
 
-Портировано в `LearnSidebar.{h,cpp}`:
+Кроме Learn, WebEngine в референсе обслуживает веб-версию библиотеки ассетов:
+`biff::ui::common::LibraryWebView` (`FUN_14022ac90`/`FUN_140211790`: «Loading Library...»,
+объект веб-канала `library`) поверх общего `biff::ui::common::BiffWebView`/`B::FXWebPage`
+(`FUN_1402dbe50`; `FUN_1402db1e0` — контекстное меню «Show inspector»/«Reload» при
+`QTWEBENGINE_REMOTE_DEBUGGING`; `FUN_1402dc290` грузит `http://localhost:<порт>` встроенного
+сервера). Справка открывается ссылкой в системном браузере, следов активации через WebEngine
+нет — у лицензии собственный диалог.
 
-- правый док с `QWebEngineView` (objectName `learnWebViewSpace`), состояние сохраняется в
-  `Settings::learnSidebarIsOpen()` — имя ключа как в референсе;
-- мост `QWebChannel` с объектом `host` (`LearnBridge`) — страница вызывает `host.openTutorials()` /
-  `host.showCommand(...)`, C++ отвечает сигналами; в референсе связь устроена так же;
-- страница — собственный ресурс `qrc:/learn/index.html` (`resources/learn.qrc`), тёмная тема
-  из §5. Реального контента уроков нет, каркас под него готов;
-- команда меню Window «Toggle Learn Sidebar»; ссылка на туториалы в StartPanel теперь открывает
-  сайдбар вместо заглушки в статус-баре.
+В порте WebEngine использовался только Learn-панелью (локальная заглушка с тремя ссылками), а
+Library — нативный `LibraryPanel`, поэтому Qt WebEngine (вместе с WebChannel/Network и remote
+debugging по `config.ini`) убран в октябре 2026: ~900 МБ Debug-развёртывания (Chromium,
+`Qt6WebEngineCore`, Quick/Qml/Positioning), MSVC-only зависимость. Если когда-нибудь понадобится
+веб-библиотека референса, её придётся подключать заново.
 
-**Инициализация OpenGL.** QtWebEngine требует общий GL-контекст, если приложение использует
-`QOpenGLWidget`, и атрибут надо ставить до `QApplication`. Референс делает ровно это:
-`AA_ShareOpenGLContexts` (`0x12`, `1401c3019`) и `AA_UseDesktopOpenGL` (`0xf`, `1401c3026`) —
-обе до конструктора `QApplication` на `1401c3223`. В порт добавлен `AA_ShareOpenGLContexts`
-в `main.cpp`, там же — гейт remote-debugging по `config.ini` (см. §3.2 п.3).
+`LearnSidebar.{h,cpp}` теперь — обычный правый док: тот же objectName `LearnSidebar`, область
+`learnWebViewSpace`, текст референса и три действия (уроки в системном браузере через Online
+Help, новый композитный кадр, импорт медиа); состояние — `Settings::learnSidebarIsOpen()`,
+команда Window › «Toggle Learn Sidebar».
 
-**Ограничение платформы.** Qt собирает WebEngine на Windows только для MSVC-китов — в
-`C:/Qt/6.9.3/mingw_64` его нет. Поэтому зависимость опциональная: CMake
-(`OPENVEGAS_WITH_WEBENGINE`, по умолчанию ON) и qmake (`qtHaveModule(webenginewidgets)`) при
-отсутствии модуля просто собирают проект без сайдбара, определяя/не определяя
-`OPENVEGAS_HAVE_WEBENGINE`.
+**Инициализация OpenGL.** `AA_ShareOpenGLContexts` и `AA_UseDesktopOpenGL` по-прежнему ставятся в
+`main.cpp` до `QApplication`, как в референсе (`1401c3019`/`1401c3026`): общие контексты нужны
+самому вьюеру, который переходит между доками (360 Viewer показывает тот же `QOpenGLWidget`).
 
 ### Ключевые кадры и свойства (Project.dll, разобрано)
 
@@ -730,7 +732,7 @@ transform-гизмо, ключевые кадры и `Value Graph` отсутс�
   QtWebEngine-поверхность, здесь обычный link-label, чтобы панель осталась нативным виджетом.
 
 Не портировано намеренно: Save/Delete Workspace пишут в статус-бар (нет модели воркспейсов),
-tutorials-ссылка никуда не ведёт (туториалы не входят в сборку).
+tutorials-ссылка открывает нативную панель Learn (самих уроков в сборке нет).
 
 ### Вьюер (ViewerWidget): мультивидовые макеты, зум, шахматный фон
 - Из референса: `biff::ui::viewer::ViewerLayoutManager` (абстрактный) с конкретными
@@ -998,6 +1000,104 @@ CompositionAsset @Version="19"
  └─ Layers → TextLayer @Version="13" | AssetLayer @Version="17"
 ```
 
+Fog (October 2026). `RenderSettings` carries `FogEnabled`, `FogNearDistance` (900),
+`FogFarDistance` (2000), `FogDensity` (1), `FogColor` (A R G B, black) and `FogFalloff`
+(`CompositionRenderSettings::FalloffType` 0 Linear, 1 Exponential, 2 Exponential²). The
+Composite Shot Properties dialog builds them in its Advanced tab (`FUN_14072b930`:
+`groupBoxFog`, `checkBoxFogEnable`, `doubleSpinBoxNearClipDistance`/`FarClipDistance`/
+`Density` with maximum 999999999, `comboBoxFallOff`, colour block with pipette; the Enable
+box enables the rest) and names them in `FUN_140730a50` (context `CompositionSettingsDialog`:
+"Fog", "Enable:", "Near Clip Distance:", "Far Clip Distance:", "Density:", "Fall Off:",
+"Color:", items "Linear", "Exponential", "Exponential²"); `EditCompositionAssetCmd`
+(`FUN_1404cda60`, "Edit Composite Shot") pushes one property command per changed field.
+The renderer is Flux.dll's GLSL `ComputeFoggedFragment(fragmentColor, ecPos)` with
+`uniform vec4 fogParams` (x density, y near, z far, w mode 1/2/3) and `fogColor`:
+`d = length(ecPos)`; linear `(far - d) / (far - near)`, exponential
+`exp(-density * d * 0.001)`, exponential² `exp(-density * density * d * d * 0.001)`;
+clamped, then `mix(fogColor * a, colour, factor)` with the alpha kept. The port applies the
+same per pixel (`model3d::Fog`) to 3D layers, models and Geometry text; 2D layers are not in
+the scene and stay clear. For that, 3D media/plane/text/nested-shot layers are now projected
+through the scene camera (`RenderWorker::renderClipIn3D`: content rendered flat, carried by
+the layer transform, `QTransform::quadToQuad` per sheet or per cell when part of it is behind
+the eye; fog from the ray–plane distance of each pixel). Neighbouring 3D layers form one
+scene: each is drawn on its own and the scene is composited per pixel from far to near
+(`RenderWorker::sceneDistances` - the ray–plane distance for a sheet, the layer position for a
+model or Geometry text), while a 2D or Grade layer between them closes the scene, as HitFilm
+and VEGAS Effects group 3D layers.
+
+Composite Shot Properties (October 2026). `FUN_14072b930` builds CompositionSettingsDialog:
+`comboBoxTemplate` with `toolButtonSave`/`toolButtonDelete`, `lineEditName` ("<MyComp>"),
+`spinBoxDuration`; tab Standard with `groupBoxVideo` (`spinBoxWidth`, `spinBoxHeight`,
+`toolButtonMatchTimeline`, editable `comboBoxFrameRate` 23.976/24/25 (PAL)/29.97 (NTSC)/30/50/
+59.94/60, `comboBoxAspectRatio`) and `groupBoxAudio` (read-only `labelValueAudioSampleRate`);
+tab Advanced with Fog (see above) and Motion Blur (`doubleSpinBoxShutterAngle` 0..720,
+`doubleSpinBoxShutterPhase` -360..360, `spinBoxMaxSamples` 1..100, `checkBoxUseAdaptive`).
+The aspect list is the PAR enum of `FUN_1403963f0` - Square Pixels (1.0), DV NTSC (0.91),
+DV NTSC Wide (1.21), DV PAL (1.09), DV PAL Wide (1.46), HD Anamorphic 1080 (1.33), DVCPro HD
+(1.5), Anamorphic 2:1 (2.0), Custom - whose exact values Project.dll keeps as a table
+(10/11, 40/33, 12/11, 16/11, 4/3; 1.5 and 2.0). `AudioVideoSettings` stores `<PAR>` (enum) and
+`<PARCustom>`.
+
+What the PAR does (October 2026). Layers live in square units: the layer factory makes a New
+Grade `round(Width * PixelAspectRatioValue)` wide (`FUN_140564460`), Flux builds the default
+camera from the width and the PAR (`FUN_18039a680`: `CalculateLensZoom(HorizontalFieldOfView,
+width, PAR)`) and gives every visual object its own PAR (`FUN_1803431f0` with
+`ImageAsset/SolidAsset::PixelAspectRatio`, `MediaVideoStream::AspectRatio`, a shot's
+`AudioVideoSettings::PixelAspectRatioValue`). So a shot is a `Width x PAR` by `Height` scene
+squeezed into `Width x Height` pixels. The port renders that scene (`Composition::displaySize`)
+and resamples it to the frame asked for; the viewer, full-screen preview and Layer panel show
+frames at the square shape, viewer coordinates (positions, masks, text, layout) are square
+units, a nested shot is placed at its square size, and an MP4/MOV export carries
+`setsar=<PAR>`. Media keep their own pixel shape (October 2026): the stream's SAR (libVLC's
+video track, `MediaAssetRef::PixelAspectRatio`) unless overridden (`MediaOverrideOptions::
+PixelAspectRatio`, saved as `<OverridePAR>`/`<PAR>`; a still's `ImageAsset::PixelAspectRatio`
+is its `<PAR>`), and are drawn `width x PAR` wide. The overrides are edited in Media Properties
+(`biff::ui::media::MediaSettingsDialog`, retranslated by `FUN_14073de70`: Name, Path/Relink,
+Container, Format, Codec, Duration, Resolution, Frame Rate, Aspect Ratio, Alpha, Color Levels,
+Color Space with "From File", hardware decoding, Audio Sample Rate; History names from
+`FUN_14034cf70`, property ids `0xaf1` frame rate, `0xaf2` PAR, `0xaf7` alpha, `0xaf9` color
+levels, `0xafd` color space, `0xafa` hardware decoding, `0xaf5/0xaf6` trimmer points).
+`MediaOverrideOptions` holds pairs (override flag, value): frame rate `+0x20/+0x28`, PAR
+`+0x30/+0x34`, alpha `+0x38/+0x3c`, colour levels `+0x40/+0x44`, colour space `+0x48/+0x4c`; the
+`MediaVideoStream` getters return the override or the file's value - `ColorLevels`/`ColorSpace`
+0 (Automatic) when not overridden, so the combo index is the value (levels 0 automatic, 1
+studio, 2 studio with super whites & blacks, 3 computer full; space 0 automatic, 1 Rec. 601, 2
+Rec. 709); `Alpha` is 1 (premultiplied) for pixel formats 0x11/0x12, 0 (straight) otherwise;
+`FrameRate` snaps 23.976/29.97/59.94 to their NTSC fractions; `AspectRatio` maps the stream's
+value through `PARFromValue` (a value it does not know is square) and makes 1440x1080 of codec 4
+HD Anamorphic. The port's dialog has them all (alpha only for files with alpha, levels/space/
+hardware decoding only for decoded video, a sequence's rate without "From File"); levels and
+the matrix are applied relative to libVLC's defaults, which it does not report. The same resampling fixed previews at another size than the shot (Half, Quarter,
+Antialiased, the Layer panel's 960x540), which used to get full-scale content cropped into the
+smaller frame; they now cost a full-size render.
+
+Templates (`biff::ui::common::TemplateManager`): one `<GUID>.hft` per template in the folder
+`DataLocation_Resolve_Folder(1)` resolves - registry `HKLM\SOFTWARE\<org>\<app>\Paths\Templates`
+plus `\AV` - holding `<Templates><Template Version="0">` with `SystemTemplate`, `ID`, `Name`,
+`Width`, `Height`, `FrameRate`, `PAR`, `PARValue` (used only for Custom), `AudioSampleRate` and
+an optional `Duration` (writer `FUN_14044ff70`/`FUN_1404507a0`, reader `FUN_14044f770` - which
+throws when PAR and PARValue or the sample rate disagree - and `FUN_1404503d0`). The system
+templates come with the installer; their names are in the reference's catalogues under
+`AVTemplate` (1080p Full HD @ 23.976...60, 720p HD, 4K/8K UHD up to 120 fps, 4K DCI 2160p, 2K DCI,
+2K 16:9 QWXGA, 1440p QHD, 1440p/2.7K GoPro, 2.5K BMCC, 5K RED EPIC, 6K RED DRAGON, Instagram
+Square, Vertical 1080p). The port builds that list in `app/AVTemplates` with the formats'
+standard sizes, reads and writes user templates in the same `.hft` form under
+`AppDataLocation/Templates/AV`, and Options' Default Template picks from the same list.
+
+Export queue (October 2026). The reference's Export panel (`ExportPanelWidget`) has a Queue of
+export tasks (`ExportTaskTreeView` over `ExportTaskItemModel`: Name, Preset, Output, Progress,
+Duration, Elapsed), Start/Suspend Exporting and `ExportTaskActions` (Start Exporting, Force Start,
+Reveal Output, Save Output As..., Duplicate Task(s), Remove Task(s), Remove Finished Task(s),
+Select All); a queued task exports a snapshot of the project taken when it was added - Options >
+Export "Default Snapshot Directory": "The directory where files required by tasks added to the
+queue will be saved. These files are deleted automatically when the tasks finish." - and
+`ExportTaskManager` keeps the queue in a tasks file ("The queue could not be restored because the
+tasks file cannot be read or is invalid."). Options > Export "Time Format" (`ExportSettingsWidget`,
+`FUN_1403c6560`/`FUN_1403c70e0`: Timecode, Natural, Seconds) only formats Duration/Elapsed. The
+port follows that with `ui/ExportQueue` + `ui/ExportQueueView` (snapshot = a `.vegfx` written at
+queue time, `ExportTasks.xml` in AppData) and runs every export through `render/ExportJob`, which
+renders the shot with a RenderManager of its own.
+
 ### 7.4 Layers
 Each layer wrapper (`AssetLayer`/`TextLayer`) contains an inner element **named after the layer itself**
 (e.g. `<New Text>`, `<1_...png>`, `<䮭.png>`, `<...mp3>`) carrying the real fields. Finder helper:
@@ -1012,6 +1112,95 @@ TextLayer @Version="13"
  ├─ Dimensions, IncludeInDepthMap, TextBox @Version="1" (MinX/MaxX/MinY/MaxY), Effects, GeometryEffects, Masks
  └─ <named>: same field set + PropertyManager (Text, FontSize, ...)
 ```
+
+Text box placement (October 2026, Flux.dll). `<TextBox>` extents are layer space, Y up, and
+`Mode` picks how the text sits in them. Point text (`Mode` 0): the text hangs off the layer
+origin - `FUN_18051ca80` (first-baseline offset) returns 0 for it, so the first line's baseline
+is the origin whatever `VerticalAlignment` says, and the line layout (`FUN_180519ca0`) gives it
+no width to align in: Left/Left Justify/Justify lines start at x = 0, Center/Center Justify
+centre on it, Right/Right Justify end on it; the first-line indent is added, the left/right/top/
+bottom indents are not. The width aligned (`FUN_180517f20`) leaves out trailing spaces and the
+last glyph's tracking. `MinX..MaxY` of point text is only this extent, recomputed from the
+layout (`FUN_180523fc0`: `MaxY` = first line ascent, `MinY` = that minus the text height plus
+the last line's descent) - project_1's "Very D.I.S.C.O" (Ubuntu Light 104) is
+`-315.063..315.063 x -19.656..96.928`, ascent 0.932 and descent 0.189 em. Paragraph text
+(`Mode` 1): the box is `[MinX, MaxX] x [MinY, MaxY]` wherever it is (the geometry builder
+`FUN_1804d94e0` renders a `Width x Height` texture at `MinX, MinY`), lines start at the left
+indent and align in `Width - Li - Ri`, and `VerticalAlignment` puts the first baseline at
+`Height - Top` (Top), `Bottom + textHeight/2 + (Height - Top - Bottom)/2` (Middle) or
+`Bottom + textHeight` (Bottom) from the box bottom, minus the first line's ascent. The port
+had point text aligned in a frame-sized box, so a Top-aligned point line (project_1's "Very
+D.I.S.C.O") was drawn at the top of the frame; `render/TextRender` now follows the rules above
+and `TextStyle::paragraphOffset` keeps the paragraph box's place.
+
+Saving (October 2026): a project opened from a file is written over that file's document
+(`project/VegfxMerge`) — the port replaces only what it models and keeps everything else
+(materials, shadows, AO, text formats, ViewerState, BinFolder, Metadata, Screens,
+CompositionTemplate, editor objects). Keyed lists follow the model: assets (composite shots
+included) and layers by `<ID>`, editor tracks by `<ID>`, properties by `<Name>`; the port's
+`OpenVegas*` extensions are always rewritten.
+
+Several composite shots (October 2026). A project is a list of `CompositionAsset`s in
+`AssetList/Assets`; a nested shot is an ordinary `AssetLayer` whose `<AssetID>` is the other
+shot's `<ID>` (`AssetLayer` is an `AbstractAssetInstance` in Project.dll, so a media file and a
+composite shot are referenced the same way), with `AssetInstanceStart` as the in-point.
+`<IsPrimary>` marks the shot VEGAS Pro gets back: "Set Primary Composite Shot"
+(`FUN_1407582d0`) clears it on the previous primary and sets it on the chosen one, or clears
+it — a project may have none. The open Editor tabs are `<OpenCompositeShots Version="0"
+TimelineType TimelineId>` beside `<Project>` with one `<CompositeShot CompositionId Name>`
+per tab: the writer is `FUN_140209440` (active timeline from ProjectMetadata 11000/11001),
+the reader `FUN_140202ab0` (TimelineType only 1000 = editor sequence or 1404 = composite
+shot, else "Invalid attribute value"; "Failed to load open composite shot list").
+Deleting a shot in Media is `RemoveAssetCmd` (`FUN_1403ce320`, "Remove Asset"): every layer
+that instances the asset goes with it in the same undo step.
+
+The port reads every `CompositionAsset`: the primary one (else the first) becomes the root
+`Composition` that also carries the project, the others `Composition::compositeShots()`;
+`AssetLayer`s naming a shot become nested clips, linked once all shots are read, with links
+that would close a loop (or point at the root) left unresolved. Each shot is written back as
+its own `CompositionAsset` (root first) and `<OpenCompositeShots>` follows the tabs. Older
+port saves kept nested shots in an `OpenVegasCompositions` block of the root shot; it is
+still read, never written. The Media panel lists the shots (Open, Composite Shot
+Properties..., Set Primary Composite Shot, Delete), New > Composite Shot creates an empty
+one ("Composite Shot %1"), and each tab keeps its own playhead (`<CTI>`). Deleting the root shot
+hands the project (ID, settings, source document, editor sequence, shot list) to the next shot;
+only a project's last shot stays.
+
+Composite shot files. Media's "Save Composite Shot" (`FUN_1407137d0`) refuses a shot whose
+layers nest another one ("This composite shot cannot be saved because it contains one or more
+embedded composite shots."), proposes `<shot name>.vegfxcs` (" [N]" appended while taken) and
+writes it with `FUN_1402c8b10`: root `BiffCompositeShot` (`DAT_141542ab0`) with `Version="1"`,
+`AppEdition` (5000) and `AppVersion`; `<Assets>` with every asset the shot's AssetLayers and
+model layers use, each serialized as in a project and its paths rewritten by `FUN_1402d5b30`
+(relative to the file when relative paths are on, else absolute); then the shot's own
+`CompositionAsset`. File > Import > Composite Shot (`FUN_1407175e0`) takes "Composite Shots
+(*.vegfxcs *.vegfx)", remembers the folder under `RecentFolders/AddCompShot`, lists the shots
+the file holds (`FUN_1402c1840`), warns "No composite shots can be imported from this file."
+when there are none, imports a single one directly and asks with `ImportCompositionDialog`
+(`FUN_1407880a0`/`FUN_140787100`: "Project Name:", "Select Composite Shots", Cancel/Import)
+otherwise. The port reads a `.vegfxcs` by laying it out as a one-shot project, brings the
+nested shots and the media along, and gives a shot whose ID the project already has a new one. The composite shot's work
+area is `<InPoint>`/`<OutPoint>` (older port saves wrote `In`/`Out`, still read), its length is
+`AudioVideoSettings/FrameCount` even when a layer runs past it, and `Project/Name` is the file
+name. Auto-saves follow FUN_1402cd290: `<base>.vegfx.autosave<N>` in `Options/AutoSavePath`.
+
+Field semantics confirmed against `project_1` (the port reads and writes them natively):
+
+- `ParentLayerID` — null GUID for a root layer; `Muted`, `Locked`, `MotionBlurOn` — 0/1.
+  Older port files also carry `OpenVegasParentLayerID`/`OpenVegasLocked`/`OpenVegasMuted`,
+  which still win when present.
+- `AssetInstanceStart` — the media frame (at the composition's rate) shown at the layer's
+  `StartFrame`, i.e. the source in-point. The music layer has 1853 (30.9 s at 60 fps), speed
+  `1.0146` and 15376 frames, so it ends 290.9 s into the song — by the asset's
+  `OutPoint` 8740 at 30 fps (291.3 s).
+- PropertyManager `speed` (`<db>`) — playback rate of the asset.
+- PropertyManager `audioLevel` (`<fl>`, dB) — the layer's Audio › Level. Its `<Animation>` key
+  times (`Ti`, ms) are composition time like every other layer property, not media time: the
+  music layer fades 0 → −60 dB over 29.70–30.05 s of its 30 s shot; its fade-in keys sit at
+  −30.89/−30.40 s, where they landed when the layer was slid left by its in-point.
+  `FUN_14033f3b0`/`FUN_140340e10` write `audioLevel` keys at `BiffTime::Milliseconds` times
+  under a "Level" label — probably the editor's fade handles; the −60 dB floor itself was
+  not found there as a constant.
 PropertyManager: animatable props `<position>`, `<scale>`, `<opacity>`, `<rotationY>`, `aoSampleRadius`, `<anchorPoint>`
 each `@Type=0/1 @Spatial=0 @CanInterpT=1`, `Name`, `Default`, `Static` (or `Animation`) with typed values
 (`<p3 X Y Z>`, `<fl>`, `<i>`, `<sc X Y Z>`); animation is keyframes `<Key @STp= @Ti= @Tp= @V=>`

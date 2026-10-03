@@ -4,6 +4,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include <QPointF>
 #include <QSizeF>
 
 namespace openvegas {
@@ -27,8 +28,13 @@ struct TextStyle
     // --- what the layer says ------------------------------------------------
     QString text;
     int fontSize = 48;
+    // Point text hangs off the layer origin: the first line's baseline sits on
+    // it and each line is aligned to it (left from it, centred on it, right up
+    // to it). Paragraph text fills a box of paragraphSize whose centre is
+    // paragraphOffset from the origin, in layer space (Y up, like a position).
     TextMode textMode = TextMode::Point;
     QSizeF paragraphSize{640.0, 360.0};
+    QPointF paragraphOffset;
 
     // --- Character ----------------------------------------------------------
     QString fontFamily;                    // empty = the application font

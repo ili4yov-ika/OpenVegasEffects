@@ -38,7 +38,7 @@ Unicode true
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define PROJECT_PROGID "OpenVegasEffects.Project"
 
-; Inventory includes WebEngine, translations and optional native plugins.
+; Inventory includes translations and optional native plugins.
 ; Uninstall removes only packaged files and directories that are empty.
 !tempfile OV_PAYLOAD_INCLUDE
 !system 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "tools\nsis_payload.ps1" -Source "${BUILD_DIR}\bin" -Output "${OV_PAYLOAD_INCLUDE}" -RequireVlc' = 0

@@ -31,9 +31,60 @@
 
 #include "app/Settings.h"
 #include "ui/ViewScaleButton.h"
+#include "ui/Viewer360View.h"
+
+#include <QFocusEvent>
 
 namespace openvegas {
 namespace ui {
+
+double ViewerMapping::scale() const
+{
+    return canvasSize.width() > 0.0 ? imageRect.width() / canvasSize.width() : 1.0;
+}
+
+QPointF ViewerMapping::toWidget(const QPointF& canvas, bool* visible) const
+{
+    if (sphere) {
+        QPointF point;
+        const bool ahead = sphere->viewAt(canvas, canvasSize, viewRect.size(), &point);
+        point += viewRect.topLeft();
+        if (visible) *visible = ahead && viewRect.contains(point);
+        return point;
+    }
+    if (visible) *visible = true;
+    const double sx = canvasSize.width() > 0.0 ? imageRect.width() / canvasSize.width() : 1.0;
+    const double sy = canvasSize.height() > 0.0 ? imageRect.height() / canvasSize.height() : 1.0;
+    return QPointF(imageRect.x() + canvas.x() * sx, imageRect.y() + canvas.y() * sy);
+}
+
+QPointF ViewerMapping::toCanvas(const QPointF& widget) const
+{
+    if (sphere) return sphere->frameAt(widget - viewRect.topLeft(), viewRect.size(), canvasSize);
+    if (imageRect.isEmpty()) return {};
+    return QPointF((widget.x() - imageRect.x()) * canvasSize.width() / imageRect.width(),
+                   (widget.y() - imageRect.y()) * canvasSize.height() / imageRect.height());
+}
+
+ViewerOverlay::~ViewerOverlay()
+{
+    if (auto* owner = viewer()) owner->removeOverlay(this);
+}
+
+bool ViewerOverlay::acceptsTool(int tool) const
+{
+    return tool == int(ViewerWidget::ViewerTool::Select);
+}
+
+ViewerWidget* ViewerOverlay::viewer() const
+{
+    return static_cast<ViewerWidget*>(m_viewer.data());
+}
+
+void ViewerOverlay::requestRepaint() const
+{
+    if (auto* owner = viewer()) owner->update();
+}
 
 namespace {
 // The reference strip is 24 px wide. Its 22 px square buttons sit one pixel
@@ -167,10 +218,13 @@ public:
         });
     }
 
-    void setFrame(const QImage& frame, const QColor& background)
+    // `shape` is the size the frame is seen at (ViewerWidget::shownFrameSize):
+    // a non-square-pixel shot is shown at width x PAR.
+    void setFrame(const QImage& frame, const QColor& background, const QSize& shape)
     {
         m_frame = frame;
         m_background = background;
+        m_shape = shape.isEmpty() ? frame.size() : shape;
         update();
     }
 
@@ -182,7 +236,7 @@ protected:
         if (m_frame.isNull()) {
             return;
         }
-        const QSize scaled = m_frame.size().scaled(size(), Qt::KeepAspectRatio);
+        const QSize scaled = m_shape.scaled(size(), Qt::KeepAspectRatio);
         const QRect target(QPoint((width() - scaled.width()) / 2,
                                   (height() - scaled.height()) / 2),
                            scaled);
@@ -215,6 +269,7 @@ protected:
 private:
     QWidget* m_owner = nullptr;
     QImage m_frame;
+    QSize m_shape;
     QColor m_background{0, 0, 0};
 };
 
@@ -228,6 +283,8 @@ ViewerWidget::ViewerWidget(QWidget* parent)
     setMinimumSize(320, 180);
     setAutoFillBackground(false);
     setFocusPolicy(Qt::StrongFocus);
+    // Overlays change the cursor over their handles without a button held.
+    setMouseTracking(true);
 
     // View options are stored settings in the reference, not per-session state:
     // the Options menu and the Preferences Viewer page write the same keys, so
@@ -265,7 +322,8 @@ void ViewerWidget::setFrame(const QImage& image)
     // its own, so a qobject_cast would match its base and accept any QWidget.
     // The pointer is only ever set from this class.
     if (m_fullScreenPreview) {
-        static_cast<FullScreenPreview*>(m_fullScreenPreview)->setFrame(m_frame, m_backgroundColor);
+        static_cast<FullScreenPreview*>(m_fullScreenPreview)->setFrame(m_frame, m_backgroundColor,
+                                                                       shownFrameSize());
     }
     update();
 }
@@ -289,6 +347,100 @@ QPointF ViewerWidget::canvasDeltaForViewDelta(const QPointF& viewDelta) const
         return viewDelta;
     return QPointF(viewDelta.x() * double(m_projectSize.width()) / imageRect.width(),
                    viewDelta.y() * double(m_projectSize.height()) / imageRect.height());
+}
+
+void ViewerWidget::addOverlay(ViewerOverlay* overlay)
+{
+    if (!overlay || m_overlays.contains(overlay)) return;
+    if (ViewerWidget* previous = overlay->viewer(); previous && previous != this) {
+        previous->removeOverlay(overlay);
+    }
+    overlay->m_viewer = this;
+    m_overlays.append(overlay);
+    update();
+}
+
+void ViewerWidget::removeOverlay(ViewerOverlay* overlay)
+{
+    if (!overlay) return;
+    m_overlays.removeAll(overlay);
+    if (m_overlayGrab == overlay) m_overlayGrab = nullptr;
+    if (overlay->viewer() == this) overlay->m_viewer = nullptr;
+    update();
+}
+
+ViewerMapping ViewerWidget::mapping(int view) const
+{
+    const int index = view < 0 ? m_activeView : view;
+    ViewerMapping result;
+    const QSize space = m_projectSize.isEmpty() ? m_frame.size() : m_projectSize;
+    result.canvasSize = QSizeF(space);
+    if (isSpherical()) {
+        result.viewRect = QRectF(sphereRect(index));
+        result.imageRect = result.viewRect;
+        result.sphere = m_sphere;
+        return result;
+    }
+    result.viewRect = QRectF(viewRect(index));
+    QRect target = imageRectForView(index);
+    if (index == m_activeView && !m_panOffset.isNull()) target.translate(m_panOffset);
+    result.imageRect = QRectF(target);
+    return result;
+}
+
+QRect ViewerWidget::sphereRect(int index) const
+{
+    return viewRect(index).adjusted(2, 2, -2, -2);
+}
+
+void ViewerWidget::setSphericalView(Viewer360View* view)
+{
+    if (m_sphere == view) return;
+    if (m_sphere) disconnect(m_sphere, nullptr, this, nullptr);
+    m_sphere = view;
+    if (view) connect(view, &Viewer360View::changed, this, qOverload<>(&QWidget::update));
+    m_sphereDragging = false;
+    m_panOffset = QPoint();
+    setCursor(toolCursor());
+    update();
+    emit sphericalModeChanged(isSpherical());
+}
+
+ViewerPointerEvent ViewerWidget::pointerEvent(const QPointF& widgetPos, int view,
+                                              Qt::MouseButton button, Qt::MouseButtons buttons,
+                                              Qt::KeyboardModifiers modifiers) const
+{
+    ViewerPointerEvent event;
+    event.widgetPos = widgetPos;
+    event.mapping = mapping(view < 0 ? m_activeView : view);
+    event.canvasPos = event.mapping.toCanvas(widgetPos);
+    event.button = button;
+    event.buttons = buttons;
+    event.modifiers = modifiers;
+    return event;
+}
+
+QVector<ViewerOverlay*> ViewerWidget::eventOverlays() const
+{
+    QVector<ViewerOverlay*> result;
+    if (m_tool == ViewerTool::Hand) return result;
+    for (auto it = m_overlays.crbegin(); it != m_overlays.crend(); ++it) {
+        if ((*it)->isActive() && (*it)->acceptsTool(int(m_tool))) result.append(*it);
+    }
+    return result;
+}
+
+void ViewerWidget::applyCursor(const ViewerPointerEvent& event)
+{
+    setCursor(event.setsCursor ? event.cursor : toolCursor());
+}
+
+Qt::CursorShape ViewerWidget::toolCursor() const
+{
+    if (m_tool == ViewerTool::Hand) return Qt::OpenHandCursor;
+    if (isSpherical() && m_tool == ViewerTool::Select) return Qt::OpenHandCursor;
+    if (m_tool == ViewerTool::Text) return Qt::IBeamCursor;
+    return Qt::ArrowCursor;
 }
 
 void ViewerWidget::setLayout(ViewerLayout layout)
@@ -331,7 +483,8 @@ void ViewerWidget::setBackgroundColor(const QColor& color)
     m_backgroundColor = color;
     app::Settings::setViewerBackgroundColor(color.name());
     if (m_fullScreenPreview) {
-        static_cast<FullScreenPreview*>(m_fullScreenPreview)->setFrame(m_frame, m_backgroundColor);
+        static_cast<FullScreenPreview*>(m_fullScreenPreview)->setFrame(m_frame, m_backgroundColor,
+                                                                       shownFrameSize());
     }
     update();
 }
@@ -529,7 +682,7 @@ void ViewerWidget::setFullScreenPreview(bool on)
     }
     auto* preview = new FullScreenPreview(this);
     preview->setAttribute(Qt::WA_DeleteOnClose, false);
-    preview->setFrame(m_frame, m_backgroundColor);
+    preview->setFrame(m_frame, m_backgroundColor, shownFrameSize());
     m_fullScreenPreview = preview;
     preview->showFullScreen();
     preview->setFocus();
@@ -609,6 +762,9 @@ void ViewerWidget::setTool(ViewerTool tool)
     m_tool = tool;
     m_handPanning = false;
     m_rubberBanding = false;
+    m_overlayGrab = nullptr;
+    m_sphereDragging = false;
+    setCursor(toolCursor());
     updateToolButtons();
     emit toolChanged(tool);
     update();
@@ -632,18 +788,30 @@ int ViewerWidget::viewAt(const QPoint& widgetPos) const
     return -1;
 }
 
+// The frame as it is seen: a shot with non-square pixels comes rendered at
+// its pixel size (width x height) and is shown at its square shape (width x
+// PAR, m_projectSize), keeping the frame's own height so 100 % stays 100 %.
+QSize ViewerWidget::shownFrameSize() const
+{
+    if (m_frame.isNull()) return QSize();
+    if (m_projectSize.isEmpty() || m_frame.height() <= 0) return m_frame.size();
+    const double aspect = double(m_projectSize.width()) / m_projectSize.height();
+    return QSize(qMax(1, int(std::lround(m_frame.height() * aspect))), m_frame.height());
+}
+
 QRect ViewerWidget::imageRectForView(int index) const
 {
     const QRect vp = viewRect(index);
     if (vp.isEmpty() || m_frame.isNull())
         return QRect();
 
-    double fitScale = qMin(double(vp.width()) / m_frame.width(),
-                           double(vp.height()) / m_frame.height());
+    const QSize shown = shownFrameSize();
+    double fitScale = qMin(double(vp.width()) / shown.width(),
+                           double(vp.height()) / shown.height());
     const double scale = (m_zoomPercent < 0)
                              ? fitScale
                              : fitScale * (double(m_zoomPercent) / 100.0);
-    const QSize scaled(int(m_frame.width() * scale), int(m_frame.height() * scale));
+    const QSize scaled(int(shown.width() * scale), int(shown.height() * scale));
     return QRect(QPoint(vp.x() + (vp.width() - scaled.width()) / 2,
                         vp.y() + (vp.height() - scaled.height()) / 2),
                  scaled);
@@ -651,6 +819,11 @@ QRect ViewerWidget::imageRectForView(int index) const
 
 QPoint ViewerWidget::imagePos(int viewIndex, const QPoint& widgetPos) const
 {
+    if (isSpherical()) {
+        // Through the lens: the equirectangular pixel under the pointer.
+        const QPointF canvas = mapping(viewIndex).toCanvas(QPointF(widgetPos));
+        return QPoint(int(canvas.x()), int(canvas.y()));
+    }
     const QRect fit = imageRectForView(viewIndex);
     if (fit.isNull() || fit.width() <= 0 || fit.height() <= 0)
         return QPoint();
@@ -1245,7 +1418,14 @@ void ViewerWidget::paintEvent(QPaintEvent* event)
             painter.fillRect(vp, m_backgroundColor);
         }
 
-        if (!m_frame.isNull()) {
+        if (!m_frame.isNull() && isSpherical()) {
+            // 360 mode: the view is a window onto the sphere, filled edge to
+            // edge rather than letter-boxed.
+            const QRect target = sphereRect(i);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+            painter.drawImage(target, m_sphere->project(channelFiltered(m_frame), target.size()));
+            painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+        } else if (!m_frame.isNull()) {
             QRect target = imageRectForView(i);
             if (!target.isNull()) {
                 if (i == m_activeView && !m_panOffset.isNull())
@@ -1260,6 +1440,20 @@ void ViewerWidget::paintEvent(QPaintEvent* event)
         }
 
         paintMotionPath(painter, i);
+
+        // Overlays draw over the active view only: that is the one their
+        // pointer events are mapped through.
+        if (i == active && !m_overlays.isEmpty()) {
+            const ViewerMapping map = mapping(i);
+            if (map.isValid()) {
+                for (ViewerOverlay* overlay : std::as_const(m_overlays)) {
+                    if (!overlay->isActive()) continue;
+                    painter.save();
+                    overlay->paint(painter, map);
+                    painter.restore();
+                }
+            }
+        }
 
         painter.restore();
 
@@ -1404,26 +1598,25 @@ QImage ViewerWidget::channelFiltered(const QImage& source) const
 
 void ViewerWidget::paintMotionPath(QPainter& painter, int viewIndex) const
 {
-    if (!m_showMotionPath || m_motionPath.size() < 2) {
+    if (!m_showMotionPath || m_motionPath.size() < 2 || m_projectSize.isEmpty()) {
         return;
     }
-    QRect target = imageRectForView(viewIndex);
-    if (target.isNull() || m_projectSize.isEmpty()) {
+    const ViewerMapping map = mapping(viewIndex);
+    if (!map.isValid() || (!map.isSpherical() && map.imageRect.isEmpty())) {
         return;
     }
-    if (viewIndex == m_activeView && !m_panOffset.isNull()) {
-        target.translate(m_panOffset);
-    }
-    const double sx = double(target.width()) / m_projectSize.width();
-    const double sy = double(target.height()) / m_projectSize.height();
-    const auto toWidget = [&](const QPointF& canvas) {
-        return QPointF(target.x() + canvas.x() * sx, target.y() + canvas.y() * sy);
-    };
 
-    QPolygonF poly;
-    poly.reserve(m_motionPath.size());
+    // In 360 mode a path can leave the lens; it is drawn in the pieces that
+    // stay in front of the viewer.
+    QVector<QPolygonF> pieces(1);
     for (const QPointF& point : m_motionPath) {
-        poly << toWidget(point);
+        bool visible = true;
+        const QPointF widget = map.toWidget(point, &visible);
+        if (visible) {
+            pieces.last() << widget;
+        } else if (!pieces.last().isEmpty()) {
+            pieces.append(QPolygonF());
+        }
     }
 
     painter.save();
@@ -1431,17 +1624,21 @@ void ViewerWidget::paintMotionPath(QPainter& painter, int viewIndex) const
     // Drawn twice: a dark backing line so the path stays visible over a bright
     // frame, then the light one on top.
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(QColor(0, 0, 0, 160), 3.0));
-    painter.drawPolyline(poly);
-    painter.setPen(QPen(QColor(240, 240, 245), 1.0));
-    painter.drawPolyline(poly);
+    for (const QPolygonF& poly : std::as_const(pieces)) {
+        if (poly.size() < 2) continue;
+        painter.setPen(QPen(QColor(0, 0, 0, 160), 3.0));
+        painter.drawPolyline(poly);
+        painter.setPen(QPen(QColor(240, 240, 245), 1.0));
+        painter.drawPolyline(poly);
+    }
 
     // Keyframed points get a square, as the reference marks them.
     painter.setPen(QPen(QColor(20, 20, 20), 1.0));
     painter.setBrush(QColor(240, 200, 60));
     for (const QPointF& key : m_motionPathKeys) {
-        const QPointF centre = toWidget(key);
-        painter.drawRect(QRectF(centre.x() - 3.0, centre.y() - 3.0, 6.0, 6.0));
+        bool visible = true;
+        const QPointF centre = map.toWidget(key, &visible);
+        if (visible) painter.drawRect(QRectF(centre.x() - 3.0, centre.y() - 3.0, 6.0, 6.0));
     }
     painter.restore();
 }
@@ -1484,6 +1681,29 @@ void ViewerWidget::mousePressEvent(QMouseEvent* event)
 
     m_dragView = index;
     m_lastMouse = event->pos();
+
+    // Overlays first: a press on the text frame or on a plugin's custom UI
+    // belongs to them, not to the tool underneath.
+    ViewerPointerEvent pointer = pointerEvent(event->position(), index, event->button(),
+                                              event->buttons(), event->modifiers());
+    m_lastCanvasPos = pointer.canvasPos;
+    for (ViewerOverlay* overlay : eventOverlays()) {
+        if (overlay->mousePress(pointer)) {
+            m_overlayGrab = overlay;
+            applyCursor(pointer);
+            event->accept();
+            return;
+        }
+    }
+
+    // 360 mode: Select and Hand look around instead of moving the layer or
+    // panning a flat canvas.
+    if (isSpherical() && (m_tool == ViewerTool::Hand || m_tool == ViewerTool::Select)) {
+        m_sphereDragging = true;
+        setCursor(Qt::ClosedHandCursor);
+        event->accept();
+        return;
+    }
 
     if (m_tool == ViewerTool::Hand) {
         m_handPanning = true;
@@ -1528,7 +1748,16 @@ void ViewerWidget::mousePressEvent(QMouseEvent* event)
 
 void ViewerWidget::mouseDoubleClickEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton && viewAt(event->pos()) >= 0) {
+    const int view = viewAt(event->pos());
+    if (event->button() == Qt::LeftButton && view >= 0) {
+        ViewerPointerEvent pointer = pointerEvent(event->position(), view, event->button(),
+                                                  event->buttons(), event->modifiers());
+        for (ViewerOverlay* overlay : eventOverlays()) {
+            if (overlay->mouseDoubleClick(pointer)) {
+                event->accept();
+                return;
+            }
+        }
         emit textEditRequested();
         event->accept();
         return;
@@ -1538,7 +1767,16 @@ void ViewerWidget::mouseDoubleClickEvent(QMouseEvent* event)
 
 void ViewerWidget::contextMenuEvent(QContextMenuEvent* event)
 {
-    if (viewAt(event->pos()) >= 0) {
+    const int view = viewAt(event->pos());
+    if (view >= 0) {
+        ViewerPointerEvent pointer = pointerEvent(QPointF(event->pos()), view, Qt::RightButton,
+                                                  Qt::RightButton, event->modifiers());
+        for (ViewerOverlay* overlay : eventOverlays()) {
+            if (overlay->contextMenu(event->globalPos(), pointer)) {
+                event->accept();
+                return;
+            }
+        }
         emit textContextMenuRequested(event->globalPos());
         event->accept();
         return;
@@ -1555,6 +1793,42 @@ void ViewerWidget::mouseMoveEvent(QMouseEvent* event)
             m_mouseImagePos = imagePos(view, event->pos());
         }
         update();
+    }
+
+    if (m_overlayGrab) {
+        ViewerPointerEvent pointer = pointerEvent(event->position(), m_dragView, Qt::NoButton,
+                                                  event->buttons(), event->modifiers());
+        m_lastCanvasPos = pointer.canvasPos;
+        m_overlayGrab->mouseMove(pointer);
+        applyCursor(pointer);
+        event->accept();
+        return;
+    }
+
+    if (m_sphereDragging && m_sphere) {
+        // The grabbed point follows the pointer: a view's height of drag
+        // turns it by its field of view.
+        const QPointF delta = event->position() - QPointF(m_lastMouse);
+        m_lastMouse = event->pos();
+        const double perPixel = m_sphere->effectiveFieldOfView()
+                                / qMax(1, sphereRect(m_activeView).height());
+        m_sphere->turnBy(delta.x() * perPixel, -delta.y() * perPixel);
+        event->accept();
+        return;
+    }
+
+    if (event->buttons() == Qt::NoButton) {
+        const int view = viewAt(event->pos());
+        if (view >= 0) {
+            ViewerPointerEvent pointer = pointerEvent(event->position(), view, Qt::NoButton,
+                                                      event->buttons(), event->modifiers());
+            m_lastCanvasPos = pointer.canvasPos;
+            for (ViewerOverlay* overlay : eventOverlays()) {
+                overlay->hover(pointer);
+                if (pointer.setsCursor) break;
+            }
+            applyCursor(pointer);
+        }
     }
 
     if (m_handPanning && m_dragView == m_activeView) {
@@ -1599,6 +1873,26 @@ void ViewerWidget::mouseMoveEvent(QMouseEvent* event)
 
 void ViewerWidget::mouseReleaseEvent(QMouseEvent* event)
 {
+    if (m_overlayGrab && event->button() == Qt::LeftButton) {
+        ViewerPointerEvent pointer = pointerEvent(event->position(), m_dragView, event->button(),
+                                                  event->buttons(), event->modifiers());
+        ViewerOverlay* grab = m_overlayGrab;
+        m_overlayGrab = nullptr;
+        grab->mouseRelease(pointer);
+        m_dragView = -1;
+        applyCursor(pointer);
+        event->accept();
+        return;
+    }
+
+    if (m_sphereDragging && event->button() == Qt::LeftButton) {
+        m_sphereDragging = false;
+        m_dragView = -1;
+        setCursor(toolCursor());
+        event->accept();
+        return;
+    }
+
     if (m_handPanning && event->button() == Qt::LeftButton) {
         m_handPanning = false;
         m_dragView = -1;
@@ -1653,12 +1947,30 @@ void ViewerWidget::placeText(int viewIndex, const QPoint& widgetPos)
 
 void ViewerWidget::keyPressEvent(QKeyEvent* event)
 {
+    for (ViewerOverlay* overlay : eventOverlays()) {
+        if (overlay->keyPress(event)) {
+            event->accept();
+            return;
+        }
+    }
     // Arrow keys nudge the selected layer. The reference registers these in its
     // Viewer category as commands 1107-1110 ("Move position left/right/up/down
     // by 1 pixel") with the Shift variants 1111-1114 moving ten. Handled before
     // the tool letters because they take a modifier into account.
     const bool shifted = event->modifiers().testFlag(Qt::ShiftModifier);
     const double step = shifted ? 10.0 : 1.0;
+    // In 360 mode they look around instead, as the 360 viewer's own keys do,
+    // and Home faces front again.
+    if (isSpherical()) {
+        switch (event->key()) {
+        case Qt::Key_Left:  m_sphere->turnBy(step, 0.0); return;
+        case Qt::Key_Right: m_sphere->turnBy(-step, 0.0); return;
+        case Qt::Key_Up:    m_sphere->turnBy(0.0, step); return;
+        case Qt::Key_Down:  m_sphere->turnBy(0.0, -step); return;
+        case Qt::Key_Home:  m_sphere->setCurrentView(Viewer360View::View::Front); return;
+        default: break;
+        }
+    }
     switch (event->key()) {
     case Qt::Key_Left:  emit layerNudged(QPointF(-step, 0.0)); return;
     case Qt::Key_Right: emit layerNudged(QPointF(step, 0.0)); return;
@@ -1694,8 +2006,37 @@ void ViewerWidget::keyPressEvent(QKeyEvent* event)
     QWidget::keyPressEvent(event);
 }
 
+void ViewerWidget::keyReleaseEvent(QKeyEvent* event)
+{
+    for (ViewerOverlay* overlay : eventOverlays()) {
+        if (overlay->keyRelease(event)) {
+            event->accept();
+            return;
+        }
+    }
+    QWidget::keyReleaseEvent(event);
+}
+
+void ViewerWidget::focusInEvent(QFocusEvent* event)
+{
+    for (ViewerOverlay* overlay : std::as_const(m_overlays)) overlay->focusChanged(true);
+    QWidget::focusInEvent(event);
+}
+
+void ViewerWidget::focusOutEvent(QFocusEvent* event)
+{
+    for (ViewerOverlay* overlay : std::as_const(m_overlays)) overlay->focusChanged(false);
+    QWidget::focusOutEvent(event);
+}
+
 void ViewerWidget::wheelEvent(QWheelEvent* event)
 {
+    if (isSpherical()) {
+        // The lens is the zoom in 360 mode.
+        if (event->angleDelta().y() != 0) m_sphere->zoomBy(-event->angleDelta().y() / 24.0);
+        event->accept();
+        return;
+    }
     if (event->angleDelta().y() > 0)
         zoomIn();
     else

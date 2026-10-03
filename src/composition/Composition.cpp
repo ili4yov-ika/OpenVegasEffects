@@ -1,5 +1,7 @@
 #include "composition/Composition.h"
 
+#include <cmath>
+
 namespace openvegas {
 namespace composition {
 
@@ -124,11 +126,71 @@ Clip* Composition::clipAt(int layerIndex, int clipIndex)
     return &layer.clips[clipIndex];
 }
 
+void Composition::frameRateFraction(double fps, int* numerator, int* denominator)
+{
+    int num = 30, den = 1;
+    if (fps > 0.0 && std::isfinite(fps)) {
+        const double whole = std::round(fps);
+        const double ntsc = std::round(fps * 1.001);
+        if (std::abs(fps - whole) < 1e-3) {
+            num = int(whole);
+        } else if (std::abs(fps - ntsc / 1.001) < 5e-3) {
+            num = int(ntsc) * 1000;
+            den = 1001;
+        } else {
+            num = int(std::round(fps * 1000.0));
+            den = 1000;
+        }
+    }
+    if (numerator) *numerator = num;
+    if (denominator) *denominator = den;
+}
+
+void Composition::addCompositeShot(const std::shared_ptr<Composition>& shot, int index)
+{
+    if (!shot || shot.get() == this || compositeShot(shot->id())) return;
+    if (index < 0 || index > m_compositeShots.size()) index = m_compositeShots.size();
+    m_compositeShots.insert(index, shot);
+}
+
+int Composition::removeCompositeShot(const core::Identifier& id)
+{
+    for (int i = 0; i < m_compositeShots.size(); ++i) {
+        if (m_compositeShots.at(i) && m_compositeShots.at(i)->id() == id) {
+            m_compositeShots.removeAt(i);
+            return i;
+        }
+    }
+    return -1;
+}
+
+std::shared_ptr<Composition> Composition::compositeShot(const core::Identifier& id) const
+{
+    for (const auto& shot : m_compositeShots)
+        if (shot && shot->id() == id) return shot;
+    return nullptr;
+}
+
 void Composition::clear()
 {
+    m_id = core::Identifier(QUuid::createUuid().toString(QUuid::WithoutBraces));
     m_layers.clear();
     m_durationSeconds = 10.0;
     m_editorSequence = EditorSequence();
+    m_renderSettings = CompositionRenderSettings();
+    m_currentFrame = 0;
+    m_workIn = 0;
+    m_workOut = -1;
+    m_projectId = core::Identifier(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    m_projectSettings = ProjectRenderSettings();
+    m_nativeSource.reset();
+    m_pixelAspect = SquarePixels;
+    m_customPixelAspect = 1.0;
+    m_audioSampleRate = 48000;
+    m_primary = false;
+    m_compositeShots.clear();
+    m_openShotIds.clear();
+    m_activeShotId.clear();
 }
 
 } // namespace composition

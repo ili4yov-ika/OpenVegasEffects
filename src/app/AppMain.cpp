@@ -7,16 +7,49 @@
 #include <QDateTime>
 #include <QDir>
 #include <QMessageBox>
+#include <QOffscreenSurface>
+#include <QOpenGLContext>
+#include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QSurfaceFormat>
+#include <QTimer>
 
 #include "core/Log.h"
+#include "ui/AutoSave.h"
+#include "ui/PromptMessage.h"
 #include "ui/SplashScreen.h"
 #include "ui/Theme.h"
 #include "plugin/PluginManager.h"
 
 namespace openvegas {
 namespace app {
+
+namespace {
+
+// Whether an OpenGL 4.1 core context can be created and made current - the
+// version every native .hfpl GPU module compiles its GLSL 4.10 for.
+bool openGl41Available()
+{
+    if (qEnvironmentVariableIsSet("OPENVEGAS_FORCE_GPU_WARNING")) return false;
+    QSurfaceFormat format;
+    format.setVersion(4, 1);
+    format.setProfile(QSurfaceFormat::CoreProfile);
+    QOffscreenSurface surface;
+    surface.setFormat(format);
+    surface.create();
+    QOpenGLContext context;
+    context.setFormat(format);
+    if (!surface.isValid() || !context.create() || !context.makeCurrent(&surface)) {
+        return false;
+    }
+    const QSurfaceFormat actual = context.format();
+    context.doneCurrent();
+    return actual.majorVersion() > 4
+        || (actual.majorVersion() == 4 && actual.minorVersion() >= 1);
+}
+
+} // namespace
 
 AppMain::AppMain(QObject* parent)
     : QObject(parent)
@@ -67,6 +100,33 @@ int AppMain::run(QApplication* application, const QString& projectToOpen)
 
     logPluginStatus();
 
+    // The reference checks the GPU once its window exists (FUN_1401c2ce0,
+    // "%1 : Unsupported GPU" gated by ShowGPUWarning, Continue/Exit). Here the
+    // requirement is what the native GPU effects need: an OpenGL 4.1 core
+    // context. Its driver-version warning has no portable counterpart.
+    if (!openGl41Available()) {
+        OV_LOG_WARN(QStringLiteral("OpenGL 4.1 core profile is not available"));
+        const QString name = QCoreApplication::applicationName();
+        const auto answer = ui::showPrompt(
+            m_mainWindow, QStringLiteral("GPUWarning"), QMessageBox::Warning,
+            tr("%1 : Unsupported GPU").arg(name),
+            tr("Your computer does not appear to support OpenGL 4.1, which %1 needs to run "
+               "its native GPU effects and transitions.<br><br>If you choose to continue, "
+               "those effects will not render.<br><br>If you think this is incorrect, please "
+               "ensure that you have the latest GPU drivers installed and try again.<br>")
+                .arg(name),
+            QMessageBox::Ignore | QMessageBox::Abort, QMessageBox::Ignore,
+            [](QMessageBox& box) {
+                box.setTextFormat(Qt::RichText);
+                box.button(QMessageBox::Ignore)->setText(tr("Continue"));
+                box.button(QMessageBox::Abort)->setText(tr("Exit"));
+            },
+            QMessageBox::Ignore);
+        if (answer == QMessageBox::Abort) {
+            return 0;
+        }
+    }
+
     // The reference guards against a few silent startup failures with
     // message boxes. "No plugins loaded" is the one most likely to be hit in a
     // clean layout (the plugin tree simply isn't beside the executable yet),
@@ -78,13 +138,23 @@ int AppMain::run(QApplication* application, const QString& projectToOpen)
                                             "repair the installation."));
     }
 
+    // A session lock in the auto-save folder; one left by a process that is
+    // gone means the last session ended abnormally, and its auto-saves are
+    // offered for recovery, as the reference does.
+    const bool previousSessionCrashed = ui::autosave::beginSession();
+
     // A path on the command line (shell file association, "Open with") is
     // loaded once the window exists.
     if (!projectToOpen.isEmpty() && m_mainWindow) {
         m_mainWindow->openProject(projectToOpen);
     }
+    if (previousSessionCrashed && m_mainWindow) {
+        QTimer::singleShot(0, m_mainWindow, [window = m_mainWindow] { window->offerAutoSaveRecovery(); });
+    }
 
-    return application->exec();
+    const int code = application->exec();
+    ui::autosave::endSession();
+    return code;
 }
 
 void AppMain::initializeFolders()

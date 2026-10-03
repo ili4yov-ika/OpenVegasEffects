@@ -1,7 +1,12 @@
 #include "ui/EffectsPanel.h"
 #include "ui_Effects.h"
+#include "ui/EffectPlacement.h"
 
+#include <QApplication>
 #include <QBrush>
+#include <QDrag>
+#include <QMimeData>
+#include <QMouseEvent>
 #include <QColor>
 #include <QFont>
 #include <QHBoxLayout>
@@ -55,8 +60,38 @@ EffectsPanel::EffectsPanel(QWidget* parent)
                     emit effectActivated(*spec);
                 }
             });
+    // Rows can also be dragged onto a clip in the timeline; a transition then
+    // lands on the clip edge nearer the drop point.
+    m_tree->viewport()->installEventFilter(this);
 
     rebuildTree();
+}
+
+bool EffectsPanel::eventFilter(QObject* object, QEvent* event)
+{
+    if (m_tree && object == m_tree->viewport()) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            const auto* mouse = static_cast<QMouseEvent*>(event);
+            if (mouse->button() == Qt::LeftButton) m_dragStart = mouse->position().toPoint();
+        } else if (event->type() == QEvent::MouseMove) {
+            const auto* mouse = static_cast<QMouseEvent*>(event);
+            const QPoint pos = mouse->position().toPoint();
+            if ((mouse->buttons() & Qt::LeftButton)
+                && (pos - m_dragStart).manhattanLength() >= QApplication::startDragDistance()) {
+                const plugin::EffectSpec* spec = specForItem(m_tree->itemAt(m_dragStart));
+                if (spec) {
+                    auto* mime = new QMimeData;
+                    mime->setData(QString::fromLatin1(kEffectMimeType), spec->id.value().toUtf8());
+                    mime->setText(spec->displayName);
+                    auto* drag = new QDrag(this);
+                    drag->setMimeData(mime);
+                    drag->exec(Qt::CopyAction);
+                    return true;
+                }
+            }
+        }
+    }
+    return QDockWidget::eventFilter(object, event);
 }
 
 const plugin::EffectSpec* EffectsPanel::specForItem(const QTreeWidgetItem* item) const

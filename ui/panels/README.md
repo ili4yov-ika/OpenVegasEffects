@@ -94,7 +94,7 @@ ViewerPanel (QWidget, форма класса openvegas::ui::ViewerPanel)
 - **Left:** Media (`mediaPanel`) + Text (`textPanel`, оба в левом доке)
 - **Center:** стек `stackedWidgetScreens` — вкладки Viewer / Trimmer / Export
 - **Right:** Controls / Effects / Layout / Track / Layer / Library / History
-  и 360 Viewer (`Preview360VideoPanel`, скрыт) + Learn (WebEngine, скрыт)
+  и 360 Viewer (`Preview360VideoPanel`, скрыт) + Learn (нативный док, скрыт)
 - **Bottom:** Timeline (`timelinePanel`) с общей полосой Start/композиций +
   AudioMeters (`AudioMetersPanel`, скрыт по умолчанию). Форма Start встроена
   второй страницей Timeline, поэтому отдельной системной dock-полосы нет.
@@ -161,13 +161,15 @@ QDockWidget `controlsPanel` с root-виджетом `ControlsPanel` (spacer и�
 
 ## 6.5 Layout — `Layout.ui`
 
-QDockWidget `Layout`: `TransformWidget` (`toolButtonMirrorVertical` /
-`toolButtonMirrorHorizontal` / `toolButtonCounterClockWise` /
-`toolButtonClockWise`, кастомный 3×3-шикер направления `compassBackground`,
-`spinBoxX` / `spinBoxY` / `spinBoxWidth` / `spinBoxHeight`, абсолют/относительные
-spinbox-ы) + `AlignmentWidget` (кнопки выравнивания/распределения
-`toolButtonAlignHorizontal*`, `toolButtonAlignVertical*`, `toolButtonDistribute*`).
-Живое обновление при селект/анселект слоёв — код.
+QDockWidget `LayoutPanel`: форма подключена к `LayoutPanel.cpp`. Внутри прокрутки —
+`TransformWidget`: две кнопки отражения, промежуток, два поворота на 90°,
+опорная точка 3×3 с оригинальными значками, X/Y/Width/Height и связка размеров.
+Далее `AlignmentWidget`: заголовок Alignment, Selection/Timeline, шесть
+выравниваний и шесть распределений с промежутком между тройками.
+Оригинальные PNG-состояния и @2x находятся в `resources/icons/layout`.
+Все выбранные незаблокированные слои редактируются одной операцией Undo;
+анимированные свойства меняются в текущем кадре с сохранением ключей.
+Точные границы восстановления и адреса Ghidra: `MARKDOWN/RE_wnd_Layout.md`.
 
 ## 6.6 Track — `Track.ui`
 

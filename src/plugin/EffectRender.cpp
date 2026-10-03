@@ -176,7 +176,8 @@ void applyBrightness(QImage& image, double factor)
 
 } // namespace
 
-bool applyEffectToImage(QImage& image, const core::Identifier& pluginId, const QStringList& parameters)
+bool applyEffectToImage(QImage& image, const core::Identifier& pluginId, const QStringList& parameters,
+                        const NativeFrameTime& time)
 {
     if (image.isNull() || image.format() != QImage::Format_RGBA8888) {
         return false;
@@ -216,7 +217,7 @@ bool applyEffectToImage(QImage& image, const core::Identifier& pluginId, const Q
         applyBrightness(image, parseBrightness(parameters));
         return true;
     }
-    return applyNativeEffectToImage(image, pluginId, parameters);
+    return applyNativeEffectToImage(image, pluginId, parameters, time);
 }
 
 QVector<EffectSpec> timelineBuiltinSpecs()

@@ -114,7 +114,7 @@ QSize readFrameSize(const QString& filePath, int timeoutMs)
 
 } // namespace
 
-VideoInfo probeVideo(const QString& filePath, int timeoutMs)
+VideoInfo probeVideo(const QString& filePath, int timeoutMs, bool includeVideo)
 {
     VideoInfo info;
     const VlcApi& api = vlc();
@@ -140,10 +140,16 @@ VideoInfo probeVideo(const QString& filePath, int timeoutMs)
     libvlc_time_t duration = 0;
     while (timer.elapsed() < timeoutMs) {
         duration = api.libvlc_media_get_duration(media);
-        if (duration > 0) {
+        const int parsed = api.mediaParsedStatus ? api.mediaParsedStatus(media) : 0;
+        if ((api.mediaParsedStatus && parsed != 0) || (!api.mediaParsedStatus && duration > 0))
             break;
-        }
         QThread::msleep(10);
+    }
+    if (api.mediaStreams) info.streams = api.mediaStreams(media);
+    unsigned sarNum = 0, sarDen = 0, rateNum = 0, rateDen = 0;
+    if (api.videoTrackFormat && api.videoTrackFormat(media, &sarNum, &sarDen, &rateNum, &rateDen)) {
+        if (sarNum > 0 && sarDen > 0) info.pixelAspect = double(sarNum) / double(sarDen);
+        if (rateNum > 0 && rateDen > 0) info.frameRate = double(rateNum) / double(rateDen);
     }
     api.libvlc_media_release(media);
 
@@ -151,7 +157,11 @@ VideoInfo probeVideo(const QString& filePath, int timeoutMs)
         return info;
     }
     info.durationSeconds = double(duration) / 1000.0;
-    info.frameSize = readFrameSize(filePath, timeoutMs);
+    if (includeVideo) {
+        info.frameSize = info.streams.videoSize;
+        if (!info.frameSize.isValid() || info.frameSize.isEmpty())
+            info.frameSize = readFrameSize(filePath, timeoutMs);
+    }
     info.valid = true;
     return info;
 }
@@ -160,9 +170,10 @@ VideoInfo probeVideo(const QString& filePath, int timeoutMs)
 // VideoDecoder
 // ---------------------------------------------------------------------------
 
-VideoDecoder::VideoDecoder(const QString& filePath, int timeoutMs)
+VideoDecoder::VideoDecoder(const QString& filePath, int timeoutMs, bool allowHardware)
     : m_filePath(filePath)
     , m_timeoutMs(timeoutMs)
+    , m_allowHardware(allowHardware)
 {
     m_ready = open();
 }
@@ -220,7 +231,8 @@ bool VideoDecoder::open()
         return false;
     }
     const QSettings settings = app::Settings::optionSettings();
-    const bool hardware = settings.value(QStringLiteral("Options/UseHardwareDecoding"), true).toBool();
+    const bool hardware = m_allowHardware
+                          && settings.value(QStringLiteral("Options/UseHardwareDecoding"), true).toBool();
     const QByteArray acceleration = api.version.startsWith(QLatin1String("4."))
         ? (hardware ? QByteArray(":hw-dec") : QByteArray(":no-hw-dec"))
         : (hardware ? QByteArray(":avcodec-hw=any") : QByteArray(":avcodec-hw=none"));

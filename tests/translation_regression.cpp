@@ -11,11 +11,12 @@ private slots:
         auto* app = QCoreApplication::instance();
         const QString root = QString::fromUtf8(TRANSLATION_TEST_ROOT);
         const QStringList locales {"ru", "ja", "zh_CN"};
-        const QStringList expected {QStringLiteral("Длительность (секунды)"),
-            QStringLiteral("長さ（秒）"), QStringLiteral("时长（秒）")};
+        // Composite Shot Properties' own label, in the reference's wording for ja/zh.
+        const QStringList expected {QStringLiteral("Длительность:"),
+            QStringLiteral("長さ："), QStringLiteral("持续时间：")};
         for (int i = 0; i < locales.size(); ++i) {
             QCOMPARE(openvegas::app::Translations::install(app, locales[i], root), locales[i]);
-            QCOMPARE(QCoreApplication::translate("openvegas::ui::TimelineWidget", "Duration (seconds)"),
+            QCOMPARE(QCoreApplication::translate("CompositionSettingsDialog", "Duration:"),
                      expected[i]);
             const QString color = QCoreApplication::translate(
                 "openvegas::ui::ColorSwatchButton", "Pick a color");
@@ -37,8 +38,8 @@ private slots:
             }
         }
         QCOMPARE(openvegas::app::Translations::install(app, "en", root), QStringLiteral("en"));
-        QCOMPARE(QCoreApplication::translate("openvegas::ui::TimelineWidget", "Duration (seconds)"),
-                 QStringLiteral("Duration (seconds)"));
+        QCOMPARE(QCoreApplication::translate("CompositionSettingsDialog", "Duration:"),
+                 QStringLiteral("Duration:"));
     }
 };
 

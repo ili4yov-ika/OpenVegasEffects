@@ -11,6 +11,7 @@
 #include <QStringList>
 #include <QUuid>
 #include <QVector>
+#include <cmath>
 #include <memory>
 
 namespace openvegas {
@@ -125,6 +126,10 @@ enum class TransformProperty
     RotationX,
     RotationY,
     Rotation,      // reference property "rotationZ"
+    // Reference property "audioLevel" (dB). Not part of Transform: the
+    // timeline lists it alone under the layer's Audio group, but it animates
+    // through the same curve plumbing as the properties above.
+    AudioLevel,
 };
 
 // Properties every layer shows, in reference order.
@@ -155,6 +160,7 @@ inline int axisCount(TransformProperty prop, LayerDimension dimension = LayerDim
     case TransformProperty::RotationX:
     case TransformProperty::RotationY:
     case TransformProperty::Rotation:
+    case TransformProperty::AudioLevel:
         break;
     }
     return 1;
@@ -182,6 +188,8 @@ inline const char* transformPropertyName(TransformProperty prop,
         return dimension == LayerDimension::ThreeD
             ? QT_TRANSLATE_NOOP("Transform", "Rotation (Z)")
             : QT_TRANSLATE_NOOP("Transform", "Rotation");
+    // AssetLayerGroupFactory's label for audioLevel, under "Audio".
+    case TransformProperty::AudioLevel:  return QT_TRANSLATE_NOOP("Transform", "Level");
     }
     return "";
 }
@@ -231,6 +239,11 @@ struct LayerTransform
     KeyFrameList orientationZCurve;
     KeyFrameList opacityCurve;   // percent, as the reference stores it
 
+    // "audioLevel" in dB (TransformProperty::AudioLevel). Its keys are
+    // composition frames like every curve here; a clip's own level adds on.
+    double audioLevel = 0.0;
+    KeyFrameList audioLevelCurve;
+
     // Curve backing one axis of a property, or nullptr when the model carries
     // none: Anchor Point has no curve and the serializer writes none, so it is
     // editable but not animatable.
@@ -248,6 +261,7 @@ struct LayerTransform
         case TransformProperty::Orientation:
             return axis == 0 ? &orientationXCurve
                              : (axis == 1 ? &orientationYCurve : &orientationZCurve);
+        case TransformProperty::AudioLevel: return &audioLevelCurve;
         case TransformProperty::AnchorPoint: break;
         }
         return nullptr;
@@ -335,6 +349,8 @@ struct LayerTransform
                              : (axis == 1 ? scaleAt(frame).y() : scaleZAt(frame));
         case TransformProperty::AnchorPoint:
             return axis == 0 ? anchorPoint.x() : (axis == 1 ? anchorPoint.y() : anchorPointZ);
+        case TransformProperty::AudioLevel:
+            return curveValue(audioLevelCurve, frame, audioLevel);
         }
         return 0.0;
     }
@@ -452,12 +468,37 @@ struct Layer
     bool visible = true;
     bool muted = false;
     bool locked = false;
+    // LayerBase/MotionBlurOn: the layer takes part in the composite shot's
+    // motion blur (toggled from its timeline row).
+    bool motionBlur = false;
     QColor labelColor = QColor(48, 53, 62);
     LayerTransform transform;
+    // Audio > Level (transform.audioLevel and its curve) in dB, between
+    // frames too - see audioLevelAtSeconds below.
+    double audioLevelAtSeconds(double seconds, double fps) const;
     QVector<Clip> clips;
     QVector<LayerMask> masks;
     QVector<MotionTrack> motionTracks;
 };
+
+// An audio level curve between frames: a fade evaluated only per frame would
+// step its gain 60 times a second instead of gliding.
+inline double audioLevelAtSeconds(double staticDb, const KeyFrameList& curve,
+                                  double seconds, double fps)
+{
+    if (curve.isEmpty()) return staticDb;
+    if (fps <= 0.0) return curve.valueAt(0).toDouble();
+    const double frame = seconds * fps;
+    const double whole = std::floor(frame);
+    const double a = curve.valueAt(int(whole)).toDouble();
+    const double b = curve.valueAt(int(whole) + 1).toDouble();
+    return a + (b - a) * (frame - whole);
+}
+inline double Layer::audioLevelAtSeconds(double seconds, double fps) const
+{
+    return composition::audioLevelAtSeconds(transform.audioLevel, transform.audioLevelCurve,
+                                            seconds, fps);
+}
 
 } // namespace composition
 } // namespace openvegas

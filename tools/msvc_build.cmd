@@ -16,6 +16,10 @@ if /i "%OV_ACTION%"=="clean" goto valid_action
 goto usage
 
 :valid_action
+rem Localized cl.exe prints its /showIncludes prefix in the console code page.
+rem CMake recorded it as UTF-8, so a caller in another code page would make
+rem Ninja drop every header dependency and leave stale objects behind.
+chcp 65001 >nul
 pushd "%~dp0.."
 if errorlevel 1 exit /b 1
 where cmake.exe >nul 2>&1

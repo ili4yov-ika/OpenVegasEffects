@@ -3,10 +3,14 @@
 #include <QColor>
 #include <QImage>
 #include <QPoint>
+#include <QPointer>
 #include <QSize>
 #include <QString>
 #include <QVector>
 #include <QWidget>
+
+#include "ui/Viewer360View.h"
+#include "ui/ViewerOverlay.h"
 
 class QAction;
 class QToolButton;
@@ -188,6 +192,25 @@ public:
     // ambiguous shortcut and neither would fire.
     QAction* fullScreenPreviewAction() const { return m_fullScreenAction; }
 
+    // Overlays drawn over the active view and offered the pointer and keys
+    // before the tool (see ViewerOverlay). The viewer does not own them;
+    // later ones are on top.
+    void addOverlay(ViewerOverlay* overlay);
+    void removeOverlay(ViewerOverlay* overlay);
+    // Canvas <-> widget mapping of a view (-1: the active one).
+    ViewerMapping mapping(int view = -1) const;
+    // Pointer position of the last mouse event, in canvas pixels.
+    QPointF lastCanvasPosition() const { return m_lastCanvasPos; }
+
+    // 360 mode: the frame is an equirectangular image looked at through
+    // `view` - the same Viewer with its tools and overlays, but the canvas is
+    // the perspective projection, dragging with Select or Hand turns the
+    // view, the wheel changes the lens and the arrow keys look around.
+    // Null switches back to the flat canvas.
+    void setSphericalView(Viewer360View* view);
+    Viewer360View* sphericalView() const { return m_sphere; }
+    bool isSpherical() const { return !m_sphere.isNull(); }
+
 public slots:
     void setLayout(ViewerLayout layout);
     void setActiveView(int index);
@@ -239,6 +262,7 @@ signals:
     void textContextMenuRequested(const QPoint& globalPosition);
     void maskCreationRequested(int shape, QRectF canvasBounds);
     void freehandMaskCreationRequested(QVector<QPointF> canvasPoints);
+    void sphericalModeChanged(bool spherical);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -251,8 +275,20 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
+    void focusInEvent(QFocusEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
 
 private:
+    ViewerPointerEvent pointerEvent(const QPointF& widgetPos, int view, Qt::MouseButton button,
+                                    Qt::MouseButtons buttons,
+                                    Qt::KeyboardModifiers modifiers) const;
+    // Overlays that take events under the current tool, topmost first.
+    QVector<ViewerOverlay*> eventOverlays() const;
+    void applyCursor(const ViewerPointerEvent& event);
+    Qt::CursorShape toolCursor() const;
+    // The view's canvas area in 360 mode: the whole view inside its border.
+    QRect sphereRect(int index) const;
     void buildToolStrip();
     // The reference's viewer Options menu, FUN_1408d93d0.
     QWidget* createOptionsButton(QWidget* parent);
@@ -267,6 +303,7 @@ private:
     QRect viewRect(int index) const;
     QRect toolStripRect() const;
     QRect imageRectForView(int index) const;
+    QSize shownFrameSize() const;
     QPoint imagePos(int viewIndex, const QPoint& widgetPos) const;
     QString formatTimecode(double seconds) const;
     void updateToolbarButtons();
@@ -333,6 +370,12 @@ private:
     // shapes, remembering the last one so a click reuses it.
     QToolButton* m_shapeButton = nullptr;
     ViewerTool m_shapeTool = ViewerTool::Rectangle;
+
+    QVector<ViewerOverlay*> m_overlays;
+    ViewerOverlay* m_overlayGrab = nullptr;
+    QPointF m_lastCanvasPos;
+    QPointer<Viewer360View> m_sphere;
+    bool m_sphereDragging = false;
 };
 
 } // namespace ui

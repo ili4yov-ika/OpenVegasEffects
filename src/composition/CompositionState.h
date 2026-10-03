@@ -19,7 +19,7 @@ inline QByteArray layerState(const QVector<Layer>& layers)
     s << layers.size();
     for (const auto& layer : layers) {
         s << layer.id.value() << layer.parentLayerId.value()
-          << layer.name << int(layer.kind) << layer.zIndex << layer.visible << layer.locked << layer.muted << layer.labelColor
+          << layer.name << int(layer.kind) << layer.zIndex << layer.visible << layer.locked << layer.muted << layer.motionBlur << layer.labelColor
           << layer.blendMode << layer.opacity << int(layer.dimension) << layer.cameraFieldOfView;
         for (auto p : transformPropertiesFor(LayerDimension::ThreeD)) {
             for (int axis = 0; axis < axisCount(p, LayerDimension::ThreeD); ++axis) {
@@ -30,7 +30,8 @@ inline QByteArray layerState(const QVector<Layer>& layers)
         const auto& t = layer.transform;
         s << t.anchorPoint << t.anchorPointZ << t.position << t.scalePercent << t.rotationDegrees << t.positionZ << t.scaleZPercent
           << t.rotationXDegrees << t.rotationYDegrees << t.orientationX << t.orientationY << t.orientationZ
-          << layer.planeColor << layer.modelAssetId.value();
+          << layer.planeColor << layer.modelAssetId.value() << t.audioLevel;
+        writeCurve(s, t.audioLevelCurve);
         s << layer.masks.size();
         for (const auto& mask : layer.masks)
             s << mask.id.value() << mask.name << int(mask.shape) << mask.bounds
@@ -47,7 +48,10 @@ inline QByteArray layerState(const QVector<Layer>& layers)
             s << clip.mediaId.value() << clip.startSeconds << clip.durationSeconds << clip.sourceStartSeconds
               << clip.speed << clip.audioLevel << clip.effects.size();
             for (const auto& effect : clip.effects) {
-                s << effect.pluginId.value() << effect.name << effect.enabled << effect.parameterValues << effect.animation.size();
+                s << effect.pluginId.value() << effect.name << effect.enabled << effect.parameterValues
+                  << int(effect.transitionEdge) << effect.transitionSeconds << effect.animation.size();
+                // A tracked layer moves with the module's data, not its values.
+                if (!effect.instanceData.isEmpty()) s << effect.instanceData;
                 for (auto it = effect.animation.cbegin(); it != effect.animation.cend(); ++it) {
                     s << it.key(); writeCurve(s, it.value());
                 }
@@ -72,6 +76,7 @@ inline void setLayerTransformValue(Layer& layer, TransformProperty prop, int axi
     case TransformProperty::RotationX: t.rotationXDegrees = value; break;
     case TransformProperty::RotationY: t.rotationYDegrees = value; break;
     case TransformProperty::Rotation: t.rotationDegrees = value; break;
+    case TransformProperty::AudioLevel: t.audioLevel = value; break;
     }
 }
 }

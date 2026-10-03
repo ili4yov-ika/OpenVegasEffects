@@ -93,6 +93,15 @@ void MediaManager::registerMissingFile(const QString& filePath)
 
 core::Result MediaManager::importFile(const QString& filePath)
 {
+    // An image-sequence asset path (dragged from Media, or stored in a
+    // project): the asset itself, or the run around its first still.
+    if (filePath.endsWith(QLatin1String(kImageSequenceMarker))) {
+        for (const MediaAsset& existing : m_assets) {
+            if (existing.filePath() == filePath) return core::Result::ok();
+        }
+        const QString first = filePath.chopped(int(qstrlen(kImageSequenceMarker)));
+        return importImageSequence(findImageSequence(first), 30.0);
+    }
     const QFileInfo info(filePath);
     if (!info.exists()) {
         return core::Result::fail(core::ResultStatus::MissingResource,
@@ -105,21 +114,19 @@ core::Result MediaManager::importFile(const QString& filePath)
     // Video carries its length and resolution inside the file. Without reading
     // them the timeline fell back to a fixed three seconds for every clip, so
     // an imported video was cut short or padded regardless of what it is.
-    if (asset.kind() == MediaKind::Video) {
-        const VideoInfo probed = probeVideo(asset.filePath());
+    if (asset.kind() == MediaKind::Video || asset.kind() == MediaKind::Audio) {
+        const VideoInfo probed = probeVideo(asset.filePath(), 4000, asset.kind() == MediaKind::Video);
+        asset.setFileStreams(probed.streams);
         if (probed.valid) {
             asset.setDurationSeconds(probed.durationSeconds);
             if (probed.frameSize.isValid() && !probed.frameSize.isEmpty()) {
                 asset.setFrameSize(probed.frameSize);
             }
+            asset.setFilePixelAspect(probed.pixelAspect);
+            asset.setFileFrameRate(probed.frameRate);
         } else {
             OV_LOG_WARN(QStringLiteral("Could not read video properties: %1").arg(asset.filePath()));
         }
-    }
-
-    if (asset.kind() == MediaKind::Audio) {
-        const double duration = vlcMediaDurationSeconds(asset.filePath());
-        if (duration > 0) asset.setDurationSeconds(duration);
     }
 
     for (const MediaAsset& existing : m_assets) {
@@ -191,6 +198,25 @@ model3d::ImportSettings MediaManager::modelSettings(const core::Identifier& id) 
     return m_modelSettings.value(id.value());
 }
 
+core::Result MediaManager::importImageSequence(const QStringList& files, double frameRate,
+                                               QString* assetPath)
+{
+    if (files.size() < 2 || !QFileInfo::exists(files.first())) {
+        return core::Result::fail(core::ResultStatus::MissingResource,
+                                  QStringLiteral("Image sequence not found: %1")
+                                      .arg(files.value(0)));
+    }
+    const MediaAsset asset = MediaAsset::fromImageSequence(files, frameRate);
+    if (assetPath) *assetPath = asset.filePath();
+    for (const MediaAsset& existing : m_assets) {
+        if (existing.filePath() == asset.filePath()) {
+            return core::Result::ok();
+        }
+    }
+    m_assets.push_back(asset);
+    return core::Result::ok();
+}
+
 core::Result MediaManager::importFiles(const QStringList& paths)
 {
     for (const QString& path : paths) {
@@ -236,23 +262,36 @@ void MediaManager::replaceProjectAssets(MediaManager&& staged)
     m_lastVideoFrames.clear(); m_videoRequests.clear();
 }
 
-// Frames are keyed by asset and source frame, so a scrub back and forth
-// reuses what has already been decoded.
-QString MediaManager::frameKey(const core::Identifier& id, int sourceFrame)
+QString MediaManager::adoptAsset(const MediaManager& other, const core::Identifier& id)
 {
-    return id.value() + QLatin1Char(0x23) + QString::number(sourceFrame);
+    const MediaAsset asset = other.assetById(id);
+    if (!asset.isValid()) return QString();
+    if (assetByFilePath(asset.filePath()).isValid()) return asset.filePath();
+    m_assets.push_back(asset);
+    if (other.m_models.contains(id.value())) {
+        m_models.insert(id.value(), other.m_models.value(id.value()));
+        m_modelSettings.insert(id.value(), other.m_modelSettings.value(id.value()));
+    }
+    return asset.filePath();
 }
 
-QImage MediaManager::videoFrame(const core::Identifier& id, int sourceFrame) const
+// Frames are keyed by asset and position in the source, so a scrub back and forth
+// reuses what has already been decoded.
+QString MediaManager::frameKey(const core::Identifier& id, int sourceMilliseconds)
 {
-    const QString key = frameKey(id, sourceFrame);
+    return id.value() + QLatin1Char(0x23) + QString::number(sourceMilliseconds);
+}
+
+QImage MediaManager::videoFrame(const core::Identifier& id, int sourceMilliseconds) const
+{
+    const QString key = frameKey(id, sourceMilliseconds);
     QMutexLocker lock(&m_videoMutex);
     const auto it = m_videoFrames.constFind(key);
     if (it != m_videoFrames.constEnd()) {
         return it.value();
     }
     // Miss: leave a request for the GUI thread rather than decoding here.
-    const QPair<core::Identifier, int> request(id, sourceFrame);
+    const QPair<core::Identifier, int> request(id, sourceMilliseconds);
     if (!m_videoRequests.contains(request)) {
         m_videoRequests.append(request);
     }
@@ -266,12 +305,12 @@ QImage MediaManager::videoFrame(const core::Identifier& id, int sourceFrame) con
     return QImage();
 }
 
-void MediaManager::putVideoFrame(const core::Identifier& id, int sourceFrame,
+void MediaManager::putVideoFrame(const core::Identifier& id, int sourceMilliseconds,
                                  const QImage& frame)
 {
     // A null frame is still recorded: it marks the decode as attempted so
     // an unreadable file is not requested again on every render.
-    const QString key = frameKey(id, sourceFrame);
+    const QString key = frameKey(id, sourceMilliseconds);
     QMutexLocker lock(&m_videoMutex);
     const auto existing = m_videoFrames.constFind(key);
     if (existing == m_videoFrames.constEnd()) {
@@ -301,7 +340,7 @@ QImage MediaManager::lastVideoFrame(const core::Identifier& id) const
     return m_lastVideoFrames.value(id.value());
 }
 
-bool MediaManager::takeVideoRequest(core::Identifier* id, int* sourceFrame)
+bool MediaManager::takeVideoRequest(core::Identifier* id, int* sourceMilliseconds)
 {
     QMutexLocker lock(&m_videoMutex);
     if (m_videoRequests.isEmpty()) {
@@ -313,8 +352,8 @@ bool MediaManager::takeVideoRequest(core::Identifier* id, int* sourceFrame)
     if (id) {
         *id = request.first;
     }
-    if (sourceFrame) {
-        *sourceFrame = request.second;
+    if (sourceMilliseconds) {
+        *sourceMilliseconds = request.second;
     }
     return true;
 }

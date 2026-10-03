@@ -139,8 +139,39 @@ Camera defaultCameraForCanvas(const QSize& canvas)
     return camera;
 }
 
+double Fog::factor(double distance) const
+{
+    if (!enabled) return 1.0;
+    double f = 1.0;
+    switch (falloff) {
+    case Falloff::Linear:
+        f = farDistance != nearDistance ? (farDistance - distance) / (farDistance - nearDistance)
+                                        : (distance < farDistance ? 1.0 : 0.0);
+        break;
+    case Falloff::Exponential:
+        f = std::exp(-density * distance * 0.001);
+        break;
+    case Falloff::ExponentialSquared:
+        // As written in Flux: the 0.001 is not squared with the distance.
+        f = std::exp(-density * density * distance * distance * 0.001);
+        break;
+    }
+    return qBound(0.0, f, 1.0);
+}
+
+void Fog::apply(uchar* rgba, double distance) const
+{
+    const double f = factor(distance);
+    if (f >= 1.0) return;
+    // Straight alpha: mix(fogColor * a, c * a, f) / a.
+    const int fog[3] = {color.red(), color.green(), color.blue()};
+    for (int c = 0; c < 3; ++c)
+        rgba[c] = uchar(qBound(0, int(std::lround(fog[c] + (rgba[c] - fog[c]) * f)), 255));
+}
+
 QImage renderMesh(const Mesh& mesh, const QMatrix4x4& modelMatrix, const Camera& camera,
-                  const QSize& canvas, const Light& light, ShadingMode mode, double opacity)
+                  const QSize& canvas, const Light& light, ShadingMode mode, double opacity,
+                  const Fog& fog)
 {
     QImage image(canvas, QImage::Format_RGBA8888);
     image.fill(Qt::transparent);
@@ -297,6 +328,7 @@ QImage renderMesh(const Mesh& mesh, const QMatrix4x4& modelMatrix, const Camera&
                 pixel[1] = uchar(lit.green());
                 pixel[2] = uchar(lit.blue());
                 pixel[3] = uchar(qBound(0, int(surfaceAlpha * 255.0 + 0.5), 255));
+                if (fog.enabled) fog.apply(pixel, double((world - camera.position).length()));
             }
         }
     }

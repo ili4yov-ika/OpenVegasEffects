@@ -3,53 +3,58 @@
 #include <QDockWidget>
 #include <QImage>
 #include <QPoint>
+#include <QPointer>
 #include <QWidget>
+
+#include "ui/Viewer360View.h"
 
 class QComboBox;
 class QToolButton;
+class QVBoxLayout;
 
 namespace openvegas::ui {
 
 // Perspective viewport over an equirectangular (2:1) image. The reference
 // implements this as Preview360VideoWidget/GL; this CPU implementation keeps
 // the same interaction and data flow without requiring another GL context.
+// The direction and lens live in a Viewer360View, which the Viewer's 360 mode
+// shares.
 class Preview360VideoWidget : public QWidget
 {
     Q_OBJECT
 public:
-    enum class View { Custom = 0, Front = 1, Back = 2, Left = 3, Right = 4, Top = 5, Bottom = 6 };
-    Q_ENUM(View)
-    enum class WrapMode { No = 0, Tile = 1, Reflect = 2 };
-    Q_ENUM(WrapMode)
+    using View = Viewer360View::View;
+    using WrapMode = Viewer360View::WrapMode;
 
-    explicit Preview360VideoWidget(QWidget* parent = nullptr);
+    explicit Preview360VideoWidget(QWidget* parent = nullptr, Viewer360View* view = nullptr);
     void setFrame(const QImage& frame);
     QImage frame() const { return m_frame; }
     QImage projectedFrame(const QSize& size) const;
+    Viewer360View* view() const { return m_view; }
 
-    View currentView() const { return m_view; }
-    double yaw() const { return m_yaw; }
-    double pitch() const { return m_pitch; }
-    double roll() const { return m_roll; }
-    double fieldOfView() const { return m_fov; }
-    bool useCameraFOV() const { return m_useCameraFOV; }
-    bool envWrapX() const { return m_wrapX != WrapMode::No; }
-    bool envWrapY() const { return m_wrapY != WrapMode::No; }
-    WrapMode wrapXMode() const { return m_wrapX; }
-    WrapMode wrapYMode() const { return m_wrapY; }
-    void inferCurrentView();
+    View currentView() const { return m_view->currentView(); }
+    double yaw() const { return m_view->yaw(); }
+    double pitch() const { return m_view->pitch(); }
+    double roll() const { return m_view->roll(); }
+    double fieldOfView() const { return m_view->fieldOfView(); }
+    bool useCameraFOV() const { return m_view->useCameraFOV(); }
+    bool envWrapX() const { return m_view->wrapXMode() != WrapMode::No; }
+    bool envWrapY() const { return m_view->wrapYMode() != WrapMode::No; }
+    WrapMode wrapXMode() const { return m_view->wrapXMode(); }
+    WrapMode wrapYMode() const { return m_view->wrapYMode(); }
+    void inferCurrentView() { m_view->inferCurrentView(); }
 
 public slots:
-    void setCurrentView(View view);
-    void setYawPitch(double yawDegrees, double pitchDegrees);
-    void setFieldOfView(double degrees);
-    void setRoll(double degrees);
-    void setCameraFieldOfView(double degrees);
-    void setUseCameraFOV(bool on);
-    void setEnvWrapX(bool on);
-    void setEnvWrapY(bool on);
-    void setWrapXMode(WrapMode mode);
-    void setWrapYMode(WrapMode mode);
+    void setCurrentView(View view) { m_view->setCurrentView(view); }
+    void setYawPitch(double yawDegrees, double pitchDegrees) { m_view->setYawPitch(yawDegrees, pitchDegrees); }
+    void setFieldOfView(double degrees) { m_view->setFieldOfView(degrees); }
+    void setRoll(double degrees) { m_view->setRoll(degrees); }
+    void setCameraFieldOfView(double degrees) { m_view->setCameraFieldOfView(degrees); }
+    void setUseCameraFOV(bool on) { m_view->setUseCameraFOV(on); }
+    void setEnvWrapX(bool on) { m_view->setWrapXMode(on ? WrapMode::Tile : WrapMode::No); }
+    void setEnvWrapY(bool on) { m_view->setWrapYMode(on ? WrapMode::Tile : WrapMode::No); }
+    void setWrapXMode(WrapMode mode) { m_view->setWrapXMode(mode); }
+    void setWrapYMode(WrapMode mode) { m_view->setWrapYMode(mode); }
 
 signals:
     void currentViewChanged(View view);
@@ -64,32 +69,16 @@ protected:
     void keyPressEvent(QKeyEvent*) override;
 
 private:
-    void invalidate();
-    double effectiveFov() const;
-
+    Viewer360View* m_view = nullptr;
     QImage m_frame;
-    View m_view = View::Front;
-    double m_yaw = 0.0;
-    double m_pitch = 0.0;
-    double m_fov = 90.0;
-    double m_cameraFov = 39.6;
-    double m_roll = 0.0;
-    bool m_useCameraFOV = false;
-    WrapMode m_wrapX = WrapMode::No;
-    WrapMode m_wrapY = WrapMode::No;
     bool m_dragging = false;
     QPoint m_lastMouse;
-    mutable QImage m_projection;
-    mutable QSize m_projectionSize;
-    mutable qint64 m_projectionFrameKey = 0;
-    mutable double m_projectionYaw = 0.0;
-    mutable double m_projectionPitch = 0.0;
-    mutable double m_projectionFov = 0.0;
-    mutable double m_projectionRoll = 0.0;
-    mutable WrapMode m_projectionWrapX = WrapMode::No;
-    mutable WrapMode m_projectionWrapY = WrapMode::No;
 };
 
+// The reference's 360 Viewer panel: the direction combo and the Properties
+// button over a view of the frame. Inside the main window the view is the
+// Viewer itself in its 360 mode (hostViewer), with its tools, transport and
+// overlays; on its own the panel shows its Preview360VideoWidget.
 class Preview360VideoPanel : public QDockWidget
 {
     Q_OBJECT
@@ -97,13 +86,22 @@ public:
     explicit Preview360VideoPanel(QWidget* parent = nullptr);
     void setFrame(const QImage& frame);
     Preview360VideoWidget* videoWidget() const { return m_video; }
+    Viewer360View* view() const { return m_view; }
+
+    // Puts `page` (the Viewer page) under the header in place of the
+    // standalone canvas; releaseViewer takes it out again and returns it.
+    void hostViewer(QWidget* page);
+    QWidget* releaseViewer();
+    bool hostsViewer() const { return !m_hosted.isNull(); }
 
 private:
     void showProperties();
-    void saveProperties();
     QComboBox* m_views = nullptr;
     QToolButton* m_properties = nullptr;
+    Viewer360View* m_view = nullptr;
     Preview360VideoWidget* m_video = nullptr;
+    QVBoxLayout* m_layout = nullptr;
+    QPointer<QWidget> m_hosted;
 };
 
 } // namespace openvegas::ui

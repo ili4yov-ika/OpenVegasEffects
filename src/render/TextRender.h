@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QPainterPath>
 #include <QRectF>
 #include <QTransform>
 #include <QVector>
@@ -45,6 +46,20 @@ void drawStyledText(QPainter& painter, const QRectF& box,
 // coordinates. Used for the background rectangle and worth having on its own so
 // a caller can measure without drawing.
 QRectF styledTextBounds(const QRectF& box, const composition::TextStyle& style);
+
+// Outlines of the glyphs drawStyledText fills (and of the underline and
+// strikethrough bars), one entry per glyph in the same box coordinates with
+// the style's horizontal/vertical scale applied. lineTop/lineBottom bound the
+// glyph's line, so the glyphs of a line share one vertical middle. Used to
+// build the geometry Geometry modules work on.
+struct GlyphOutline
+{
+    QPainterPath path;
+    double lineTop = 0.0;
+    double lineBottom = 0.0;
+};
+QVector<GlyphOutline> styledTextOutlines(const QRectF& box,
+                                         const composition::TextStyle& style);
 
 } // namespace render
 } // namespace openvegas

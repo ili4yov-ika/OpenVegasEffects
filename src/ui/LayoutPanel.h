@@ -30,7 +30,7 @@ namespace ui {
 //     a group box titled "Alignment" with comboBoxAlignTo (Selection /
 //     Timeline), six align buttons and six distribute buttons.
 //
-// Both are built here rather than as classes of their own: what is recoverable
+// Both are loaded from ui/panels/Layout.ui: what is recoverable
 // from the reference is the widget tree and the names, and those are reproduced
 // exactly - the objectNames below are the reference's own.
 //
@@ -101,7 +101,7 @@ signals:
 
 private:
     // Pushes m_bounds into the four spin boxes, honouring the direction.
-    void refreshFields();
+    void refreshFields(bool force = false);
     // Reads the four spin boxes back into a bounding box.
     QRectF boundsFromFields() const;
     void emitBounds(const QRectF& bounds);
@@ -109,6 +109,7 @@ private:
     void applyDistribution(const QString& mode);
     void updateEnabled();
 
+    QWidget* m_transformWidget = nullptr;
     QDoubleSpinBox* m_x = nullptr;
     QDoubleSpinBox* m_y = nullptr;
     QDoubleSpinBox* m_width = nullptr;

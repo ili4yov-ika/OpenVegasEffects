@@ -42,9 +42,9 @@ Turbo Rendering, подключение Media Cache DB к медиапайпла
 | `1412c7438` | Строка `VoiceoverPath` | Последний каталог успешной записи хранится в `Options/VoiceoverPath` |
 | `1412e5918`, `1412e5880` | Имена `checkBoxSaveScreenLayout`, `checkBoxRelativePaths` | Соответствующие флажки теперь влияют на сериализацию проекта |
 | `141313b80` | Команда `Create Voiceover Recording`, xref `FUN_14071a640` | Меню Record и редактируемая горячая клавиша `Ctrl+Shift+R` открывают запись |
-| `1412c76b0`, `FUN_140231840`, `FUN_1403a48a0` | Чтение integer `Options/AudioWaveformStyle` с fallback 2 и запись из General Options | Наши `Options/AudioWaveforms` хранят текст выбора; алгоритм waveform не подключён. Числа native enum не сопоставлены с RMS/Peak |
-| `1412c76c8`, `FUN_140231920`, `FUN_1403a48a0` | Integer `Options/WaveformScaleType`, fallback 1 | Наш `Options/LogWaveform` — bool, пока только сохраняется; прямую совместимость INI не заявляем |
-| `FUN_140665b10`, `14130a870`, `14130a930` | Проверка `MediaAudioStream::WaveformPreviewAvailable`, чтение peak-file path, опциональных `CacheLayerWaveforms`/`LayerWaveformChunks`, отправка `WaveformPreviewIsReady` | Нужен отдельный peak/cache/image pipeline. Audio Meters, RMS буферов AudioPlayer и эффект `.hfpl` Waveform его не заменяют |
+| `1412c76b0`, `FUN_140231840`, `FUN_1403a48a0` | Чтение integer `Options/AudioWaveformStyle` с fallback 2 и запись из General Options | Наши `Options/AudioWaveforms` хранят английский ключ выбора (старый переведённый текст читается), таймлайн рисует RMS или Peak. Числа native enum не сопоставлены с RMS/Peak |
+| `1412c76c8`, `FUN_140231920`, `FUN_1403a48a0` | Integer `Options/WaveformScaleType`, fallback 1 | Наш `Options/LogWaveform` — bool, переключает шкалу −60…0 dBFS/линейную в waveform таймлайна; прямую совместимость INI не заявляем |
+| `FUN_140665b10`, `14130a870`, `14130a930` | Проверка `MediaAudioStream::WaveformPreviewAvailable`, чтение peak-file path, опциональных `CacheLayerWaveforms`/`LayerWaveformChunks`, отправка `WaveformPreviewIsReady` | Порт: `media/AudioWaveform` — фоновое FFmpeg-декодирование в mono 8 kHz, пики и RMS по 10 мс, память и дисковый peak-кэш по пути/размеру/mtime; `TimelineCanvas` рисует столбцы видимой части клипа с учётом slip/speed. Раскладка native peak-файла не восстановлена |
 | `1412c7ce0`, `FUN_1402361a0`, `FUN_1403b36d0` | Bool `Options/ShowProjectSettingsDialog`: getter и сохранение Prompts | New Project читает `Options/Prompts/ShowProjectSettings` и при включённом флаге открывает свойства композиции |
 | `FUN_1401dc5b0` → `FUN_1402361a0` | Xref вызова; bulk-декомпилят подтверждает условную ветку создания окна при включённом флаге и режиме, отличном от 5000 | Не считать реализацией одно наличие флажка в Options; полный смысл режима 5000 пока не установлен |
 | `1412c7418`, `FUN_14022f5e0`, `FUN_1402a7140` | Bool `Options/EnableEffectPresetCreation`, default false, getter и setter | Наш `Debug/EffectPresetCreation` изменяет только сохранённый флаг |
@@ -110,7 +110,7 @@ Turbo Rendering, подключение Media Cache DB к медиапайпла
 | `Options/HideFullScreenPreview` | Полноэкранный preview скрывается при неактивном приложении и возвращается при активации |
 | `Options/CloseMediaOnInactive` | При деактивации останавливает транспорт/scrub, освобождает аудиоисточник и принадлежащие MainWindow видеодекодеры |
 | `Options/PlayAudioOnScrub` | При остановленном транспорте проигрывает короткий фрагмент в позиции scrub; таймер остановки отменяется при обычном Play |
-| `Options/UseRelativePaths` | `ProjectSaveOptions`, обычное сохранение и autosave: Filename, пути моделей и MediaID/ModelAssetID в расширениях сохраняются относительно проекта; при загрузке разрешаются относительно его каталога |
+| `Options/UseRelativePaths` | `ProjectSaveOptions`, обычное сохранение: Filename, пути моделей и MediaID/ModelAssetID в расширениях сохраняются относительно проекта; при загрузке разрешаются относительно его каталога. Автосохранения лежат в своей папке и всегда пишут абсолютные пути |
 | `Options/IncludeScreenLayout` | Сохраняет Qt dock-state как base64 в `OpenVegasScreenLayout`; при открытии применяется с проверкой версии Qt state и восстановлением нижних dock-углов/меню |
 | `Options/Labels/%1/Name`, `/Color` | Меню меток таймлайна предлагает восемь сохранённых имён/цветов и отдельный произвольный цвет; изменение использует общий Undo/Redo; заблокированный слой не редактируется |
 | `Options/RemoveExtensions` | ExportPanel использует имя композиции; удаляет известное исходное расширение из основы имени, сохраняя расширение выбранного формата экспорта |
@@ -119,6 +119,11 @@ Turbo Rendering, подключение Media Cache DB к медиапайпла
 | Browse Tutorials в Learn | Вызывает рабочую команду Online Help вместо сообщения об отсутствии встроенных уроков |
 | Timeline `renderRequested`/`optionsRequested` | Удалены неиспользуемые сигналы и соединение. Рендер по scrub/изменению модели и команда Render Frame остаются рабочими |
 | Viewer `m_texts`, `m_textDraft`, `m_textPlaceView` | Удалён мёртвый рисующий путь. Текст создаётся и редактируется через реальные слои композиции и TextRender |
+| Viewer: оверлеи, рамка текста, 360, custom UI | `ViewerOverlay` (рисование и события раньше инструмента), `TextTransformOverlay` (перемещение/масштаб/поворот текста с Undo и ключами), 360-режим того же вьюера во вкладке «360 Viewer», `NativeCustomUiOverlay` для custom UI native-модулей (`Notify 1001..1013`) |
+| Строка слоя таймлайна (`LayerPropertyTreeLayerWidget`) | Замок (`unlock`/`lock`), глаз (`video-on-checked`/`video-off`), метка, InLineEdit «N. имя [Тип]» (двойной щелчок — переименование «Set Layer Name», Esc — отмена), Motion Blur (`motion-blur[-checked]`, «Set Layer Motion Blur»), 2D/3D (`two-d`/`three-d`), Parent («None» + слои без циклов, «Set Layer Parent(s)»). Blend остался в панели Layer. Иконки трассированы из ресурсов референса в `resources/icons/timeline` |
+| Motion Blur слоя и композиции | Переключатель в строке слоя (`MotionBlurOn`) + `RenderSettings` композиции (CompositionSettingsDialog `FUN_140730a50`: Enable/Shutter Angle/Shutter Phase/Max Samples/Use Adaptive) в «Composite Shot Properties»; CPU-рендер усредняет под-кадры затвора для анимированного 2D-трансформа |
+| Fog композиции | Группа Fog того же диалога (`FUN_14072b930`, тексты `FUN_140730a50`): Enable, Near/Far Clip Distance (до 999999999), Density, Fall Off (Linear / Exponential / Exponential²), Color; формула шейдера Flux `ComputeFoggedFragment` (`model3d::Fog`): туман по расстоянию от камеры для 3D-слоёв, 3D-текста с геометрией и моделей; 2D-слои не затрагивает. Для этого медиа/Plane/текст/вложенные композиты в 3D теперь проецируются через камеру сцены (раньше рисовались плоско) |
+| Группы слоя (AssetLayerGroupFactory, `FUN_1405ce1e0`) | Tracks/Masks/Transform/Behaviors — только для ассета с картинкой; Masks без «+»; Audio › Level (`FUN_1405e7bd0`: `audioLevel`, dB, FloatEditor) — для ассета со звуком; у mp3 только Effects и Audio. Level анимируется как свойства Transform (`TransformProperty::AudioLevel`) |
 
 Изменение палитры Options не перекрашивает ранее размеченные слои: меню применяет новый
 цвет только к выбранному слою/медиа. MediaPanel использует ту же палитру, произвольный цвет и No Label; старые метки не перекрашиваются при изменении палитры.
@@ -142,6 +147,20 @@ Cancel и ошибка не перезаписывают существующи�
 
 ## 3. Ранее реализованное, которое не следует считать заглушкой
 
+- Media › Properties (`biff::ui::media::MediaSettingsDialog`, 3 октября 2026): имя, путь с
+  Relink, контейнер, длительность, разрешение и все переопределения референса — частота кадров
+  и альфа с «From File», Aspect Ratio, Color Levels, Color Space, аппаратное декодирование, с
+  шагами History. Дополнен Format (FourCC)/Codec (описание) и аудиоблоком
+  Sample Rate/Channels/Audio Stream: адаптеры VLC 3/4 копируют сведения до освобождения
+  track list. Audio-only файлы тоже имеют Properties, без видеопереопределений.
+  Выбранный аудиопоток применяется до декодирования Play/Scrub, перед обработкой Audio
+  .hfpl в экспорте, в прямом FFmpeg-экспорте и waveform; ключ waveform включает поток.
+  Undo/Redo, Relink и offline save/load сохраняют аудиоиндекс в OpenVegasAudioStream;
+  соответствие native AudioIdx не заявляется. Automatic на многодорожечном файле
+  не показывает частоту/кодек произвольного потока. Интеграционные тесты проверяют
+  две дорожки 32/44.1 kHz, PCM мастера, обе ветки экспорта (включая готовый MOV),
+  Undo и повторный load/save с исходным XML. VLC 4 и другие ОС пока проверены только
+  по заголовкам/сборке, без runtime-теста.
 - AudioPlayer использует libVLC для декодирования и системного вывода PCM.
   Активные клипы нескольких видимых, незаглушённых слоёв суммируются с учётом
   sourceStart, speed, gain и вложенных композиций. Audio Meters получает RMS
@@ -149,7 +168,7 @@ Cancel и ошибка не перезаписывают существующи�
   ограничены, stop/seek отменяют ожидания и устаревшие queued-сигналы.
   Нативные Audio `.hfpl` теперь действуют на PCM клипа до gain и master mix,
   параметры `.hfpl` пересчитываются на каждом 10-мс блоке по keyframes, но
-  AudioTransition и поблочная автоматизация финального экспорта ещё не подключены;
+  AudioTransition и поблочная автоматизация финального экспорта подключены (1 октября 2026);
   скорость меняет высоту тона через ресемплирование.
 - Маски и Behaviors в Controls используют общие редакторы и Undo/Redo. Разделение
   UI-параметров Behaviors не означает завершённое исполнение закрытого ABI всех `.hfpl`.
@@ -168,12 +187,15 @@ Cancel и ошибка не перезаписывают существующи�
 
 | Путь | Что действительно работает | Чего нет |
 |---|---|---|
-| Audio preview / Audio Meters | libVLC PCM master mix всех активных Audio/Video клипов: visible/muted, offset, speed, gain, вложенные композиции; native Audio `.hfpl` перед gain с 10-мс keyframe-автоматизацией, seek/loop и RMS итогового PCM | Realtime AudioTransition, поблочная автоматизация экспорта; сохранение высоты тона при speed |
+| Audio preview / Audio Meters | libVLC PCM master mix всех активных Audio/Video клипов: visible/muted, offset, speed, gain, анимируемый Audio › Level слоя (огибающая по 10 мс, в том числе через вложенные композиции), вложенные композиции; native Audio `.hfpl` перед gain с 10-мс keyframe-автоматизацией, seek/loop и RMS итогового PCM | Look-ahead Reverse/NoiseReduction при воспроизведении; сохранение высоты тона при speed |
+| Half/Quarter preview | Viewer запрашивает уменьшенный кадр, RenderWorker строит `displaySize()` и затем уменьшает готовое изображение; кадрирование и PAR сохраняются | Рендер слоёв, текста, 3D, вложенных композитов и эффектов в уменьшенном масштабе; пересчёт пиксельных радиусов, проверка кэша и визуальной эквивалентности |
 | Видеоэкспорт со звуком | Отдельный путь `MainWindow::finishVideoExport`: FFmpeg `atempo`, `volume`, `adelay`, `amix`; native Audio обрабатывается перед сведением | Этот экспортный путь не подключён к AudioPlayer и master meter при Play/Scrub |
 | Media Cache DB | `AppMain::initializeCache`: каталог, SQLite open, подсчёт записей, `pruneOlderThan` по сроку хранения | Вне CacheDB нет использования `put/get` для наполнения и повторного использования media cache. `MediaManager` держит отдельный RAM video-frame cache с фиксированным лимитом 256 MiB |
 | Thumbnail cache limit | QPixmapCache использует ThumbnailCacheSizeMB; миниатюры Media повторно используются по path/mtime/size, QImageReader декодирует уменьшенное изображение | QIcon видимого списка хранит свои ссылки; это не общий лимит всей памяти Media |
-| Кнопка кеширования timeline | `preRenderRequested` запускает/отменяет `RenderManager::startPlaybackCache` | Нет дискового pre-render, TTL timeline cache и автоматического запуска по задержке |
-| 3D project settings | Serializer записывает `AntialiasingMode=0`, `ReflectionMapSize=512`, `ModelTextureMaxSize=4096`, `ShadowMapSize=2048` | Это константы, а не применение значений Options к 3D renderer |
+| Кнопка кеширования timeline | `preRenderRequested` запускает/отменяет `RenderManager::startPlaybackCache`; кадры пишутся в `Options/TimelineCache`, TTL и автозапуск по `RenderCacheDelay` подключены | — |
+| Pre-render составного кадра | Контекстное меню клипа «Pre-Render» → «Make/Remove Pre-Render(s)» (как AssetPreRenderMenu): кадр рендерится один раз поверх прозрачности в `PreRenderDirectoryPath/<проект>/<id композиции>/`, родительский рендер читает его вместо живого рендера, пока совпадает ключ состояния | Нет очереди задач pre-render и автоматического pre-render изменённых кадров |
+| 3D project settings | `ProjectSettings` (BPC 1000/1001/1002, AntialiasingMode 1..9, карты, LimitVideoDecodingTo8bit, UseLinearColor) читаются, пишутся и редактируются в File › Project Settings (ProjectSettingsDialog референса); новые проекты берут значения из Options (`RenderBitDepth`, `Antialiasing`, `UseLinearColor`, размеры карт) | 3D renderer ещё не применяет эти значения (битность, MSAA, размеры карт) |
+| Автосохранение и восстановление | `ui/AutoSave`: `Options/AutoSave`, `AutoSaveFrequency` (мин.), `AutoSavePath` (по умолчанию Documents/OpenVegas/OpenVegasEffects/AutoSave); файлы `<проект>.vegfx.autosave<N>` с маркером исходного проекта; только при изменениях после ручного сохранения, очистка при сохранении; lock-файл сессии определяет аварийное завершение; диалог Recovered Projects (AutoSaveRecoveryDialog: Open/Save/Delete Project) | Старые `<проект>.autosave.vegfx` рядом с проектом удаляются при сохранении, но в списке восстановления не показываются |
 
 ## 4. Оставшиеся заглушки — пока не закрыты
 
@@ -186,17 +208,12 @@ Native render pipeline, lens model и Fisheye/Scale/Motion Blur пока не в
 
 | Группа | Настройки/элементы без полного потребителя | Что требуется |
 |---|---|---|
-| Waveforms | `AudioWaveforms`, `LogWaveform` | Построение и отображение waveform с выбором линейной/логарифмической шкалы |
 | Analytics | `Options/Analytics` | Отдельная политика аналитики; Debug/PrintAnalytics реализует только локальное журналирование действий |
-| Proxies | `ProxyDirectoryPath`, `ProxyQuality`, `PreviewMode`, `PreferIntegratedGPU` | Создание/выбор прокси и согласование его с оригинальным источником |
-| Pre-Renders | `PreRenderDirectoryPath` | Кеш на диске; существующий playback cache хранит кадры в памяти |
-| Prompts & Warnings | `Options/Prompts/*`, кроме подключённого ShowProjectSettings | Подключение остальных флагов к импорту, GPU/QuickTime, камерам и удалению export tasks |
-| Render | `TurboRendering`, планировщик `RenderThreads`, `UseHardwareEncoding`, `LimitVideoDecodingTo8bit` | UseHardwareDecoding и avcodec-threads уже передаются видеодекодеру VLC; фактическое hardware acceleration требует проверки и возможен fallback при CPU readback. Настройки encoder/renderer ещё не подключены |
+| Prompts & Warnings | `Options/Prompts/GPUDriverWarning`, `QuickTimeWarning` | Нет самих функций (QuickTime, переносимая проверка версии драйвера); подключены RemovingExportTasks (удаление задач очереди экспорта), GPUWarning, MediaMismatchPrompt, OversizedAssets, ImageSequenceImportPrompt, ShowProjectSettings и правило камеры `Adding3DCameras`/`Removing3DCameras` ([RE_3D_Camera_Rule](RE_3D_Camera_Rule.md)) |
+| Render | `TurboRendering`, планировщик `RenderThreads`, `LimitVideoDecodingTo8bit` | UseHardwareDecoding и avcodec-threads передаются VLC; UseHardwareEncoding выбирает рабочий аппаратный H.264 (NVENC/QSV/AMF/MF) для экспорта MP4. Конвейер порта целиком 8-битный, поэтому LimitVideoDecodingTo8bit ничего не меняет; Turbo и потоки рендера не подключены |
 | Media cache | `MediaCacheDB`, `MediaCacheFiles`, `DaysToKeepMediaCacheFiles` | Startup open/prune работает; требуется наполнение и повторное использование кеша медиапайплайном |
-| Realtime audio DSP | Native AudioTransition | 16 Audio `.hfpl` подключены к PCM master mixer, проверены на смене keyframe `Balance.hfpl`; модель перекрытий ещё отсутствует |
-| 3D Render/Display | `ModelTextureMaxSize`, `ShadowMapSize`, `ReflectionMapSize`, `Antialiasing`, `ShowCheckerboard3D`, `ShowFloorPlane` | Соответствующие рендер-пути, текстуры и настоящая 3D сцена Viewer |
-| Timeline cache | `TimelineCache`, `TimelineCacheDays`, `UseAutomaticRenderCache`, `RenderCacheDelay` | Хранилище и автоматическое планирование; ручной playback cache не заменяет эти опции |
-| Export | `TimeFormat` | Применение к представлению времени export tasks, а не произвольное изменение имён файлов |
+| 3D Render/Display | `ModelTextureMaxSize`, `ShadowMapSize`, `ReflectionMapSize`, `Antialiasing`, `ShowCheckerboard3D`, `ShowFloorPlane` | Соответствующие рендер-пути и текстуры. 3D-слои видны в перспективе камеры с туманом и складываются по глубине внутри сцены (2D-слой её разрывает); режимы наложения в сцене, маски и рамки выделения вьюера остаются 2D-приближением |
+| Export | Пресеты экспорта | `TimeFormat` закрыт: Timecode / Natural / Seconds форматируют Duration и Elapsed очереди экспорта. Нет вкладки Presets референса (ExportPresetManager: встроенные и пользовательские пресеты, редактор свойств) — панель предлагает пять форматов |
 | Debug | `HardwareDecodingIndicator`, `EffectPresetCreation` | Достоверный статус используемого декодера и отдельный debug-путь создания presets; обычные пользовательские presets уже работают |
 | Models | Строки `Models`/nodeNames | Сохранение связи треугольников с узлами, затем per-node visibility/transform/selection; сейчас mesh плоский и строка выбирает весь слой |
 
@@ -208,10 +225,10 @@ Ghidra не является достаточным основанием счи�
 
 | Приоритет | Пункт | Наблюдаемая проверка |
 |---|---|---|
-| 1 | Realtime audio DSP | Native эффект меняет PCM при Play; переход обрабатывает оба перекрывающихся клипа, автоматизация соответствует времени композиции. Базовые сумма/mute/gain/offset/speed/seek уже проверены на PCM |
-| 1 | Waveform | Из PCM создаются пики и изображение, RMS/Peak и linear/log дают ожидаемые различия; масштаб и retime соответствуют таймлайну; отмена/недоступное медиа не оставляют старый waveform |
-| 1 | Prompts | Установка/снятие конкретного флага меняет соответствующий путь New/Import/Delete; вне данного prompt остальные подтверждения сохраняются |
-| 2 | Proxy/pre-render/cache | Созданный файл реально выбирается для preview; cache hit не повторяет декодирование; инвалидируются изменения медиа/параметров и применяется TTL |
+| 1 | Realtime audio DSP | Сделано (1 октября 2026; look-ahead 0,25 с для первого эффекта цепочки): 16 Audio `.hfpl` с `GetSampleRanges`/историей сухого сигнала, AudioTransition на стыках клипов, 10-мс автоматизация; проверено `audio_regression` на PCM |
+| 1 | Waveform | Сделано (1 октября 2026): пики из PCM, RMS/Peak и linear/log, slip/stretch и дисковый кэш проверены `waveformPeaksStylesAndCache`; изменённый файл получает новый ключ, недоступный — без waveform. Требует FFmpeg в PATH |
+| 1 | Prompts | Частично (1 октября 2026): общий `ui::showPrompt` повторяет BiffEventFilter (`FUN_140269950`): «Do not show this again», запоминание ответа, повторное включение в Options; подключены GPUWarning (OpenGL 4.1 при запуске, Continue/Exit), MediaMismatchPrompt (`FUN_140804440`, размер кадра видеоклипа) и OversizedAssets (`FUN_1403e1850`, текстура частиц больше 1024×1024). Подписи флажков взяты из WarningSettingsWidget референса |
+| 2 | Proxy/pre-render/cache | Timeline cache сделан (1 октября 2026): кадры playback cache пишутся в `Options/TimelineCache` (`render/FrameDiskCache`), читаются до рендера в другом `RenderManager`, ключ включает вложенные композиции и размер/mtime медиафайлов, `TimelineCacheDays` удаляет неиспользуемые при запуске, `UseAutomaticRenderCache` запускает кэш от плейхеда после `RenderCacheDelay`. Прокси сделаны (1 октября 2026): подменю Media «Proxy» (None/Performance/Quality, как ProxyMediaMenu), очередь FFmpeg в `ProxyDirectoryPath/<проект>/` с атомарной заменой, ProxyQuality задаёт сжатие, PreferIntegratedGPU — Quick Sync при наличии; PreviewMode Auto/Proxy/Full Resolution; кадры прокси масштабируются к оригиналу, ключ кэша рендера различает вариант, экспорт читает оригиналы. Pre-render составных кадров сделан (1 октября 2026): «Make/Remove Pre-Render(s)» в контекстном меню клипа, кадры в `PreRenderDirectoryPath/<проект>/<id композиции>/` с тем же ключом состояния, что у timeline cache; изменённый кадр перестаёт совпадать и рендерится заново; проверено `preRenderedShotIsReadInsteadOfRendered`. Очереди задач pre-render нет |
 | 2 | Render/GPU/3D options | Проверяется используемый backend и результат, включая fallback при отсутствии поддержки; XML-константы и сохранение флажка не закрывают пункт |
 | 2 | Thumbnail cache | Изменение лимита меняет фактическую удерживаемую память/eviction при множестве миниатюр |
 | 3 | Export time | Переключение TimeFormat меняет именно представление export tasks |

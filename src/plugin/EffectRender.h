@@ -4,6 +4,7 @@
 
 #include <QStringList>
 #include "plugin/EffectSpec.h"
+#include "plugin/NativeEffectRender.h"
 
 class QImage;
 
@@ -23,7 +24,10 @@ QVector<EffectSpec> timelineBuiltinSpecs();
 // Applies the effect identified by pluginId to the image in place, honoring the
 // given parameters (the parameter values use the same order as the EffectSpec's
 // parameter list). Returns false for unknown/unsupported effect ids.
-bool applyEffectToImage(QImage& image, const core::Identifier& pluginId, const QStringList& parameters);
+// `time` reaches native modules (NativeFrameTime); the built-in effects do
+// not depend on it.
+bool applyEffectToImage(QImage& image, const core::Identifier& pluginId, const QStringList& parameters,
+                        const NativeFrameTime& time = {});
 
 } // namespace plugin
 } // namespace openvegas

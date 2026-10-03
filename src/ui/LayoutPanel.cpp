@@ -1,5 +1,8 @@
 #include "ui/LayoutPanel.h"
 #include "ui_Layout.h"
+#include "ui/Theme.h"
+
+#include <QApplication>
 
 #include <QButtonGroup>
 #include <QComboBox>
@@ -9,9 +12,6 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
-#include <QPainter>
-#include <QPainterPath>
-#include <QPixmap>
 #include <QSignalBlocker>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -25,165 +25,24 @@ namespace ui {
 
 namespace {
 
-const QColor kGlyph(206, 206, 210);
-const QColor kGlyphRule(120, 170, 230);   // the edge an align/distribute acts on
-
-// The reference names each button's icon ("align-left", "distribute-top",
-// "mirror-vertical", ...) but the artwork is its own; this port has no such
-// files, so the glyphs are drawn here rather than shipping look-alike assets.
-// Every one is composed of the same parts the originals are: a coloured rule
-// for the edge being aligned to and grey bars for the objects moved onto it.
+// Icons are copied unchanged from the original RCC resource tree. Include
+// each native state and its @2x variant so disabled and HiDPI buttons keep
+// the same artwork rather than Qt generating grey, blurred approximations.
 QIcon makeGlyph(const QString& name)
 {
-    QPixmap pixmap(16, 16);
-    pixmap.fill(Qt::transparent);
-    QPainter p(&pixmap);
-    p.setRenderHint(QPainter::Antialiasing, false);
-    p.setPen(Qt::NoPen);
-
-    const auto rule = [&](bool vertical, int at) {
-        p.fillRect(vertical ? QRect(at, 1, 1, 14) : QRect(1, at, 14, 1), kGlyphRule);
+    QIcon icon;
+    const auto addState = [&](const QString& suffix, QIcon::Mode mode, QIcon::State state) {
+        const QString base = QStringLiteral(":/icons/layout/") + name + suffix;
+        icon.addFile(base + QStringLiteral(".png"), QSize(), mode, state);
+        icon.addFile(base + QStringLiteral("@2x.png"), QSize(), mode, state);
     };
-    const auto bar = [&](const QRect& r) { p.fillRect(r, kGlyph); };
-
-    if (name == QLatin1String("align-left")) {
-        rule(true, 1);
-        bar(QRect(2, 3, 11, 4));
-        bar(QRect(2, 9, 7, 4));
-    } else if (name == QLatin1String("align-horizontally")) {
-        rule(true, 8);
-        bar(QRect(3, 3, 11, 4));
-        bar(QRect(5, 9, 7, 4));
-    } else if (name == QLatin1String("align-right")) {
-        rule(true, 14);
-        bar(QRect(3, 3, 11, 4));
-        bar(QRect(7, 9, 7, 4));
-    } else if (name == QLatin1String("align-top")) {
-        rule(false, 1);
-        bar(QRect(3, 2, 4, 11));
-        bar(QRect(9, 2, 4, 7));
-    } else if (name == QLatin1String("align-vertically")) {
-        rule(false, 8);
-        bar(QRect(3, 3, 4, 11));
-        bar(QRect(9, 5, 4, 7));
-    } else if (name == QLatin1String("align-bottom")) {
-        rule(false, 14);
-        bar(QRect(3, 3, 4, 11));
-        bar(QRect(9, 7, 4, 7));
-    } else if (name == QLatin1String("distribute-left")) {
-        bar(QRect(1, 3, 3, 10));
-        bar(QRect(7, 3, 3, 10));
-        bar(QRect(12, 3, 3, 10));
-        rule(true, 1);
-        rule(true, 7);
-        rule(true, 12);
-    } else if (name == QLatin1String("distribute-horizontally")) {
-        bar(QRect(1, 3, 3, 10));
-        bar(QRect(6, 3, 3, 10));
-        bar(QRect(12, 3, 3, 10));
-        rule(true, 2);
-        rule(true, 7);
-        rule(true, 13);
-    } else if (name == QLatin1String("distribute-right")) {
-        bar(QRect(1, 3, 3, 10));
-        bar(QRect(6, 3, 3, 10));
-        bar(QRect(12, 3, 3, 10));
-        rule(true, 3);
-        rule(true, 8);
-        rule(true, 14);
-    } else if (name == QLatin1String("distribute-top")) {
-        bar(QRect(3, 1, 10, 3));
-        bar(QRect(3, 7, 10, 3));
-        bar(QRect(3, 12, 10, 3));
-        rule(false, 1);
-        rule(false, 7);
-        rule(false, 12);
-    } else if (name == QLatin1String("distribute-vertically")) {
-        bar(QRect(3, 1, 10, 3));
-        bar(QRect(3, 6, 10, 3));
-        bar(QRect(3, 12, 10, 3));
-        rule(false, 2);
-        rule(false, 7);
-        rule(false, 13);
-    } else if (name == QLatin1String("distribute-bottom")) {
-        bar(QRect(3, 1, 10, 3));
-        bar(QRect(3, 6, 10, 3));
-        bar(QRect(3, 12, 10, 3));
-        rule(false, 3);
-        rule(false, 8);
-        rule(false, 14);
-    } else if (name == QLatin1String("mirror-horizontal")) {
-        p.setRenderHint(QPainter::Antialiasing, true);
-        QPolygonF left;
-        left << QPointF(6.5, 2) << QPointF(6.5, 14) << QPointF(1, 8);
-        QPolygonF right;
-        right << QPointF(9.5, 2) << QPointF(9.5, 14) << QPointF(15, 8);
-        p.setBrush(kGlyph);
-        p.drawPolygon(left);
-        p.setBrush(QColor(kGlyph.red() / 2, kGlyph.green() / 2, kGlyph.blue() / 2));
-        p.drawPolygon(right);
-        p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(kGlyphRule, 1, Qt::DashLine));
-        p.drawLine(QPointF(8, 1), QPointF(8, 15));
-    } else if (name == QLatin1String("mirror-vertical")) {
-        p.setRenderHint(QPainter::Antialiasing, true);
-        QPolygonF top;
-        top << QPointF(2, 6.5) << QPointF(14, 6.5) << QPointF(8, 1);
-        QPolygonF bottom;
-        bottom << QPointF(2, 9.5) << QPointF(14, 9.5) << QPointF(8, 15);
-        p.setBrush(kGlyph);
-        p.drawPolygon(top);
-        p.setBrush(QColor(kGlyph.red() / 2, kGlyph.green() / 2, kGlyph.blue() / 2));
-        p.drawPolygon(bottom);
-        p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(kGlyphRule, 1, Qt::DashLine));
-        p.drawLine(QPointF(1, 8), QPointF(15, 8));
-    } else if (name == QLatin1String("scale-linked")) {
-        // Two links of a chain, which is what the reference draws beside Width
-        // and Height.
-        p.setRenderHint(QPainter::Antialiasing, true);
-        p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(kGlyph, 1.6));
-        p.drawRoundedRect(QRectF(4.5, 1.5, 7, 7), 3.0, 3.0);
-        p.drawRoundedRect(QRectF(4.5, 7.5, 7, 7), 3.0, 3.0);
-    } else if (name == QLatin1String("rotate-cw") || name == QLatin1String("rotate-ccw")) {
-        const bool clockwise = name.endsWith(QLatin1String("cw"))
-                               && !name.endsWith(QLatin1String("ccw"));
-        p.setRenderHint(QPainter::Antialiasing, true);
-        p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(kGlyph, 2));
-        // Three quarters of a circle, open where the arrow head goes.
-        p.drawArc(QRectF(3, 3, 10, 10), clockwise ? 90 * 16 : 90 * 16,
-                  clockwise ? -260 * 16 : 260 * 16);
-        p.setPen(Qt::NoPen);
-        p.setBrush(kGlyph);
-        QPolygonF head;
-        if (clockwise) {
-            head << QPointF(8, 0.5) << QPointF(12, 3.5) << QPointF(8, 6.5);
-        } else {
-            head << QPointF(8, 0.5) << QPointF(4, 3.5) << QPointF(8, 6.5);
-        }
-        p.drawPolygon(head);
-    }
-
-    p.end();
-    return QIcon(pixmap);
-}
-
-QToolButton* makeIconButton(QWidget* parent, const QString& objectName, const QString& iconName,
-                            const QString& toolTip)
-{
-    auto* button = new QToolButton(parent);
-    button->setObjectName(objectName);
-    button->setIcon(makeGlyph(iconName));
-    button->setIconSize(QSize(16, 16));
-    button->setToolTip(toolTip);
-    button->setAutoRaise(true);
-    button->setFixedSize(22, 22);
-    // The reference carries the icon id as a property on the button; kept so
-    // the artwork can be swapped for real assets without touching the wiring.
-    button->setProperty("icon-image", iconName);
-    return button;
+    addState(QString(), QIcon::Normal, QIcon::Off);
+    addState(QStringLiteral("-hover"), QIcon::Active, QIcon::Off);
+    addState(QStringLiteral("-checked"), QIcon::Normal, QIcon::On);
+    addState(QStringLiteral("-checked"), QIcon::Active, QIcon::On);
+    addState(QStringLiteral("-disabled"), QIcon::Disabled, QIcon::Off);
+    addState(QStringLiteral("-disabled"), QIcon::Disabled, QIcon::On);
+    return icon;
 }
 
 } // namespace
@@ -193,6 +52,7 @@ LayoutPanel::LayoutPanel(QWidget* parent)
 {
     Ui::LayoutPanel form;
     form.setupUi(this);
+    m_transformWidget = form.TransformWidget;
     m_x = form.spinBoxX;
     m_y = form.spinBoxY;
     m_width = form.spinBoxWidth;
@@ -208,9 +68,9 @@ LayoutPanel::LayoutPanel(QWidget* parent)
     };
     setGlyph(form.toolButtonMirrorVertical, QStringLiteral("mirror-vertical"));
     setGlyph(form.toolButtonMirrorHorizontal, QStringLiteral("mirror-horizontal"));
-    setGlyph(form.toolButtonCounterClockWise, QStringLiteral("rotate-ccw"));
-    setGlyph(form.toolButtonClockWise, QStringLiteral("rotate-cw"));
-    setGlyph(m_scaleLinked, QStringLiteral("scale-linked"));
+    setGlyph(form.toolButtonCounterClockWise, QStringLiteral("anticlockwise90"));
+    setGlyph(form.toolButtonClockWise, QStringLiteral("clockwise90"));
+    setGlyph(m_scaleLinked, QStringLiteral("linked"));
     connect(form.toolButtonMirrorVertical, &QToolButton::clicked, this,
             [this] { emit mirrorRequested(Qt::Vertical); });
     connect(form.toolButtonMirrorHorizontal, &QToolButton::clicked, this,
@@ -232,11 +92,27 @@ LayoutPanel::LayoutPanel(QWidget* parent)
     };
     auto* directionGroup = new QButtonGroup(form.widgetDirection);
     directionGroup->setExclusive(true);
-    form.widgetDirection->setStyleSheet(QStringLiteral(
-        "QToolButton { border:1px solid palette(mid); background:palette(base); }"
-        "QToolButton:checked { border:1px solid palette(highlight); background:palette(highlight); }"
-        "QToolButton:hover { border:1px solid palette(highlight); }"));
+    const bool dark = !qApp->styleSheet().isEmpty();
+    const auto& colors = themeColors();
+    const QString border = dark ? colors.lineColor.name() : palette().mid().color().name();
+    const QString heading = dark ? colors.fillPanel1.name() : palette().alternateBase().color().name();
+    const QString hover = dark ? colors.buttonHover.name() : palette().button().color().name();
+    const QString accent = dark ? colors.focus.name() : palette().highlight().color().name();
+    form.layoutContentWidget->setStyleSheet(QStringLiteral(
+        "QToolButton[layoutIcon=\"true\"] { border:0; border-radius:0; padding:4px;"
+        "min-width:16px; min-height:16px; background:transparent; }"
+        "QToolButton[layoutIcon=\"true\"]:hover { background:%1; }"
+        "QToolButton[layoutIcon=\"true\"]:checked { background:%2; }"
+        "QToolButton[layoutIcon=\"true\"]:disabled { background:transparent; }"
+        "QGroupBox { border:1px solid %3; border-radius:0; margin-top:0; }"
+        "QLabel#layoutAlignmentHeading { background:%4; padding:6px 8px; }")
+            .arg(hover, accent, border, heading));
+    const char* directionIcons[] = {
+        "top-left", "top", "top-right", "left", "center", "right",
+        "bottom-left", "bottom", "bottom-right",
+    };
     for (int i = 0; i < 9; ++i) {
+        setGlyph(directionButtons[i], QString::fromLatin1(directionIcons[i]));
         directionButtons[i]->setProperty("direction", int(directions[i]));
         directionButtons[i]->setChecked(directions[i] == m_direction);
         directionGroup->addButton(directionButtons[i]);
@@ -306,7 +182,7 @@ void LayoutPanel::setDirection(Direction direction)
         handle->setChecked(handle->property("direction").toInt() == static_cast<int>(direction));
     }
     // The box has not moved - only the corner the numbers are read from.
-    refreshFields();
+    refreshFields(true);
 }
 
 LayoutPanel::AlignTo LayoutPanel::alignTo() const
@@ -324,6 +200,10 @@ void LayoutPanel::setSelectionBounds(const QRectF& bounds)
 
 void LayoutPanel::setSelectionBounds(const QVector<QRectF>& bounds)
 {
+    if (bounds.isEmpty()) {
+        clearSelection();
+        return;
+    }
     m_selectionBounds = bounds;
     m_bounds = QRectF();
     for (const QRectF& item : bounds) m_bounds = m_bounds.isNull() ? item : m_bounds.united(item);
@@ -344,11 +224,11 @@ void LayoutPanel::clearSelection()
     m_hasSelection = false;
     m_bounds = QRectF();
     m_selectionBounds.clear();
-    refreshFields();
+    refreshFields(true);
     updateEnabled();
 }
 
-void LayoutPanel::refreshFields()
+void LayoutPanel::refreshFields(bool force)
 {
     if (!m_x) {
         return;
@@ -357,7 +237,7 @@ void LayoutPanel::refreshFields()
     // the selection's box in again on every rendered frame, and during playback
     // that would overwrite a half-typed number.
     for (const QDoubleSpinBox* field : {m_x, m_y, m_width, m_height}) {
-        if (field->hasFocus()) {
+        if (!force && field->hasFocus()) {
             return;
         }
     }
@@ -486,10 +366,11 @@ void LayoutPanel::updateEnabled()
         field->setEnabled(m_hasSelection);
     }
 
-    // Aligning to the Selection means aligning the selected objects to each
-    // other, and distributing means spreading three or more of them evenly.
-    // This port selects one layer at a time, so both are switched off rather
-    // than left as buttons that do nothing when pressed.
+    if (m_transformWidget) m_transformWidget->setEnabled(m_hasSelection);
+    if (m_alignTo) m_alignTo->setEnabled(m_hasSelection);
+
+    // Alignment to the selection requires two objects; distribution requires
+    // at least three. Orientation and dimensions also need a selection.
     const bool toTimeline = alignTo() == AlignTo::Timeline;
     if (m_alignRow) {
         const bool canAlign = m_hasSelection && (toTimeline || m_selectionBounds.size() > 1);

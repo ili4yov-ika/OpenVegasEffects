@@ -10,7 +10,7 @@ add_executable(textpanel_regression textpanel_regression.cpp
     ../src/ui/TextSettingsDialog.cpp ../src/ui/TextSettingsDialog.h
     ../src/composition/TextStyle.cpp ../src/render/TextRender.cpp
     ../src/composition/Composition.cpp ../src/composition/KeyFrame.cpp
-    ../src/project/VegfxSerializer.cpp ../src/media/MediaManager.cpp ../src/media/MediaAsset.cpp
+    ../src/project/VegfxSerializer.cpp ../src/project/VegfxMerge.cpp ../src/media/MediaManager.cpp ../src/media/MediaAsset.cpp
     ../src/media/VideoProbe.cpp ../src/media/Vlc4Adapter.cpp ../src/media/VlcBackend.cpp ../src/core/Log.cpp
     ../src/model3d/ModelLoader.cpp ../src/model3d/ModelImportSettings.cpp
     ../src/model3d/AlembicReader.cpp ../src/model3d/Mesh.cpp)
@@ -49,13 +49,34 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/ui/LibraryPanel.cpp ../src/ui/LibraryPanel.h
     ../src/ui/MediaPanel.cpp ../src/ui/MediaPanel.h
     ../src/ui/AudioMetersPanel.cpp ../src/ui/AudioMetersPanel.h
-    ../src/ui/ViewerWidget.cpp ../src/ui/ViewerWidget.h
+    ../src/ui/ViewerWidget.cpp ../src/ui/ViewerWidget.h ../src/ui/ViewerOverlay.h
+    ../src/ui/Viewer360View.cpp ../src/ui/Viewer360View.h
+    ../src/ui/TextTransformOverlay.cpp ../src/ui/TextTransformOverlay.h
+    ../src/ui/NativeCustomUiOverlay.cpp ../src/ui/NativeCustomUiOverlay.h
+    ../src/ui/NativeInstanceHost.cpp ../src/ui/NativeInstanceHost.h
+    ../src/ui/MediaSettingsDialog.cpp ../src/ui/MediaSettingsDialog.h
     ../src/ui/ViewScaleButton.cpp ../src/ui/ViewScaleButton.h
     ../src/ui/ViewerTransportBar.cpp ../src/ui/ViewerTransportBar.h
     ../src/ui/DockTitleBar.cpp ../src/ui/DockTitleBar.h
     ../src/ui/LayoutPanel.cpp ../src/ui/LayoutPanel.h
     ../src/app/Settings.cpp ../src/app/Settings.h
-    ../src/render/RenderManager.cpp ../src/model3d/Renderer3D.cpp
+    ../src/render/RenderManager.cpp ../src/render/AudioExport.cpp ../src/model3d/Renderer3D.cpp
+    ../src/render/TextGeometry.cpp ../src/render/TextGeometry.h
+    ../src/render/FrameDiskCache.cpp ../src/render/FrameDiskCache.h
+    ../src/render/VideoEncoder.cpp ../src/render/VideoEncoder.h
+    ../src/media/AudioWaveform.cpp ../src/media/AudioWaveform.h
+    ../src/media/ProxyMedia.cpp ../src/media/ProxyMedia.h
+    ../src/ui/PromptMessage.cpp ../src/ui/PromptMessage.h
+    ../src/ui/CameraRule.cpp ../src/ui/CameraRule.h
+    ../src/ui/AutoSave.cpp ../src/ui/AutoSave.h
+    ../src/ui/LearnSidebar.cpp ../src/ui/LearnSidebar.h
+    ../src/ui/ProjectSettingsDialog.cpp ../src/ui/ProjectSettingsDialog.h
+    ../src/ui/RecoveredProjectsDialog.cpp ../src/ui/RecoveredProjectsDialog.h
+    ../src/ui/ImportCompositionDialog.cpp ../src/ui/ImportCompositionDialog.h
+    ../src/ui/CompositionSettingsDialog.cpp ../src/ui/CompositionSettingsDialog.h
+    ../src/app/AVTemplates.cpp ../src/app/AVTemplates.h
+    ../src/render/ExportJob.cpp ../src/render/ExportJob.h ../src/media/ExrImage.cpp ../src/media/ExrImage.h
+    ../src/ui/ExportQueue.cpp ../src/ui/ExportQueue.h ../src/ui/ExportQueueView.cpp ../src/ui/ExportQueueView.h
     ../src/composition/MotionTracker.cpp ../src/composition/MotionTracker.h)
 target_include_directories(timeline_regression PRIVATE ../src)
 target_link_libraries(timeline_regression PRIVATE Qt6::Widgets Qt6::Test Qt6::Svg Qt6::Xml Qt6::OpenGL)
@@ -73,9 +94,12 @@ set_tests_properties(timeline_regression PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM
 
 add_executable(options_regression options_regression.cpp
     ../src/ui/OptionsDialog.cpp ../src/ui/OptionsDialog.h ../ui/OptionsDialog.ui
-    ../src/ui/Theme.cpp ../src/app/Settings.cpp ../src/app/Translations.cpp)
+    ../src/ui/Theme.cpp ../src/app/Settings.cpp ../src/app/Translations.cpp
+    ../src/ui/PromptMessage.cpp ../src/ui/PromptMessage.h
+    ../src/ui/AutoSave.cpp ../src/ui/AutoSave.h
+    ../src/app/AVTemplates.cpp ../src/app/AVTemplates.h)
 target_include_directories(options_regression PRIVATE ../src)
-target_link_libraries(options_regression PRIVATE Qt6::Widgets Qt6::Test)
+target_link_libraries(options_regression PRIVATE Qt6::Widgets Qt6::Test Qt6::Xml)
 set_target_properties(options_regression PROPERTIES AUTOUIC ON
     AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/../ui")
 add_test(NAME options_regression COMMAND options_regression)

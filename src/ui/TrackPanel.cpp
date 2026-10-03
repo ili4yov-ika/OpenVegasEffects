@@ -1,5 +1,6 @@
 #include "ui/TrackPanel.h"
 #include "ui_Track.h"
+#include "ui/CameraRule.h"
 
 #include <QComboBox>
 #include <QCoreApplication>
@@ -115,7 +116,13 @@ void TrackPanel::onDeleteLayer()
 {
     const int row = selectedRow();
     if (!m_composition || row < 0 || m_composition->layers().at(row).locked) return;
-    if (m_composition->removeLayer(row)) { refresh(); emitModified(); }
+    // The last camera of a 3D shot: asked first, then the shot goes 2D.
+    const bool lastCamera = removesLastCamera(*m_composition, {row});
+    if (lastCamera && !confirmRemoveLastCamera(this)) return;
+    if (m_composition->removeLayer(row)) {
+        if (lastCamera) convertTo2D(*m_composition);
+        refresh(); emitModified();
+    }
 }
 
 void TrackPanel::onMoveLayer(int delta)

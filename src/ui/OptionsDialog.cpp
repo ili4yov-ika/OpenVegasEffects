@@ -1,7 +1,9 @@
 #include "ui/OptionsDialog.h"
+#include "app/AVTemplates.h"
 #include "app/ProjectDefaults.h"
 
 #include "ui_OptionsDialog.h"
+#include "ui/AutoSave.h"
 #include "ui/Theme.h"
 
 #include "app/Settings.h"
@@ -86,8 +88,10 @@ const char* const kModelTextureMaxSize = "Options/ModelTextureMaxSize";
 const char* const kShadowMapSize       = "Options/ShadowMapSize";
 const char* const kReflectionMapSize   = "Options/ReflectionMapSize";
 const char* const kAntialiasing        = "Options/Antialiasing";
-const char* const kAutosaveEnabled     = "Options/AutoSaveEnabled";
-const char* const kAutosaveSeconds     = "Options/AutoSaveIntervalSeconds";
+// The reference's keys (AutoSaveSettingsWidget): a switch, minutes, a folder.
+const char* const kAutosaveEnabled     = "Options/AutoSave";
+const char* const kAutosaveMinutes     = "Options/AutoSaveFrequency";
+const char* const kAutosavePath        = "Options/AutoSavePath";
 const char* const kVoiceDevice         = "Options/Voiceover/Device";
 const char* const kVoiceChannels       = "Options/Voiceover/Channels";
 const char* const kVoiceSampleRate     = "Options/Voiceover/SampleRate";
@@ -107,17 +111,39 @@ struct PromptDefinition
     bool defaultValue;
 };
 
+// Labels are the reference WarningSettingsWidget's own. Its settings are
+// ShowGPUWarning, ShowGPUDriverWarning, ShowTextureSizeWarning (particle
+// textures over 1024 x 1024), ShowImageSequenceImportDialog,
+// ShowMatchClipDialog, ShowQuickTimeDialog, ShowAddCameraDialog (adding a
+// camera turns a 2D shot 3D), ShowRemoveCameraDialog (removing the last one
+// turns it back), ShowRemoveExportTasksDialog and ShowProjectSettingsDialog.
 const PromptDefinition kPromptDefinitions[] = {
-    {"checkBoxGPUWarning", "GPUWarning", "Warn when the GPU does not meet requirements", true},
-    {"checkBoxGPUDriverWarning", "GPUDriverWarning", "Warn when the GPU driver is out of date", true},
-    {"checkBoxOversizedAssets", "OversizedAssets", "Warn before importing oversized assets", true},
-    {"checkBoxImageSequenceImportPrompt", "ImageSequenceImportPrompt", "Ask before importing an image sequence", true},
-    {"checkBoxMediaMismatchPrompt", "MediaMismatchPrompt", "Ask when media settings differ from the project", true},
-    {"checkBoxQuickTime", "QuickTimeWarning", "Show QuickTime compatibility warnings", true},
-    {"checkBoxAdding3DCameras", "Adding3DCameras", "Ask before adding cameras from a 3D model", true},
-    {"checkBoxRemoving3DCameras", "Removing3DCameras", "Ask before removing imported 3D cameras", true},
-    {"checkBoxRemovingExportTasks", "RemovingExportTasks", "Ask before removing export tasks", true},
-    {"checkBoxShowProjectSettings", "ShowProjectSettings", "Show project settings when creating a project", true},
+    {"checkBoxGPUWarning", "GPUWarning",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Prompt me on launch if my GPU is unsupported"), true},
+    {"checkBoxGPUDriverWarning", "GPUDriverWarning",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog",
+                       "Prompt me on launch if my GPU driver is unsupported or out of date"), true},
+    {"checkBoxOversizedAssets", "OversizedAssets",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Prompt me before using oversized particle textures"), true},
+    {"checkBoxImageSequenceImportPrompt", "ImageSequenceImportPrompt",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog",
+                       "Prompt me when importing an image from an image sequence"), true},
+    {"checkBoxMediaMismatchPrompt", "MediaMismatchPrompt",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog",
+                       "Prompt me when the media doesn't match editor timeline"), true},
+    {"checkBoxQuickTime", "QuickTimeWarning",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog",
+                       "Prompt me on launch if QuickTime is installed but could not be loaded"), true},
+    {"checkBoxAdding3DCameras", "Adding3DCameras",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Prompt me before converting 2D composite shots to 3D"), true},
+    {"checkBoxRemoving3DCameras", "Removing3DCameras",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Prompt me before converting 3D composite shots to 2D"), true},
+    {"checkBoxRemovingExportTasks", "RemovingExportTasks",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog",
+                       "Prompt me before removing export tasks from the export queue"), true},
+    {"checkBoxShowProjectSettings", "ShowProjectSettings",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog",
+                       "Prompt me for the project settings to use before creating a new project"), true},
 };
 
 struct ShortcutDefinition
@@ -360,9 +386,10 @@ QWidget* OptionsDialog::buildGeneralPage()
 
     m_template = new QComboBox(page);
     m_template->setObjectName(QStringLiteral("comboBoxTemplate"));
-    m_template->addItem(tr("1080p Full HD @ 30 fps"), QStringLiteral("fullhd30"));
-    m_template->addItem(tr("1080p Full HD @ 60 fps"), QStringLiteral("fullhd60"));
-    m_template->addItem(tr("4K UHD @ 30 fps"), QStringLiteral("uhd30"));
+    // The same templates Composite Shot Properties offers: the built-in
+    // formats, then the ones the user saved there.
+    for (const app::AVTemplate& avTemplate : app::allTemplates())
+        m_template->addItem(avTemplate.name, avTemplate.id);
     form->addRow(tr("Default Template:"), m_template);
 
     m_shotDuration = new QTimeEdit(page);
@@ -385,8 +412,10 @@ QWidget* OptionsDialog::buildGeneralPage()
 
     m_waveforms = new QComboBox(page);
     m_waveforms->setObjectName(QStringLiteral("comboBoxAudioWaveforms"));
-    m_waveforms->addItem(tr("RMS Amplitude"));
-    m_waveforms->addItem(tr("Peak Amplitude"));
+    // The English text is the stored value, so the timeline reads the same
+    // setting whatever the interface language.
+    m_waveforms->addItem(tr("RMS Amplitude"), QStringLiteral("RMS Amplitude"));
+    m_waveforms->addItem(tr("Peak Amplitude"), QStringLiteral("Peak Amplitude"));
     form->addRow(tr("Audio Waveforms:"), m_waveforms);
 
     auto* checks = new QVBoxLayout;
@@ -508,9 +537,11 @@ QWidget* OptionsDialog::buildExportPage()
 
     m_timeFormat = new QComboBox(page);
     m_timeFormat->setObjectName(QStringLiteral("comboBoxTimeFormat"));
-    m_timeFormat->addItem(tr("Timecode"));
-    m_timeFormat->addItem(tr("Frames"));
-    m_timeFormat->addItem(tr("SMPTE"));
+    // ExportSettingsWidget's formats for Duration and Elapsed in the queue.
+    m_timeFormat->addItem(tr("Timecode"), QStringLiteral("Timecode"));
+    m_timeFormat->addItem(tr("Natural"), QStringLiteral("Natural"));
+    m_timeFormat->addItem(tr("Seconds"), QStringLiteral("Seconds"));
+    m_timeFormat->setToolTip(tr("The format in which to display time durations (Elapsed and Remaining only)."));
     form->addRow(tr("Time Format:"), m_timeFormat);
 
     auto* checks = new QVBoxLayout;
@@ -1102,7 +1133,9 @@ QWidget* OptionsDialog::buildAutoSavePage()
     form->setContentsMargins(16, 16, 16, 16);
     form->setSpacing(8);
 
-    m_autosaveEnabled = new QCheckBox(tr("Enable automatic backups"), page);
+    // The reference's AutoSaveSettingsWidget: the switch, a frequency in
+    // minutes and the folder the auto-saves go to (Quick Start 2.2.10).
+    m_autosaveEnabled = new QCheckBox(QCoreApplication::translate("AutoSaveSettingsWidget", "Enable Project Auto Saving"), page);
     m_autosaveEnabled->setObjectName(QStringLiteral("checkBoxAutoSaving"));
     m_autosaveEnabled->setStyleSheet(QStringLiteral("QCheckBox::indicator:checked { "
                                                     "background-color: %1; }")
@@ -1111,16 +1144,27 @@ QWidget* OptionsDialog::buildAutoSavePage()
 
     m_autosaveSeconds = new QSpinBox(page);
     m_autosaveSeconds->setObjectName(QStringLiteral("spinBoxSaveFrequency"));
-    m_autosaveSeconds->setRange(30, 3600);
-    m_autosaveSeconds->setSingleStep(30);
-    m_autosaveSeconds->setSuffix(tr(" sec"));
-    form->addRow(tr("Autosave every:"), m_autosaveSeconds);
-    connect(m_autosaveEnabled, &QCheckBox::toggled,
-            m_autosaveSeconds, &QWidget::setEnabled);
+    m_autosaveSeconds->setRange(1, 120);
+    m_autosaveSeconds->setSuffix(QCoreApplication::translate("AutoSaveSettingsWidget", " minute(s)"));
+    form->addRow(QCoreApplication::translate("AutoSaveSettingsWidget", "Auto Save Frequency:"), m_autosaveSeconds);
 
-    form->addRow(makePageLabel(
-        tr("Autosave writes to the project's folder beside the .vegfx file, "
-           "kept separate from the manual Save As.")));
+    auto* pathRow = new QWidget(page);
+    auto* pathLayout = new QHBoxLayout(pathRow);
+    pathLayout->setContentsMargins(0, 0, 0, 0);
+    m_autosavePath = new QLineEdit(pathRow);
+    m_autosavePath->setObjectName(QStringLiteral("lineEditAutoSavePath"));
+    auto* browse = new QPushButton(QCoreApplication::translate("AutoSaveSettingsWidget", "Select Folder..."), pathRow);
+    browse->setObjectName(QStringLiteral("pushButtonSelectAutoSaveFolder"));
+    pathLayout->addWidget(m_autosavePath, 1);
+    pathLayout->addWidget(browse);
+    form->addRow(QCoreApplication::translate("AutoSaveSettingsWidget", "Auto Save Project Path:"), pathRow);
+    connect(browse, &QPushButton::clicked, this, [this] {
+        const QString chosen = QFileDialog::getExistingDirectory(
+            this, QCoreApplication::translate("AutoSaveSettingsWidget", "Choose auto save projects path"), m_autosavePath->text());
+        if (!chosen.isEmpty()) m_autosavePath->setText(QDir::toNativeSeparators(chosen));
+    });
+    for (QWidget* editor : {static_cast<QWidget*>(m_autosaveSeconds), static_cast<QWidget*>(pathRow)})
+        connect(m_autosaveEnabled, &QCheckBox::toggled, editor, &QWidget::setEnabled);
     return page;
 }
 
@@ -1137,7 +1181,7 @@ void OptionsDialog::onRestoreDefaults()
     const QString name = categoryNames().value(idx);
     if (name == QStringLiteral("General")) {
         m_maxUndo->setValue(30);
-        m_template->setCurrentIndex(0);
+        m_template->setCurrentIndex(qMax(0, m_template->findData(QStringLiteral("fullhd30"))));
         m_shotDuration->setTime(QTime(0, 0, 30));
         m_editorDuration->setTime(QTime(0, 5, 0));
         m_planeDuration->setTime(QTime(0, 0, 30));
@@ -1214,7 +1258,8 @@ void OptionsDialog::onRestoreDefaults()
         m_preferIntegratedGpu->setChecked(false);
     } else if (name == QStringLiteral("Auto Save")) {
         m_autosaveEnabled->setChecked(true);
-        m_autosaveSeconds->setValue(300);
+        m_autosaveSeconds->setValue(10);
+        m_autosavePath->setText(QDir::toNativeSeparators(autosave::defaultFolder()));
     } else if (name == QStringLiteral("Shortcuts")) {
         for (int i = 0; i < m_shortcutEdits.size(); ++i) {
             m_shortcutEdits[i]->setKeySequence(QKeySequence::fromString(
@@ -1261,7 +1306,7 @@ bool OptionsDialog::saveSettings()
     s.setValue(kShotDuration, m_shotDuration->time().toString(QStringLiteral("hh:mm:ss.zzz")));
     s.setValue(kEditorDuration, m_editorDuration->time().toString(QStringLiteral("hh:mm:ss.zzz")));
     s.setValue(kPlaneDuration, m_planeDuration->time().toString(QStringLiteral("hh:mm:ss.zzz")));
-    s.setValue(kAudioWaveforms, m_waveforms->currentText());
+    s.setValue(kAudioWaveforms, m_waveforms->currentData());
     s.setValue(kIncludeLayout, m_includeLayout->isChecked());
     s.setValue(kRelativePaths, m_relativePaths->isChecked());
     s.setValue(kCloseMediaInactive, m_closeMediaOnInactive->isChecked());
@@ -1333,8 +1378,9 @@ bool OptionsDialog::saveSettings()
     s.setValue(kPreviewMode, m_previewMode->currentText());
     s.setValue(kPreferIntegratedGpu, m_preferIntegratedGpu->isChecked());
     s.setValue(kAutosaveEnabled, m_autosaveEnabled->isChecked());
-    s.setValue(kAutosaveSeconds, m_autosaveSeconds->value());
-    settings.setAutosaveIntervalSeconds(m_autosaveSeconds->value());
+    s.setValue(kAutosaveMinutes, m_autosaveSeconds->value());
+    s.setValue(kAutosavePath, QDir::toNativeSeparators(m_autosavePath->text().trimmed()));
+    settings.setAutosaveIntervalSeconds(m_autosaveSeconds->value() * 60);
     for (int i = 0; i < m_shortcutEdits.size(); ++i) {
         s.setValue(shortcutKey(QLatin1String(kShortcutDefinitions[i].actionName)),
                    m_shortcutEdits[i]->keySequence().toString(QKeySequence::PortableText));
@@ -1343,7 +1389,7 @@ bool OptionsDialog::saveSettings()
     s.setValue(kSnapshotDir, m_snapshotDir->text().trimmed());
     settings.setSnapshotDirectory(m_snapshotDir->text().trimmed());
     settings.setLanguage(m_language->currentData().toString());
-    s.setValue(kTimeFormat, m_timeFormat->currentText());
+    s.setValue(kTimeFormat, m_timeFormat->currentData().toString());
     s.setValue(kRemoveExt, m_removeExt->isChecked());
     s.setValue(kBeepSpeaker, m_beepSpeaker->isChecked());
     s.sync();
@@ -1369,8 +1415,11 @@ void OptionsDialog::loadSettings()
     };
     m_editorDuration->setTime(loadTime(kEditorDuration, QTime(0, 5, 0)));
     m_planeDuration->setTime(loadTime(kPlaneDuration, QTime(0, 0, 30)));
-    m_waveforms->setCurrentIndex(qMax(0, m_waveforms->findText(
-        s.value(kAudioWaveforms).toString())));
+    // Earlier builds stored the translated item text.
+    const QString waveformStyle = s.value(kAudioWaveforms).toString();
+    const int waveformIndex = m_waveforms->findData(waveformStyle);
+    m_waveforms->setCurrentIndex(qMax(0, waveformIndex >= 0
+        ? waveformIndex : m_waveforms->findText(waveformStyle)));
     m_includeLayout->setChecked(s.value(kIncludeLayout, false).toBool());
     m_relativePaths->setChecked(s.value(kRelativePaths, false).toBool());
     m_closeMediaOnInactive->setChecked(s.value(kCloseMediaInactive, false).toBool());
@@ -1407,7 +1456,8 @@ void OptionsDialog::loadSettings()
             .filePath(QStringLiteral("OpenVegas Effects")));
     m_exportDir->setText(s.value(kExportDir, defaultExport).toString());
     m_snapshotDir->setText(s.value(kSnapshotDir, appSettings.snapshotDirectory()).toString());
-    m_timeFormat->setCurrentIndex(qMax(0, m_timeFormat->findText(
+    // Older builds stored the shown text (and offered Frames/SMPTE).
+    m_timeFormat->setCurrentIndex(qMax(0, m_timeFormat->findData(
         s.value(kTimeFormat, QStringLiteral("Timecode")).toString())));
     m_removeExt->setChecked(s.value(kRemoveExt, true).toBool());
     m_beepSpeaker->setChecked(s.value(kBeepSpeaker, true).toBool());
@@ -1471,10 +1521,12 @@ void OptionsDialog::loadSettings()
     m_previewMode->setCurrentIndex(qMax(0, m_previewMode->findText(
         s.value(kPreviewMode, QStringLiteral("Auto")).toString())));
     m_preferIntegratedGpu->setChecked(s.value(kPreferIntegratedGpu, false).toBool());
-    m_autosaveEnabled->setChecked(s.value(kAutosaveEnabled, true).toBool());
-    m_autosaveSeconds->setValue(s.value(kAutosaveSeconds,
-                                        appSettings.autosaveIntervalSeconds()).toInt());
+    // autosave:: reads the older AutoSaveEnabled/AutoSaveIntervalSeconds too.
+    m_autosaveEnabled->setChecked(autosave::enabled());
+    m_autosaveSeconds->setValue(autosave::frequencyMinutes());
+    m_autosavePath->setText(QDir::toNativeSeparators(autosave::folder()));
     m_autosaveSeconds->setEnabled(m_autosaveEnabled->isChecked());
+    m_autosavePath->parentWidget()->setEnabled(m_autosaveEnabled->isChecked());
     for (int i = 0; i < m_shortcutEdits.size(); ++i) {
         m_shortcutEdits[i]->setKeySequence(QKeySequence::fromString(
             s.value(shortcutKey(QLatin1String(kShortcutDefinitions[i].actionName)),
