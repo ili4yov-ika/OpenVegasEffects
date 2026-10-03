@@ -1130,7 +1130,7 @@ void MainWindow::configureMenus()
     });
     connect(m_ui->actionOnlineHelp, &QAction::triggered, this, [] {
         QDesktopServices::openUrl(QUrl(QStringLiteral(
-            "https://www.vegascreativesoftware.com/us/support/")));
+            "https://github.com/ili4yov-ika/OpenVegasEffects")));
     });
 
     connect(m_ui->actionReloadExternalStylesheet, &QAction::triggered,

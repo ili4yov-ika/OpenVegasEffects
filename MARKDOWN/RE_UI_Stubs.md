@@ -1,22 +1,21 @@
 # RE_UI_Stubs — аудит заглушек интерфейса
 
-Обновлено: 2026-09-28. Объект проверки: `src/ui`, потребители настроек в `src/app`,
-`src/media`, `src/project` и `src/render`; оригинал сопоставлен через подключённый
-Ghidra MCP. Этот документ заменяет аудит 2026-09-14: старые номера строк и утверждения
-о неработающем звуке больше не соответствовали коду.
+Обновлено: 2026-10-04. Объект проверки: `src/ui`, потребители настроек в `src/app`,
+`src/media`, `src/project`, `src/render` и `src/model3d`. Эта редакция сверяет документ
+с текущими исходниками и [чеклистом](CHECKLIST.md); новых live-запросов Ghidra в ней
+не выполнялось. Адреса и результаты Ghidra ниже относятся к предыдущим исследованиям,
+включая live-аудит 2026-09-27 и восстановление Layout 2026-10-03.
 
 Настройка считается реализованной, когда она меняет поведение приложения, а не только
 проходит `loadSettings → saveSettings`. Поиск ключа в OptionsDialog сам по себе этого
-не доказывает. Проверки сборки и автоматические тесты отделены от проверки оборудования.
+не доказывает. Наличие обработчика, результаты тестов и проверка оборудования —
+разные уровни подтверждения.
 
-Повторный аудит 2026-09-27: живые string/xref/decompile запросы Ghidra для
-VegasEffects.exe, проверка соответствующих функций в локальном bulk-декомпиляте
-и поиск потребителей в текущем `src`. Найдены дополнительные незавершённые пути:
-Turbo Rendering, подключение Media Cache DB к медиапайплайну
-и realtime native audio DSP. Последний теперь подключён для Audio `.hfpl` на уровне
-клипа; лимит thumbnail cache и многодорожечный master mix также подключены. Предыдущее описание этих частей
-как полностью рабочих исправлено. Миграция libVLC и подключённые обработчики
-описаны ниже; остальные незавершённые пути остаются в матрице раздела 4.
+Исправлены противоречия прежней редакции: Qt Multimedia уже заменён libVLC;
+waveform, ProxyQuality/PreferIntegratedGPU, EditorDefaultDuration и export TimeFormat
+имеют потребителей. Шаблоны обслуживает AVTemplates, экспорт — ExportJob/AudioExport.
+Остаются ограничения realtime native audio, Media Cache DB, render/GPU/3D options,
+масштаба превью и визуальных границ Layout; они перечислены в разделах 3.1 и 4.
 
 Статусы в этом документе:
 
@@ -44,15 +43,16 @@ Turbo Rendering, подключение Media Cache DB к медиапайпла
 | `141313b80` | Команда `Create Voiceover Recording`, xref `FUN_14071a640` | Меню Record и редактируемая горячая клавиша `Ctrl+Shift+R` открывают запись |
 | `1412c76b0`, `FUN_140231840`, `FUN_1403a48a0` | Чтение integer `Options/AudioWaveformStyle` с fallback 2 и запись из General Options | Наши `Options/AudioWaveforms` хранят английский ключ выбора (старый переведённый текст читается), таймлайн рисует RMS или Peak. Числа native enum не сопоставлены с RMS/Peak |
 | `1412c76c8`, `FUN_140231920`, `FUN_1403a48a0` | Integer `Options/WaveformScaleType`, fallback 1 | Наш `Options/LogWaveform` — bool, переключает шкалу −60…0 dBFS/линейную в waveform таймлайна; прямую совместимость INI не заявляем |
-| `FUN_140665b10`, `14130a870`, `14130a930` | Проверка `MediaAudioStream::WaveformPreviewAvailable`, чтение peak-file path, опциональных `CacheLayerWaveforms`/`LayerWaveformChunks`, отправка `WaveformPreviewIsReady` | Порт: `media/AudioWaveform` — фоновое FFmpeg-декодирование в mono 8 kHz, пики и RMS по 10 мс, память и дисковый peak-кэш по пути/размеру/mtime; `TimelineCanvas` рисует столбцы видимой части клипа с учётом slip/speed. Раскладка native peak-файла не восстановлена |
+| `FUN_140665b10`, `14130a870`, `14130a930` | Проверка `MediaAudioStream::WaveformPreviewAvailable`, чтение peak-file path, опциональных `CacheLayerWaveforms`/`LayerWaveformChunks`, отправка `WaveformPreviewIsReady` | Порт: `media/AudioWaveform` — фоновое FFmpeg-декодирование в mono 8 kHz, пики и RMS по 10 мс, память и дисковый peak-кэш по пути/размеру/mtime/выбранному аудиопотоку; `TimelineCanvas` рисует столбцы видимой части клипа с учётом slip/speed. Раскладка native peak-файла не восстановлена |
 | `1412c7ce0`, `FUN_1402361a0`, `FUN_1403b36d0` | Bool `Options/ShowProjectSettingsDialog`: getter и сохранение Prompts | New Project читает `Options/Prompts/ShowProjectSettings` и при включённом флаге открывает свойства композиции |
 | `FUN_1401dc5b0` → `FUN_1402361a0` | Xref вызова; bulk-декомпилят подтверждает условную ветку создания окна при включённом флаге и режиме, отличном от 5000 | Не считать реализацией одно наличие флажка в Options; полный смысл режима 5000 пока не установлен |
 | `1412c7418`, `FUN_14022f5e0`, `FUN_1402a7140` | Bool `Options/EnableEffectPresetCreation`, default false, getter и setter | Наш `Debug/EffectPresetCreation` изменяет только сохранённый флаг |
 | `FUN_14041e430` → `FUN_14022f5e0` | Xref; в соответствующем bulk-декомпиляте флаг включает путь `PluginUIPreset::SavePropertyName`/`DeletePropertyName` | Это дополнительный режим работы native UI preset, а не доказательство отсутствия обычных пользовательских presets у нас |
-| `1412c76e0`, `FUN_140231760`, `FUN_1403c0930` | Bool `Options/ProxyPreferIntegratedGPU`; запись вместе с `ProxyDirectoryPath`, integer `ProxyMediaQuality`, `PreRenderDirectoryPath` | Наши ProxyQuality/PreferIntegratedGPU сохраняются, но создание прокси и выбор GPU отсутствуют |
+| `1412c76e0`, `FUN_140231760`, `FUN_1403c0930` | Bool `Options/ProxyPreferIntegratedGPU`; запись вместе с `ProxyDirectoryPath`, integer `ProxyMediaQuality`, `PreRenderDirectoryPath` | MainWindow::setAssetProxyMode читает ProxyQuality и PreferIntegratedGPU; ProxyGenerator запускает FFmpeg, проверенный h264_qsv используется при предпочтении integrated GPU, иначе libx264. Native enum и общий выбор GPU не восстановлены |
 | `FUN_1403a48a0`, `1412c7328`, `1412c7340` | General Options записывает строки `CompositionLength`/`EditorSequenceLength`; также `SequenceObjectDefaultImageLength`, `SavePathsAsRelative`, `AutoSleepWakeAssets`, `AnalyticsReportingEnabled` | Наши ключи и представления отдельно сопоставлены ниже; наличие native setter не раскрывает весь backend |
 | `1412c7770`, `1412c78a8`, `1412c78c0` | Определённые строки `TimelineCacheDB`, `TimelineCacheFiles`, `DaysToKeepTimelineCacheFiles` | Уровень доказательства здесь — имена, а не восстановленный алгоритм дискового кеша |
 | `FUN_1408cf1b0`, `FUN_1408cec90`, `FUN_140381170`, `FUN_140380080` | Выбор слоя для Layer; Settings и повторное распознавание направления 360 по углам | Подробные результаты и ограничения: [Layer](RE_wnd_Layer.md), [360 Viewer](RE_wnd_Viewer360.md) |
+| `FUN_140315400`, `FUN_140329cd0`, `FUN_14042dcd0` | TransformWidget, AlignmentWidget и DirectionWidget оригинального Layout; setupUi проверены 2026-10-03 | Форма, оригинальные PNG-состояния/@2x, групповое редактирование и Undo; точные визуальные границы ещё не восстановлены: [Layout](RE_wnd_Layout.md) |
 
 Строка в бинарнике подтверждает наличие имени, но не формат данных или полный алгоритм.
 Параметры Channels/SampleRate/Countdown/MuteOutput являются настройками нашей записи;
@@ -72,17 +72,17 @@ Turbo Rendering, подключение Media Cache DB к медиапайпла
 
 | Оригинал | Наш ключ | Состояние |
 |---|---|---|
-| `AudioWaveformStyle` (integer) | `AudioWaveforms` (текст выбора) | Только хранение; enum mapping не восстановлен |
-| `WaveformScaleType` (integer) | `LogWaveform` (bool) | Только хранение |
+| `AudioWaveformStyle` (integer) | `AudioWaveforms` (английский токен выбора) | Применяется в TimelineCanvas: RMS/Peak; native enum mapping не восстановлен |
+| `WaveformScaleType` (integer) | `LogWaveform` (bool) | Применяется в waveform: логарифмическая/линейная шкала; тип отличается от оригинала |
 | `CompositionLength` (строка) | `CompositeShotDefaultDuration` | Применяется при создании композиции; native формат строки отдельно не проверен |
-| `EditorSequenceLength` (строка) | `EditorDefaultDuration` | Только хранение |
+| `EditorSequenceLength` (строка) | `EditorDefaultDuration` | ProjectDefaults задаёт frameCount/outPoint новой EditorSequence; отдельный native editor timeline не реализован |
 | `SequenceObjectDefaultImageLength` | `PlaneDefaultDuration` | У нас применяется к Plane; не доказана эквивалентность для всех native image assets |
 | `SavePathsAsRelative` | `UseRelativePaths` | Рабочее расширение сериализатора OpenVegas |
 | `AutoSleepWakeAssets` | `CloseMediaOnInactive` | Освобождаются ресурсы MainWindow при неактивности; полный lifecycle оригинала не восстановлен |
 | `AnalyticsReportingEnabled` | `Analytics` | Только хранение; `Debug/PrintAnalytics` — отдельный локальный журнал |
 | `ShowProjectSettingsDialog` | `Prompts/ShowProjectSettings` | New Project читает флаг и открывает свойства при включении |
-| `ProxyMediaQuality` (integer) | `ProxyQuality` (текст выбора) | Только хранение; enum mapping не установлен |
-| `ProxyPreferIntegratedGPU` | `PreferIntegratedGPU` | Только хранение |
+| `ProxyMediaQuality` (integer) | `ProxyQuality` (текст выбора) | Задаёт CRF/global_quality при английских токенах Low/Medium/High; Options сохраняет переведённый currentText, поэтому локализованные Low/High дают fallback Medium. Native enum mapping не установлен |
+| `ProxyPreferIntegratedGPU` | `PreferIntegratedGPU` | Выбирает h264_qsv после пробного кодирования; fallback libx264; не общий выбор GPU рендера |
 | `EnableEffectPresetCreation` | `Debug/EffectPresetCreation` | Только хранение; наш ключ находится в группе Debug |
 | `ShowHardwareDecodingIndicator` | `Debug/HardwareDecodingIndicator` | Только хранение; достоверного индикатора активного декодера нет |
 | `TimelineCacheDB`, `TimelineCacheFiles`, `DaysToKeepTimelineCacheFiles` | `TimelineCache`, `TimelineCacheDays` | Неполное сопоставление: у нас нет отдельной пары database/files с native схемой |
@@ -90,16 +90,19 @@ Turbo Rendering, подключение Media Cache DB к медиапайпла
 Точные строки `DefaultTemplate`, `EditorDefaultDuration`, `RenderThreads`,
 `LogWaveform` в этой выборке Ghidra не найдены. Отрицательный string search не
 доказывает отсутствия соответствующей функции в оригинале. Default Template у нас
-представлен тремя встроенными строками; native `AVTemplate`/библиотека шаблонов
-не восстановлены этим аудитом.
+использует `app/AVTemplates`: 81 встроенный формат и пользовательские `.hft`,
+стабильные ID, Save/Delete в CompositionSettingsDialog. Имена встроенных форматов
+взяты из каталогов референса; параметры заданы портом, установочные `.hft` оригинала
+не получены. Формат пользовательских `.hft` исследован отдельно; отсутствие строки
+в прежней выборке не означает отсутствие реализованного потребителя.
 
 ## 2. Исправленные заглушки
 
 | Элемент/ключ | Реальное действие и место реализации |
 |---|---|
 | Record Voiceover | `VoiceoverDialog.cpp`: запись микрофона, обратный отсчёт, остановка, сохранение WAV, отмена; `MainWindow.cpp`: добавление отдельного слоя в позицию начала записи с Undo/Redo |
-| `Options/Voiceover/Device` | Устройство выбирается из `QMediaDevices::audioInputs`; отключённое устройство выдаёт ошибку, а не заменяется произвольным микрофоном |
-| `Options/Voiceover/Channels`, `/SampleRate` | Проверяются `isFormatSupported`, используются в формате PCM; неподдерживаемая комбинация не начинается молча с другими параметрами |
+| `Options/Voiceover/Device` | `media::audioInputDevices`: DirectShow на Windows, CoreAudio на macOS, pactl/PulseAudio на Linux; ID dshow:/qtsound:/pulse:. AudioCapture проверяет выбранный ID; default оставляет выбор libVLC/ОС. Старые Qt ID требуют повторного выбора |
+| `Options/Voiceover/Channels`, `/SampleRate` | Проверяется PcmFormat, libVLC callbacks запрашивают S16N с заданными каналами/частотой, WAV использует тот же формат. Нативный формат микрофона и аппаратная поддержка комбинации не перечисляются: VLC может конвертировать входной поток |
 | `Options/Voiceover/Countdown` | Таймер перед запуском записи и транспорта, отмена во время отсчёта безопасна |
 | `Options/Voiceover/MuteOutput` | На время записи заглушает выход `AudioPlayer`, затем снимает заглушение |
 | `Options/VoiceoverVolume`, `/VoiceoverPath` | Слайдер регулирует PCM gain в `AudioCapture::setVolume`; запоминается последний каталог сохранённой записи |
@@ -167,13 +170,37 @@ Cancel и ошибка не перезаписывают существующи�
   того же ограниченного итогового PCM после master mute. Очереди декодеров
   ограничены, stop/seek отменяют ожидания и устаревшие queued-сигналы.
   Нативные Audio `.hfpl` теперь действуют на PCM клипа до gain и master mix,
-  параметры `.hfpl` пересчитываются на каждом 10-мс блоке по keyframes, но
-  AudioTransition и поблочная автоматизация финального экспорта подключены (1 октября 2026);
-  скорость меняет высоту тона через ресемплирование.
+  параметры `.hfpl` пересчитываются на каждом 10-мс блоке по keyframes.
+  AudioTransition подключён в realtime и экспорте; AudioExport обрабатывает
+  анимированные native-параметры блоками по 480 frames при 48 kHz.
+  Realtime speed меняет высоту тона через ресемплирование; export использует FFmpeg atempo.
+  Наличие Audio DSP не означает точный realtime-результат для любого GetSampleRanges,
+  цепочки и длины клипа (границы перечислены ниже).
 - Маски и Behaviors в Controls используют общие редакторы и Undo/Redo. Разделение
   UI-параметров Behaviors не означает завершённое исполнение закрытого ABI всех `.hfpl`.
 - Text: реальные слои, форматирование, цвета, Point/Paragraph, редактирование на канвасе.
 - Vector Path создаёт Freehand mask/path через рабочий путь таймлайна.
+- Waveform: `media/AudioWaveform` декодирует PCM через FFmpeg, хранит peaks/RMS в RAM
+  и `.peaks` на диске; TimelineCanvas применяет стиль/шкалу и slip/speed.
+  Ключ включает аудиопоток; native формат peak-файла не восстановлен.
+- Proxy: Media › Proxy (None/Performance/Quality), очередь ProxyGenerator, каталоги
+  ProxyDirectoryPath, PreviewMode Auto/Proxy/Full Resolution; экспорт читает оригиналы.
+  Настройки ProxyQuality/PreviewMode пока сохраняют переведённый текст вместо стабильных
+  токенов: backend сравнивает английские строки; локализованный режим может отключить proxy.
+  FFmpeg пишет `.part`, после успеха файл переименовывается. Замена существующего
+  файла через remove/rename не является гарантированно атомарной при ошибке rename.
+- Timeline cache: FrameDiskCache сохраняет playback frames, читается до рендера
+  в другом RenderManager, включает вложенные композиции/медиа в ключ; TimelineCacheDays
+  и автозапуск от плейхеда через UseAutomaticRenderCache/RenderCacheDelay подключены.
+- ExportQueue/ExportQueueView/ExportJob: снимки проекта, последовательные задачи,
+  start/suspend, duplicate/remove/reveal, сохранение ExportTasks.xml; TimeFormat
+  форматирует Duration/Elapsed (Timecode / Natural / Seconds). Вкладки Presets нет.
+- Сохранение проекта: VegfxSerializer накладывает модель на исходный документ
+  через VegfxMerge, сохраняя неизвестные поля существующих элементов. Это не полный
+  парсер native схемы и не гарантия неизменности любой неизвестной структуры.
+- Layout: восстановлены форма и иконки, опорная точка, выравнивание/распределение,
+  отражение и поворот незаблокированной выборки одним Undo по ID, сохранение ключей.
+  Геометрические ограничения отдельно описаны в [RE_wnd_Layout](RE_wnd_Layout.md).
 - Рабочие пути: History/Undo, Layout, Trimmer, Viewer 360, Media/Relink, сохранение проекта,
   экспорт области, кеш воспроизведения, докинг, горячие клавиши и Options load/save/reset.
   Это перечень существующих обработчиков, а не утверждение о полном совпадении с VEGAS.
@@ -187,15 +214,16 @@ Cancel и ошибка не перезаписывают существующи�
 
 | Путь | Что действительно работает | Чего нет |
 |---|---|---|
-| Audio preview / Audio Meters | libVLC PCM master mix всех активных Audio/Video клипов: visible/muted, offset, speed, gain, анимируемый Audio › Level слоя (огибающая по 10 мс, в том числе через вложенные композиции), вложенные композиции; native Audio `.hfpl` перед gain с 10-мс keyframe-автоматизацией, seek/loop и RMS итогового PCM | Look-ahead Reverse/NoiseReduction при воспроизведении; сохранение высоты тона при speed |
-| Half/Quarter preview | Viewer запрашивает уменьшенный кадр, RenderWorker строит `displaySize()` и затем уменьшает готовое изображение; кадрирование и PAR сохраняются | Рендер слоёв, текста, 3D, вложенных композитов и эффектов в уменьшенном масштабе; пересчёт пиксельных радиусов, проверка кэша и визуальной эквивалентности |
-| Видеоэкспорт со звуком | Отдельный путь `MainWindow::finishVideoExport`: FFmpeg `atempo`, `volume`, `adelay`, `amix`; native Audio обрабатывается перед сведением | Этот экспортный путь не подключён к AudioPlayer и master meter при Play/Scrub |
-| Media Cache DB | `AppMain::initializeCache`: каталог, SQLite open, подсчёт записей, `pruneOlderThan` по сроку хранения | Вне CacheDB нет использования `put/get` для наполнения и повторного использования media cache. `MediaManager` держит отдельный RAM video-frame cache с фиксированным лимитом 256 MiB |
-| Thumbnail cache limit | QPixmapCache использует ThumbnailCacheSizeMB; миниатюры Media повторно используются по path/mtime/size, QImageReader декодирует уменьшенное изображение | QIcon видимого списка хранит свои ссылки; это не общий лимит всей памяти Media |
-| Кнопка кеширования timeline | `preRenderRequested` запускает/отменяет `RenderManager::startPlaybackCache`; кадры пишутся в `Options/TimelineCache`, TTL и автозапуск по `RenderCacheDelay` подключены | — |
-| Pre-render составного кадра | Контекстное меню клипа «Pre-Render» → «Make/Remove Pre-Render(s)» (как AssetPreRenderMenu): кадр рендерится один раз поверх прозрачности в `PreRenderDirectoryPath/<проект>/<id композиции>/`, родительский рендер читает его вместо живого рендера, пока совпадает ключ состояния | Нет очереди задач pre-render и автоматического pre-render изменённых кадров |
-| 3D project settings | `ProjectSettings` (BPC 1000/1001/1002, AntialiasingMode 1..9, карты, LimitVideoDecodingTo8bit, UseLinearColor) читаются, пишутся и редактируются в File › Project Settings (ProjectSettingsDialog референса); новые проекты берут значения из Options (`RenderBitDepth`, `Antialiasing`, `UseLinearColor`, размеры карт) | 3D renderer ещё не применяет эти значения (битность, MSAA, размеры карт) |
-| Автосохранение и восстановление | `ui/AutoSave`: `Options/AutoSave`, `AutoSaveFrequency` (мин.), `AutoSavePath` (по умолчанию Documents/OpenVegas/OpenVegasEffects/AutoSave); файлы `<проект>.vegfx.autosave<N>` с маркером исходного проекта; только при изменениях после ручного сохранения, очистка при сохранении; lock-файл сессии определяет аварийное завершение; диалог Recovered Projects (AutoSaveRecoveryDialog: Open/Save/Delete Project) | Старые `<проект>.autosave.vegfx` рядом с проектом удаляются при сохранении, но в списке восстановления не показываются |
+| Audio preview / Audio Meters | libVLC PCM master mix активных Audio/Video клипов: visible/muted, offset, speed, gain, анимируемый Audio Level и вложенные композиции; native Audio `.hfpl`, AudioTransition, seek/loop, master RMS после mute | Будущее сухого сигнала доступно только первому эффекту на 0,25 с; дальше окна и у последующих эффектов — тишина. Короткий Reverse и окна NoiseReduction могут работать, произвольный Reverse/цепочка не гарантированы. Сохранение pitch при realtime speed не реализовано |
+| Half/Quarter preview | RenderWorker рендерит в displaySize() композиции, затем уменьшает готовый кадр; кадрирование и PAR сохраняются | Единый уменьшенный масштаб слоёв/текста/3D/вложенных композитов/эффектов с пересчётом пиксельных радиусов; сейчас эффекты не обрабатываются быстрее Full |
+| Видеоэкспорт со звуком | MainWindow и ExportQueue запускают `render/ExportJob`; `AudioExport::buildExportAudioInputs` готовит прямые или обработанные PCM-источники, native Audio/AudioTransition/анимируемый Level, затем FFmpeg atempo/volume/adelay/amix | Отдельный offline-путь, не использует AudioPlayer/master mute и его meter. Обработанный PCM фиксирован в 48 kHz; частота конечного файла определяется FFmpeg/входами, явный output -ar не задаётся. AudioSampleRate композиции хранится и показывается, но не выбирает частоту этого конвейера |
+| Media Cache DB | AppMain::initializeCache: каталог, SQLite open, подсчёт записей, pruneOlderThan | Нет вызовов CacheDB::put/get в медиапайплайне. RAM video-frame cache MediaManager ограничен 256 MiB; waveform/timeline/proxy имеют отдельные хранилища и не доказывают наполнение Media Cache DB |
+| Thumbnail cache limit | ThumbnailCacheSizeMB задаёт лимит QPixmapCache; Media повторно использует миниатюры по path/mtime/size, QImageReader декодирует уменьшенное изображение | QIcon видимого списка держит собственные ссылки; это не лимит всей памяти Media |
+| Pre-render составного кадра | Make/Remove Pre-Render(s) в меню клипа: кадры композиции поверх прозрачности в PreRenderDirectoryPath, читаются вместо живого рендера при совпадении ключа состояния | Нет полноценной очереди задач pre-render и автоматического обновления изменённых кадров; исходный native cache format не восстановлен |
+| Layout | Числовые поля/опорная точка, link, alignment/distribution; групповые mirror/rotate, Undo по ID, правка анимации в текущем кадре | MainWindow::layerBounds() использует размер композиции и локальные Position/Scale. Не учитывает размер медиа/текста, Rotation/Anchor/Parent, 3D-проекцию и границы эффектов; native numeric drag/scrub также не перенесён |
+| Proxy options и публикация | Генерация FFmpeg и выбор preview подключены | OptionsDialog сохраняет ProxyQuality/PreviewMode через переведённый currentText, а ProxyMedia/updateProxyPreview сравнивают английские токены: нужны стабильные значения и миграция. Remove/rename существующего файла также не гарантирует атомарную замену |
+| 3D project settings | ProjectSettingsDialog редактирует BPC 1000..1002, AntialiasingMode 1..9, карты, LimitVideoDecodingTo8bit, UseLinearColor; VegfxSerializer читает/пишет поля. ProjectDefaults читает соответствующие ключи Options | Renderer не применяет битность/MSAA/размеры карт/linear color. Дополнительно Options/Antialiasing записывается текстом, а ProjectDefaults ожидает integer 1..9: новый проект получает fallback 1; нужно согласовать тип и миграцию |
+| Автосохранение и восстановление | ui/AutoSave: папка и период, `<проект>.vegfx.autosave<N>`, маркер исходного проекта, только при изменениях, очистка при ручном сохранении; lock-файл и Recovered Projects Open/Save/Delete | Старые `<проект>.autosave.vegfx` рядом с проектом удаляются при сохранении, но в списке восстановления не показываются |
 
 ## 4. Оставшиеся заглушки — пока не закрыты
 
@@ -205,15 +233,19 @@ Layer/360 Viewer дополнительно исследованы в Ghidra и 
 рабочий camera FOV и отмену Properties без изменения состояния.
 Wrap No/Tile/Reflect восстановлены через Notify(2) EnvironmentMapViewer.hfpl.
 Native render pipeline, lens model и Fisheye/Scale/Motion Blur пока не восстановлены полностью.
+Layout также имеет открытый геометрический путь: [аудит Раскладки](RE_wnd_Layout.md).
 
 | Группа | Настройки/элементы без полного потребителя | Что требуется |
 |---|---|---|
 | Analytics | `Options/Analytics` | Отдельная политика аналитики; Debug/PrintAnalytics реализует только локальное журналирование действий |
 | Prompts & Warnings | `Options/Prompts/GPUDriverWarning`, `QuickTimeWarning` | Нет самих функций (QuickTime, переносимая проверка версии драйвера); подключены RemovingExportTasks (удаление задач очереди экспорта), GPUWarning, MediaMismatchPrompt, OversizedAssets, ImageSequenceImportPrompt, ShowProjectSettings и правило камеры `Adding3DCameras`/`Removing3DCameras` ([RE_3D_Camera_Rule](RE_3D_Camera_Rule.md)) |
-| Render | `TurboRendering`, планировщик `RenderThreads`, `LimitVideoDecodingTo8bit` | UseHardwareDecoding и avcodec-threads передаются VLC; UseHardwareEncoding выбирает рабочий аппаратный H.264 (NVENC/QSV/AMF/MF) для экспорта MP4. Конвейер порта целиком 8-битный, поэтому LimitVideoDecodingTo8bit ничего не меняет; Turbo и потоки рендера не подключены |
+| Render | `TurboRendering`, планировщик `RenderThreads`, `LimitVideoDecodingTo8bit`, уменьшенный масштаб Half/Quarter | UseHardwareDecoding и avcodec-threads передаются VLC; UseHardwareEncoding выбирает рабочий аппаратный H.264 (NVENC/QSV/AMF/MF) для экспорта MP4. Конвейер порта целиком 8-битный, поэтому LimitVideoDecodingTo8bit ничего не меняет; Turbo и потоки рендера не подключены |
 | Media cache | `MediaCacheDB`, `MediaCacheFiles`, `DaysToKeepMediaCacheFiles` | Startup open/prune работает; требуется наполнение и повторное использование кеша медиапайплайном |
 | 3D Render/Display | `ModelTextureMaxSize`, `ShadowMapSize`, `ReflectionMapSize`, `Antialiasing`, `ShowCheckerboard3D`, `ShowFloorPlane` | Соответствующие рендер-пути и текстуры. 3D-слои видны в перспективе камеры с туманом и складываются по глубине внутри сцены (2D-слой её разрывает); режимы наложения в сцене, маски и рамки выделения вьюера остаются 2D-приближением |
+| Proxy options | ProxyQuality/PreviewMode и безопасная замена файла | Сохранять стабильные токены, читать старые переводы; тесты ru/ja/zh_CN и смены языка. Ошибка публикации нового proxy не должна удалять существующий |
 | Export | Пресеты экспорта | `TimeFormat` закрыт: Timecode / Natural / Seconds форматируют Duration и Elapsed очереди экспорта. Нет вкладки Presets референса (ExportPresetManager: встроенные и пользовательские пресеты, редактор свойств) — панель предлагает пять форматов |
+| Audio format | AudioSampleRate композиции | Подключить значение к realtime/offline PCM и выходному кодированию; realtime и обработанный offline PCM работают в 48 kHz; FFmpeg выбирает частоту итогового файла, поле в Properties не управляет этим выбором |
+| Layout | Точные visual bounds; native drag/scrub числовых полей | Собственный размер слоя, Rotation/Anchor/Parent и 3D-проекция; критерий — alignment соответствует видимому кадру, а не условной рамке композиции |
 | Debug | `HardwareDecodingIndicator`, `EffectPresetCreation` | Достоверный статус используемого декодера и отдельный debug-путь создания presets; обычные пользовательские presets уже работают |
 | Models | Строки `Models`/nodeNames | Сохранение связи треугольников с узлами, затем per-node visibility/transform/selection; сейчас mesh плоский и строка выбирает весь слой |
 
@@ -221,20 +253,35 @@ Native render pipeline, lens model и Fisheye/Scale/Motion Blur пока не в
 Чеклист верхнего уровня остаётся незавершённым. Само наличие строки или widget-name в
 Ghidra не является достаточным основанием считать backend восстановленным.
 
-### 4.1 Критерии закрытия следующих пунктов
+### 4.1 Критерии закрытия открытых пунктов
 
 | Приоритет | Пункт | Наблюдаемая проверка |
 |---|---|---|
-| 1 | Realtime audio DSP | Сделано (1 октября 2026; look-ahead 0,25 с для первого эффекта цепочки): 16 Audio `.hfpl` с `GetSampleRanges`/историей сухого сигнала, AudioTransition на стыках клипов, 10-мс автоматизация; проверено `audio_regression` на PCM |
-| 1 | Waveform | Сделано (1 октября 2026): пики из PCM, RMS/Peak и linear/log, slip/stretch и дисковый кэш проверены `waveformPeaksStylesAndCache`; изменённый файл получает новый ключ, недоступный — без waveform. Требует FFmpeg в PATH |
-| 1 | Prompts | Частично (1 октября 2026): общий `ui::showPrompt` повторяет BiffEventFilter (`FUN_140269950`): «Do not show this again», запоминание ответа, повторное включение в Options; подключены GPUWarning (OpenGL 4.1 при запуске, Continue/Exit), MediaMismatchPrompt (`FUN_140804440`, размер кадра видеоклипа) и OversizedAssets (`FUN_1403e1850`, текстура частиц больше 1024×1024). Подписи флажков взяты из WarningSettingsWidget референса |
-| 2 | Proxy/pre-render/cache | Timeline cache сделан (1 октября 2026): кадры playback cache пишутся в `Options/TimelineCache` (`render/FrameDiskCache`), читаются до рендера в другом `RenderManager`, ключ включает вложенные композиции и размер/mtime медиафайлов, `TimelineCacheDays` удаляет неиспользуемые при запуске, `UseAutomaticRenderCache` запускает кэш от плейхеда после `RenderCacheDelay`. Прокси сделаны (1 октября 2026): подменю Media «Proxy» (None/Performance/Quality, как ProxyMediaMenu), очередь FFmpeg в `ProxyDirectoryPath/<проект>/` с атомарной заменой, ProxyQuality задаёт сжатие, PreferIntegratedGPU — Quick Sync при наличии; PreviewMode Auto/Proxy/Full Resolution; кадры прокси масштабируются к оригиналу, ключ кэша рендера различает вариант, экспорт читает оригиналы. Pre-render составных кадров сделан (1 октября 2026): «Make/Remove Pre-Render(s)» в контекстном меню клипа, кадры в `PreRenderDirectoryPath/<проект>/<id композиции>/` с тем же ключом состояния, что у timeline cache; изменённый кадр перестаёт совпадать и рендерится заново; проверено `preRenderedShotIsReadInsteadOfRendered`. Очереди задач pre-render нет |
-| 2 | Render/GPU/3D options | Проверяется используемый backend и результат, включая fallback при отсутствии поддержки; XML-константы и сохранение флажка не закрывают пункт |
-| 2 | Thumbnail cache | Изменение лимита меняет фактическую удерживаемую память/eviction при множестве миниатюр |
-| 3 | Export time | Переключение TimeFormat меняет именно представление export tasks |
-| 3 | Models | Действие адресует конкретный node, меняет модель, проходит Undo и save/load; метки медиа уже проверены отдельно |
+| 1 | Полный realtime native Audio | Длинный Reverse, запросы будущего за 0,25 с и у второго/следующих эффектов возвращают нужный PCM; seek/loop не ломают историю, очереди/память ограничены. Прохождение короткого Reverse не закрывает весь путь |
+| 1 | Layout visual bounds | Разные размеры медиа/текста, поворот, anchor/parent и 3D; выравнивание/размеры совпадают с Viewer, групповой Undo и save/load сохраняются |
+| 2 | Media Cache DB | Импорт/декодирование наполняют кеш, повторное открытие реально читает его; изменение файла инвалидирует записи, TTL удаляет файлы и записи |
+| 2 | Render/GPU/3D и Half/Quarter | Реальный backend/выход меняются при настройке, fallback проверен; тип Options/Antialiasing согласован. Уменьшение размера сокращает работу по всему конвейеру, без изменения кадрирования и радиусов эффектов |
+| 2 | AudioSampleRate | Изменение частоты композиции меняет PCM и конечный файл, сохраняется после load/save; метаданные файла проверяются отдельно от UI |
+| 2 | Proxy settings и замена | Low/High и Auto/Proxy работают после сохранения Options на ru/ja/zh_CN и переключения языка; ошибка rename сохраняет предыдущий proxy |
+| 2 | Очередь pre-render | Очередь, отмена, прогресс, повторный запуск и инвалидирование изменённых композиций; обычный playback cache не закрывает этот пункт |
+| 2 | Оставшиеся prompts | Есть сама проверка драйвера/QuickTime и подтверждённый сценарий сообщения; сохранения флажка недостаточно |
+| 3 | Export presets | Built-in/user presets, редактор, save/delete и назначение задаче; TimeFormat уже работает и не относится к этому остатку |
+| 3 | Models | Выбор конкретного node, visibility/transform, Undo и save/load; выбор всего mesh вместо узла не закрывает пункт |
 
-### 4.2 Повторная live-проверка Ghidra и границы миграции
+Waveform, timeline cache, proxy generation, ограничение QPixmapCache и export TimeFormat
+перенесены в реализованные/частичные пути выше. Native enum/форматы, общий лимит памяти
+и аппаратные проверки остаются отдельными ограничениями.
+
+Новые ограничения этой редакции подтверждены следующими цепочками кода:
+
+| Путь | Запись/интерфейс | Потребитель и ограничение |
+|---|---|---|
+| Antialiasing | [OptionsDialog](../src/ui/OptionsDialog.cpp): saveSettings пишет currentText | [ProjectDefaults](../src/app/ProjectDefaults.h): toInt и enum 1..9; текст становится fallback 1 |
+| ProxyQuality/PreviewMode | [OptionsDialog](../src/ui/OptionsDialog.cpp): переведённые элементы и currentText | [ProxyMedia](../src/media/ProxyMedia.cpp) сравнивает Low/High; [MainWindow](../src/ui/MainWindow.cpp)::updateProxyPreview сравнивает Auto/Proxy |
+| AudioSampleRate | [CompositionSettingsDialog](../src/ui/CompositionSettingsDialog.cpp) и сериализатор сохраняют значение | [AudioPlayer](../src/media/AudioPlayer.cpp): Rate=48000; [AudioExport](../src/render/AudioExport.cpp): kRate=48000; [ExportJob](../src/render/ExportJob.cpp) не устанавливает частоту выходного файла из композиции |
+| Публикация proxy | [ProxyMedia](../src/media/ProxyMedia.cpp)::ProxyGenerator::startNext пишет .part | После успеха remove(output), затем rename(part, output); при ошибке rename прежний output уже удалён |
+
+### 4.2 Предыдущая live-проверка Ghidra и границы миграции
 
 2026-09-27 через MCP получены live-декомпиляты `FUN_1408cf1b0` и
 `FUN_140381170` в VegasEffects.exe. Первый подтверждает No/Multiple Selection,
@@ -253,7 +300,7 @@ Vlc4Adapter проверяет ABI, адаптирует parser/callback structs
 AudioCapture использует DirectShow/qtsound/PulseAudio; новая запись сохраняет
 WAV через прежний атомарный путь. Физическая запись микрофона не проверена.
 
-### 4.3 Закрытые потребители 2026-09-28
+### 4.3 Закрытые потребители с учётом изменений до 2026-10-03
 
 - Media labels: меню Media использует восемь имён/цветов Options, Custom color
   и No Label. Цветная полоса сохраняется в режиме списка и миниатюр; offline
@@ -266,9 +313,11 @@ WAV через прежний атомарный путь. Физическая 
   меток asset не восстановлен. Live Ghidra подтверждает имена Labels
   (1412cf384), Set Clip Label (1412deb38), Set Layer Label (1412dfcb0),
   но эти строки не доказывают формат сериализации метки медиа.
-- DefaultTemplate: три шаблона UI реально задают size/fps нового проекта.
-  Постоянные ID fullhd30/fullhd60/uhd30 хранятся в DefaultTemplateId;
-  старое отображаемое имя читается при миграции. Смена языка не сбрасывает ID.
+- DefaultTemplate: AVTemplates обслуживает 81 встроенный формат и пользовательские
+  `.hft`; size/fps/PAR/audio sample rate выбираются по DefaultTemplateId.
+  Прежние fullhd30/fullhd60/uhd30 остаются совместимыми ID; старое имя читается
+  при миграции. Смена языка не сбрасывает ID. Наличие поля sample rate не означает
+  применение этой частоты в текущем PCM-конвейере.
 - EditorDefaultDuration применяется к frameCount/outPoint EditorSequence
   независимо от CompositeShotDefaultDuration. Новый проект и первый запуск
   используют общий helper; открытые проекты сохраняют собственные параметры.
@@ -281,10 +330,29 @@ WAV через прежний атомарный путь. Физическая 
 - Загрузка .vegfx разбирает композицию/медиа/раскладку во временные объекты
   и заменяет текущие данные только при успехе. Save использует QSaveFile,
   проверяет write/commit и не обрезает существующий проект до завершения записи.
-  Это защита от ошибок I/O; полное сохранение всех неизвестных native полей
-  остаётся открытым пунктом основного чеклиста.
+  VegfxMerge сохраняет неизвестные поля исходных элементов; это защита от потери
+  данных при обычном round-trip, а не полный перенос всех native типов и алгоритмов.
 
 ## 5. Проверки
+
+### 5.1 Проверки этой редакции (2026-10-04)
+
+- Сверены реальные потребители waveform/proxy/template/editor duration, запись WAV,
+  realtime/offline audio, Media Cache DB, render options, экспорт и Layout.
+  Новых live-декомпилятов Ghidra, сборки и CTest в этой редакции не запускалось:
+  изменён документ, код приложения не менялся.
+- `python tools/validate_translations.py`: ru/ja/zh_CN — по 1404 актуальных сообщения,
+  по 0 ошибок. Это структурная проверка TS, а не полнота покрытия новых строк кода.
+- Проверены относительные ссылки и наличие названных методов/файлов; удалённая
+  `MainWindow::finishVideoExport` заменена актуальным ExportJob/AudioExport.
+- Выявлены дополнительные открытые пути: текстовый Options/Antialiasing против
+  integer в ProjectDefaults; фиксированные 48 kHz realtime/обработанного PCM при редактируемом
+  AudioSampleRate; переведённые ProxyQuality/PreviewMode вместо токенов;
+  отсутствие гарантии атомарной замены существующего proxy файла.
+
+### 5.2 Результаты предыдущих этапов
+
+Следующие результаты относятся к указанным этапам и не являются новым полным прогоном.
 
 Этап 2026-09-28: CMake/MSVC Debug и qmake/MSVC Debug собраны; после правок сериализации 6/6 CTest прошли. Затем отдельно проверены компактные строки Media с метками и снимок панели.
 
@@ -299,10 +367,22 @@ WAV через прежний атомарный путь. Физическая 
   относительных путей и layout round-trip.
 - После миграции повторно прошли все шесть CTest-наборов: Text, Timeline, Options, UI Stubs, Audio и Translations (6/6); после дополнений 360 отдельно прошли Timeline/Translations и тест миграции настроек.
 - `tools/validate_translations.py`: новые сообщения переведены на ru/ja/zh_CN;
-  при повторном аудите проверено по 1001 актуальному сообщению, пустых и unfinished нет.
+  на предыдущем этапе проверено по 1001 сообщению без пустых/unfinished; актуальные
+  количества и результат проверки этой редакции указаны в 5.1.
 - Для актуализации аудита проверены string/xref/decompile связи, реальные потребители
   ключей и Settings getter, отсутствие обращения `CacheDB::put/get` вне реализации CacheDB,
-  новый master mixer AudioPlayer и отдельный экспортный `amix`.
+  master mixer AudioPlayer и отдельный offline-путь AudioExport/ExportJob с `amix`.
+
+- Этап 2026-10-03: CMake/MSVC Debug пересобран после исправления зависимостей Ninja;
+  открытие `project_1/Project.vegfx` под CDB без прежнего MediaAsset access violation.
+  53 Debug-проверки Text/Media прошли; три Layout-регрессии прошли отдельно,
+  снимки формы проверены (подробности в [RE_wnd_Layout](RE_wnd_Layout.md)).
+- Наличие регрессий для новых путей проверено по исходникам: `nativeEffectsSeeLookAheadWhilePlaying`,
+  `transitionsCombineClipsInRealtime`, `waveformPeaksStylesAndCache`,
+  `proxyMediaGenerationAndRoundTrip`, `timelineDiskCacheSurvivesManagersAndExpires`,
+  `preRenderedShotIsReadInsteadOfRendered`, `exportQueueRunsTasksFromSnapshots`,
+  `compositionTemplatesAndFormats`, `mediaAudioStreamsMetadataSelectionAndRoundTrip`.
+  В этом аудите эти тесты повторно не выполнялись.
 
 Offscreen-тесты не проверяют настоящий микрофон, аудиоустройство, системный native
 color dialog или взаимодействие с оконным менеджером при смене активного приложения.
