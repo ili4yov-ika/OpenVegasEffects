@@ -1,7 +1,9 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 #include <QVector>
+#include "media/AudioFormat.h"
 
 namespace openvegas {
 namespace composition { class Composition; }
@@ -9,7 +11,7 @@ namespace media { class MediaManager; }
 namespace render {
 
 // One FFmpeg audio input of an export, placed `delay` seconds after the
-// export start. rawPcm inputs are stereo s16le 48 kHz files already carrying
+// export start. rawPcm inputs are stereo s16le files at sampleRate, already carrying
 // gain, native Audio effects and audio transitions; the others are media
 // files read from `source` at `speed` and scaled by `gain`.
 struct ExportAudioInput
@@ -22,6 +24,7 @@ struct ExportAudioInput
     double gain = 1.0;
     bool rawPcm = false;
     int audioStreamIndex = -1;
+    int sampleRate = media::kDefaultAudioSampleRate;
 };
 
 struct ExportAudioRequest
@@ -38,7 +41,14 @@ struct ExportAudioRequest
 
 bool fileHasAudioStream(const QString& ffprobe, const QString& path);
 
-// Collects the audio of the composition's top-level layers for an export.
+// FFmpeg input/filter construction shared by final export and nested mixing.
+QStringList exportAudioInputArguments(const QVector<ExportAudioInput>& inputs);
+QString exportAudioMixFilter(const QVector<ExportAudioInput>& inputs, int sampleRate,
+                             int firstInputIndex = 1);
+
+// Collects audio recursively, mixing a nested composition before applying its
+// owning clip's speed, native effects, level and transitions. Cycles fail the
+// request without appending partial input lists.
 // Clips with native Audio effects or audio transitions are decoded (with the
 // handles their transitions play into), processed with layer-local positions
 // and combined over each transition window, then written as raw PCM. Must run

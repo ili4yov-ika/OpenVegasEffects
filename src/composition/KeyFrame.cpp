@@ -1,5 +1,6 @@
 #include "composition/KeyFrame.h"
 
+#include <QColor>
 #include <QtGlobal>
 
 #include <cmath>
@@ -302,9 +303,11 @@ QVariant KeyFrameList::valueAt(int frame) const
         return previous->value;
     }
 
+    const bool colours = previous->value.typeId() == QMetaType::QColor
+                         && next->value.typeId() == QMetaType::QColor;
     double a = 0.0;
     double b = 0.0;
-    if (!numericValue(previous->value, a) || !numericValue(next->value, b)) {
+    if (!colours && (!numericValue(previous->value, a) || !numericValue(next->value, b))) {
         return previous->value;      // nothing sensible to blend
     }
 
@@ -318,6 +321,15 @@ QVariant KeyFrameList::valueAt(int frame) const
     // straight-line shortcut only applies when both ends are Linear.
     if (previous->temporal != TemporalType::Linear || next->temporal != TemporalType::Linear) {
         t = bezierEase(t, outgoingHandleFor(*previous), incomingHandleFor(*next));
+    }
+    if (colours) {
+        // A colour (a light's, a Material's emissive) blends channel by
+        // channel, the way the reference's BiffColor keys do.
+        const QColor from = previous->value.value<QColor>();
+        const QColor to = next->value.value<QColor>();
+        const auto mix = [t](float x, float y) { return qBound(0.0f, float(x + (y - x) * t), 1.0f); };
+        return QVariant(QColor::fromRgbF(mix(from.redF(), to.redF()), mix(from.greenF(), to.greenF()),
+                                         mix(from.blueF(), to.blueF()), mix(from.alphaF(), to.alphaF())));
     }
     return QVariant(a + (b - a) * t);
 }

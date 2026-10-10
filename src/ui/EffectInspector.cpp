@@ -47,6 +47,10 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr int kModuleHiddenRole = Qt::UserRole + 7;
 constexpr int kInstanceKeyRole = Qt::UserRole + 8;
 constexpr int kControlKeyRole = Qt::UserRole + 9;
+// A control registered hidden (option 0x2), shown only once its module says.
+constexpr int kStartsHiddenRole = Qt::UserRole + 10;
+// A group of a plug-in's controls: hidden with all of them.
+constexpr int kControlGroupRole = Qt::UserRole + 11;
 QString itemPath(QTreeWidgetItem* item)
 {
     QStringList result;
@@ -379,35 +383,13 @@ void EffectInspector::buildLayerProperties(const composition::Layer& layer)
                           && layer.kind != composition::LayerKind::Light);
     addRow(tr("Dimension"), dimension, "controlsLayerDimension");
     connect(dimension, &QComboBox::currentIndexChanged, this, [this](int index) {
-        if (index && m_comp && !compositionIs3D(*m_comp)) {
-            // A camera has to come first (CameraRule); both go in one record.
-            if (!confirmAddCamera(this, AddCameraReason::SetDimension)) {
-                QTimer::singleShot(0, this, [self = QPointer<EffectInspector>(this)] {
-                    if (self) self->refresh();
-                });
-                return;
-            }
-            const auto* layer = layerRef();
-            if (!layer || layer->locked) return;
-            const auto before = m_comp->layers();
-            m_comp->insertLayer(m_comp->layers().size(), newCameraLayer(*m_comp));
-            m_comp->layerRef(m_layerIndex).dimension = composition::LayerDimension::ThreeD;
-            const QPointer<EffectInspector> self(this);
-            const auto notify = [self] {
-                if (!self) return; self->refresh(); emit self->effectParamsChanged(); emit self->keyFramesChanged();
-            };
-            if (m_undoStack) {
-                m_undoStack->push(new LayerStackCommand(
-                    m_comp, before, m_comp->layers(),
-                    QCoreApplication::translate("CompositionTools", "Set Layer Dimension(s)"), notify));
-            }
-            // Deferred: refresh() rebuilds the tree this combo box lives in.
-            QTimer::singleShot(0, this, notify);
-            return;
-        }
-        editModel(tr("Layer dimension"), "layer-dimension", [=](composition::Layer& l) {
-            l.dimension = index ? composition::LayerDimension::ThreeD : composition::LayerDimension::TwoD;
-        }, false, true);
+        // After the combo box has finished its signal: the camera prompt runs
+        // an event loop, where a pending refresh() rebuilds the tree this
+        // combo box lives in - it was deleted under its own signal, and the
+        // Controls panel crashed on the 3D switch now and then.
+        QTimer::singleShot(0, this, [self = QPointer<EffectInspector>(this), index] {
+            if (self) self->setLayerDimension(index);
+        });
     });
     auto* blend = new QComboBox(m_tree); blend->addItems(composition::blendModeNames());
     blend->setCurrentText(layer.blendMode); blend->setEnabled(editable);
@@ -415,6 +397,38 @@ void EffectInspector::buildLayerProperties(const composition::Layer& layer)
     connect(blend, &QComboBox::currentTextChanged, this, [this](const QString& value) {
         editModel(tr("Layer blend mode"), "layer-blend", [=](composition::Layer& l) { l.blendMode = value; });
     });
+}
+
+void EffectInspector::setLayerDimension(int index)
+{
+    const auto* layer = layerRef();
+    if (!layer || (layer->dimension == composition::LayerDimension::ThreeD) == (index != 0)) return;
+    if (index && m_comp && !compositionIs3D(*m_comp)) {
+        // A camera has to come first (CameraRule); both go in one record.
+        if (!confirmAddCamera(this, AddCameraReason::SetDimension)) {
+            refresh();   // the combo box goes back to what the layer is
+            return;
+        }
+        layer = layerRef();
+        if (!layer || layer->locked) return;
+        const auto before = m_comp->layers();
+        m_comp->insertLayer(m_comp->layers().size(), newCameraLayer(*m_comp));
+        m_comp->layerRef(m_layerIndex).dimension = composition::LayerDimension::ThreeD;
+        const QPointer<EffectInspector> self(this);
+        const auto notify = [self] {
+            if (!self) return; self->refresh(); emit self->effectParamsChanged(); emit self->keyFramesChanged();
+        };
+        if (m_undoStack) {
+            m_undoStack->push(new LayerStackCommand(
+                m_comp, before, m_comp->layers(),
+                QCoreApplication::translate("CompositionTools", "Set Layer Dimension(s)"), notify));
+        }
+        notify();
+        return;
+    }
+    editModel(tr("Layer dimension"), "layer-dimension", [=](composition::Layer& l) {
+        l.dimension = index ? composition::LayerDimension::ThreeD : composition::LayerDimension::TwoD;
+    }, false, true);
 }
 
 void EffectInspector::buildMasks(const composition::Layer& layer)
@@ -697,6 +711,14 @@ void EffectInspector::buildEffects(const composition::Layer& layer, bool behavio
         }
 
         QHash<QString, QTreeWidgetItem*> groups;
+        // Open as the reference has it, in the plug-in's language.
+        const QString masterControls = spec.translationContext.isEmpty()
+            ? QStringLiteral("Master Controls")
+            : QCoreApplication::translate(spec.translationContext.toUtf8().constData(), "Master Controls");
+        // Which controls the module shows for the effect's values.
+        const QString instanceKey =
+            QStringLiteral("%1/%2/%3").arg(layer.id.value()).arg(m_clipIndex).arg(e);
+        refreshModuleControls(e);
         for (int p = 0; p < spec.parameters.size(); ++p) {
             plugin::EffectParameterSpec param = spec.parameters[p];
             if (param.type == "layer") {
@@ -711,17 +733,19 @@ void EffectInspector::buildEffects(const composition::Layer& layer, bool behavio
             if (!param.group.isEmpty()) {
                 if (!groups.contains(param.group)) {
                     groups[param.group] = new QTreeWidgetItem(effectItem, {param.group});
-                    groups[param.group]->setExpanded(param.group == "Master Controls");
+                    groups[param.group]->setExpanded(param.group == masterControls);
+                    groups[param.group]->setData(0, kControlGroupRole, true);
                 }
                 parent = groups[param.group];
             }
             auto* row = new QTreeWidgetItem(parent, {param.displayName});
             row->setData(0, Qt::UserRole, m_layerIndex); row->setData(0, Qt::UserRole + 1, m_clipIndex);
             row->setData(0, Qt::UserRole + 2, e); row->setData(0, Qt::UserRole + 3, p);
-            // A native module can switch a control off (SetPropertyState).
-            row->setData(0, kInstanceKeyRole,
-                         QStringLiteral("%1/%2/%3").arg(layer.id.value()).arg(m_clipIndex).arg(e));
+            // A native module switches its controls on and off (SetPropertyState).
+            row->setData(0, kInstanceKeyRole, instanceKey);
             row->setData(0, kControlKeyRole, param.name);
+            row->setData(0, kStartsHiddenRole, param.hidden);
+            if (param.hidden) row->setData(0, kModuleHiddenRole, true);
             auto* wrapper = new QWidget(m_tree); auto* layout = new QHBoxLayout(wrapper);
             layout->setContentsMargins(0, 0, 1, 0); layout->setSpacing(2);
             const QString object = QStringLiteral("controlsParam_%1_%2_%3_%4").arg(m_layerIndex).arg(m_clipIndex).arg(e).arg(p);
@@ -859,9 +883,19 @@ void EffectInspector::applySearch()
             item->setHidden(true);
             return false;
         }
-        const bool own = filter.isEmpty() || item->text(0).contains(filter, Qt::CaseInsensitive);
         bool child = false;
-        for (int i = 0; i < item->childCount(); ++i) child |= visit(item->child(i));
+        bool anyShown = false;
+        for (int i = 0; i < item->childCount(); ++i) {
+            child |= visit(item->child(i));
+            anyShown |= !item->child(i)->data(0, kModuleHiddenRole).toBool();
+        }
+        // A group goes with the last of its controls (VegasEffects
+        // FUN_140424790 keeps a group visible while any child is).
+        if (item->data(0, kControlGroupRole).toBool() && !anyShown) {
+            item->setHidden(true);
+            return false;
+        }
+        const bool own = filter.isEmpty() || item->text(0).contains(filter, Qt::CaseInsensitive);
         item->setHidden(!own && !child);
         if (!filter.isEmpty() && child) item->setExpanded(true);
         return own || child;
@@ -869,9 +903,30 @@ void EffectInspector::applySearch()
     for (int i = 0; i < m_tree->topLevelItemCount(); ++i) visit(m_tree->topLevelItem(i));
 }
 
+void EffectInspector::refreshModuleControls(int effectIndex)
+{
+    const composition::Effect* effect = effectAt(effectIndex);
+    if (!effect || !m_comp || m_layerIndex < 0 || m_layerIndex >= m_comp->layers().size()
+        || !plugin::isNativeModule(effect->pluginId)) {
+        return;
+    }
+    QStringList values;
+    const int frame = currentFrame();
+    for (int p = 0; p < effect->parameterValues.size(); ++p)
+        values << effect->parameterAt(p, frame).toString();
+    plugin::refreshNativeControlStates(
+        effect->pluginId, values,
+        QStringLiteral("%1/%2/%3").arg(m_comp->layers()[m_layerIndex].id.value()).arg(m_clipIndex).arg(effectIndex));
+}
+
 void EffectInspector::refreshValues()
 {
     for (const auto& reader : m_valueReaders) reader();
+    if (m_comp && m_layerIndex >= 0 && m_layerIndex < m_comp->layers().size()) {
+        const auto& clips = m_comp->layers()[m_layerIndex].clips;
+        if (m_clipIndex >= 0 && m_clipIndex < clips.size())
+            for (int e = 0; e < clips[m_clipIndex].effects.size(); ++e) refreshModuleControls(e);
+    }
     applyControlStates();
     updateHeader();
 }
@@ -885,7 +940,8 @@ void EffectInspector::applyControlStates()
         const QVariant instance = item->data(0, kInstanceKeyRole);
         if (!instance.isValid()) continue;
         const bool off = !plugin::nativeControlShown(instance.toString(),
-                                                     item->data(0, kControlKeyRole).toString());
+                                                     item->data(0, kControlKeyRole).toString(),
+                                                     !item->data(0, kStartsHiddenRole).toBool());
         if (item->data(0, kModuleHiddenRole).toBool() == off) continue;
         item->setData(0, kModuleHiddenRole, off);
         changed = true;

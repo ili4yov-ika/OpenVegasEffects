@@ -5,6 +5,7 @@
 #include <QStringList>
 #include "core/Identifier.h"
 #include "composition/Effect.h"
+#include "media/AudioFormat.h"
 #include <memory>
 
 namespace openvegas::media {
@@ -61,7 +62,9 @@ public:
     void setSource(const QString& path);
     const QString& source() const { return m_source; }
     void setClips(const QVector<AudioClip>& clips, double duration,
-                  const QVector<AudioTransition>& transitions = {});
+                  const QVector<AudioTransition>& transitions = {},
+                  int sampleRate = kDefaultAudioSampleRate);
+    int sampleRate() const { return m_sampleRate; }
     void play(double timelineSeconds);
     void pause();
     void stop();
@@ -81,6 +84,7 @@ private:
     QVector<AudioTransition> m_transitions;
     QString m_source;
     double m_duration = 0, m_position = 0;
+    int m_sampleRate = kDefaultAudioSampleRate;
     bool m_muted = false;
     quint64 m_generation = 0;
 };

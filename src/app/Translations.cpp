@@ -13,14 +13,19 @@ namespace app {
 namespace {
 
 const char* const kCatalogPrefix = "openvegaseffects_";
+// The plug-ins' own strings - names, categories, control labels, units, combo
+// items, groups and their run-time messages - under "Effect_<ShortName>".
+const char* const kPluginCatalogPrefix = "openvegaseffects_plugins_";
 
 // Keeps the installed translators alive for the lifetime of the application.
 QTranslator* g_appTranslator = nullptr;
+QTranslator* g_pluginTranslator = nullptr;
 QTranslator* g_qtTranslator = nullptr;
 
-QString resolveCatalogue(const QString& locale, const QString& translationsRoot)
+QString resolveCatalogue(const QString& locale, const QString& translationsRoot,
+                         const char* prefix = kCatalogPrefix)
 {
-    const QString fileName = QString::fromLatin1(kCatalogPrefix) + locale + QStringLiteral(".qm");
+    const QString fileName = QString::fromLatin1(prefix) + locale + QStringLiteral(".qm");
     if (!translationsRoot.isEmpty()) {
         // Reference layout: Translations/<locale>/<catalogue>.qm
         const QString onDisk = QDir(translationsRoot).filePath(locale + QLatin1Char('/') + fileName);
@@ -64,6 +69,9 @@ QString Translations::install(QCoreApplication* app,
     if (g_appTranslator) {
         app->removeTranslator(g_appTranslator);
     }
+    if (g_pluginTranslator) {
+        app->removeTranslator(g_pluginTranslator);
+    }
     if (g_qtTranslator) {
         app->removeTranslator(g_qtTranslator);
     }
@@ -98,6 +106,16 @@ QString Translations::install(QCoreApplication* app,
         return QStringLiteral("en");
     }
     app->installTranslator(g_appTranslator);
+
+    const QString plugins = resolveCatalogue(wanted, translationsRoot, kPluginCatalogPrefix);
+    if (!plugins.isEmpty()) {
+        if (!g_pluginTranslator) {
+            g_pluginTranslator = new QTranslator(app);
+        }
+        if (g_pluginTranslator->load(plugins)) {
+            app->installTranslator(g_pluginTranslator);
+        }
+    }
 
     // Qt's own strings (standard dialogs, shortcuts) where available.
     if (!g_qtTranslator) {

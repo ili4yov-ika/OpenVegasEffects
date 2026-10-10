@@ -3,6 +3,7 @@
 #include "ui/Theme.h"
 
 #include <QAction>
+#include <QCoreApplication>
 #include <QCloseEvent>
 #include <QContextMenuEvent>
 #include <QColorDialog>
@@ -30,6 +31,7 @@
 #include <cmath>
 
 #include "app/Settings.h"
+#include "render/LayerGeometry.h"
 #include "ui/ViewScaleButton.h"
 #include "ui/Viewer360View.h"
 
@@ -295,6 +297,7 @@ ViewerWidget::ViewerWidget(QWidget* parent)
         m_backgroundColor = stored;
     }
     m_showMotionPath = app::Settings::showMotionPath();
+    m_checkerboard3D = app::Settings::showCheckerboard3D();
     m_playbackResolution = downsampleFromLabel(app::Settings::playbackDownsampleMode());
     m_pausedResolution = downsampleFromLabel(app::Settings::pausedDownsampleMode());
     m_playbackQuality = qualityFromLabel(app::Settings::playbackQualityProfile());
@@ -313,6 +316,124 @@ ViewerWidget::ViewerWidget(QWidget* parent)
     addAction(m_fullScreenAction);
 
     buildToolStrip();
+    buildCameraButtons();
+}
+
+// The reference's camera button (biff::ui::viewer::ViewCameraButton) keeps
+// these strings, and its catalogues their translations.
+QString ViewerWidget::viewTypeName(int type)
+{
+    switch (render::ViewType(type)) {
+    case render::ViewType::ActiveCamera: return QCoreApplication::translate("biff::ui::viewer::ViewCameraButton", "Active Camera");
+    case render::ViewType::Perspective: return QCoreApplication::translate("biff::ui::viewer::ViewCameraButton", "Perspective");
+    case render::ViewType::Front: return QCoreApplication::translate("biff::ui::viewer::ViewCameraButton", "Front");
+    case render::ViewType::Back: return QCoreApplication::translate("biff::ui::viewer::ViewCameraButton", "Back");
+    case render::ViewType::Left: return QCoreApplication::translate("biff::ui::viewer::ViewCameraButton", "Left");
+    case render::ViewType::Right: return QCoreApplication::translate("biff::ui::viewer::ViewCameraButton", "Right");
+    case render::ViewType::Top: return QCoreApplication::translate("biff::ui::viewer::ViewCameraButton", "Top");
+    case render::ViewType::Bottom: return QCoreApplication::translate("biff::ui::viewer::ViewCameraButton", "Bottom");
+    case render::ViewType::TwoD: break;
+    }
+    return QCoreApplication::translate("biff::ui::viewer::ViewCameraButton", "Active Camera");
+}
+
+void ViewerWidget::buildCameraButtons()
+{
+    // The reference's camera menu: Active Camera and Perspective, the six
+    // axis views, then Reset Current View.
+    const int types[] = {1, 2, -1, 3, 4, 5, 6, 7, 8};
+    for (int view = 0; view < int(m_cameraButtons.size()); ++view) {
+        auto* button = new QToolButton(this);
+        button->setObjectName(QStringLiteral("viewerCameraMenu_%1").arg(view));
+        button->setProperty("class", QStringLiteral("camera-menu"));
+        button->setPopupMode(QToolButton::InstantPopup);
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setFocusPolicy(Qt::NoFocus);
+        button->setCursor(Qt::ArrowCursor);
+        auto* menu = new QMenu(button);
+        auto* group = new QActionGroup(menu);
+        group->setExclusive(true);
+        for (int type : types) {
+            if (type < 0) {
+                menu->addSeparator();
+                continue;
+            }
+            QAction* action = menu->addAction(viewTypeName(type));
+            action->setCheckable(true);
+            action->setData(type);
+            group->addAction(action);
+            connect(action, &QAction::triggered, this, [this, view, type] { setViewType(view, type); });
+        }
+        menu->addSeparator();
+        QAction* reset = menu->addAction(QCoreApplication::translate("biff::ui::viewer::ViewCameraButton", "Reset Current View"));
+        reset->setObjectName(QStringLiteral("viewerResetView_%1").arg(view));
+        connect(reset, &QAction::triggered, this, [this, view] { emit viewResetRequested(view); });
+        button->setMenu(menu);
+        m_cameraButtons[view] = button;
+    }
+    updateCameraButtons();
+}
+
+void ViewerWidget::updateCameraButtons()
+{
+    for (int view = 0; view < int(m_cameraButtons.size()); ++view) {
+        QToolButton* button = m_cameraButtons[view];
+        if (!button) continue;
+        const bool shown = view < viewCount() && !isSpherical();
+        button->setVisible(shown);
+        if (!shown) continue;
+        button->setText(viewTypeName(m_viewTypes[view]));
+        for (QAction* action : button->menu()->actions())
+            if (action->isCheckable()) action->setChecked(action->data().toInt() == m_viewTypes[view]);
+        button->adjustSize();
+        const QRect area = viewRect(view);
+        button->move(area.right() - button->width() - 8, area.top() + 8);
+        button->raise();
+    }
+}
+
+int ViewerWidget::viewType(int view) const
+{
+    return view >= 0 && view < int(m_viewTypes.size()) ? m_viewTypes[view] : 1;
+}
+
+void ViewerWidget::setViewType(int view, int type)
+{
+    if (view < 0 || view >= int(m_viewTypes.size()) || type < 1 || type > 8) return;
+    if (m_viewTypes[view] == type) {
+        updateCameraButtons();
+        return;
+    }
+    m_viewTypes[view] = type;
+    m_viewFrames[view] = QImage();
+    updateCameraButtons();
+    emit viewTypeChanged(view, type);
+    update();
+}
+
+void ViewerWidget::setViewFrame(int view, const QImage& image)
+{
+    if (view < 0 || view >= int(m_viewFrames.size())) return;
+    m_viewFrames[view] = image;
+    update(viewRect(view));
+}
+
+QImage ViewerWidget::viewFrame(int view) const
+{
+    return view >= 0 && view < int(m_viewFrames.size()) ? m_viewFrames[view] : QImage();
+}
+
+bool ViewerWidget::viewHasOwnPicture(int view) const
+{
+    return view >= 0 && view < int(m_viewTypes.size()) && !isSpherical()
+           && render::viewHasOwnCamera(render::ViewType(m_viewTypes[view]));
+}
+
+void ViewerWidget::setCheckerboard3DEnabled(bool enabled)
+{
+    if (m_checkerboard3D == enabled) return;
+    m_checkerboard3D = enabled;
+    update();
 }
 
 void ViewerWidget::setFrame(const QImage& image)
@@ -381,6 +502,7 @@ ViewerMapping ViewerWidget::mapping(int view) const
         result.sphere = m_sphere;
         return result;
     }
+    result.view = index;
     result.viewRect = QRectF(viewRect(index));
     QRect target = imageRectForView(index);
     if (index == m_activeView && !m_panOffset.isNull()) target.translate(m_panOffset);
@@ -422,9 +544,12 @@ ViewerPointerEvent ViewerWidget::pointerEvent(const QPointF& widgetPos, int view
 
 QVector<ViewerOverlay*> ViewerWidget::eventOverlays() const
 {
+    // A view of its own camera has only the scene's overlays.
+    const bool own = viewHasOwnPicture(m_activeView);
     QVector<ViewerOverlay*> result;
     if (m_tool == ViewerTool::Hand) return result;
     for (auto it = m_overlays.crbegin(); it != m_overlays.crend(); ++it) {
+        if (own && !(*it)->inSceneViews()) continue;
         if ((*it)->isActive() && (*it)->acceptsTool(int(m_tool))) result.append(*it);
     }
     return result;
@@ -450,6 +575,7 @@ void ViewerWidget::setLayout(ViewerLayout layout)
     m_layout = layout;
     if (m_activeView >= viewCount())
         m_activeView = 0;
+    updateCameraButtons();
     emit layoutChanged(m_layout);
     update();
 }
@@ -1412,13 +1538,25 @@ void ViewerWidget::paintEvent(QPaintEvent* event)
         painter.save();
         painter.setClipRect(vp.adjusted(2, 2, -2, -2));
 
-        if (m_checkerboard) {
+        // A view with a camera of its own shows its own picture, over the 3D
+        // backdrop (ShowCheckerboard3D); the others the shot's frame.
+        const bool own = viewHasOwnPicture(i);
+        if (own ? m_checkerboard3D : m_checkerboard) {
             paintCheckerboard(painter, QRectF(vp), m_backgroundColor);
         } else {
             painter.fillRect(vp, m_backgroundColor);
         }
 
-        if (!m_frame.isNull() && isSpherical()) {
+        if (own) {
+            const QImage& picture = m_viewFrames[i];
+            QRect target = imageRectForView(i);
+            if (!picture.isNull() && !target.isNull()) {
+                if (i == m_activeView && !m_panOffset.isNull()) target.translate(m_panOffset);
+                painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+                painter.drawImage(target, channelFiltered(picture));
+                painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+            }
+        } else if (!m_frame.isNull() && isSpherical()) {
             // 360 mode: the view is a window onto the sphere, filled edge to
             // edge rather than letter-boxed.
             const QRect target = sphereRect(i);
@@ -1439,11 +1577,25 @@ void ViewerWidget::paintEvent(QPaintEvent* event)
             }
         }
 
-        paintMotionPath(painter, i);
+        // The motion path and the overlays are in the shot's picture, which
+        // a view of its own camera does not show.
+        if (!own) paintMotionPath(painter, i);
 
         // Overlays draw over the active view only: that is the one their
-        // pointer events are mapped through.
-        if (i == active && !m_overlays.isEmpty()) {
+        // pointer events are mapped through. The scene's own overlays draw
+        // in every view.
+        if (!m_overlays.isEmpty() && !isSpherical()) {
+            const ViewerMapping map = mapping(i);
+            if (map.isValid()) {
+                for (ViewerOverlay* overlay : std::as_const(m_overlays)) {
+                    if (!overlay->isActive()) continue;
+                    if (!overlay->inSceneViews() && (i != active || own)) continue;
+                    painter.save();
+                    overlay->paint(painter, map);
+                    painter.restore();
+                }
+            }
+        } else if (i == active && !own && !m_overlays.isEmpty()) {
             const ViewerMapping map = mapping(i);
             if (map.isValid()) {
                 for (ViewerOverlay* overlay : std::as_const(m_overlays)) {
@@ -1659,6 +1811,7 @@ void ViewerWidget::resizeEvent(QResizeEvent* event)
         m_toolStrip->setGeometry(toolStripRect());
         m_toolStrip->raise();
     }
+    updateCameraButtons();
     update();
 }
 
@@ -1682,7 +1835,7 @@ void ViewerWidget::mousePressEvent(QMouseEvent* event)
     m_dragView = index;
     m_lastMouse = event->pos();
 
-    // Overlays first: a press on the text frame or on a plugin's custom UI
+    // Overlays first: a press on the layer frame or on a plugin's custom UI
     // belongs to them, not to the tool underneath.
     ViewerPointerEvent pointer = pointerEvent(event->position(), index, event->button(),
                                               event->buttons(), event->modifiers());
@@ -1708,6 +1861,15 @@ void ViewerWidget::mousePressEvent(QMouseEvent* event)
     if (m_tool == ViewerTool::Hand) {
         m_handPanning = true;
         setCursor(Qt::ClosedHandCursor);
+        event->accept();
+        return;
+    }
+
+    // In a view of its own camera the layers are not at hand: Orbit turns
+    // that camera, and Select does nothing.
+    if (viewHasOwnPicture(index)) {
+        m_viewOrbiting = m_tool == ViewerTool::Orbit;
+        if (m_viewOrbiting) setCursor(Qt::SizeAllCursor);
         event->accept();
         return;
     }
@@ -1831,6 +1993,22 @@ void ViewerWidget::mouseMoveEvent(QMouseEvent* event)
         }
     }
 
+    if (m_handPanning && viewHasOwnPicture(m_dragView)) {
+        const ViewerMapping map = mapping(m_dragView);
+        const QPointF delta = map.toCanvas(event->position()) - map.toCanvas(QPointF(m_lastMouse));
+        m_lastMouse = event->pos();
+        if (!delta.isNull()) emit viewPanned(m_dragView, delta);
+        event->accept();
+        return;
+    }
+    if (m_viewOrbiting) {
+        const QPointF delta = event->pos() - m_lastMouse;
+        m_lastMouse = event->pos();
+        if (!delta.isNull()) emit viewOrbited(m_dragView, delta);
+        event->accept();
+        return;
+    }
+
     if (m_handPanning && m_dragView == m_activeView) {
         m_panOffset += event->pos() - m_lastMouse;
         m_lastMouse = event->pos();
@@ -1873,6 +2051,12 @@ void ViewerWidget::mouseMoveEvent(QMouseEvent* event)
 
 void ViewerWidget::mouseReleaseEvent(QMouseEvent* event)
 {
+    if (m_viewOrbiting && event->button() == Qt::LeftButton) {
+        m_viewOrbiting = false;
+        setCursor(toolCursor());
+        event->accept();
+        return;
+    }
     if (m_overlayGrab && event->button() == Qt::LeftButton) {
         ViewerPointerEvent pointer = pointerEvent(event->position(), m_dragView, event->button(),
                                                   event->buttons(), event->modifiers());
@@ -2034,6 +2218,17 @@ void ViewerWidget::wheelEvent(QWheelEvent* event)
     if (isSpherical()) {
         // The lens is the zoom in 360 mode.
         if (event->angleDelta().y() != 0) m_sphere->zoomBy(-event->angleDelta().y() / 24.0);
+        event->accept();
+        return;
+    }
+    // Over a view of its own camera the wheel moves that camera.
+    const int view = viewAt(event->position().toPoint());
+    if (viewHasOwnPicture(view) && event->angleDelta().y() != 0) {
+        const ViewerMapping map = mapping(view);
+        QPointF anchor;
+        if (!(event->modifiers() & Qt::AltModifier) && map.isValid())
+            anchor = map.toCanvas(event->position()) - QPointF(map.canvasSize.width() / 2.0, map.canvasSize.height() / 2.0);
+        emit viewZoomRequested(view, event->angleDelta().y() / 120.0, anchor);
         event->accept();
         return;
     }

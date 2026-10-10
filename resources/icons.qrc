@@ -1,6 +1,18 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
     <qresource prefix="/icons">
+    <file alias="viewer/light.png">icons/viewer/light.png</file>
+    <file alias="viewer/light@2x.png">icons/viewer/light@2x.png</file>
+    <file alias="viewer/light-hover.png">icons/viewer/light-hover.png</file>
+    <file alias="viewer/light-hover@2x.png">icons/viewer/light-hover@2x.png</file>
+    <file alias="viewer/light-checked.png">icons/viewer/light-checked.png</file>
+    <file alias="viewer/light-checked@2x.png">icons/viewer/light-checked@2x.png</file>
+    <file alias="viewer/crosshairs.png">icons/viewer/crosshairs.png</file>
+    <file alias="viewer/crosshairs@2x.png">icons/viewer/crosshairs@2x.png</file>
+    <file alias="viewer/crosshairs-hover.png">icons/viewer/crosshairs-hover.png</file>
+    <file alias="viewer/crosshairs-hover@2x.png">icons/viewer/crosshairs-hover@2x.png</file>
+    <file alias="viewer/crosshairs-checked.png">icons/viewer/crosshairs-checked.png</file>
+    <file alias="viewer/crosshairs-checked@2x.png">icons/viewer/crosshairs-checked@2x.png</file>
     <file alias="layout/top-left.png">icons/layout/top-left.png</file>
     <file alias="layout/top-left@2x.png">icons/layout/top-left@2x.png</file>
     <file alias="layout/top-left-disabled.png">icons/layout/top-left-disabled.png</file>

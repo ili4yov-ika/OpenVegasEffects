@@ -458,8 +458,8 @@ void TimelineCanvas::paintEvent(QPaintEvent* event)
                 const composition::Layer& l = m_comp->layers().at(lane.layerIndex);
                 const auto prop = static_cast<composition::TransformProperty>(lane.transformProp);
                 QSet<int> frames;
-                for (int axis = 0; axis < composition::axisCount(prop, l.dimension); ++axis) {
-                    const composition::KeyFrameList* c = l.transform.curve(prop, axis);
+                for (int axis = 0; axis < composition::axisCount(prop, laneDimension(l, lane)); ++axis) {
+                    const composition::KeyFrameList* c = laneCurve(l, lane, prop, axis);
                     if (!c) {
                         continue;
                     }
@@ -482,6 +482,27 @@ void TimelineCanvas::paintEvent(QPaintEvent* event)
                     painter.setBrush(dragged ? QColor(18, 176, 255) : QColor(232, 232, 232));
                     drawKeyFrameMarker(painter, kx, cy, kKeyframeRadius,
                                        keyFrameTypeAt(lane, frameNo));
+                }
+                painter.setBrush(Qt::NoBrush);
+                continue;
+            }
+
+            // A model animation's Strength or Playback row: one curve.
+            if (lane.isAnimationRow()) {
+                const composition::KeyFrameList* curve = laneAnimationCurve(
+                    m_comp->layers().at(lane.layerIndex), lane);
+                if (!curve || curve->isEmpty()) continue;
+                const double fps = frameRate();
+                const int cy = y + lane.height / 2;
+                painter.setPen(Qt::NoPen);
+                const int laneIndex = static_cast<int>(&lane - m_lanes.constData());
+                for (int frameNo : curve->locations()) {
+                    const int kx = static_cast<int>((frameNo / fps) * pps);
+                    const bool dragged = laneIndex == m_dragLane && frameNo == m_dragFrame;
+                    painter.setBrush(dragged ? QColor(18, 176, 255) : QColor(232, 232, 232));
+                    const composition::KeyFrame* key = curve->at(frameNo);
+                    drawKeyFrameMarker(painter, kx, cy, kKeyframeRadius,
+                                       key ? key->temporal : composition::TemporalType::Linear);
                 }
                 painter.setBrush(Qt::NoBrush);
                 continue;
@@ -657,11 +678,18 @@ QVector<composition::KeyFrameList*> laneCurves(composition::Composition* comp,
 
     if (lane.isTransformRow()) {
         const auto prop = static_cast<composition::TransformProperty>(lane.transformProp);
-        for (int axis = 0; axis < composition::axisCount(prop, layer.dimension); ++axis) {
-            if (composition::KeyFrameList* curve = layer.transform.curve(prop, axis)) {
+        for (int axis = 0; axis < composition::axisCount(prop, laneDimension(layer, lane)); ++axis) {
+            if (composition::KeyFrameList* curve = laneCurve(layer, lane, prop, axis)) {
                 out.append(curve);
             }
         }
+        return out;
+    }
+
+    if (lane.isAnimationRow()) {
+        if (composition::KeyFrameList* curve =
+                laneAnimationCurve(layer, lane))
+            out.append(curve);
         return out;
     }
 
@@ -706,7 +734,7 @@ bool TimelineCanvas::keyFrameAt(const QPoint& pos, int* laneIndex, int* frame) c
     const double fps = frameRate();
     for (int i = 0; i < m_lanes.size(); ++i) {
         const TimelineLane& lane = m_lanes.at(i);
-        if (!lane.isParameterRow() && !lane.isTransformRow()) {
+        if (!lane.isParameterRow() && !lane.isTransformRow() && !lane.isAnimationRow()) {
             continue;
         }
         if (pos.y() < lane.y || pos.y() >= lane.y + lane.height) {
@@ -762,12 +790,15 @@ bool TimelineCanvas::moveKeyFrames(const TimelineLane& lane, int fromFrame, int 
         const auto prop = static_cast<composition::TransformProperty>(lane.transformProp);
         // Both axes of a point-valued property share the row, so they move
         // together and stay on the same frames.
-        for (int axis = 0; axis < composition::axisCount(prop, layer.dimension); ++axis) {
-            const bool axisMoved = moveIn(layer.transform.curve(prop, axis));
+        for (int axis = 0; axis < composition::axisCount(prop, laneDimension(layer, lane)); ++axis) {
+            const bool axisMoved = moveIn(laneCurve(layer, lane, prop, axis));
             moved = axisMoved || moved;
         }
         return moved;
     }
+
+    if (lane.isAnimationRow())
+        return moveIn(laneAnimationCurve(layer, lane));
 
     if (lane.isParameterRow()) {
         if (lane.clipIndex < 0 || lane.clipIndex >= layer.clips.size()) {
@@ -797,12 +828,18 @@ composition::TemporalType TimelineCanvas::keyFrameTypeAt(const TimelineLane& lan
     const composition::Layer& layer = m_comp->layers().at(lane.layerIndex);
     if (lane.isTransformRow()) {
         const auto prop = static_cast<composition::TransformProperty>(lane.transformProp);
-        for (int axis = 0; axis < composition::axisCount(prop, layer.dimension); ++axis) {
-            if (const composition::KeyFrameList* curve = layer.transform.curve(prop, axis)) {
+        for (int axis = 0; axis < composition::axisCount(prop, laneDimension(layer, lane)); ++axis) {
+            if (const composition::KeyFrameList* curve = laneCurve(layer, lane, prop, axis)) {
                 if (const composition::KeyFrame* key = curve->at(frame)) {
                     return key->temporal;
                 }
             }
+        }
+    }
+    if (lane.isAnimationRow()) {
+        if (const composition::KeyFrameList* curve =
+                laneAnimationCurve(layer, lane)) {
+            if (const composition::KeyFrame* key = curve->at(frame)) return key->temporal;
         }
     }
     return composition::TemporalType::Linear;
@@ -834,12 +871,15 @@ bool TimelineCanvas::setKeyFrameType(const TimelineLane& lane, int frame,
     if (lane.isTransformRow()) {
         const auto prop = static_cast<composition::TransformProperty>(lane.transformProp);
         // Both axes of a point property share the row, so they stay in step.
-        for (int axis = 0; axis < composition::axisCount(prop, layer.dimension); ++axis) {
-            const bool axisChanged = applyTo(layer.transform.curve(prop, axis));
+        for (int axis = 0; axis < composition::axisCount(prop, laneDimension(layer, lane)); ++axis) {
+            const bool axisChanged = applyTo(laneCurve(layer, lane, prop, axis));
             changed = axisChanged || changed;
         }
         return changed;
     }
+
+    if (lane.isAnimationRow())
+        return applyTo(laneAnimationCurve(layer, lane));
 
     if (lane.isParameterRow()) {
         if (lane.clipIndex < 0 || lane.clipIndex >= layer.clips.size()) {
@@ -897,11 +937,15 @@ void TimelineCanvas::contextMenuEvent(QContextMenuEvent* event)
         const composition::KeyFrame* key = nullptr;
         if (lane.isTransformRow()) {
             const auto prop = static_cast<composition::TransformProperty>(lane.transformProp);
-            for (int axis = 0; axis < composition::axisCount(prop, layer.dimension) && !key; ++axis) {
-                if (const composition::KeyFrameList* c = layer.transform.curve(prop, axis)) {
+            for (int axis = 0; axis < composition::axisCount(prop, laneDimension(layer, lane)) && !key; ++axis) {
+                if (const composition::KeyFrameList* c = laneCurve(layer, lane, prop, axis)) {
                     key = c->at(frame);
                 }
             }
+        } else if (lane.isAnimationRow()) {
+            if (const composition::KeyFrameList* c =
+                    laneAnimationCurve(layer, lane))
+                key = c->at(frame);
         } else if (lane.isParameterRow() && lane.clipIndex >= 0
                    && lane.clipIndex < layer.clips.size()) {
             const composition::Clip& clip = layer.clips.at(lane.clipIndex);
@@ -1181,7 +1225,7 @@ bool TimelineCanvas::transitionHandleAt(const QPoint& pos, int* layerIndex, int*
     if (!m_comp || m_tool != EditorTool::Select) return false;
     constexpr int kGrab = 4;
     for (const TimelineLane& lane : m_lanes) {
-        if (lane.isParameterRow() || lane.isTransformRow()) continue;
+        if (lane.isParameterRow() || lane.isTransformRow() || lane.isAnimationRow()) continue;
         if (lane.layerIndex < 0 || lane.layerIndex >= m_comp->layers().size()) continue;
         if (pos.y() < lane.y || pos.y() >= lane.y + lane.height) continue;
         const composition::Layer& layer = m_comp->layers().at(lane.layerIndex);
@@ -1274,7 +1318,7 @@ bool TimelineCanvas::clipAt(const QPoint& pos, int* layerIndex, int* clipIndex,
     }
     const int kEdgeGrab = 6;   // width of the trim zone at each end, in pixels
     for (const TimelineLane& lane : m_lanes) {
-        if (lane.isParameterRow() || lane.isTransformRow()) continue;
+        if (lane.isParameterRow() || lane.isTransformRow() || lane.isAnimationRow()) continue;
         if (lane.layerIndex < 0 || lane.layerIndex >= m_comp->layers().size()) {
             continue;
         }
@@ -1935,8 +1979,15 @@ TimelineWidget::TimelineWidget(QWidget* parent)
         for (QTreeWidgetItemIterator it(m_tree); *it; ++it) {
             auto* row = *it;
             if (row->data(0, Qt::UserRole).toInt() != lane.layerIndex) continue;
-            const bool match = lane.isTransformRow()
+            const bool match = !lane.layerProperty.isEmpty()
+                ? row->data(0, kLayerPropertyRole).toString() == lane.layerProperty
+                : lane.isAnimationRow()
+                ? row->data(0, kModelAnimationRole).toString() == lane.modelAnimation
+                  && row->data(0, kModelAnimationPropertyRole).isValid()
+                  && row->data(0, kModelAnimationPropertyRole).toInt() == lane.animationProperty
+                : lane.isTransformRow()
                 ? row->data(0, Qt::UserRole + 4).isValid() && row->data(0, Qt::UserRole + 4).toInt() == lane.transformProp
+                  && row->data(0, kModelNodeRole).toString() == lane.modelNode
                 : row->data(0, Qt::UserRole + 3).isValid() && row->data(0, Qt::UserRole + 3).toInt() == lane.parameterIndex
                   && row->data(0, Qt::UserRole + 2).toInt() == lane.effectIndex
                   && row->data(0, Qt::UserRole + 1).toInt() == lane.clipIndex;
@@ -2041,6 +2092,7 @@ TimelineWidget::TimelineWidget(QWidget* parent)
         std::sort(selectedLayers.begin(), selectedLayers.end());
         emit layersSelected(selectedLayers);
         emit clipSelected(layer, clip.isValid() ? clip.toInt() : -1);
+        emit modelNodeSelected(layer, item->data(0, kModelNodeRole).toString());
         m_canvas->setSelection(layer, clip.isValid() ? clip.toInt()
             : (m_comp && m_comp->layers()[layer].clips.size() == 1 ? 0 : -1));
         syncLanes(); updateKeyButtons();
@@ -2151,6 +2203,28 @@ void TimelineWidget::selectLayer(int layerIndex)
     }
     m_tree->setCurrentItem(m_tree->topLevelItem(layerIndex));
     if (m_canvas) m_canvas->setSelection(layerIndex, -1);
+}
+
+void TimelineWidget::selectModelNode(int layerIndex, const QString& path)
+{
+    if (!m_tree || layerIndex < 0 || layerIndex >= m_tree->topLevelItemCount()) return;
+    QTreeWidgetItem* layerRow = m_tree->topLevelItem(layerIndex);
+    QTreeWidgetItem* found = layerRow;
+    if (!path.isEmpty()) {
+        for (QTreeWidgetItemIterator it(layerRow); *it; ++it) {
+            QTreeWidgetItem* row = *it;
+            if (row != layerRow && !row->parent()) break;   // the next layer
+            // The node's own row, not one of its Transform rows.
+            if (row->data(0, kModelNodeRole).toString() == path
+                && row->parent() && row->parent()->data(0, kModelNodeRole).toString() != path) {
+                found = row;
+                break;
+            }
+        }
+    }
+    for (QTreeWidgetItem* up = found->parent(); up; up = up->parent()) up->setExpanded(true);
+    if (m_tree->currentItem() != found) m_tree->setCurrentItem(found);
+    m_tree->scrollToItem(found);
 }
 
 void TimelineWidget::setMediaManager(std::shared_ptr<media::MediaManager> media)
@@ -2385,7 +2459,9 @@ QVector<int> TimelineWidget::keyFrameLocations() const
     QSet<int> keys;
     if (!m_comp) return {};
     auto* row = m_tree->currentItem();
-    const bool property = row && (row->data(0, Qt::UserRole + 3).isValid() || row->data(0, Qt::UserRole + 4).isValid());
+    const bool property = row && (row->data(0, Qt::UserRole + 3).isValid() || row->data(0, Qt::UserRole + 4).isValid()
+                                  || row->data(0, kModelAnimationPropertyRole).isValid()
+                                  || row->data(0, kLayerPropertyRole).isValid());
     if (property) {
         for (auto* curve : const_cast<TimelineWidget*>(this)->selectedCurves())
             for (int frame : curve->locations()) keys.insert(frame);
@@ -2399,6 +2475,9 @@ QVector<int> TimelineWidget::keyFrameLocations() const
                 for (const auto& effect : clip.effects)
                     for (const auto& curve : effect.animation)
                         for (int frame : curve.locations()) keys.insert(frame);
+            for (const auto& animation : layer.modelAnimations)
+                for (const auto* curve : {&animation.strengthCurve, &animation.playbackCurve})
+                    for (int frame : curve->locations()) keys.insert(frame);
         }
     }
     QVector<int> frames(keys.begin(), keys.end()); std::sort(frames.begin(), frames.end()); return frames;
@@ -2552,6 +2631,66 @@ void TimelineWidget::toggleKeyFrame(QTreeWidgetItem* row)
     if (l < 0 || l >= m_comp->layers().size() || m_comp->layers()[l].locked) return;
     m_tree->setCurrentItem(row);
     const int frame = currentFrame();
+    if (row->data(0, kLayerPropertyRole).isValid()) {
+        // A light's, a lens's or a Material's property: a key at the
+        // playhead with the value there, or that key gone.
+        const QString name = row->data(0, kLayerPropertyRole).toString();
+        editLayer(l, QCoreApplication::translate("QObject", "Toggle Property Animation"),
+                  [name, frame](composition::Layer& layer) {
+            composition::toggleKeyedLayerProperty(layer, name, frame);
+        });
+        return;
+    }
+    if (row->data(0, kModelAnimationPropertyRole).isValid()) {
+        // Strength or Playback of a model animation: a key at the playhead
+        // with the value there, or that key gone (the last one leaves its
+        // value as the property's own).
+        const QString instance = row->data(0, kModelAnimationRole).toString();
+        const int property = row->data(0, kModelAnimationPropertyRole).toInt();
+        editLayer(l, QCoreApplication::translate("QObject", "Toggle Property Animation"),
+                  [instance, property, frame](composition::Layer& layer) {
+            for (composition::ModelAnimationInstance& animation : layer.modelAnimations) {
+                if (animation.id.value() != instance) continue;
+                const bool playback = property == int(ModelAnimationProperty::Playback);
+                composition::KeyFrameList& curve = playback ? animation.playbackCurve : animation.strengthCurve;
+                double& value = playback ? animation.playback : animation.strength;
+                const double now = playback ? animation.playbackAt(frame) : animation.strengthAt(frame);
+                if (curve.contains(frame)) {
+                    curve.removeAt(frame);
+                    if (curve.isEmpty()) value = now;
+                } else {
+                    if (curve.isEmpty()) curve.setDefaultValue(now);
+                    curve.set(frame, now);
+                }
+            }
+        });
+        return;
+    }
+    if (row->data(0, Qt::UserRole + 4).isValid() && !row->data(0, kModelNodeRole).toString().isEmpty()) {
+        const auto p = composition::TransformProperty(row->data(0, Qt::UserRole + 4).toInt());
+        const QString node = row->data(0, kModelNodeRole).toString();
+        const QVector3D pivot = row->data(0, kModelNodeRole + 1).value<QVector3D>();
+        editLayer(l, tr("Toggle transform keyframe"), [p, frame, node, pivot](composition::Layer& layer) {
+            composition::ModelNodeTransform* state = layer.modelNode(node);
+            if (!state) {
+                layer.modelNodes.append({node, composition::restingModelNodeTransform(
+                                                   pivot.x(), pivot.y(), pivot.z())});
+                state = &layer.modelNodes.last();
+            }
+            auto& t = state->transform;
+            const int axes = composition::axisCount(p, composition::LayerDimension::ThreeD);
+            bool remove = false;
+            for (int axis = 0; axis < axes; ++axis)
+                if (auto* curve = t.curve(p, axis)) remove |= curve->contains(frame);
+            for (int axis = 0; axis < axes; ++axis) {
+                auto* curve = t.curve(p, axis); if (!curve) continue;
+                const double v = t.valueAt(p, axis, frame);
+                if (remove) { curve->removeAt(frame); if (curve->isEmpty()) composition::setTransformValue(t, p, axis, v); }
+                else { if (curve->isEmpty()) curve->setDefaultValue(v); curve->set(frame, v); }
+            }
+        });
+        return;
+    }
     if (row->data(0, Qt::UserRole + 4).isValid()) {
         const auto p = composition::TransformProperty(row->data(0, Qt::UserRole + 4).toInt());
         editLayer(l, tr("Toggle transform keyframe"), [p, frame](composition::Layer& layer) {
@@ -2621,6 +2760,18 @@ void TimelineWidget::syncLanes()
         if (!isLayerRow && transformProp.isValid()) {
             lane.layerIndex = item->data(0, Qt::UserRole).toInt();
             lane.transformProp = transformProp.toInt();
+            lane.modelNode = item->data(0, kModelNodeRole).toString();
+        }
+        const QVariant layerProperty = item->data(0, kLayerPropertyRole);
+        if (!isLayerRow && layerProperty.isValid()) {
+            lane.layerIndex = item->data(0, Qt::UserRole).toInt();
+            lane.layerProperty = layerProperty.toString();
+        }
+        const QVariant animationProperty = item->data(0, kModelAnimationPropertyRole);
+        if (!isLayerRow && animationProperty.isValid()) {
+            lane.layerIndex = item->data(0, Qt::UserRole).toInt();
+            lane.modelAnimation = item->data(0, kModelAnimationRole).toString();
+            lane.animationProperty = animationProperty.toInt();
         }
         const QVariant param = item->data(0, Qt::UserRole + 3);
         if (!isLayerRow && param.isValid()) {

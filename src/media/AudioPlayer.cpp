@@ -22,13 +22,10 @@
 
 namespace openvegas::media {
 namespace {
-constexpr unsigned Rate = 48000, Channels = 2, BlockFrames = 480;
-constexpr size_t QueueSamples = Rate * Channels + Channels * 2;
+constexpr unsigned Channels = 2;
 // Dry input kept per native effect for GetSampleRanges history requests:
 // reverbs ask for up to their impulse length, Echo for delay * echoes.
 constexpr qsizetype NativeHistoryFrames = qsizetype(1) << 20;
-// How far ahead of the playhead native effects see the dry signal.
-constexpr qint64 NativeLookAheadFrames = Rate / 4;
 struct NativeDryHistory {
     QVector<qint16> samples;
     qint64 first = 0;
@@ -50,6 +47,10 @@ double meter(double squares, unsigned frames) {
 }
 struct AudioPlayer::Engine {
     struct Decoder {
+        const unsigned rate;
+        const size_t queueSamples;
+        explicit Decoder(unsigned sampleRate)
+            : rate(sampleRate), queueSamples(size_t(rate) * Channels + Channels * 2) {}
         AudioClip clip;
         libvlc_media_player_t* player = nullptr;
         std::mutex mutex;
@@ -72,9 +73,9 @@ struct AudioPlayer::Engine {
             std::unique_lock<std::mutex> lock(self.mutex);
             size_t remaining = size_t(count) * Channels;
             while (remaining && !self.cancelled) {
-                self.ready.wait(lock, [&] { return self.cancelled || self.pcm.size() < QueueSamples; });
+                self.ready.wait(lock, [&] { return self.cancelled || self.pcm.size() < self.queueSamples; });
                 if (self.cancelled) return;
-                const size_t amount = std::min(remaining, QueueSamples - self.pcm.size());
+                const size_t amount = std::min(remaining, self.queueSamples - self.pcm.size());
                 self.pcm.insert(self.pcm.end(), data, data + amount);
                 data += amount; remaining -= amount; self.ready.notify_all();
             }
@@ -100,7 +101,7 @@ struct AudioPlayer::Engine {
             api.libvlc_media_release(media);
             if (!player) { qWarning("VLC decoder creation failed: %s", api.libvlc_errmsg()); return false; }
             api.libvlc_audio_set_callbacks(player, decoded, nullptr, nullptr, nullptr, drained, this);
-            api.libvlc_audio_set_format(player, "S16N", Rate, Channels);
+            api.libvlc_audio_set_format(player, "S16N", rate, Channels);
             if (api.libvlc_media_player_play(player) != 0) { qWarning("VLC decode play failed: %s", api.libvlc_errmsg()); shutdown(); return false; }
             return true;
         }
@@ -110,7 +111,7 @@ struct AudioPlayer::Engine {
             const double speed = std::clamp(clip.speed, 0.01, 100.0);
             const size_t needed = (size_t(std::ceil(fraction + frames * speed)) + 1) * Channels;
             ready.wait_for(lock, std::chrono::milliseconds(250), [&] {
-                return cancelled || ended || pcm.size() >= std::min(needed, QueueSamples);
+                return cancelled || ended || pcm.size() >= std::min(needed, queueSamples);
             });
             unsigned produced = 0;
             for (unsigned f = 0; f < frames; ++f, ++produced) {
@@ -137,6 +138,8 @@ struct AudioPlayer::Engine {
         qint64 next = -1;
     };
     std::vector<NativeLookAhead> lookAhead;
+    const unsigned rate;
+    const unsigned blockFrames;
     AudioPlayer* owner;
     quint64 generation;
     QVector<AudioClip> clips;
@@ -154,15 +157,15 @@ struct AudioPlayer::Engine {
     std::mutex clockMutex;
     std::condition_variable clockWake;
     const std::chrono::steady_clock::time_point clockStart = std::chrono::steady_clock::now();
-    Engine(AudioPlayer* parent, quint64 serial, QVector<AudioClip> sources, double time, double length, bool mute)
-        : owner(parent), generation(serial), clips(std::move(sources)), muted(mute), start(time), duration(length) {
+    Engine(AudioPlayer* parent, quint64 serial, QVector<AudioClip> sources, double time, double length, bool mute, unsigned sampleRate)
+        : rate(sampleRate), blockFrames(std::max(1u, rate / 100)), owner(parent), generation(serial), clips(std::move(sources)), muted(mute), start(time), duration(length) {
         decoders.resize(size_t(clips.size()));
         lookAhead.resize(size_t(clips.size()));
         QDataStream stream(&header, QIODevice::WriteOnly);
         stream.setByteOrder(QDataStream::LittleEndian);
         stream.writeRawData("RIFF", 4); stream << quint32(0xfffffff0);
         stream.writeRawData("WAVEfmt ", 8); stream << quint32(16) << quint16(1) << quint16(Channels)
-            << quint32(Rate) << quint32(Rate * Channels * 2) << quint16(Channels * 2) << quint16(16);
+            << quint32(rate) << quint32(rate * Channels * 2) << quint16(Channels * 2) << quint16(16);
         stream.writeRawData("data", 4); stream << quint32(0xffffffcc);
     }
     ~Engine() { shutdown(); }
@@ -189,10 +192,10 @@ struct AudioPlayer::Engine {
                         QHash<int, std::vector<float>>& inputs) {
         for (const AudioTransition& transition : std::as_const(transitions)) {
             const double first = std::max(now, transition.start);
-            const double last = std::min(now + double(frames) / Rate, transition.end);
+            const double last = std::min(now + double(frames) / rate, transition.end);
             if (last <= first) continue;
-            const unsigned f0 = std::min(frames, unsigned(std::llround((first - now) * Rate)));
-            const unsigned f1 = std::min(frames, unsigned(std::llround((last - now) * Rate)));
+            const unsigned f0 = std::min(frames, unsigned(std::llround((first - now) * rate)));
+            const unsigned f1 = std::min(frames, unsigned(std::llround((last - now) * rate)));
             if (f1 <= f0) continue;
             const unsigned count = f1 - f0;
             QVector<qint16> from(int(count * Channels), 0), to(int(count * Channels), 0);
@@ -207,9 +210,9 @@ struct AudioPlayer::Engine {
             };
             take(transition.fromClip, from);
             take(transition.toClip, to);
-            const qint32 total = qint32(std::max<qint64>(1, std::llround((transition.end - transition.start) * Rate)));
-            const qint32 position = qint32(std::llround((first - transition.start) * Rate));
-            const qint32 cut = qint32(std::llround((transition.cut - transition.start) * Rate));
+            const qint32 total = qint32(std::max<qint64>(1, std::llround((transition.end - transition.start) * rate)));
+            const qint32 position = qint32(std::llround((first - transition.start) * rate));
+            const qint32 cut = qint32(std::llround((transition.cut - transition.start) * rate));
             QVector<qint16> mixed;
             const QString key = QStringLiteral("transition:") + transition.pluginId.value();
             bool ok = !failedNativeEffects.contains(key)
@@ -254,7 +257,7 @@ struct AudioPlayer::Engine {
             // A callback input has no external live clock. Bound read-ahead so
             // silence cannot fill the output pipeline hours ahead of playback.
             const auto due = self.clockStart + std::chrono::microseconds(
-                qint64(std::max(0.0, double(self.frame) / Rate - 0.05) * 1000000));
+                qint64(std::max(0.0, double(self.frame) / self.rate - 0.05) * 1000000));
             {
                 std::unique_lock<std::mutex> lock(self.clockMutex);
                 self.clockWake.wait_until(lock, due, [&] { return self.cancelled.load(); });
@@ -263,14 +266,14 @@ struct AudioPlayer::Engine {
                 plugin::releaseNativeEffectThreadRenderer();
                 return 0;
             }
-            const double now = self.start + double(self.frame) / Rate;
+            const double now = self.start + double(self.frame) / self.rate;
             if (now >= self.duration) {
                 plugin::releaseNativeEffectThreadRenderer();
                 return 0;
             }
-            const unsigned frames = unsigned(std::min(double(BlockFrames), std::ceil((self.duration - now) * Rate)));
-            const double blockEnd = now + double(frames) / Rate;
-            float samples[BlockFrames * Channels]{};
+            const unsigned frames = unsigned(std::min(double(self.blockFrames), std::ceil((self.duration - now) * self.rate)));
+            const double blockEnd = now + double(frames) / self.rate;
+            std::vector<float> samples(self.blockFrames * Channels, 0.0f);
             // Clips inside an active transition are kept apart and combined by
             // it instead of being summed straight into the master.
             QHash<int, std::vector<float>> transitionInputs;
@@ -283,7 +286,7 @@ struct AudioPlayer::Engine {
             }
             for (int i = 0; i < self.clips.size() && !self.cancelled; ++i) {
                 const AudioClip& clip = self.clips[i];
-                const double first = std::max(now, clip.start), last = std::min(now + double(frames) / Rate, clip.end);
+                const double first = std::max(now, clip.start), last = std::min(now + double(frames) / self.rate, clip.end);
                 if (last <= first) continue;
                 Decoder* decoder;
                 {
@@ -293,22 +296,22 @@ struct AudioPlayer::Engine {
                     if (!slot) continue;
                     decoder = slot.get();
                 }
-                const unsigned offset = std::min(frames, unsigned(std::llround((first - now) * Rate)));
-                const unsigned count = std::min(frames - offset, unsigned(std::llround((last - first) * Rate)));
-                float contribution[BlockFrames * Channels]{};
+                const unsigned offset = std::min(frames, unsigned(std::llround((first - now) * self.rate)));
+                const unsigned count = std::min(frames - offset, unsigned(std::llround((last - first) * self.rate)));
+                std::vector<float> contribution(self.blockFrames * Channels, 0.0f);
                 QVector<qint16> futureSamples; // dry frames after this block
                 if (clip.nativeEffects.isEmpty()) {
-                    decoder->mix(contribution, count);
+                    decoder->mix(contribution.data(), count);
                 } else {
                     NativeLookAhead& ahead = self.lookAhead[size_t(i)];
-                    const qint64 firstSample = std::llround(first * Rate);
+                    const qint64 firstSample = std::llround(first * self.rate);
                     // Rounding may move a block start by a sample; only a real
                     // jump discards what was already read from the decoder.
                     if (std::abs(ahead.next - firstSample) > 2) ahead.samples.clear();
                     ahead.next = firstSample;
                     const qint64 queued = qint64(ahead.samples.size() / Channels);
-                    const qint64 want = std::min<qint64>(std::llround(clip.end * Rate),
-                                                         firstSample + count + NativeLookAheadFrames)
+                    const qint64 want = std::min<qint64>(std::llround(clip.end * self.rate),
+                                                         firstSample + count + (self.rate / 4))
                                         - firstSample - queued;
                     if (want > 0) {
                         std::vector<float> pulled(size_t(want) * Channels, 0.0f);
@@ -353,22 +356,22 @@ struct AudioPlayer::Engine {
                         }
                         const QVector<qint16> before = nativeSamples;
                         // History requests are exact while playing. The first
-                        // effect also sees NativeLookAheadFrames of the dry
+                        // effect also sees 0.25 seconds of the dry
                         // future (NoiseReduction's window); later effects and
                         // whole-layer requests such as AudioReverse read
                         // silence there. Export is exact.
-                        const qint64 layerSample = qRound64((first - effect.layerStart) * Rate);
+                        const qint64 layerSample = qRound64((first - effect.layerStart) * self.rate);
                         NativeDryHistory& history = self.nativeHistory[effect.instanceKey];
                         history.append(nativeSamples, layerSample);
                         const plugin::NativeAudioLayer layer {
-                            qRound64(effect.layerDuration * Rate), effect.shotFps};
+                            qRound64(effect.layerDuration * self.rate), effect.shotFps};
                         // The future is appended for this call only, not copied
                         // with the (up to 2^21-frame) history.
                         const qsizetype historySize = history.samples.size();
                         if (firstEffect) history.samples.append(futureSamples);
                         firstEffect = false;
                         const bool applied = plugin::applyNativeAudioEffect(
-                            nativeSamples, Channels, Rate, layerSample,
+                            nativeSamples, Channels, self.rate, layerSample,
                             effect.pluginId, values, effect.instanceKey,
                             &history.samples, history.first, layer);
                         history.samples.resize(historySize);
@@ -382,19 +385,19 @@ struct AudioPlayer::Engine {
                     }
                 }
                 const auto kept = transitionInputs.find(i);
-                float* destination = kept != transitionInputs.end() ? kept->data() : samples;
+                float* destination = kept != transitionInputs.end() ? kept->data() : samples.data();
                 const bool enveloped = !clip.envelope.isEmpty();
                 double gain = clip.gain;
                 for (unsigned sample = 0; sample < count * Channels; ++sample) {
                     if (enveloped && sample % Channels == 0)
-                        gain = clip.gainAt(first + double(sample / Channels) / Rate);
+                        gain = clip.gainAt(first + double(sample / Channels) / self.rate);
                     const double value = nativeSamples.isEmpty()
                         ? double(contribution[sample])
                         : double(nativeSamples[int(sample)]) / 32768.0;
                     destination[(offset * Channels) + sample] += float(value * gain);
                 }
             }
-            self.mixTransitions(samples, frames, now, transitionInputs);
+            self.mixTransitions(samples.data(), frames, now, transitionInputs);
             self.pending.resize(int(frames * Channels * 2)); self.pendingOffset = 0;
             double squares[Channels]{};
             for (unsigned i = 0; i < frames * Channels; ++i) {
@@ -403,7 +406,7 @@ struct AudioPlayer::Engine {
                 qToLittleEndian<qint16>(qint16(std::lround(sample * 32767)), self.pending.data() + i * 2);
             }
             self.frame += frames;
-            if (self.frame % (BlockFrames * 2) == 0) {
+            if (self.frame % (self.blockFrames * 2) == 0) {
                 const double left = meter(squares[0], frames), right = meter(squares[1], frames);
                 const QByteArray block = self.pending;
                 QMetaObject::invokeMethod(self.owner, [owner = self.owner, serial = self.generation, left, right, block, now] {
@@ -425,7 +428,7 @@ struct AudioPlayer::Engine {
         // API there deadlocks. Future clips keep one bounded prefetch buffer.
         for (int i = 0; i < clips.size(); ++i) {
             if (clips[i].end <= start) continue;
-            auto decoder = std::make_unique<Decoder>(); decoder->clip = clips[i];
+            auto decoder = std::make_unique<Decoder>(rate); decoder->clip = clips[i];
             if (!decoder->open(std::max(start, clips[i].start))) decoder->ended = true;
             decoders[size_t(i)] = std::move(decoder);
         }
@@ -466,18 +469,19 @@ void AudioPlayer::setSource(const QString& path) {
     if (m_source == path && m_clips.size() == 1) return;
     stop(); m_source = path; m_clips.clear(); m_duration = vlcMediaDurationSeconds(path);
     if (m_duration > 0) m_clips.append({path, 0, m_duration, 0, 1, 1});
-    m_transitions.clear();
+    m_transitions.clear(); m_sampleRate = kDefaultAudioSampleRate;
 }
 void AudioPlayer::setClips(const QVector<AudioClip>& clips, double duration,
-                           const QVector<AudioTransition>& transitions) {
+                           const QVector<AudioTransition>& transitions, int sampleRate) {
     stop(); m_source.clear(); m_clips = clips; m_transitions = transitions;
     m_duration = std::max(0.0, duration);
+    m_sampleRate = normalizedAudioSampleRate(sampleRate);
 }
 void AudioPlayer::play(double seconds) {
     stop(); m_position = std::clamp(seconds, 0.0, m_duration);
     if (m_clips.isEmpty() || m_position >= m_duration) return;
     if (!isAvailable()) { emit playbackError(vlcDescription()); return; }
-    m_engine = std::make_unique<Engine>(this, m_generation, m_clips, m_position, m_duration, m_muted);
+    m_engine = std::make_unique<Engine>(this, m_generation, m_clips, m_position, m_duration, m_muted, unsigned(m_sampleRate));
     m_engine->transitions = m_transitions;
     if (!m_engine->begin()) {
         const QString detail = QString::fromUtf8(vlc().libvlc_errmsg());

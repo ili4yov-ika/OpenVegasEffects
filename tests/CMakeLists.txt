@@ -3,7 +3,7 @@ project(OpenVegasTextPanelTests LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Test Svg Xml OpenGL)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Test Svg Xml OpenGL Sql)
 add_executable(textpanel_regression textpanel_regression.cpp
     ../ui/panels/Text.ui
     ../resources/icons.qrc ../src/ui/TextPanel.cpp ../src/ui/TextPanel.h ../src/ui/Theme.cpp
@@ -13,7 +13,8 @@ add_executable(textpanel_regression textpanel_regression.cpp
     ../src/project/VegfxSerializer.cpp ../src/project/VegfxMerge.cpp ../src/media/MediaManager.cpp ../src/media/MediaAsset.cpp
     ../src/media/VideoProbe.cpp ../src/media/Vlc4Adapter.cpp ../src/media/VlcBackend.cpp ../src/core/Log.cpp
     ../src/model3d/ModelLoader.cpp ../src/model3d/ModelImportSettings.cpp
-    ../src/model3d/AlembicReader.cpp ../src/model3d/Mesh.cpp)
+    ../src/model3d/AlembicReader.cpp ../src/model3d/FbxReader.cpp ../src/model3d/GltfReader.cpp ../src/model3d/LwoReader.cpp ../src/model3d/ThreeDsReader.cpp
+    ../src/model3d/Mesh.cpp)
 target_include_directories(textpanel_regression PRIVATE ../src)
 target_link_libraries(textpanel_regression PRIVATE Qt6::Widgets Qt6::Test Qt6::Svg Qt6::Xml)
 set_target_properties(textpanel_regression PROPERTIES AUTOUIC ON
@@ -41,6 +42,7 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/ui/TimelineValueGraphView.cpp ../src/ui/EffectInspector.cpp ../src/plugin/EffectRender.cpp
     ../src/plugin/NativeEffectRender.cpp ../src/plugin/NativeEffectRender.h
     ../src/plugin/NativePlugin.cpp ../src/plugin/NativePlugin.h
+    ../src/plugin/PluginManager.cpp ../src/plugin/PluginManager.h
     ../src/ui/LayerPanel.cpp ../src/ui/TrackPanel.cpp
     ../src/ui/Preview360VideoPanel.cpp
     ../src/ui/TrimmerPanel.cpp ../src/ui/TrimmerPanel.h
@@ -52,19 +54,26 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/ui/ViewerWidget.cpp ../src/ui/ViewerWidget.h ../src/ui/ViewerOverlay.h
     ../src/ui/Viewer360View.cpp ../src/ui/Viewer360View.h
     ../src/ui/TextTransformOverlay.cpp ../src/ui/TextTransformOverlay.h
+    ../src/ui/ModelNodeOverlay.cpp ../src/ui/ModelNodeOverlay.h
+    ../src/ui/SceneObjectOverlay.cpp ../src/ui/SceneObjectOverlay.h
     ../src/ui/NativeCustomUiOverlay.cpp ../src/ui/NativeCustomUiOverlay.h
     ../src/ui/NativeInstanceHost.cpp ../src/ui/NativeInstanceHost.h
     ../src/ui/MediaSettingsDialog.cpp ../src/ui/MediaSettingsDialog.h
+    ../src/ui/ModelAnimationDialog.cpp ../src/ui/ModelAnimationDialog.h
+    ../src/ui/Model3DSettingsDialog.cpp ../src/ui/Model3DSettingsDialog.h
     ../src/ui/ViewScaleButton.cpp ../src/ui/ViewScaleButton.h
     ../src/ui/ViewerTransportBar.cpp ../src/ui/ViewerTransportBar.h
     ../src/ui/DockTitleBar.cpp ../src/ui/DockTitleBar.h
     ../src/ui/LayoutPanel.cpp ../src/ui/LayoutPanel.h
     ../src/app/Settings.cpp ../src/app/Settings.h
     ../src/render/RenderManager.cpp ../src/render/AudioExport.cpp ../src/model3d/Renderer3D.cpp
+    ../src/render/PreRenderManager.cpp ../src/render/PreRenderManager.h
     ../src/render/TextGeometry.cpp ../src/render/TextGeometry.h
+    ../src/render/LayerGeometry.cpp ../src/render/LayerGeometry.h
     ../src/render/FrameDiskCache.cpp ../src/render/FrameDiskCache.h
     ../src/render/VideoEncoder.cpp ../src/render/VideoEncoder.h
     ../src/media/AudioWaveform.cpp ../src/media/AudioWaveform.h
+    ../src/media/DecodedFrameCache.cpp ../src/media/DecodedFrameCache.h
     ../src/media/ProxyMedia.cpp ../src/media/ProxyMedia.h
     ../src/ui/PromptMessage.cpp ../src/ui/PromptMessage.h
     ../src/ui/CameraRule.cpp ../src/ui/CameraRule.h
@@ -76,10 +85,13 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/ui/CompositionSettingsDialog.cpp ../src/ui/CompositionSettingsDialog.h
     ../src/app/AVTemplates.cpp ../src/app/AVTemplates.h
     ../src/render/ExportJob.cpp ../src/render/ExportJob.h ../src/media/ExrImage.cpp ../src/media/ExrImage.h
+    ../src/render/ExportPreset.cpp ../src/render/ExportPreset.h
+    ../src/ui/ExportPresets.cpp ../src/ui/ExportPresets.h
+    ../src/cache/CacheDB.cpp ../src/cache/CacheDB.h
     ../src/ui/ExportQueue.cpp ../src/ui/ExportQueue.h ../src/ui/ExportQueueView.cpp ../src/ui/ExportQueueView.h
     ../src/composition/MotionTracker.cpp ../src/composition/MotionTracker.h)
 target_include_directories(timeline_regression PRIVATE ../src)
-target_link_libraries(timeline_regression PRIVATE Qt6::Widgets Qt6::Test Qt6::Svg Qt6::Xml Qt6::OpenGL)
+target_link_libraries(timeline_regression PRIVATE Qt6::Widgets Qt6::Test Qt6::Svg Qt6::Xml Qt6::OpenGL Qt6::Sql)
 set_target_properties(timeline_regression PROPERTIES AUTOUIC ON
     AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/../ui/panels")
 target_compile_definitions(timeline_regression PRIVATE
@@ -89,7 +101,9 @@ if(WIN32)
 endif()
 # Force the text logger onto stdout on Windows. Without an explicit logger,
 # QtTest can return a failure to CTest while writing no captured diagnostics.
-add_test(NAME timeline_regression COMMAND timeline_regression -o -,txt)
+# The standard output does not reach CTest's log; the file says which
+# function failed.
+add_test(NAME timeline_regression COMMAND timeline_regression -o -,txt -o ${CMAKE_CURRENT_BINARY_DIR}/timeline_ctest.txt,txt)
 set_tests_properties(timeline_regression PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 add_executable(options_regression options_regression.cpp
@@ -97,7 +111,8 @@ add_executable(options_regression options_regression.cpp
     ../src/ui/Theme.cpp ../src/app/Settings.cpp ../src/app/Translations.cpp
     ../src/ui/PromptMessage.cpp ../src/ui/PromptMessage.h
     ../src/ui/AutoSave.cpp ../src/ui/AutoSave.h
-    ../src/app/AVTemplates.cpp ../src/app/AVTemplates.h)
+    ../src/app/AVTemplates.cpp ../src/app/AVTemplates.h
+    ../src/app/GpuDriver.cpp ../src/app/GpuDriver.h)
 target_include_directories(options_regression PRIVATE ../src)
 target_link_libraries(options_regression PRIVATE Qt6::Widgets Qt6::Test Qt6::Xml)
 set_target_properties(options_regression PROPERTIES AUTOUIC ON
@@ -107,9 +122,12 @@ set_tests_properties(options_regression PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=
 
 add_executable(ui_stubs_regression ui_stubs_regression.cpp
     ../src/ui/VoiceoverDialog.cpp ../src/ui/VoiceoverDialog.h ../src/ui/Theme.cpp
-    ../src/ui/ExportPanel.cpp ../src/ui/ExportPanel.h ../ui/ExportPanel.ui ../src/app/Settings.cpp)
+    ../src/ui/ExportPanel.cpp ../src/ui/ExportPanel.h ../ui/ExportPanel.ui ../src/app/Settings.cpp
+    ../src/ui/ExportPresets.cpp ../src/ui/ExportPresets.h ../src/render/ExportPreset.cpp
+    ../src/render/ExportPreset.h ../src/render/VideoEncoder.cpp ../src/render/VideoEncoder.h
+    ../src/core/Log.cpp ../src/core/Log.h)
 target_include_directories(ui_stubs_regression PRIVATE ../src)
-target_link_libraries(ui_stubs_regression PRIVATE Qt6::Widgets Qt6::Test)
+target_link_libraries(ui_stubs_regression PRIVATE Qt6::Widgets Qt6::Test Qt6::Xml)
 set_target_properties(ui_stubs_regression PROPERTIES AUTOUIC ON
     AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/../ui")
 add_test(NAME ui_stubs_regression COMMAND ui_stubs_regression -o -,txt)
@@ -135,7 +153,24 @@ foreach(locale ru ja zh_CN)
         DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../translations/openvegaseffects_${locale}.ts"
         VERBATIM)
     list(APPEND TRANSLATION_TEST_QMS "${qm}")
+    set(plugin_qm "${CMAKE_CURRENT_BINARY_DIR}/translation-catalogs/${locale}/openvegaseffects_plugins_${locale}.qm")
+    add_custom_command(OUTPUT "${plugin_qm}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/translation-catalogs/${locale}"
+        COMMAND Qt6::lrelease "${CMAKE_CURRENT_SOURCE_DIR}/../translations/openvegaseffects_plugins_${locale}.ts" -qm "${plugin_qm}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../translations/openvegaseffects_plugins_${locale}.ts"
+        VERBATIM)
+    list(APPEND TRANSLATION_TEST_QMS "${plugin_qm}")
 endforeach()
+target_sources(options_regression PRIVATE ${TRANSLATION_TEST_QMS})
+target_sources(timeline_regression PRIVATE ${TRANSLATION_TEST_QMS})
+target_compile_definitions(timeline_regression PRIVATE
+    TRANSLATION_TEST_ROOT="${CMAKE_CURRENT_BINARY_DIR}/translation-catalogs")
+target_compile_definitions(options_regression PRIVATE
+    TRANSLATION_TEST_ROOT="${CMAKE_CURRENT_BINARY_DIR}/translation-catalogs")
+if(MSVC)
+    target_compile_options(options_regression PRIVATE /utf-8)
+    target_compile_options(timeline_regression PRIVATE /utf-8 /bigobj)
+endif()
 add_executable(translation_regression translation_regression.cpp
     ../src/app/Translations.cpp ${TRANSLATION_TEST_QMS})
 target_include_directories(translation_regression PRIVATE ../src)

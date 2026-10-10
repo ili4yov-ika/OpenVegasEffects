@@ -34,11 +34,14 @@ composition::Layer newCameraLayer(const composition::Composition& composition)
     camera.kind = composition::LayerKind::Camera;
     camera.dimension = composition::LayerDimension::ThreeD;
     camera.blendMode = QStringLiteral("None");
-    // The default camera looks at the shot from where its height fills the
-    // vertical field of view; the camera layer starts there with the same lens.
-    const model3d::Camera standIn = model3d::defaultCameraForCanvas(composition.displaySize());
-    camera.cameraFieldOfView = standIn.fieldOfViewDegrees;
-    camera.transform.positionZ = standIn.position.z();
+    // As the reference's "New Camera" (VegasEffects.exe 0x140a45760): a
+    // 35 mm lens across the shot's width, focused at its zoom, standing that
+    // far back - where the shot's frame fills it.
+    const double zoom = composition::CameraSettings::lensZoom(composition::CameraSettings::kNewCameraLensAngle,
+                                                              composition.displaySize().width());
+    camera.camera.zoom = zoom;
+    camera.camera.focusDistance = zoom;
+    camera.transform.positionZ = zoom;
     return camera;
 }
 

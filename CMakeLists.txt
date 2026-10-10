@@ -210,12 +210,15 @@ add_executable(OpenVegasEffects WIN32
     src/app/UserDataPaths.h
     src/app/UserDataPaths.cpp
     src/app/Settings.h
+    src/app/OptionValues.h
     src/app/ProjectDefaults.h
     src/app/Settings.cpp
     src/app/Translations.h
     src/app/Translations.cpp
     src/app/AppMain.h
     src/app/AppMain.cpp
+    src/app/GpuDriver.h
+    src/app/GpuDriver.cpp
     src/ui/SplashScreen.h
     src/ui/SplashScreen.cpp
     src/ui/DockTitleBar.h
@@ -240,7 +243,9 @@ add_executable(OpenVegasEffects WIN32
     src/media/MediaAsset.cpp
     src/media/AudioCapture.h
     src/media/AudioPlayer.h
+    src/media/AudioFormat.h
     src/media/AudioWaveform.h
+    src/media/DecodedFrameCache.h
     src/media/ProxyMedia.h
     src/media/MediaManager.h
     src/media/MediaManager.cpp
@@ -248,6 +253,7 @@ add_executable(OpenVegasEffects WIN32
     src/media/AudioCapture.cpp
     src/media/AudioPlayer.cpp
     src/media/AudioWaveform.cpp
+    src/media/DecodedFrameCache.cpp
     src/media/ProxyMedia.cpp
     src/media/ExrImage.cpp
     src/media/VideoProbe.h
@@ -285,6 +291,16 @@ add_executable(OpenVegasEffects WIN32
     src/render/TextRender.h
     src/model3d/AlembicReader.h
     src/model3d/AlembicReader.cpp
+    src/model3d/FbxReader.h
+    src/model3d/GltfReader.h
+    src/model3d/LwoReader.h
+    src/model3d/ThreeDsReader.h
+    src/render/PreRenderManager.h
+    src/render/PreRenderManager.cpp
+    src/model3d/FbxReader.cpp
+    src/model3d/GltfReader.cpp
+    src/model3d/LwoReader.cpp
+    src/model3d/ThreeDsReader.cpp
     src/model3d/Mesh.cpp
     src/model3d/ModelImportSettings.cpp
     src/model3d/ModelLoader.cpp
@@ -294,6 +310,8 @@ add_executable(OpenVegasEffects WIN32
     src/render/VideoEncoder.cpp
     src/render/RenderManager.cpp
     src/render/TextGeometry.cpp
+    src/render/LayerGeometry.h
+    src/render/LayerGeometry.cpp
     src/render/TextRender.cpp
 src/ui/MainWindow.h
 src/ui/MainWindow.cpp
@@ -319,6 +337,8 @@ src/ui/OptionsDialog.cpp
     src/app/AVTemplates.cpp
     src/render/ExportJob.h
     src/render/ExportJob.cpp
+    src/render/ExportPreset.h
+    src/render/ExportPreset.cpp
     src/ui/ExportQueue.h
     src/ui/ExportQueue.cpp
     src/ui/ExportQueueView.h
@@ -386,6 +406,8 @@ src/ui/OptionsDialog.cpp
     src/ui/TrimmerPanel.cpp
     src/ui/ExportPanel.h
     src/ui/ExportPanel.cpp
+    src/ui/ExportPresets.h
+    src/ui/ExportPresets.cpp
     src/ui/EffectInspector.h
     src/ui/EffectInspector.cpp
     src/ui/ViewerWidget.h
@@ -395,11 +417,17 @@ src/ui/OptionsDialog.cpp
     src/ui/Viewer360View.cpp
     src/ui/TextTransformOverlay.h
     src/ui/TextTransformOverlay.cpp
+    src/ui/ModelNodeOverlay.h
+    src/ui/ModelNodeOverlay.cpp
+    src/ui/SceneObjectOverlay.h
+    src/ui/SceneObjectOverlay.cpp
     src/ui/NativeCustomUiOverlay.h
     src/ui/NativeCustomUiOverlay.cpp
     src/ui/NativeInstanceHost.h
     src/ui/MediaSettingsDialog.h
     src/ui/MediaSettingsDialog.cpp
+    src/ui/ModelAnimationDialog.h
+    src/ui/ModelAnimationDialog.cpp
     src/ui/NativeInstanceHost.cpp
     src/ui/ViewerPanel.h
     src/ui/ViewerPanel.cpp
@@ -430,6 +458,20 @@ if(TARGET Qt6::lrelease)
             translations/openvegaseffects_ja.ts
             translations/openvegaseffects_zh_CN.ts
         RESOURCE_PREFIX "/i18n")
+    # The plug-ins' own strings (contexts "Effect_<ShortName>") are not in the
+    # sources, so lupdate must not touch their catalogues: they are only
+    # compiled and embedded (tools/plugin_translations.py writes them).
+    qt_add_lrelease(OpenVegasEffects
+        TS_FILES
+            translations/openvegaseffects_plugins_ru.ts
+            translations/openvegaseffects_plugins_ja.ts
+            translations/openvegaseffects_plugins_zh_CN.ts
+        LRELEASE_TARGET OpenVegasEffects_plugin_lrelease
+        QM_FILES_OUTPUT_VARIABLE plugin_qm_files)
+    qt_add_resources(OpenVegasEffects "plugin_translations"
+        PREFIX "/i18n"
+        BASE "${CMAKE_CURRENT_BINARY_DIR}"
+        FILES ${plugin_qm_files})
     message(STATUS "Translations enabled (ru, ja, zh_CN)")
 else()
     message(STATUS "Qt LinguistTools not found - UI translations disabled")

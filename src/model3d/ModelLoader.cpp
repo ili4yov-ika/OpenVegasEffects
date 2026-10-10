@@ -1,10 +1,16 @@
 #include "model3d/ModelLoader.h"
+#include "model3d/FbxReader.h"
+#include "model3d/GltfReader.h"
+#include "model3d/LwoReader.h"
+#include "model3d/ThreeDsReader.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QDateTime>
 #include <QHash>
+#include <QMutex>
 #include <QRegularExpression>
 #include <QTextStream>
 
@@ -31,6 +37,20 @@ QStringList toList(const char* const* items, int count)
         list.append(QString::fromLatin1(items[i]));
     }
     return list;
+}
+
+// The reference reads OBJ through Assimp, whose material starts at a
+// diffuse of 0.6 with no ambient, specular or emission and a shininess of 0
+// (ObjFile::Material); the reference makes a shininess under 1 into 1.
+Material assimpObjMaterial()
+{
+    Material material;
+    material.diffuseColor = QColor::fromRgbF(0.6f, 0.6f, 0.6f);
+    material.ambientColor = QColor(0, 0, 0);
+    material.specularColor = QColor(0, 0, 0);
+    material.emissiveColor = QColor(0, 0, 0);
+    material.shininess = 1.0;
+    return material;
 }
 
 // One "v/vt/vn" corner of an OBJ face. Missing fields come back as -1.
@@ -121,7 +141,7 @@ void loadMaterialLibrary(const QString& path, Mesh* mesh, QHash<QString, int>* b
         const QString keyword = tokens.first().toLower();
 
         if (keyword == QLatin1String("newmtl")) {
-            Material material;
+            Material material = assimpObjMaterial();
             material.name = tokens.mid(1).join(QLatin1Char(' '));
             byName->insert(material.name, mesh->materials.size());
             mesh->materials.append(material);
@@ -154,13 +174,23 @@ void loadMaterialLibrary(const QString& path, Mesh* mesh, QHash<QString, int>* b
             material.diffuseMap = resolveMapPath(baseDir, tokens.last());
         } else if (keyword == QLatin1String("map_ks")) {
             material.specularMap = resolveMapPath(baseDir, tokens.last());
+        } else if (keyword == QLatin1String("map_pm") || keyword == QLatin1String("map_metallic")) {
+            material.metallicMap = resolveMapPath(baseDir, tokens.last());
+        } else if (keyword == QLatin1String("map_pr") || keyword == QLatin1String("map_roughness")) {
+            material.roughnessMap = resolveMapPath(baseDir, tokens.last());
+        } else if (keyword == QLatin1String("map_specgloss") || keyword == QLatin1String("map_sg")) {
+            material.specularGlossinessMap = resolveMapPath(baseDir, tokens.last());
         } else if (keyword == QLatin1String("map_ke")) {
             material.emissiveMap = resolveMapPath(baseDir, tokens.last());
         } else if (keyword == QLatin1String("map_ka")) {
             material.occlusionMap = resolveMapPath(baseDir, tokens.last());
-        } else if (keyword == QLatin1String("norm") || keyword == QLatin1String("map_bump")
-                   || keyword == QLatin1String("bump")) {
+        } else if (keyword == QLatin1String("norm")) {
             material.normalMap = resolveMapPath(baseDir, tokens.last());
+        } else if (keyword == QLatin1String("map_bump") || keyword == QLatin1String("bump")) {
+            // A height map; "-bm s" scales it.
+            material.bumpMap = resolveMapPath(baseDir, tokens.last());
+            const int bm = tokens.indexOf(QStringLiteral("-bm"));
+            if (bm > 0 && bm + 1 < tokens.size() - 1) material.bumpScale = tokens.at(bm + 1).toDouble();
         }
     }
 }
@@ -180,6 +210,7 @@ LoadResult loadObj(const QString& filePath)
     QHash<QString, int> materialsByName;
     QStringList problems;
     int currentMaterial = -1;
+    int currentNode = -1;
 
     QTextStream in(&file);
     const QRegularExpression spaces(QStringLiteral("\\s+"));
@@ -229,13 +260,14 @@ LoadResult loadObj(const QString& filePath)
                 tri.uv[1] = b.uv;
                 tri.uv[2] = c.uv;
                 tri.material = currentMaterial;
+                tri.node = currentNode;
                 mesh.triangles.append(tri);
             }
         } else if (keyword == QLatin1String("o") || keyword == QLatin1String("g")) {
+            // Each object or group is a node of the model, as the reference's
+            // importer makes a Model3DGroup of it; the faces after it are its.
             const QString name = tokens.mid(1).join(QLatin1Char(' '));
-            if (!name.isEmpty() && !mesh.nodeNames.contains(name)) {
-                mesh.nodeNames.append(name);
-            }
+            if (!name.isEmpty()) currentNode = mesh.addNode(name);
         } else if (keyword == QLatin1String("usemtl")) {
             currentMaterial = materialsByName.value(tokens.mid(1).join(QLatin1Char(' ')), -1);
         } else if (keyword == QLatin1String("mtllib")) {
@@ -248,6 +280,18 @@ LoadResult loadObj(const QString& filePath)
     if (mesh.triangles.isEmpty()) {
         result.message = QCoreApplication::translate("Model3D", "The file contains no geometry.");
         return result;
+    }
+    // Faces with no material, or one the libraries do not have, take
+    // Assimp's default material, as they do in the reference.
+    bool bare = false;
+    for (const Triangle& triangle : std::as_const(mesh.triangles)) bare = bare || triangle.material < 0;
+    if (bare) {
+        Material fallback = assimpObjMaterial();
+        fallback.name = QStringLiteral("DefaultMaterial");
+        const int index = mesh.materials.size();
+        mesh.materials.append(fallback);
+        for (Triangle& triangle : mesh.triangles)
+            if (triangle.material < 0) triangle.material = index;
     }
 
     result.ok = true;
@@ -263,43 +307,59 @@ void applySettings(Mesh* mesh, const ImportSettings& settings)
         return;
     }
 
-    // Coordinate system, before anything measures the model: Y-up and Z-up
-    // authoring tools disagree, and the reference's Flip YZ Axis is the switch
-    // between them.
+    // The reference's Model3DPostProcessor::Process (Project.dll 1802c5490).
+    // What happens to the positions is kept as a matrix too, so animations
+    // in the file's space can be carried into the imported model's.
+    //
+    // Flip YZ Axis first (SwapAxes): (x, y, z) becomes (-x, z, y), the
+    // normals alike.
+    QMatrix4x4 placement;
     if (settings.flipYZAxis) {
+        placement = QMatrix4x4(-1, 0, 0, 0,
+                               0, 0, 1, 0,
+                               0, 1, 0, 0,
+                               0, 0, 0, 1);
         for (QVector3D& p : mesh->positions) {
-            p = QVector3D(p.x(), p.z(), -p.y());
+            p = QVector3D(-p.x(), p.z(), p.y());
         }
         for (QVector3D& n : mesh->normals) {
-            n = QVector3D(n.x(), n.z(), -n.y());
+            n = QVector3D(-n.x(), n.z(), n.y());
         }
     }
 
-    // Unit scale, then Auto Normalize on top: the first puts the model in
-    // metres, the second sizes it to something a composition can show whatever
-    // the file's own scale was.
-    double scale = settings.unitScale();
+    // Then the scale, s = Single Unit Scale x the unit's pixels, about the
+    // bounding box's centre c. Auto Normalize (N = 500 / (|size / 2| * s))
+    // sizes the model so half its box's diagonal is 500 pixels; centred, a
+    // point goes to (p - c) * s * N, otherwise to (p * s - c) * N + c. Without
+    // it, (p - c) * s centred, p * s otherwise. (The reference measures the
+    // box before the flip turns its x round, which puts a flipped, centred
+    // model off centre; this centres it.)
+    const double s = (settings.singleUnitScale > 0.0 ? settings.singleUnitScale : 1.0) * settings.unitScale();
+    QVector3D lo, hi;
+    mesh->bounds(&lo, &hi);
+    const QVector3D centre = (lo + hi) * 0.5f;
+    const QVector3D size = hi - lo;
+    double factor = s;              // what a point is multiplied by
+    QVector3D offset;               // and what is added after
     if (settings.autoNormalize) {
-        const double span = mesh->boundingSize() * scale;
-        if (span > 0.0) {
-            // 400 units across, roughly a third of a 1080-tall frame, which is
-            // about where the reference drops a normalised model in.
-            scale *= 400.0 / span;
-        }
+        const bool flat = qAbs(size.x()) <= 1e-5f && qAbs(size.y()) <= 1e-5f && qAbs(size.z()) <= 1e-5f;
+        const double half = (size * 0.5f).length() * s;
+        const double n = flat || half <= 0.0 ? 1.0 : 500.0 / half;
+        factor = s * n;
+        offset = settings.centerAnchorPoint ? -centre * float(s * n) : centre * float(1.0 - n);
+    } else if (settings.centerAnchorPoint) {
+        offset = -centre * float(s);
     }
-    scale *= settings.singleUnitScale > 0.0 ? settings.singleUnitScale : 1.0;
-    if (!qFuzzyCompare(scale, 1.0)) {
+    if (!qFuzzyCompare(factor, 1.0) || !offset.isNull()) {
         for (QVector3D& p : mesh->positions) {
-            p *= static_cast<float>(scale);
+            p = p * float(factor) + offset;
         }
+        QMatrix4x4 scaling;
+        scaling.translate(offset);
+        scaling.scale(float(factor));
+        placement = scaling * placement;
     }
-
-    if (settings.centerAnchorPoint) {
-        const QVector3D centre = mesh->centre();
-        for (QVector3D& p : mesh->positions) {
-            p -= centre;
-        }
-    }
+    mesh->importTransform = placement;
 
     const bool wantGenerated = settings.normalMethod == ImportSettings::NormalMethod::GenerateFaceted
         || settings.normalMethod == ImportSettings::NormalMethod::GenerateFacetedAutoSmoothing;
@@ -309,9 +369,12 @@ void applySettings(Mesh* mesh, const ImportSettings& settings)
 
     if (wantGenerated || mesh->normals.isEmpty()) {
         // Faceted means every corner takes its own face normal, which is what
-        // a zero smoothing angle produces.
-        mesh->generateNormals(wantSmoothing ? settings.autoSmoothingAngle : 0.0,
-                              settings.unifyNormals);
+        // a zero smoothing angle produces. A file without normals gets smooth
+        // ones up to the smoothing angle, as the reference's Assimp import
+        // makes them (aiProcess_GenSmoothNormals, PP_GSN_MAX_SMOOTHING_ANGLE
+        // set from the angle).
+        const double angle = !wantGenerated || wantSmoothing ? settings.autoSmoothingAngle : 0.0;
+        mesh->generateNormals(angle, settings.unifyNormals);
     }
 
     if (settings.flipNormals) {
@@ -360,10 +423,40 @@ QString animationFileFilter()
         "GL Transmission Format (*.gltf);;GL Transmission Format Binary (*.glb)");
 }
 
+std::shared_ptr<const Mesh> animationSource(const QString& filePath)
+{
+    struct Entry { QDateTime modified; qint64 size = -1; std::shared_ptr<const Mesh> mesh; };
+    static QMutex mutex;
+    static QHash<QString, Entry> sources;
+    const QFileInfo info(filePath);
+    if (!info.exists()) return nullptr;
+    const QString key = info.absoluteFilePath();
+    {
+        QMutexLocker lock(&mutex);
+        const auto found = sources.constFind(key);
+        if (found != sources.constEnd() && found->modified == info.lastModified()
+            && found->size == info.size())
+            return found->mesh;
+    }
+    // Read as a model; only its nodes and animations are kept.
+    LoadResult loaded = loadModel(key, ImportSettings());
+    std::shared_ptr<const Mesh> mesh;
+    if (loaded.ok && !loaded.mesh.animations.isEmpty()) {
+        auto kept = std::make_shared<Mesh>();
+        kept->nodes = loaded.mesh.nodes;
+        kept->animations = loaded.mesh.animations;
+        mesh = kept;
+    }
+    QMutexLocker lock(&mutex);
+    sources.insert(key, Entry{info.lastModified(), info.size(), mesh});
+    return mesh;
+}
+
 bool canReadExtension(const QString& suffix)
 {
     const QString lower = suffix.toLower();
-    if (lower == QLatin1String("obj")) {
+    if (lower == QLatin1String("obj") || lower == QLatin1String("fbx") || lower == QLatin1String("gltf")
+        || lower == QLatin1String("glb") || lower == QLatin1String("3ds") || lower == QLatin1String("lwo")) {
         return true;
     }
 #ifdef OPENVEGAS_HAVE_ALEMBIC
@@ -376,7 +469,8 @@ bool canReadExtension(const QString& suffix)
 
 QString readableFormats()
 {
-    QStringList formats{QStringLiteral("obj")};
+    QStringList formats{QStringLiteral("3ds"), QStringLiteral("lwo"), QStringLiteral("obj"), QStringLiteral("fbx"),
+                        QStringLiteral("gltf"), QStringLiteral("glb")};
 #ifdef OPENVEGAS_HAVE_ALEMBIC
     formats.append(QStringLiteral("abc"));
 #endif
@@ -390,6 +484,14 @@ LoadResult loadModel(const QString& filePath, const ImportSettings& settings)
 
     if (suffix == QLatin1String("obj")) {
         result = loadObj(filePath);
+    } else if (suffix == QLatin1String("gltf") || suffix == QLatin1String("glb")) {
+        result = loadGltf(filePath);
+    } else if (suffix == QLatin1String("fbx")) {
+        result = loadFbx(filePath);
+    } else if (suffix == QLatin1String("3ds")) {
+        result = load3ds(filePath);
+    } else if (suffix == QLatin1String("lwo")) {
+        result = loadLwo(filePath);
     }
 #ifdef OPENVEGAS_HAVE_ALEMBIC
     else if (suffix == QLatin1String("abc")) {
@@ -408,6 +510,28 @@ LoadResult loadModel(const QString& filePath, const ImportSettings& settings)
 
     if (result.ok) {
         applySettings(&result.mesh, settings);
+        result.mesh.computeNodePivots();
+        // The maps, read once here rather than at every frame - those the
+        // format did not carry inside the file already (glTF does).
+        const auto read = [](const QString& path) {
+            if (path.isEmpty() || !QFileInfo::exists(path)) return QImage();
+            const QImage image(path);
+            return image.isNull() ? image : image.convertToFormat(QImage::Format_RGBA8888);
+        };
+        for (Material& material : result.mesh.materials) {
+            const auto fill = [&read](QImage& image, const QString& path) {
+                if (image.isNull()) image = read(path);
+            };
+            fill(material.diffuseImage, material.diffuseMap);
+            fill(material.specularImage, material.specularMap);
+            fill(material.metallicImage, material.metallicMap);
+            fill(material.roughnessImage, material.roughnessMap);
+            fill(material.specularGlossinessImage, material.specularGlossinessMap);
+            fill(material.normalImage, material.normalMap);
+            fill(material.bumpImage, material.bumpMap);
+            fill(material.emissiveImage, material.emissiveMap);
+            fill(material.occlusionImage, material.occlusionMap);
+        }
     }
     return result;
 }

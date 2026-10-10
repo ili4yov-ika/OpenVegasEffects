@@ -9,6 +9,8 @@
 #include <QVector>
 #include <QWidget>
 
+#include <array>
+
 #include "ui/Viewer360View.h"
 #include "ui/ViewerOverlay.h"
 
@@ -120,6 +122,20 @@ public:
 
     void setFrame(const QImage& image);
     QImage frame() const { return m_frame; }
+
+    // Which camera each view shows (render::ViewType: 1 Active Camera,
+    // 2 Perspective, 3..8 Front, Back, Left, Right, Top, Bottom), chosen from
+    // the view's camera menu - the reference's "camera-menu" button
+    // (FUN_140937970). A view with a camera of its own shows the picture
+    // handed to setViewFrame, the others the shot's frame.
+    int viewType(int view) const;
+    void setViewType(int view, int type);
+    void setViewFrame(int view, const QImage& image);
+    QImage viewFrame(int view) const;
+    // The name a view type goes by in the menu and on its button.
+    static QString viewTypeName(int type);
+    // Options ShowCheckerboard3D: the backdrop of the views with their own camera.
+    void setCheckerboard3DEnabled(bool enabled);
 
     ViewerLayout layout() const { return m_layout; }
     int activeView() const { return m_activeView; }
@@ -263,6 +279,16 @@ signals:
     void maskCreationRequested(int shape, QRectF canvasBounds);
     void freehandMaskCreationRequested(QVector<QPointF> canvasPoints);
     void sphericalModeChanged(bool spherical);
+    // A view's camera menu chose another view, or Reset Current View.
+    void viewTypeChanged(int view, int type);
+    void viewResetRequested(int view);
+    // Moving a view's own camera: the wheel over it, a Hand drag (in canvas
+    // pixels) and an Orbit drag (in widget pixels).
+    // `anchor`: the pointer's offset from the middle of the picture, in
+    // canvas pixels (none with Alt held: the middle).
+    void viewZoomRequested(int view, double steps, QPointF anchor);
+    void viewPanned(int view, QPointF canvasDelta);
+    void viewOrbited(int view, QPointF delta);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -313,6 +339,17 @@ private:
 
     QImage m_frame;
     QSize m_projectSize{1920, 1080};
+    // Views with a camera of their own: their types (the main view on the
+    // shot's camera, the others along the axes, as a four-view layout is
+    // used), pictures and camera buttons.
+    void buildCameraButtons();
+    void updateCameraButtons();
+    bool viewHasOwnPicture(int view) const;
+    std::array<int, 4> m_viewTypes{1, 7, 3, 6};
+    std::array<QImage, 4> m_viewFrames;
+    std::array<QToolButton*, 4> m_cameraButtons{};
+    bool m_checkerboard3D = true;
+    bool m_viewOrbiting = false;   // an Orbit drag turning a view's camera
 
     ViewerLayout m_layout = ViewerLayout::Single;
     int m_activeView = 0;

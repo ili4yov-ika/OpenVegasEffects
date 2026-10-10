@@ -40,7 +40,51 @@ class AudioRegression : public QObject
         }
         return false;
     }
+    static void sampleRatesData() {
+        QTest::addColumn<int>("sampleRate");
+        for (int rate : {32000, 44100, 48000, 96000})
+            QTest::newRow(qPrintable(QString::number(rate))) << rate;
+    }
 private slots:
+    void compositionRatePreservesTimingAndMasterPcm_data() { sampleRatesData(); }
+    void compositionRatePreservesTimingAndMasterPcm() {
+        QFETCH(int, sampleRate);
+        if (!openvegas::media::AudioPlayer::isAvailable()) QSKIP("libVLC is required");
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString steps = constantWave(dir, "steps.wav", -32768);
+        const QString base = constantWave(dir, "base.wav", 1000);
+        const QVector<openvegas::media::AudioClip> clips {
+            {steps, 0.1, 0.6, 0.25, 2, 0.5}, {base, 0, 0.8, 0, 1, 0.25}};
+        openvegas::media::AudioPlayer audio;
+        QSignalSpy pcm(&audio, &openvegas::media::AudioPlayer::pcmMixed);
+        QSignalSpy errors(&audio, &openvegas::media::AudioPlayer::playbackError);
+        audio.setClips(clips, 0.8, {}, sampleRate);
+        QCOMPARE(audio.sampleRate(), sampleRate);
+        const auto valueNear = [&](double seconds, int expected) {
+            for (const auto& entry : pcm) {
+                const auto bytes = entry[0].toByteArray();
+                if (qAbs(entry[1].toDouble() - seconds) > 0.011) continue;
+                if (bytes.size() != sampleRate / 100 * 4) continue;
+                const int offset = sampleRate / 400 * 4; // 2.5 ms into the block.
+                if (qAbs(int(qFromLittleEndian<qint16>(bytes.constData() + offset)) - expected) < 5)
+                    return true;
+            }
+            return false;
+        };
+        audio.play(0);
+        QTRY_VERIFY_WITH_TIMEOUT(valueNear(0.04, 250), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(valueNear(0.14, 750), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(valueNear(0.28, 1250), 5000);
+        audio.seek(0.26); pcm.clear();
+        QTRY_VERIFY_WITH_TIMEOUT(valueNear(0.28, 1250), 5000);
+        audio.stop(); const auto count = pcm.count();
+        QTest::qWait(50); QCOMPARE(pcm.count(), count);
+        QVERIFY2(errors.isEmpty(), errors.isEmpty() ? "" : qPrintable(errors[0][0].toString()));
+        audio.setSource(base); QCOMPARE(audio.sampleRate(), 48000);
+        audio.setClips(clips, 0.8, {}, 0); QCOMPARE(audio.sampleRate(), 48000);
+        audio.setClips(clips, 0.8, {}, INT_MAX); QCOMPARE(audio.sampleRate(), 48000);
+    }
+
     void selectedAudioStreamReachesMasterPcm()
     {
         const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
@@ -86,8 +130,10 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(containsSample(pcm, 1000), 3000);
         audio.stop();
     }
+    void nativeBalanceChangesRealtimeMaster_data() { sampleRatesData(); }
     void nativeBalanceChangesRealtimeMaster()
     {
+        QFETCH(int, sampleRate);
         const QString modulePath = qEnvironmentVariable("OPENVEGAS_HFPL_BALANCE");
         if (modulePath.isEmpty() || !QFileInfo::exists(modulePath)) {
             QSKIP("Set OPENVEGAS_HFPL_BALANCE to the reference Balance.hfpl for this integration test");
@@ -116,7 +162,7 @@ private slots:
         module.sourceEffect.animation.insert(0, balanceCurve);
         openvegas::media::AudioPlayer audio;
         QSignalSpy pcm(&audio, &openvegas::media::AudioPlayer::pcmMixed);
-        audio.setClips({clip}, 1.5);
+        audio.setClips({clip}, 1.5, {}, sampleRate);
         audio.play(0);
         const auto panned = [&] {
             for (const auto& entry : pcm) {
@@ -259,8 +305,10 @@ private slots:
         openvegas::plugin::releaseNativeEffectThreadRenderer();
         openvegas::plugin::clearNativeEffectModules();
     }
+    void nativeEffectsSeeLookAheadWhilePlaying_data() { sampleRatesData(); }
     void nativeEffectsSeeLookAheadWhilePlaying()
     {
+        QFETCH(int, sampleRate);
         const QString balancePath = qEnvironmentVariable("OPENVEGAS_HFPL_BALANCE");
         if (balancePath.isEmpty() || !QFileInfo::exists(balancePath)) {
             QSKIP("Set OPENVEGAS_HFPL_BALANCE to the reference Balance.hfpl for this integration test");
@@ -298,7 +346,7 @@ private slots:
         clip.nativeEffects.append(module);
         openvegas::media::AudioPlayer audio;
         QSignalSpy pcm(&audio, &openvegas::media::AudioPlayer::pcmMixed);
-        audio.setClips({clip}, 0.3);
+        audio.setClips({clip}, 0.3, {}, sampleRate);
         audio.play(0);
         const auto valueNear = [&](double seconds) {
             for (const auto& entry : pcm) {

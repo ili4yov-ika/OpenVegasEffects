@@ -3,6 +3,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <memory>
+
 #include "model3d/Mesh.h"
 #include "model3d/ModelImportSettings.h"
 
@@ -27,6 +29,10 @@ QStringList modelExtensions();       // 3ds lwo obj fbx abc gltf glb
 QStringList animationExtensions();   // fbx abc gltf glb
 QString modelFileFilter();
 QString animationFileFilter();
+// The nodes and animations of an animation file, read once and kept while
+// the file stays the same (safe from any thread); null when it cannot be
+// read or holds no animation.
+std::shared_ptr<const Mesh> animationSource(const QString& filePath);
 
 // True when this build can actually parse the extension, as opposed to merely
 // offering it in the dialog.

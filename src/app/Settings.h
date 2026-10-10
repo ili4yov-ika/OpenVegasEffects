@@ -56,6 +56,11 @@ public:
     //   MotionPathKeyFrames 1412c7590   how many keys of it to show
     static bool showCheckerboard2D();
     static void setShowCheckerboard2D(bool enabled);
+    // Options ShowCheckerboard3D and ShowFloorPlane ("Show floor plane (3D
+    // Views only)"): the backdrop and the floor grid of the Viewer's views
+    // with a camera of their own. Both on by default.
+    static bool showCheckerboard3D();
+    static bool showFloorPlane();
     // Kept as a colour name rather than a QColor so this header stays clear of
     // QtGui; every caller is a widget and can build the QColor itself.
     static QString viewerBackgroundColor();

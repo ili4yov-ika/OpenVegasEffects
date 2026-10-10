@@ -1,6 +1,10 @@
 #include "ui/OptionsDialog.h"
 #include "ui/Theme.h"
 #include "app/Settings.h"
+#include "app/ProjectDefaults.h"
+#include "app/GpuDriver.h"
+#include <QTranslator>
+#include <QScopeGuard>
 #include "ui/PromptMessage.h"
 
 #include <QAction>
@@ -240,6 +244,64 @@ private slots:
                                    + QStringLiteral("/options-export.png")));
     }
 
+    // The reference's startup driver check (FUN_1401bffe0, FUN_1401c2ce0):
+    // Intel integrated graphics by generation, each with the driver build it
+    // needs; the warning names the device, version and date and sends one to
+    // Intel's download centre; "Exit" there leaves, "Do not show again"
+    // skips it with Continue.
+    void gpuDriverWarningFollowsTheReference()
+    {
+        QCOMPARE(app::gpuClassOf("Intel(R) UHD Graphics 620"), 7);
+        QCOMPARE(app::gpuClassOf("intel(r) uhd graphics 630"), 7);           // case aside
+        QCOMPARE(app::gpuClassOf("Radeon RX Vega M GH Graphics"), 7);
+        QCOMPARE(app::gpuClassOf("Intel(R) HD Graphics 620"), 6);
+        QCOMPARE(app::gpuClassOf("Intel(R) Iris(R) Plus Graphics 640"), 6);
+        QCOMPARE(app::gpuClassOf("Intel(R) HD Graphics 520"), 5);
+        QCOMPARE(app::gpuClassOf("Intel(R) HD Graphics 5500"), 4);
+        QCOMPARE(app::gpuClassOf("Intel(R) HD Graphics 5000"), 3);           // not " HD Graphics 500"
+        QCOMPARE(app::gpuClassOf("Intel(R) HD Graphics 4000"), 2);
+        QCOMPARE(app::gpuClassOf("Intel(R) HD Graphics 3000"), 1);
+        QCOMPARE(app::gpuClassOf("NVIDIA GeForce RTX 3060/PCIe/SSE2"), 8);
+        QCOMPARE(app::gpuClassOf(QString()), 8);
+
+        // Generations 5 to 7 need Intel's 100.6326.
+        QVERIFY(app::checkGpuDriver("Intel(R) UHD Graphics 620", "26.20.100.6325").outdated());
+        QVERIFY(!app::checkGpuDriver("Intel(R) UHD Graphics 620", "26.20.100.6326").outdated());
+        QVERIFY(!app::checkGpuDriver("Intel(R) HD Graphics 520", "31.0.101.5186").outdated());
+        QCOMPARE(app::checkGpuDriver("Intel(R) HD Graphics 520", "31.0.101.5186").installed, qint64(1015186));
+        // 3 and 4 the build 5057, 2 the build 5059.
+        QVERIFY(app::checkGpuDriver("Intel(R) HD Graphics 5500", "20.19.15.5056").outdated());
+        QVERIFY(!app::checkGpuDriver("Intel(R) HD Graphics 4600", "20.19.15.5057").outdated());
+        QVERIFY(app::checkGpuDriver("Intel(R) HD Graphics 4000", "10.18.10.5058").outdated());
+        QVERIFY(!app::checkGpuDriver("Intel(R) HD Graphics 4000", "10.18.10.5059").outdated());
+        // Older ones and everything else are not checked; nor is a version
+        // that is no number.
+        QVERIFY(!app::checkGpuDriver("Intel(R) HD Graphics 3000", "8.15.10.1").outdated());
+        QVERIFY(!app::checkGpuDriver("NVIDIA GeForce RTX 3060/PCIe/SSE2", "1.2").outdated());
+        QVERIFY(!app::checkGpuDriver("Intel(R) UHD Graphics 620", "unknown").outdated());
+
+        // Without a matching adapter: the renderer, and GL_VERSION's last word.
+        const app::GpuDriverInfo info =
+            app::gpuDriverInfo("Intel(R) UHD Graphics 620 (test)", "4.6.0 - Build 26.20.100.6000");
+        QCOMPARE(info.device, QString("Intel(R) UHD Graphics 620 (test)"));
+        QCOMPARE(info.version, QString("26.20.100.6000"));
+        const QString text = app::gpuDriverWarningText({"26.20.100.6000", "1-1-2019", "Intel(R) UHD Graphics 620"});
+        QVERIFY(text.startsWith("Your GPU driver is out of date.<br>"));
+        QVERIFY(text.contains("<br>Device: Intel(R) UHD Graphics 620"));
+        QVERIFY(text.contains("<br>Driver Version: 26.20.100.6000"));
+        QVERIFY(text.contains("<br>Driver Date: 1-1-2019"));
+        QVERIFY(text.contains("<a href=\"https://downloadcenter.intel.com/\">"));
+
+        // The prompt: Exit leaves; an up-to-date driver asks nothing.
+        QTimer::singleShot(0, [] {
+            if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
+                box->button(QMessageBox::Abort)->click();
+        });
+        QVERIFY(!app::warnAboutGpuDriver(nullptr, "Intel(R) UHD Graphics 620", "4.6.0 - Build 26.20.100.6000"));
+        QVERIFY(app::warnAboutGpuDriver(nullptr, "Intel(R) UHD Graphics 620", "4.6.0 - Build 26.20.100.8681"));
+        QVERIFY(app::warnAboutGpuDriver(nullptr, "NVIDIA GeForce RTX 3060/PCIe/SSE2", "4.6.0 NVIDIA 555.85"));
+    }
+
     void templateSelectionSurvivesChangedDisplayText() {
         {
             ui::OptionsDialog dialog;
@@ -253,6 +315,104 @@ private slots:
         ui::OptionsDialog reopened;
         QCOMPARE(reopened.findChild<QComboBox*>("comboBoxTemplate")->currentData().toString(), QStringLiteral("uhd30"));
         QMetaObject::invokeMethod(&reopened, "reject", Qt::DirectConnection);
+    }
+
+    void localizedOptionValues_data()
+    {
+        QTest::addColumn<QString>("locale");
+        for (const auto* locale : {"en", "ru", "ja", "zh_CN"})
+            QTest::newRow(locale) << QString::fromLatin1(locale);
+    }
+
+    void localizedOptionValues()
+    {
+        QFETCH(QString, locale);
+        QTranslator translator;
+        if (locale != QLatin1String("en")) {
+            const QString catalog = QDir(QString::fromUtf8(TRANSLATION_TEST_ROOT))
+                .filePath(locale + "/openvegaseffects_" + locale + ".qm");
+            QVERIFY(translator.load(catalog));
+            QVERIFY(qApp->installTranslator(&translator));
+        }
+        const auto removeTranslator = qScopeGuard([&] { qApp->removeTranslator(&translator); });
+        const QStringList qualities {"Low", "Medium", "High"};
+        const QStringList previews {"Auto", "Proxy", "Full Resolution"};
+        for (int index = 0; index < qualities.size(); ++index) {
+            const auto translated = [](const QString& token) {
+                return QCoreApplication::translate("openvegas::ui::OptionsDialog", token.toUtf8().constData());
+            };
+            auto settings = app::Settings::optionSettings();
+            settings.setValue("Options/Antialiasing", "8x MSAA");
+            settings.setValue("Options/ProxyQuality", translated(qualities[index]));
+            settings.setValue("Options/PreviewMode", translated(previews[index]));
+            settings.sync();
+            QCOMPARE(app::defaultProjectRenderSettings().antialiasingMode, 2);
+            // A legacy localized value must load even after switching to English.
+            qApp->removeTranslator(&translator);
+            {
+                ui::OptionsDialog migrated;
+                QCOMPARE(migrated.findChild<QComboBox*>("comboBoxProxyQuality")->currentData().toString(), qualities[index]);
+                QCOMPARE(migrated.findChild<QComboBox*>("comboBoxPreviewMode")->currentData().toString(), previews[index]);
+                QMetaObject::invokeMethod(&migrated, "reject", Qt::DirectConnection);
+            }
+            if (locale != QLatin1String("en")) qApp->installTranslator(&translator);
+            {
+                ui::OptionsDialog dialog;
+                auto* antialiasing = dialog.findChild<QComboBox*>("comboBoxAntialiasing");
+                auto* quality = dialog.findChild<QComboBox*>("comboBoxProxyQuality");
+                auto* preview = dialog.findChild<QComboBox*>("comboBoxPreviewMode");
+                QVERIFY(antialiasing && quality && preview);
+                QCOMPARE(antialiasing->currentData().toInt(), 2);
+                QCOMPARE(quality->currentData().toString(), qualities[index]);
+                QCOMPARE(preview->currentData().toString(), previews[index]);
+                antialiasing->setCurrentIndex(antialiasing->findData(3));
+                // Display strings must never be used as serialized values.
+                quality->setItemText(quality->currentIndex(), "changed display label");
+                preview->setItemText(preview->currentIndex(), "changed display label");
+                dialog.findChild<QPushButton*>("btnOK")->click();
+            }
+            settings.sync();
+            QCOMPARE(settings.value("Options/Antialiasing").toInt(), 3);
+            QCOMPARE(settings.value("Options/ProxyQuality").toString(), qualities[index]);
+            QCOMPARE(settings.value("Options/PreviewMode").toString(), previews[index]);
+            QCOMPARE(app::defaultProjectRenderSettings().antialiasingMode, 3);
+            // Reopen in English, then return to the test's language.
+            qApp->removeTranslator(&translator);
+            {
+                ui::OptionsDialog reopened;
+                QCOMPARE(reopened.findChild<QComboBox*>("comboBoxAntialiasing")->currentData().toInt(), 3);
+                QCOMPARE(reopened.findChild<QComboBox*>("comboBoxProxyQuality")->currentData().toString(), qualities[index]);
+                QCOMPARE(reopened.findChild<QComboBox*>("comboBoxPreviewMode")->currentData().toString(), previews[index]);
+                QMetaObject::invokeMethod(&reopened, "reject", Qt::DirectConnection);
+            }
+            if (locale != QLatin1String("en")) qApp->installTranslator(&translator);
+        }
+    }
+
+    void nativeAntialiasingModesPersist()
+    {
+        ui::OptionsDialog dialog;
+        auto* combo = dialog.findChild<QComboBox*>("comboBoxAntialiasing");
+        QVERIFY(combo);
+        QCOMPARE(combo->count(), 9);
+        for (int mode = 1; mode <= 9; ++mode) {
+            combo->setCurrentIndex(combo->findData(mode));
+            dialog.findChild<QPushButton*>("btnOK")->click();
+            QCOMPARE(app::defaultProjectRenderSettings().antialiasingMode, mode);
+        }
+        dialog.findChild<QListWidget*>("categoryList")->setCurrentRow(
+            ui::OptionsDialog::categoryNames().indexOf(QStringLiteral("Render")));
+        dialog.findChild<QPushButton*>("btnRestoreDefaults")->click();
+        QCOMPARE(combo->currentData().toInt(), 1); // Native default: 4x MSAA.
+        dialog.findChild<QPushButton*>("btnOK")->click();
+        QCOMPARE(app::defaultProjectRenderSettings().antialiasingMode, 1);
+        auto settings = app::Settings::optionSettings();
+        for (const auto* obsolete : {"Off", "2x MSAA"}) {
+            settings.setValue("Options/Antialiasing", obsolete); settings.sync();
+            QCOMPARE(app::defaultProjectRenderSettings().antialiasingMode, 1);
+            ui::OptionsDialog reopened;
+            QCOMPARE(reopened.findChild<QComboBox*>("comboBoxAntialiasing")->currentData().toInt(), 1);
+        }
     }
 
 private:

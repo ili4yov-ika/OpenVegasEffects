@@ -31,6 +31,11 @@ struct EffectParameterSpec
     // Labels may be renamed or duplicated; layer IDs must survive either case.
     QStringList choiceValues;
     QString group;
+    // Options bit 0x2 of the control (the Create* services' flags): the
+    // property exists and is read, but the Controls and timeline trees leave
+    // it out - Glow keeps an old integer "radius" next to "radius_f" that way
+    // (VegasEffects FUN_14077ba20/FUN_14077be30 skip such nodes).
+    bool hidden = false;
 };
 
 struct EffectSpec
@@ -52,6 +57,11 @@ struct EffectSpec
     // "Chroma Key {greenscreen green screen bluescreen}". The Effects panel
     // matches on them as well as on the name.
     QStringList keywords;
+
+    // The Qt translation context of a native plugin's own strings,
+    // "Effect_<ShortName>"; the names, labels, units, groups and combo items
+    // above are already translated in it.
+    QString translationContext;
 
     // A plugin's own GUID (reference PluginMetadata +0x04). Unique per plugin
     // across the whole shipped set, which is what makes it a dependable key

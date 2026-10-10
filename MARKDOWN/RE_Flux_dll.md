@@ -81,7 +81,7 @@ Flux::AddModel3DAssetToCache(...), RenderTexture... (см. список эксп
 | `FluxCamera` | 5 ctor@`180284a70..180284f40`, `~`@`180285de0`, `CreateDefaultCamera`@`1802848f0`; `Copy`@`1802849c0`, `OrbitCamera`@`180285030`, `OrientateToCamera`@`180285a30`, `EyeMatrixView`@`180285fa0`, `GetCameraType`@`180285f10`, `SetEulerAngles/SetClipAnchorPoint/SetClipPosition/SetZoom` | камера (lib::Camera) |
 | `FluxSelect` | ctor@`18029f6a0`, `~`@`18029f6f0`, `Select`@`1802a0b10`, `RenderSelectedWireFrameTriangles`@`1802a2c20` | пикинг объектов |
 | `FluxTextData` | ctor@`1802a96e0`, `~`@`1802a97b0`; `GetTextBoundingBox`@`1802aa970`, `GetTextLines`@`1802aa980`, `GetTextOutlines`@`1802a9640`, `GetCursor*`, `SetCurrentTextTokenFormat` | текстовый рей-лей (раскладка/границы) |
-| `FluxOpenGLInfo` | ctor@`180292440`, `~`@`180292480`, `InitializeOpenGLInfo`@`180292260`, `IsGPUBelowMinimumRequirements`@`180292420`, `GPUSupportedAntialiasingModes`@`1802939a0`, `VideoMemory`@`1802923f0` | паспорт GPU через GL |
+| `FluxOpenGLInfo` | ctor@`180292440`, `~`@`180292480`, `InitializeOpenGLInfo`@`180292260`, `IsGPUBelowMinimumRequirements`@`180292420`, `GPUSupportedAntialiasingModes`@`1802939a0`, `VideoMemory`@`1802923f0` | паспорт GPU через GL; `GPUSupportedAntialiasingModes` проверяет режимы 1..8 и даёт пары (режим, сэмплы цвета): 1→4, 2→8, 3→16, 4→32, 5→4, 6→8, 7→4, 8→8 (9 = 32x CSAA → 8), отсортированные по сэмплам; Tannen 180369770 создаёт по ним `glRenderbufferStorageMultisample` (режимы 1..4) или `...CoverageNV` (5..9) |
 | `FluxVideoMemory` | экспорт: `Create`@`180293c10`, `AvailableGPUNames`@`1802b22f0`, `RequiredVideoMemory`@`1802b2ce0`; внутренние: `MinimumRequiredSize`@`1802b22e0`, `DedicatedSize`@`1802b2760`, `SystemRAM`@`1802b2d10` | требования/отчёт по видеопамяти |
 | `FluxUtilities` | `CreateBezierCurve`@`1802ae0c0/1802ae400`, `CurvedHandles`@`1802ae640` | статические утилиты кривых |
 | vftable-экспорты | `1807897d0..18078ba68` (6 шт.) | публичные таблицы виртуальных функций |
@@ -252,6 +252,81 @@ C:\Gitlab-Runner\builds\BjqbSWcs\0\FXhome\hitfilm\hitfilm\HitFilm\Modules\Flux\
 (`FluxCanvas::Create`, `FluxView::Create` и пр.) точечной декомпиляцией по адресам
 из `flux_exports.txt`; 4) связать пайплайн с `RE_VegasEffects.md` (точки вызова
 `RenderPreview/RenderFrame` в хосте).
+
+## Освещение и тени (10 октября 2026)
+
+- GLSL `Illuminant` (строки шейдеров 0x795280…0x7951a0, сборка `FUN_1804aa390`): цвет без
+  источников (`lightType[0] == 0`) — `matColorDiffuse`; ambient (`lightType == 1`, только при
+  `isIllum`) — `lightColor × lightIntensity × matColorAmbient × ADSS.x` (для Phong/Cook-Torrance;
+  у PBR — `matColorDiffuse`); типы 2–4: `ldir = normalize(lightPosition − ecPos)` (у направленного
+  `−lightDirection`), при `NdotL > 0.0001` — затухание (`lightFallOff` 3: `min((d² − 2·reach·d +
+  reach²)/reach², 1)`, 2: `min(1 − d/reach, 1)`, не 1 — ноль дальше `reach`), конус
+  (`spotDot = dot(normalize(−ldir), lightDirection)`; при `spotDot < spotParams.y` множитель
+  `max((spotDot − spotParams.x) × spotParams.z, 0)`), Phong (`illuminationType 0`):
+  `lightColor × NdotL × diffuse × ADSS.y + ADSS.z × lightColor × specular × pow(min(R·V, 1), ADSS.w)`,
+  затем `× lightIntensity × att`, и `color += mix(vec4(shadowColor·a, a), vec4(colorPerLight.rgb, 0),
+  shadowCoeff)` (неосвещаемому — `mix(vec4(shadowColor,1), 0, shadowCoeff)`). Итог зажимается
+  в 0..1, к освещённому прибавляется emissive × a. Источники обрабатываются пачками по
+  `MAXNUMOFLIGHTS` с `previousLightMap`.
+- Униформы (`FUN_1804a5100`, данные `FUN_180483820`): `lightPosition` — начало координат слоя
+  в глазных координатах, `lightDirection` — ось (0, 0, −1) (DAT_1807ab568 = −1), повёрнутая
+  матрицей слоя; `lightColor` — `color` RGBA; `lightIntensity` = `intensity` / 100 × 2.5
+  (DAT_1807ab4ec = 100, DAT_1807ab454 = 2.5); `reach`, `lightFallOff` = `falloff`;
+  `spotParams` = (cos h, cos((1 − feather/100)·h), 1/(второе − первое) или 0), h =
+  `spotlightAngle` × 0.017453292 × 0.5; `shadowOpacity`/`shadowDiffusion` / 100.
+- Материал слоя (`FUN_180474d80`, `FUN_1804744f0`, `FUN_180474730` — по типам слоёв): ADSS =
+  `matAmbient`, `matDiffuse`, `matSpecular`, `matShininess` / 100; `matEmissiveColor`;
+  `illuminated`, `receiveShadows`, `castShadows`, `billboardedLights/Shadows`, self shadow bias
+  0.0001, `castReflections`, `receiveReflections`, AO-параметры.
+- Тени: `ComputeShadowValue` — проверка `dot(shadowDirection, ecPos − lightPosition) > 0`,
+  координаты карты 0..1, `shadowAmount = PCF(…, clamp(20·shadowDiffusion, 1, max(20·shadowDiffusion,
+  1)))`, `shadowValue = shadowAmount × shadowOpacity`; для точечного или прожектора с
+  `spotParams.x ≤ 0.867` — максимум по шести картам, иначе одна. `PCF`: центр с весом 10 при
+  `depth < 1 && zReceiver − threshold > depth`, затем при uv в 0.01..0.99 квадрат
+  `range = int(radius × 0.5 + 0.5)` с шагом 1/2048 и наклонным смещением глубины
+  (`ComputeDepthBias` по производным), сумма / счётчик. Проход глубины отбрасывает фрагменты с
+  alpha ≤ 0.5.
+
+- Материал модели (`FUN_180370e10`): diffuse, specular, ambient, emissive — цвет материала ×
+  Opacity / 100; `SpecularShininess` = (1, Shininess) — у модели ADSS.zw = (1, показатель
+  материала); для `illuminationType` 2/3 (`FUN_1804a7460`) `alphaMode` и `alphaCutOff` / 100;
+  Cook-Torrance — `roughnessValue` = CK_Roughness / 100, `fresnelTerm` = CK_Fresnel,
+  `specularReflectance` = CK_SpecularReflectance / 100; Metallic-Roughness —
+  `mrRoughnessFactor`, `mrMetallicFactor`, лак / 100; Specular-Glossiness — `sgGlossinessFactor` / 100.
+  В шейдере MR: `roughness = clamp(G карты × фактор)`, `metallic = clamp(B карты × фактор)`,
+  `kD = (1 − 0.04)(1 − metallic)`, specular = mix(0.04, base, metallic); SG: `roughness = 1 −
+  clamp(A карты × глянец)`, `kD = 1 − max(specular)`; на свет — `GetPointShade` (Schlick, Smith-GGX
+  visibility, GGX distribution); Cook-Torrance — Fresnel × `GeomAtt` × `BeckmannDist` / (N·V·N·L);
+  `OcclusionTerm` в последнем проходе — mix(цвет, occlusion × цвет, occlusionStrength).
+
+- Глубина резкости (`DepthOfFieldRenderer`; шейдеры 0x7a06e0…0x7a3228 в файле, настройки камеры
+  `FUN_1803c1ac0`): HasDoF, фокус = `CameraLayer::FocusDistance` / PixelsPerMM, blur = blurDoF / 100,
+  фокусное = `CalculateFocalLength` (zoom × HorizontalFilmSize / ширина), f-число = `CalculateFStop`
+  (фокусное / (aperture / PixelsPerMM)). Член размытия: `lensDistance` 50.25, `zScale` =
+  1/mmToPixelScale, `Zfocus = 1/(1/f − 1/focus) + focus`, `pixCoC = |lensDiameter·f·(Zfocus − d) /
+  (Zfocus·(d − f))|`, `blur = clamp(clamp(pixCoC·mmToPixelScale·blurAmount, 0, maxCoC)/maxCoC, 0, 1)`;
+  BoxBlurPass — `sizeCoC` = среднее по ±1 текселю × maxCoC × 0.5, отсчёты через 0.25 с весом своего
+  члена, проходы по горизонтали и вертикали; DepthBlurPass учитывает предыдущие слои (`prevColorMap`,
+  `prevDepthMap`). Поле рендерера +0x1e0 = 25 (вероятно, `maxNumOfSamplesPerPass`); значение maxCoC
+  не найдено.
+
+- Материал по типу слоя (`FUN_180351900`): AssetLayer — `FUN_180474730`, TextLayer — `FUN_180474d80`,
+  Model3DLayer — `FUN_180474a80`, прочие — `FUN_1804744f0`; результат — `MaterialProperties`
+  (+0 ADSS, +0x10 emissive, +0x20/+0x24 отражательность, +0x28 illuminated, +0x29 receiveShadows,
+  +0x2a castShadows, +0x2c selfShadowBias, +0x30 billboardedShadows, +0x31 billboardedLights,
+  +0x34/+0x35 отражения, +0x38… карта окружения и AO). У модели ADSS = (1, 1, 1, 1), emissive ноль,
+  `matAmbient`… не читаются; `selfShadowBias` = (v − 1)/999 × 0.00999 + 0.00001 (`DAT_1807ab378`
+  = 1, `DAT_1807ab518` = 999, `DAT_1807ab388` = 0.00999, `DAT_1807ab338` = 1e-5); у остальных
+  слоёв — 0.0001. В шейдере `shadowAmount = (depthValue < 1.0 && shadowCoord.z − selfShadowBias >
+  depthValue)`.
+- `IsIllumIsShadowReceiver` (`FUN_1804a4cf0`): x = illuminated ? 1 : 0, а при billboardedLights —
+  `DAT_1807ab360` = 0.8; y = receiveShadows. В `Illuminant` при `isIllum` в (0.5, 0.9) для
+  источников типов 2–4: `n = normalize(−lightDir); viewVector = normalize(lightDir)`, затем
+  `NdotL = dot(n, ldir)` и вставка `if (NdotL < 0.0) { n = −n; }` — слой освещён так, будто
+  смотрит на источник. billboardedShadows (+0x30) читают проходы теней (`FUN_1803e8ea0`,
+  `FUN_1804de0b0`): для слоя-билборда (тип 0) камерой поворота берётся камера света, а не сцены.
+  `castShadowsIfLayerDisabled` читается вместе с `IsVisible` при сборе отбрасывающих тени
+  (`FUN_18048dfd0` и соседние).
 
 ## Перенос подтверждённых контрактов в код
 

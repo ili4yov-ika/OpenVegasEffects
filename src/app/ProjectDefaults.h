@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/AVTemplates.h"
+#include "app/OptionValues.h"
 #include "app/Settings.h"
 #include "composition/Composition.h"
 #include <QtMath>
@@ -29,8 +30,7 @@ inline composition::ProjectRenderSettings defaultProjectRenderSettings()
     composition::ProjectRenderSettings s;
     const int bitDepth = settings.value(QStringLiteral("Options/RenderBitDepth"), 1000).toInt();
     s.bitDepth = bitDepth >= 1000 && bitDepth <= 1002 ? bitDepth : 1000;
-    const int antialiasing = settings.value(QStringLiteral("Options/Antialiasing"), 1).toInt();
-    s.antialiasingMode = antialiasing >= 1 && antialiasing <= 9 ? antialiasing : 1;
+    s.antialiasingMode = antialiasingMode(settings.value(QStringLiteral("Options/Antialiasing"), 1));
     s.useLinearColor = settings.value(QStringLiteral("Options/UseLinearColor"), false).toBool();
     s.reflectionMapSize = qMax(1, settings.value(QStringLiteral("Options/ReflectionMapSize"), 512).toInt());
     s.shadowMapSize = qMax(1, settings.value(QStringLiteral("Options/ShadowMapSize"), 2048).toInt());

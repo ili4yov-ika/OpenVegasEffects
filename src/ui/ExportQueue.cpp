@@ -253,10 +253,13 @@ void ExportQueue::runNext()
     request.composition = shot;
     request.media = m_media;
     request.outputPath = task.outputPath;
+    if (m_presetResolver) request.preset = m_presetResolver(task.preset);
     request.firstFrame = task.firstFrame;
     request.lastFrame = task.lastFrame;
     request.preRenderDirectory = m_preRenderDirectory;
     request.hardwareEncoding = m_hardwareEncoding;
+    request.renderThreads = m_renderThreads;
+    request.cacheDirectory = m_cacheDirectory;
     auto* job = new render::ExportJob(request, this);
     m_job = job;
     m_jobTaskId = task.id;

@@ -73,6 +73,49 @@ QStringList h264EncoderArguments(const QString& encoder)
             QStringLiteral("yuv420p")};
 }
 
+QStringList h264EncoderArguments(const QString& encoder, const H264Rate& rate)
+{
+    static const char* const kProfiles[] = {"baseline", "main", "high"};
+    const QString profile = QString::fromLatin1(kProfiles[qBound(0, rate.profile, 2)]);
+    const QString bitRate = QString::number(qMax(100000, rate.bitRate));
+    const QString maxBitRate = QString::number(qMax(rate.bitRate, rate.maxBitRate));
+    const QString buffer = QString::number(2LL * qMax(rate.bitRate, rate.maxBitRate));
+    QStringList args {QStringLiteral("-c:v"), encoder.isEmpty() ? kSoftwareEncoder : encoder};
+    if (encoder == QLatin1String("h264_nvenc")) {
+        args << QStringLiteral("-preset") << QStringLiteral("p5") << QStringLiteral("-profile:v") << profile
+             << QStringLiteral("-rc") << (rate.constant ? QStringLiteral("cbr") : QStringLiteral("vbr"))
+             << QStringLiteral("-b:v") << bitRate << QStringLiteral("-maxrate")
+             << (rate.constant ? bitRate : maxBitRate) << QStringLiteral("-bufsize") << buffer
+             << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p");
+    } else if (encoder == QLatin1String("h264_qsv")) {
+        args << QStringLiteral("-profile:v") << profile << QStringLiteral("-b:v") << bitRate
+             << QStringLiteral("-maxrate") << (rate.constant ? bitRate : maxBitRate)
+             << QStringLiteral("-pix_fmt") << QStringLiteral("nv12");
+    } else if (encoder == QLatin1String("h264_amf")) {
+        args << QStringLiteral("-profile:v") << profile << QStringLiteral("-rc")
+             << (rate.constant ? QStringLiteral("cbr") : QStringLiteral("vbr_peak"))
+             << QStringLiteral("-b:v") << bitRate << QStringLiteral("-maxrate")
+             << (rate.constant ? bitRate : maxBitRate) << QStringLiteral("-pix_fmt")
+             << QStringLiteral("yuv420p");
+    } else if (encoder == QLatin1String("h264_mf")) {
+        args << QStringLiteral("-rate_control") << (rate.constant ? QStringLiteral("cbr") : QStringLiteral("pc_vbr"))
+             << QStringLiteral("-b:v") << bitRate << QStringLiteral("-pix_fmt") << QStringLiteral("nv12");
+    } else {
+        // libx264: a constant rate is held with HRD signalling; a variable
+        // one aims at the bit rate under the ceiling.
+        args << QStringLiteral("-profile:v") << profile << QStringLiteral("-b:v") << bitRate
+             << QStringLiteral("-maxrate") << (rate.constant ? bitRate : maxBitRate)
+             << QStringLiteral("-bufsize") << buffer;
+        if (rate.constant) {
+            args << QStringLiteral("-minrate") << bitRate << QStringLiteral("-x264-params")
+                 << QStringLiteral("nal-hrd=cbr");
+        }
+        args << QStringLiteral("-pix_fmt") << QStringLiteral("yuv420p");
+    }
+    if (rate.keyFrameInterval > 0) args << QStringLiteral("-g") << QString::number(rate.keyFrameInterval);
+    return args;
+}
+
 bool h264EncoderWorks(const QString& ffmpeg, const QString& encoder)
 {
     if (ffmpeg.isEmpty() || encoder.isEmpty()) return false;

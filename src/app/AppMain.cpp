@@ -1,4 +1,8 @@
 #include "app/AppMain.h"
+#include "app/GpuDriver.h"
+
+#include "media/AudioWaveform.h"
+#include "media/DecodedFrameCache.h"
 #include "app/ProjectDefaults.h"
 
 #include <QFileInfo>
@@ -9,6 +13,7 @@
 #include <QMessageBox>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
+#include <QOpenGLFunctions>
 #include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
@@ -29,7 +34,8 @@ namespace {
 
 // Whether an OpenGL 4.1 core context can be created and made current - the
 // version every native .hfpl GPU module compiles its GLSL 4.10 for.
-bool openGl41Available()
+// With its renderer and version strings, which the driver check reads.
+bool openGl41Available(QString* renderer = nullptr, QString* version = nullptr)
 {
     if (qEnvironmentVariableIsSet("OPENVEGAS_FORCE_GPU_WARNING")) return false;
     QSurfaceFormat format;
@@ -44,9 +50,34 @@ bool openGl41Available()
         return false;
     }
     const QSurfaceFormat actual = context.format();
+    if (QOpenGLFunctions* gl = context.functions()) {
+        const auto read = [gl](GLenum name) {
+            const auto* value = reinterpret_cast<const char*>(gl->glGetString(name));
+            return value ? QString::fromLatin1(value) : QString();
+        };
+        if (renderer) *renderer = read(GL_RENDERER);
+        if (version) *version = read(GL_VERSION);
+    }
     context.doneCurrent();
     return actual.majorVersion() > 4
         || (actual.majorVersion() == 4 && actual.minorVersion() >= 1);
+}
+
+// The media cache's size on disk is kept under this: the reference ages its
+// files by days only, but decoded frames can fill a disk well within them.
+constexpr qint64 kMediaCacheMaxBytes = qint64(4) << 30;
+// How much may be written between checks of the cap while running.
+constexpr qint64 kMediaCacheCheckBytes = qint64(256) << 20;
+
+void recordMediaCacheFile(cache::CacheDB* database, const QString& key, const QString& file, qint64 bytes)
+{
+    const qint64 now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+    cache::CacheEntry entry;
+    entry.key = key;
+    entry.cacheFile = file;
+    entry.createdUtcMs = entry.lastUsedUtcMs = now;
+    entry.bytes = bytes;
+    database->put(entry);
 }
 
 } // namespace
@@ -103,8 +134,10 @@ int AppMain::run(QApplication* application, const QString& projectToOpen)
     // The reference checks the GPU once its window exists (FUN_1401c2ce0,
     // "%1 : Unsupported GPU" gated by ShowGPUWarning, Continue/Exit). Here the
     // requirement is what the native GPU effects need: an OpenGL 4.1 core
-    // context. Its driver-version warning has no portable counterpart.
-    if (!openGl41Available()) {
+    // context. Then its driver check: Intel integrated graphics with an old
+    // driver are warned (app::warnAboutGpuDriver).
+    QString renderer, glVersion;
+    if (!openGl41Available(&renderer, &glVersion)) {
         OV_LOG_WARN(QStringLiteral("OpenGL 4.1 core profile is not available"));
         const QString name = QCoreApplication::applicationName();
         const auto answer = ui::showPrompt(
@@ -125,6 +158,9 @@ int AppMain::run(QApplication* application, const QString& projectToOpen)
         if (answer == QMessageBox::Abort) {
             return 0;
         }
+    } else if (!app::warnAboutGpuDriver(m_mainWindow, renderer, glVersion)) {
+        // "%1 : Outdated GPU Driver", Exit.
+        return 0;
     }
 
     // The reference guards against a few silent startup failures with
@@ -193,11 +229,46 @@ void AppMain::initializeCache()
     const QString cacheFilesDir = m_settings->mediaCacheFilesPath();
     QDir().mkpath(cacheFilesDir);
 
+    // Waveform peaks - the decoded audio's summary the timeline draws - are
+    // the media cache's files: kept under MediaCacheFiles and recorded in
+    // MediaCacheDB, so a reopened project reads them instead of decoding
+    // again and they go after DaysToKeepMediaCacheFiles unused.
+    media::WaveformStore peaks;
+    peaks.directory = QDir(cacheFilesDir).filePath(QStringLiteral("Peaks"));
+    media::WaveformCache::setDefaultStore(peaks);
+    // Decoded video frames that were slow to get are kept there too.
+    media::DecodedFrameStore frames;
+    frames.directory = QDir(cacheFilesDir).filePath(QStringLiteral("Frames"));
+    media::DecodedFrameCache::setDefaultStore(frames);
+
     const core::Result r = m_cacheDB->open(cachePath);
     if (r.isFailure()) {
         OV_LOG_WARN(QStringLiteral("Cache unavailable: %1").arg(r.message()));
         return;
     }
+    cache::CacheDB* database = m_cacheDB.get();
+    peaks.stored = [database](const QString& key, const QString& file) {
+        recordMediaCacheFile(database, QStringLiteral("peaks:") + key, file, QFileInfo(file).size());
+    };
+    peaks.used = [database](const QString& key) {
+        database->touch(QStringLiteral("peaks:") + key,
+                        QDateTime::currentDateTimeUtc().toMSecsSinceEpoch());
+    };
+    media::WaveformCache::setDefaultStore(peaks);
+    frames.stored = [database, written = qint64(0)](const QString& key, const QString& file,
+                                                    qint64 bytes) mutable {
+        recordMediaCacheFile(database, QStringLiteral("frame:") + key, file, bytes);
+        written += bytes;
+        if (written >= kMediaCacheCheckBytes) {
+            written = 0;
+            database->pruneToBytes(kMediaCacheMaxBytes);
+        }
+    };
+    frames.used = [database](const QString& key) {
+        database->touch(QStringLiteral("frame:") + key,
+                        QDateTime::currentDateTimeUtc().toMSecsSinceEpoch());
+    };
+    media::DecodedFrameCache::setDefaultStore(frames);
     OV_LOG_INFO(QStringLiteral("Cache DB opened at %1 (%2 entries), files in %3")
                     .arg(cachePath)
                     .arg(m_cacheDB->entryCount())
@@ -213,6 +284,11 @@ void AppMain::initializeCache()
                             .arg(pruned)
                             .arg(days));
         }
+    }
+    const qint64 overSize = m_cacheDB->pruneToBytes(kMediaCacheMaxBytes);
+    if (overSize > 0) {
+        OV_LOG_INFO(QStringLiteral("Cache: pruned %1 least recently used entries over the size cap")
+                        .arg(overSize));
     }
 }
 

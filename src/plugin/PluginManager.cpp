@@ -1176,6 +1176,42 @@ private:
                 : QStringLiteral("Native plugin module (%1). %2")
                       .arg(QFileInfo(filePath).fileName(), native.copyright);
 
+        // The controls as the reference shows them: PluginHostAPI's Create*
+        // services run each label, unit, group and combo item through the
+        // plug-in's catalogue. The module was registered above with its own
+        // strings, which it reads values by; a combo keeps storing the
+        // module's item text and shows the translated one.
+        spec.translationContext = native.translationContext;
+        if (!context.isEmpty()) {
+            const auto translated = [&context](const QString& text) {
+                return text.isEmpty() ? text
+                                      : QCoreApplication::translate(context.constData(),
+                                                                    text.toUtf8().constData());
+            };
+            for (EffectParameterSpec& parameter : spec.parameters) {
+                parameter.displayName = translated(parameter.displayName);
+                parameter.unit = translated(parameter.unit);
+                QStringList groups = parameter.group.split(QStringLiteral(" / "));
+                for (QString& group : groups) group = translated(group);
+                parameter.group = groups.join(QStringLiteral(" / "));
+                if (!parameter.choices.isEmpty() && parameter.choiceValues.isEmpty()) {
+                    QStringList shown;
+                    for (const QString& choice : std::as_const(parameter.choices)) shown << translated(choice);
+                    if (shown != parameter.choices) {
+                        parameter.choiceValues = parameter.choices;
+                        parameter.choices = shown;
+                    }
+                }
+            }
+            spec.subCategory = translated(spec.subCategory);
+            // The keywords are one string in the catalogue, as they stand in
+            // the plug-in's name; the translation keeps the English words too.
+            if (!spec.keywords.isEmpty()) {
+                spec.keywords = translated(spec.keywords.join(QLatin1Char(' ')))
+                                    .split(QLatin1Char(' '), Qt::SkipEmptyParts);
+            }
+        }
+
         PluginEntry entry;
         entry.plugin = std::make_shared<LocalPlugin>(filePath, spec);
         entry.spec = std::move(spec);
@@ -1274,7 +1310,8 @@ private:
         m_entries.push_back(entry);
     }
 
-    static constexpr int kMetadataCacheVersion = 11;
+    // 12: slider units read as UTF-16 ("px", not "p"); 13: hidden controls.
+    static constexpr int kMetadataCacheVersion = 13;
 
     QVector<QString> m_dirs;
     Callbacks m_callbacks;

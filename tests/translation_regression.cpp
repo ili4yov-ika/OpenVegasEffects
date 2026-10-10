@@ -14,6 +14,12 @@ private slots:
         // Composite Shot Properties' own label, in the reference's wording for ja/zh.
         const QStringList expected {QStringLiteral("Длительность:"),
             QStringLiteral("長さ："), QStringLiteral("持续时间：")};
+        // A plug-in's own strings, from the plug-in catalogue: Glow's name,
+        // a control label, a combo item and a unit.
+        const QStringList glow {QStringLiteral("Свечение"), QStringLiteral("グロー"),
+            QStringLiteral("发光")};
+        const QStringList radius {QStringLiteral("Радиус"), QStringLiteral("半径"),
+            QStringLiteral("半径")};
         for (int i = 0; i < locales.size(); ++i) {
             QCOMPARE(openvegas::app::Translations::install(app, locales[i], root), locales[i]);
             QCOMPARE(QCoreApplication::translate("CompositionSettingsDialog", "Duration:"),
@@ -24,6 +30,14 @@ private slots:
             QVERIFY(color != QStringLiteral("Pick a color"));
             const QString status = QCoreApplication::translate("openvegas::app::AppMain", "Loading plug-ins...");
             QVERIFY(status != QStringLiteral("Loading plug-ins..."));
+            QCOMPARE(QCoreApplication::translate("Effect_Glow", "Glow"), glow[i]);
+            QCOMPARE(QCoreApplication::translate("Effect_Glow", "Radius"), radius[i]);
+            QVERIFY(QCoreApplication::translate("Effect_Glow", "Horizontal & Vertical")
+                    != QStringLiteral("Horizontal & Vertical"));
+            if (locales[i] == QLatin1String("ru")) {
+                QCOMPARE(QCoreApplication::translate("Effect_Glow", "px"), QStringLiteral("px"));
+                QCOMPARE(QCoreApplication::translate("Effect_AudioEcho", "ms"), QStringLiteral("мс"));
+            }
             for (int count : {1, 2, 5, 21}) {
                 const QString plural = QCoreApplication::translate("openvegas::ui::MainWindow",
                     "%n plugin(s) used by this project are missing", nullptr, count);
@@ -40,6 +54,7 @@ private slots:
         QCOMPARE(openvegas::app::Translations::install(app, "en", root), QStringLiteral("en"));
         QCOMPARE(QCoreApplication::translate("CompositionSettingsDialog", "Duration:"),
                  QStringLiteral("Duration:"));
+        QCOMPARE(QCoreApplication::translate("Effect_Glow", "Radius"), QStringLiteral("Radius"));
     }
 };
 

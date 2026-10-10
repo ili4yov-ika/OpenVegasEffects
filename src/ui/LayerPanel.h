@@ -85,6 +85,12 @@ private:
     QDoubleSpinBox* m_opacity = nullptr;
     QDoubleSpinBox* m_cameraFov = nullptr;
     QLabel* m_cameraFovLabel = nullptr;
+    // A camera's clipping (the reference's Camera Properties: Near and Far
+    // Clip Distance).
+    QDoubleSpinBox* m_cameraNear = nullptr;
+    QDoubleSpinBox* m_cameraFar = nullptr;
+    QLabel* m_cameraNearLabel = nullptr;
+    QLabel* m_cameraFarLabel = nullptr;
     QPushButton* m_labelColor = nullptr;
     QPushButton* m_planeColor = nullptr;
 };

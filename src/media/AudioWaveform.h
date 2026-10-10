@@ -8,6 +8,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include <functional>
+
 class QProcess;
 
 namespace openvegas {
@@ -52,6 +54,18 @@ enum class WaveformStyle { Rms, Peak };
 QVector<float> waveformColumns(const WaveformPeaks& peaks, double sourceStart, double sourceEnd,
                                int columns, WaveformStyle style, bool logarithmic);
 
+// Where peaks are kept between sessions. The application points it at the
+// media cache (Options/MediaCacheFiles) and records each file in the media
+// cache database (MediaCacheDB), so peaks age out with
+// DaysToKeepMediaCacheFiles: `stored` when a file is written, `used` when one
+// is read again.
+struct WaveformStore
+{
+    QString directory;
+    std::function<void(const QString& key, const QString& file)> stored;
+    std::function<void(const QString& key)> used;
+};
+
 // Builds peaks in the background, one FFmpeg decode per file at a time, and
 // keeps them in memory and in a disk cache keyed by path, size and mtime - a
 // replaced file gets a fresh waveform and an unreadable one none at all.
@@ -68,7 +82,10 @@ public:
     // starts that) or when the file has no decodable audio.
     const WaveformPeaks* peaks(const QString& filePath, int audioStreamIndex = -1);
     void setDecoder(const QString& ffmpegPath) { m_ffmpeg = ffmpegPath; }
-    void setCacheDirectory(const QString& directory) { m_cacheDirectory = directory; }
+    void setCacheDirectory(const QString& directory) { m_store.directory = directory; }
+    void setStore(const WaveformStore& store) { m_store = store; }
+    // The store caches made from now on start with.
+    static void setDefaultStore(const WaveformStore& store);
 
 signals:
     void peaksReady(const QString& filePath);
@@ -81,7 +98,7 @@ private:
     void saveToDisk(const QString& key, const WaveformPeaks& peaks) const;
 
     QString m_ffmpeg;
-    QString m_cacheDirectory;
+    WaveformStore m_store;
     QHash<QString, WaveformPeaks> m_ready;   // by key
     QSet<QString> m_failed;                  // keys without audio
     struct Pending { QString path; int stream; };

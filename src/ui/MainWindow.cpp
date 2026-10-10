@@ -66,6 +66,7 @@
 #include "render/VideoEncoder.h"
 #include "render/ExportJob.h"
 #include "ui/ExportQueue.h"
+#include "ui/ExportPresets.h"
 #include "ui/ExportQueueView.h"
 #include "media/ProxyMedia.h"
 #include "ui/EffectPlacement.h"
@@ -86,8 +87,11 @@
 #include "ui/LayoutTransformCommand.h"
 #include "ui/TextSettingsDialog.h"
 #include "ui/TextTransformOverlay.h"
+#include "ui/ModelNodeOverlay.h"
+#include "ui/SceneObjectOverlay.h"
 #include "ui/NativeCustomUiOverlay.h"
 #include "ui/NativeInstanceHost.h"
+#include "render/LayerGeometry.h"
 #include "ui/VoiceoverDialog.h"
 
 namespace openvegas {
@@ -325,6 +329,42 @@ TextTransformOverlay::Target textTargetAt(composition::Composition& comp, int la
     return target;
 }
 
+// The layer the viewer's transform frame works on at `time`: text by its
+// style, as textTargetAt, and footage, a nested shot or a plane by the box
+// the renderer draws it in (render::layerGeometry). No layer in the result
+// for what has no box to frame there: a hidden layer, one without a clip
+// under the playhead, a grade, camera or light layer, a 3D layer seen
+// through the camera.
+TextTransformOverlay::Target layerTargetAt(composition::Composition& comp, int layerIndex,
+                                           int preferredClip, double time,
+                                           const media::MediaManager* media, int* clipIndex)
+{
+    TextTransformOverlay::Target target =
+        textTargetAt(comp, layerIndex, preferredClip, time, clipIndex);
+    if (target.layer || layerIndex < 0 || layerIndex >= comp.layers().size()) return target;
+    composition::Layer& layer = comp.layerRef(layerIndex);
+    if (!layer.visible || layer.kind == composition::LayerKind::Grade) return target;
+    int shown = -1;
+    for (int i = 0; i < layer.clips.size(); ++i) {
+        const composition::Clip& clip = layer.clips.at(i);
+        if (time >= clip.startSeconds && time < clip.startSeconds + clip.durationSeconds
+            && (shown < 0 || i == preferredClip)) {
+            shown = i;
+        }
+    }
+    if (shown < 0) return target;
+    const int frame = compositionFrameAt(comp, time);
+    const render::LayerGeometry geometry = render::layerGeometry(comp, layer, media, frame);
+    if (!geometry.valid || geometry.inScene) return target;
+    target.layer = &layer;
+    target.frame = frame;
+    target.canvasSize = QSizeF(comp.displaySize());
+    target.geometry = geometry;
+    target.text = false;
+    if (clipIndex) *clipIndex = shown;
+    return target;
+}
+
 void moveLayerAtFrame(composition::Layer& layer, const QPointF& delta, int frame)
 {
     auto& transform = layer.transform;
@@ -444,6 +484,7 @@ MainWindow::MainWindow(app::AppMain* owner, QWidget* parent)
     // playhead. Measured on 1080p h264 at about 30 ms a frame read straight
     // ahead and 40 for a random seek, so this lands near the source frame rate
     // while still handing the event loop a turn between frames.
+    m_decodedFrames = new media::DecodedFrameCache(this);
     m_videoDecodeTimer.setInterval(8);
     connect(&m_videoDecodeTimer, &QTimer::timeout, this,
             &MainWindow::serviceVideoDecodeRequests);
@@ -779,7 +820,25 @@ void MainWindow::buildUi()
     // every pushed command adds its row, and clicking a row walks the stack to
     // that point. Its undoRequested / redoRequested signals used to reach
     // nobody at all.
+    m_preRenders = new render::PreRenderManager(this);
+    // PreRenderProgressLabel's words, with the frames so far.
+    connect(m_preRenders, &render::PreRenderManager::stateChanged, this, [this](const QString& id) {
+        const QString text = m_preRenders->statusText(id);
+        if (text.isEmpty()) return;
+        if (m_preRenders->state(id) == render::PreRenderManager::State::InProgress) {
+            statusBar()->showMessage(QStringLiteral("%1 %2 / %3").arg(text)
+                                         .arg(m_preRenders->framesDone(id)).arg(m_preRenders->framesTotal(id)));
+        } else {
+            statusBar()->showMessage(text);
+        }
+        if (m_preRenders->state(id) == render::PreRenderManager::State::Done) requestRenderFrame();
+    });
+    connect(m_preRenders, &render::PreRenderManager::failed, this, [this](const QString&, const QString& reason) {
+        statusBar()->showMessage(reason, 8000);
+    });
     connect(m_undoStack, &QUndoStack::indexChanged, this, [this](int index) {
+        // A pre-rendered shot edited since is made again once the edits settle.
+        if (m_preRenders) m_preRenders->checkForChanges();
         // Row 0 is "New Project", so stack step N lives on row N + 1.
         while (m_historyPanel->count() - 1 < m_undoStack->count()) {
             const int next = m_historyPanel->count() - 1;
@@ -833,6 +892,15 @@ void MainWindow::buildUi()
     m_exportQueue->load();
     m_exportQueueView = new ExportQueueView(m_exportQueue, m_exportPanel);
     m_exportPanel->setQueueWidget(m_exportQueueView);
+    // The export presets (ExportPresetManager): the built-in ones and the
+    // user's, in the ExportPresets folder of the user data.
+    const QString presetFolder = m_owner
+        ? m_owner->userDataPaths().pathFor(app::UserDataFolder::ExportPresets)
+        : QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+              .filePath(QStringLiteral("ExportPresets"));
+    m_exportPresets = new ExportPresetManager(presetFolder, this);
+    m_exportPanel->setPresetManager(m_exportPresets);
+    m_exportQueue->setPresetResolver([this](const QString& name) { return m_exportPresets->preset(name); });
     addDockWidget(Qt::LeftDockWidgetArea, exportDock);
     tabifyDockWidget(m_viewerDock, exportDock);
     tabifyDockWidget(m_viewerDock, m_layerPanel);
@@ -1847,6 +1915,13 @@ void MainWindow::wireSignals()
         m_selectedLayers = layers;
         updateLayoutPanelSelection();
     });
+    connect(m_timeline, &TimelineWidget::modelNodeSelected, this,
+            [this](int layerIndex, const QString& path) {
+        if (!m_composition || layerIndex < 0 || layerIndex >= m_composition->layers().size()) return;
+        m_selectedModelNodeLayer = m_composition->layers().at(layerIndex).id.value();
+        m_selectedModelNode = path;
+        if (m_viewer) m_viewer->update();
+    });
     connect(m_timeline, &TimelineWidget::newLayerRequested, this, &MainWindow::onAddNewLayer);
     connect(m_timeline, &TimelineWidget::makeCompositeShotRequested,
             this, &MainWindow::makeCompositeShotFromSelection);
@@ -1871,13 +1946,18 @@ void MainWindow::wireSignals()
         if (closingActive) activateComposition(m_openCompositions.at(qMax(0, index - 1)));
         else rebuildCompositionTabs();
     });
-    // The frame round the selected text: the text shown at the playhead, read
+    // The frame round the selected layer: what it shows at the playhead, read
     // fresh for every event so it follows selection, time and edits.
     m_textOverlay = std::make_unique<TextTransformOverlay>(
         [this] {
-            return m_composition
-                ? textTargetAt(*m_composition, m_selectedLayer, m_selectedClip, m_playbackTime, nullptr)
-                : TextTransformOverlay::Target();
+            if (!m_composition) return TextTransformOverlay::Target();
+            TextTransformOverlay::Target target =
+                layerTargetAt(*m_composition, m_selectedLayer, m_selectedClip, m_playbackTime,
+                              m_mediaManager.get(), nullptr);
+            // With other layers selected too, a drag inside the frame moves
+            // them all (onLayerMoved); the handles still work on this one.
+            target.movesAlone = m_selectedLayers.size() <= 1;
+            return target;
         },
         [this] {
             m_projectModified = true;
@@ -1901,13 +1981,16 @@ void MainWindow::wireSignals()
                 }, title));
         },
         [this](const QPointF& canvasPos) {
-            // The topmost text under the pointer becomes the selection, as a
-            // click on it in the timeline would make it.
+            // The topmost layer under the pointer becomes the selection, as a
+            // click on it in the timeline would make it - text alone under the
+            // Text tool. Locked layers are passed through.
             if (!m_composition) return false;
+            const bool textOnly = m_viewer->tool() == ViewerWidget::ViewerTool::Text;
             for (int i = 0; i < m_composition->layers().size(); ++i) {
                 int clip = -1;
-                const auto target = textTargetAt(*m_composition, i, -1, m_playbackTime, &clip);
-                if (!target.layer
+                const auto target = layerTargetAt(*m_composition, i, -1, m_playbackTime,
+                                                  m_mediaManager.get(), &clip);
+                if (!target.layer || target.layer->locked || (textOnly && !target.text)
                     || !TextTransformOverlay::quadFor(target).containsPoint(canvasPos,
                                                                             Qt::OddEvenFill)) {
                     continue;
@@ -1928,6 +2011,57 @@ void MainWindow::wireSignals()
             return false;
         });
     m_viewer->addOverlay(m_textOverlay.get());
+    // The selected model's nodes: outlined, picked and moved in the Viewer,
+    // in step with their rows under the layer's Models branch.
+    m_modelNodeOverlay = std::make_unique<ModelNodeOverlay>(
+        [this] {
+            ModelNodeOverlay::Target target;
+            if (!m_composition || m_selectedLayer < 0
+                || m_selectedLayer >= m_composition->layers().size()) {
+                return target;
+            }
+            composition::Layer& layer = m_composition->layerRef(m_selectedLayer);
+            if (layer.kind != composition::LayerKind::Model3D || !layer.visible) return target;
+            target.composition = m_composition.get();
+            target.layer = &layer;
+            target.frame = compositionFrameAt(*m_composition, m_playbackTime);
+            if (m_selectedModelNodeLayer == layer.id.value()) target.node = m_selectedModelNode;
+            return target;
+        },
+        m_mediaManager,
+        [this](const QString& path) {
+            if (!m_composition || m_selectedLayer < 0
+                || m_selectedLayer >= m_composition->layers().size()) {
+                return;
+            }
+            m_selectedModelNodeLayer = m_composition->layers().at(m_selectedLayer).id.value();
+            m_selectedModelNode = path;
+            m_timeline->selectModelNode(m_selectedLayer, path);
+        },
+        [this] { if (m_composition) m_modelNodeDragBefore = m_composition->layers(); },
+        [this] {
+            m_projectModified = true;
+            updateWindowTitle();
+            requestRenderFrame();
+        },
+        [this] {
+            if (!m_composition) return;
+            // One step for the whole drag, named as the timeline names a
+            // Position edit.
+            const QString title = QCoreApplication::translate("openvegas::ui::TimelineWidget", "Set %1")
+                                      .arg(QCoreApplication::translate("Transform", "Position"));
+            m_undoStack->push(new LayerStackCommand(
+                m_composition, m_modelNodeDragBefore, m_composition->layers(), title, [this] {
+                    m_projectModified = true;
+                    updateWindowTitle();
+                    m_timeline->refreshKeyFrames();
+                    m_controlsPanel->refresh();
+                    requestRenderFrame();
+                }));
+            m_modelNodeDragBefore.clear();
+            m_timeline->refreshKeyFrames();
+        });
+    m_viewer->addOverlay(m_modelNodeOverlay.get());
     m_instanceHost = std::make_unique<NativeInstanceHost>(
         [this] { return m_composition; }, [this] { return m_mediaManager; });
     connect(m_instanceHost.get(), &NativeInstanceHost::effectChanged, this, [this] {
@@ -1980,6 +2114,63 @@ void MainWindow::wireSignals()
         return target;
     });
     m_viewer->addOverlay(m_customUiOverlay.get());
+    // Cameras, lights and points of a 3D shot, drawn in every view through
+    // that view's camera; their handles select and move them.
+    m_sceneObjectOverlay = std::make_unique<SceneObjectOverlay>(
+        [this] {
+            SceneObjectOverlay::Scene scene;
+            if (!m_composition || !compositionIs3D(*m_composition)) return scene;
+            scene.composition = m_composition.get();
+            scene.frame = compositionFrameAt(*m_composition, m_playbackTime);
+            scene.selectedLayer = m_selectedLayer;
+            return scene;
+        },
+        [this](int view) -> std::optional<SceneObjectOverlay::ViewCamera> {
+            if (!m_composition || view < 0 || view >= int(m_viewStates.size())) return std::nullopt;
+            const QSize canvas = m_composition->displaySize();
+            const int frame = compositionFrameAt(*m_composition, m_playbackTime);
+            const auto type = render::ViewType(m_viewer->viewType(view));
+            if (render::viewHasOwnCamera(type))
+                return SceneObjectOverlay::ViewCamera{
+                    render::viewCamera(type, m_viewStates[view], m_composition.get(), canvas, frame), false};
+            return SceneObjectOverlay::ViewCamera{render::sceneCameraOf(m_composition.get(), canvas, frame), true};
+        },
+        [this](int layer) {
+            if (!m_composition || layer < 0 || layer >= m_composition->layers().size()) return;
+            m_timeline->selectLayer(layer);
+            m_selectedLayer = layer;
+            m_selectedClip = -1;
+            m_selectedLayers = {layer};
+            m_layerPanel->setSelection(layer);
+            m_trackPanel->setSelectedLayer(layer);
+            m_controlsPanel->setSelection(layer, -1);
+            updateMotionPathOverlay();
+            updateLayoutPanelSelection();
+            updateTextPanelSelection();
+        },
+        [this] { if (m_composition) m_sceneObjectDragBefore = m_composition->layers(); },
+        [this] {
+            m_projectModified = true;
+            updateWindowTitle();
+            requestRenderFrame();
+        },
+        [this] {
+            if (!m_composition) return;
+            const QString title = QCoreApplication::translate("openvegas::ui::TimelineWidget", "Set %1")
+                                      .arg(QCoreApplication::translate("Transform", "Position"));
+            m_undoStack->push(new LayerStackCommand(
+                m_composition, m_sceneObjectDragBefore, m_composition->layers(), title, [this] {
+                    m_projectModified = true;
+                    updateWindowTitle();
+                    m_timeline->refreshKeyFrames();
+                    m_controlsPanel->refresh();
+                    requestRenderFrame();
+                }, true));
+            m_sceneObjectDragBefore.clear();
+            m_timeline->refreshKeyFrames();
+            m_controlsPanel->refresh();
+        });
+    m_viewer->addOverlay(m_sceneObjectOverlay.get());
     plugin::setNativeCustomUiRedrawHandler([viewer = QPointer<ViewerWidget>(m_viewer)] {
         if (viewer) viewer->update();
     });
@@ -2030,6 +2221,42 @@ void MainWindow::wireSignals()
     // A new preview resolution or quality profile only shows once a frame has
     // been rendered under it.
     connect(m_viewer, &ViewerWidget::renderQualityChanged, this, &MainWindow::requestRenderFrame);
+    // A view's camera menu: another view starts where the reference places
+    // its camera, and Reset Current View puts it back there.
+    connect(m_viewer, &ViewerWidget::viewTypeChanged, this, [this](int view, int type) {
+        if (view < 0 || view >= int(m_viewStates.size())) return;
+        m_viewStates[view] = render::defaultViewCameraState(render::ViewType(type));
+        requestRenderFrame();
+    });
+    connect(m_viewer, &ViewerWidget::viewResetRequested, this, [this](int view) {
+        if (view < 0 || view >= int(m_viewStates.size())) return;
+        m_viewStates[view] = render::defaultViewCameraState(render::ViewType(m_viewer->viewType(view)));
+        requestRenderFrame();
+    });
+    connect(m_viewer, &ViewerWidget::layoutChanged, this, [this] { requestRenderFrame(); });
+    const auto moveView = [this](int view, const std::function<render::ViewCameraState(render::ViewType,
+                                                                                        render::ViewCameraState)>& move) {
+        if (view < 0 || view >= int(m_viewStates.size())) return;
+        m_viewStates[view] = move(render::ViewType(m_viewer->viewType(view)), m_viewStates[view]);
+        requestRenderFrame();
+    };
+    connect(m_viewer, &ViewerWidget::viewZoomRequested, this, [moveView](int view, double steps, QPointF anchor) {
+        moveView(view, [steps, anchor](render::ViewType type, render::ViewCameraState state) {
+            return render::zoomedView(type, state, steps, anchor);
+        });
+    });
+    connect(m_viewer, &ViewerWidget::viewPanned, this, [moveView](int view, QPointF delta) {
+        moveView(view, [delta](render::ViewType type, render::ViewCameraState state) {
+            return render::pannedView(type, state, delta);
+        });
+    });
+    connect(m_viewer, &ViewerWidget::viewOrbited, this, [moveView](int view, QPointF delta) {
+        moveView(view, [delta](render::ViewType type, render::ViewCameraState state) {
+            return render::orbitedView(type, state, delta);
+        });
+    });
+    for (int view = 0; view < int(m_viewStates.size()); ++view)
+        m_viewStates[view] = render::defaultViewCameraState(render::ViewType(m_viewer->viewType(view)));
     connect(m_viewer, &ViewerWidget::showMotionPathChanged, this,
             [this](bool) { updateMotionPathOverlay(); });
     if (m_renderManager && m_transportBar) {
@@ -2063,6 +2290,8 @@ void MainWindow::wireSignals()
     // Drop media files onto the Project Media panel to import them.
     connect(m_mediaPanel, &MediaPanel::importRequested, this, &MainWindow::importFiles);
     connect(m_mediaPanel, &MediaPanel::importCommandRequested, this, &MainWindow::onImportMedia);
+    connect(m_mediaPanel, &MediaPanel::importModelAnimationRequested, this, &MainWindow::onImportModelAnimation);
+    connect(m_timeline, &TimelineWidget::modelAnimationImported, m_mediaPanel, &MediaPanel::refresh);
     connect(m_mediaPanel, &MediaPanel::mediaMetadataModified, this, [this] {
         m_projectModified = true;
         updateWindowTitle();
@@ -2108,6 +2337,8 @@ void MainWindow::wireSignals()
     // Trimmer: open the activated media asset, and Insert/Overlay clips.
     connect(m_mediaPanel, &MediaPanel::mediaActivated, this, [this](const QString& filePath) {
         if (m_mediaManager) {
+            const media::MediaKind kind = m_mediaManager->assetByFilePath(filePath).kind();
+            if (kind == media::MediaKind::Model3D || kind == media::MediaKind::Model3DAnimation) return;
             m_trimmerPanel->openAsset(m_mediaManager->assetByFilePath(filePath));
             showCenterTab(m_trimmerPanel);
         }
@@ -2364,12 +2595,9 @@ void MainWindow::requestRenderFrame()
     m_renderManager->setPreRenderDirectory(preRenderRoot());
     m_viewer->setTimecode(m_playbackTime);
     m_layerPanel->setCurrentTime(m_playbackTime);
-    double cameraFov = 39.6;
-    for (const auto& layer : m_composition->layers()) {
-        if (layer.kind == composition::LayerKind::Camera && layer.visible) {
-            cameraFov = layer.cameraFieldOfView; break;
-        }
-    }
+    double cameraFov = render::sceneCameraOf(m_composition.get(), m_composition->displaySize(),
+                                             compositionFrameAt(*m_composition, m_playbackTime))
+                           .fieldOfViewDegrees;
     m_viewer360->videoWidget()->setCameraFieldOfView(cameraFov);
 
     // Preview resolution and quality profile from the viewer's own quality
@@ -2382,6 +2610,7 @@ void MainWindow::requestRenderFrame()
                            qMax(1, int(m_composition->height() * scale + 0.5)));
     const bool withEffects = m_viewer->renderEffects(playing);
     m_renderManager->requestFrame(m_renderedFrameIndex++, m_playbackTime, renderSize, withEffects);
+    requestViewFrames(renderSize, withEffects);
     if (m_autoRenderCache && !playing) {
         m_autoRenderCacheTimer.start(); // restarted by every new paused frame
     }
@@ -2389,11 +2618,80 @@ void MainWindow::requestRenderFrame()
     updateLayoutPanelSelection();
 }
 
+void MainWindow::requestViewFrames(const QSize& size, bool withEffects)
+{
+    const bool floor = app::Settings::showFloorPlane();
+    for (int view = 0; view < int(m_viewRenderers.size()); ++view) {
+        const auto type = render::ViewType(m_viewer->viewType(view));
+        const bool wanted = m_composition && view < m_viewer->viewCount() && !m_viewer->isSpherical()
+                            && render::viewHasOwnCamera(type);
+        if (!wanted) {
+            if (m_viewRenderers[view]) {
+                m_viewRenderers[view]->deleteLater();
+                m_viewRenderers[view] = nullptr;
+            }
+            continue;
+        }
+        if (!m_viewRenderers[view]) {
+            auto* renderer = new render::RenderManager(this);
+            connect(renderer, &render::RenderManager::frameReady, this,
+                    [this, view](int, QByteArray rgba, QSize frameSize) {
+                        if (frameSize.isEmpty() || rgba.size() < qsizetype(frameSize.width()) * frameSize.height() * 4)
+                            return;
+                        const QImage frame(reinterpret_cast<const uchar*>(rgba.constData()), frameSize.width(),
+                                           frameSize.height(), frameSize.width() * 4, QImage::Format_RGBA8888);
+                        m_viewer->setViewFrame(view, frame.copy());
+                    });
+            m_viewRenderers[view] = renderer;
+        }
+        render::RenderManager* renderer = m_viewRenderers[view];
+        renderer->setComposition(m_composition);
+        renderer->setMediaManager(m_mediaManager);
+        renderer->setPreRenderDirectory(preRenderRoot());
+        renderer->setViewCamera(render::viewCamera(type, m_viewStates[view], m_composition.get(),
+                                                   m_composition->displaySize(), 0),
+                                floor);
+        // Over transparency: the Viewer puts the 3D backdrop under it.
+        renderer->requestFrame(m_renderedFrameIndex, m_playbackTime, size, withEffects, true);
+    }
+}
+
 void MainWindow::onRenderRequested()
 {
     statusBar()->showMessage(tr("Render requested"));
     OV_LOG_INFO(QStringLiteral("Render requested from timeline"));
     requestRenderFrame();
+}
+
+void MainWindow::onImportModelAnimation()
+{
+    if (!m_mediaManager) return;
+    // FUN_140715e60: the reference's filter, from the folder the last model
+    // came from (RecentFolders / AddModel3D).
+    QSettings settings = app::Settings::optionSettings();
+    QString folder = settings.value(QStringLiteral("RecentFolders/AddModel3D")).toString();
+    if (folder.isEmpty() || !QFileInfo(folder).isDir())
+        folder = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    const QString title = QCoreApplication::translate("biff::ui::media::MediaActions", "Import 3D Model Animation");
+    const QStringList files = QFileDialog::getOpenFileNames(this, title, folder, model3d::animationFileFilter());
+    if (files.isEmpty()) return;
+    settings.setValue(QStringLiteral("RecentFolders/AddModel3D"), QFileInfo(files.first()).absolutePath());
+    QStringList failed;
+    bool added = false;
+    for (const QString& file : files) {
+        if (m_mediaManager->importModelAnimation(file).isFailure()) failed.append(QFileInfo(file).fileName());
+        else added = true;
+    }
+    if (added) {
+        m_mediaPanel->refresh();
+        m_projectModified = true;
+        updateWindowTitle();
+    }
+    if (!failed.isEmpty()) {
+        QMessageBox::warning(this, title,
+                             QCoreApplication::translate("AnimationSettingsDialog", "The animation could not be imported.")
+                                 + QStringLiteral("\n\n") + failed.join(QLatin1Char('\n')));
+    }
 }
 
 void MainWindow::onImportMedia()
@@ -2417,12 +2715,14 @@ void MainWindow::onLayerOrbited(const QPointF& delta)
         statusBar()->showMessage(tr("Orbit works on a 3D layer"));
         return;
     }
-    // Dragging right turns the layer about its Y axis and dragging down about
-    // its X, at a quarter of a degree per pixel - a full turn in a drag across
-    // a 1440-pixel viewer.
+    // Dragging right turns the layer's face to the right (about its Y axis)
+    // and dragging down tips it down (about X), at a quarter of a degree per
+    // pixel - a full turn in a drag across a 1440-pixel viewer. The reference
+    // turns a layer by minus its angles (render::layerRotationAt), hence the
+    // signs.
     const double perPixel = 0.25;
-    layer.transform.rotationYDegrees += delta.x() * perPixel;
-    layer.transform.rotationXDegrees += delta.y() * perPixel;
+    layer.transform.rotationYDegrees -= delta.x() * perPixel;
+    layer.transform.rotationXDegrees -= delta.y() * perPixel;
     m_projectModified = true;
     updateWindowTitle();
     m_timeline->refreshKeyFrames();
@@ -2573,11 +2873,16 @@ void MainWindow::updateMotionPathOverlay()
     m_viewer->setMotionPath(path, keys);
 }
 
-bool MainWindow::addModelLayer(const QString& path, const model3d::ImportSettings& settings)
+bool MainWindow::addModelLayer(const QString& path, const model3d::ImportSettings& settings,
+                               const QVector<model3d::Material>& materials)
 {
     if (!m_composition || !m_mediaManager) {
         return false;
     }
+    // The Materials tab's edits, kept by the asset (set before the import,
+    // which lays them over the file's materials).
+    m_mediaManager->setModelMaterials(core::Identifier(QStringLiteral("media:") + QFileInfo(path).absoluteFilePath()),
+                                      materials);
     const core::Result result = m_mediaManager->importModel(path, settings);
     if (result.isFailure()) {
         QMessageBox::warning(this, tr("Import 3D Model"), result.message());
@@ -2683,7 +2988,7 @@ void MainWindow::importFiles(const QStringList& files)
                                          .arg(QFileInfo(file).fileName()));
                 continue;
             }
-            if (addModelLayer(file, dialog.settings())) {
+            if (addModelLayer(file, dialog.settings(), dialog.editedMaterials())) {
                 ++models;
             }
             continue;
@@ -3038,7 +3343,13 @@ void MainWindow::onAddNewLayer(composition::LayerKind kind)
     layer.opacity = 1.0;
     // A light only exists in a 3D shot: without a camera the reference asks
     // to add one first (FUN_1405a8740) and creates nothing on Cancel.
-    if (kind == composition::LayerKind::Light) layer.dimension = composition::LayerDimension::ThreeD;
+    if (kind == composition::LayerKind::Light) {
+        layer.dimension = composition::LayerDimension::ThreeD;
+        // Where the reference's LightLayer starts (Project.dll 0x1802fd7e0):
+        // 400 above the middle of the shot (a spot is also turned 90 degrees
+        // about X, to point down).
+        layer.transform.position = QPointF(0.0, 400.0);
+    }
     if (!pushLayersNeedingCamera({layer}, AddCameraReason::CreateLayer, tr("Add layer '%1'").arg(name))) {
         return;
     }
@@ -3429,6 +3740,10 @@ void MainWindow::onOptions()
 {
     if (!m_optionsDialog) {
         m_optionsDialog = new OptionsDialog(this);
+        // "In-progress pre-renders will be cancelled."
+        connect(m_optionsDialog, &OptionsDialog::preRendersAboutToBeDeleted, this, [this] {
+            if (m_preRenders) m_preRenders->cancelAll();
+        });
         // Viewer preferences take effect when the dialog closes, so the
         // widgets that honour them re-read once rather than polling.
         connect(m_optionsDialog, &QDialog::finished, this, [this] {
@@ -3437,6 +3752,8 @@ void MainWindow::onOptions()
                 // The reference drives these from two places - its Preferences
                 // Viewer page and the viewer's own Options menu.
                 m_viewer->setCheckerboardEnabled(app::Settings::showCheckerboard2D());
+                m_viewer->setCheckerboard3DEnabled(app::Settings::showCheckerboard3D());
+                requestRenderFrame();   // the floor grid
                 m_viewer->setShowMotionPath(app::Settings::showMotionPath());
                 m_viewer->setPlaybackQuality(ViewerWidget::qualityFromLabel(
                     app::Settings::playbackQualityProfile()));
@@ -3551,18 +3868,34 @@ void MainWindow::offerAutoSaveRecovery()
     showRecoveredProjects();
 }
 
+QString MainWindow::timelineCacheDirectory()
+{
+    const QString directory = app::Settings::optionSettings().value(
+        QStringLiteral("Options/TimelineCache"),
+        QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
+            .filePath(QStringLiteral("TimelineCache"))).toString().trimmed();
+    return QDir::fromNativeSeparators(directory);
+}
+
+void MainWindow::applyRenderOptions(render::ExportJob::Request& request)
+{
+    const QSettings settings = app::Settings::optionSettings();
+    request.renderThreads = qBound(0, settings.value(QStringLiteral("Options/RenderThreads"), 0).toInt(), 64);
+    // "Use turbo rendering where available": frames the playback cache has
+    // already made of the same state are taken instead of rendered again.
+    request.cacheDirectory = settings.value(QStringLiteral("Options/TurboRendering"), false).toBool()
+        ? timelineCacheDirectory() : QString();
+}
+
 void MainWindow::applyTimelineCacheOptions(bool prune)
 {
     // Options > Cache > Timeline Cache. The playback cache keeps its frames
     // in this directory too; at startup frames unused for longer than the
     // retention are removed, like the media cache's own pruning.
     const QSettings settings = app::Settings::optionSettings();
-    const QString directory = settings.value(
-        QStringLiteral("Options/TimelineCache"),
-        QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
-            .filePath(QStringLiteral("TimelineCache"))).toString().trimmed();
+    const QString directory = timelineCacheDirectory();
     if (m_renderManager) {
-        m_renderManager->setDiskCacheDirectory(QDir::fromNativeSeparators(directory));
+        m_renderManager->setDiskCacheDirectory(directory);
         if (prune) {
             const int removed = m_renderManager->diskCache().prune(
                 settings.value(QStringLiteral("Options/TimelineCacheDays"), 30).toInt());
@@ -3709,13 +4042,34 @@ void MainWindow::configureExportQueue()
     m_exportQueue->setPreRenderDirectory(preRenderRoot());
     m_exportQueue->setHardwareEncoding(app::Settings::optionSettings()
                                            .value(QStringLiteral("Options/UseHardwareEncoding"), true).toBool());
+    render::ExportJob::Request options;
+    applyRenderOptions(options);
+    m_exportQueue->setRenderOptions(options.renderThreads, options.cacheDirectory);
     if (m_owner && m_owner->settings())
         m_exportQueue->setSnapshotDirectory(m_owner->settings()->snapshotDirectory());
+}
+
+bool MainWindow::exportPresetUsable()
+{
+    const render::ExportPreset preset = m_exportPanel ? m_exportPanel->currentExportPreset() : render::ExportPreset();
+    if (!preset.isValid() || !m_composition) return true;
+    const double fps = m_composition->fpsDenominator() > 0
+        ? double(m_composition->fpsNumerator()) / m_composition->fpsDenominator() : 30.0;
+    const QStringList problems = render::validateExportPreset(
+        preset, QSize(m_composition->width(), m_composition->height()), fps);
+    if (problems.isEmpty()) return true;
+    statusBar()->showMessage(problems.first());
+    QMessageBox box(QMessageBox::Warning, QCoreApplication::applicationName(), problems.join(QLatin1Char('\n')),
+                    QMessageBox::Ok, this);
+    box.setObjectName(QStringLiteral("promptExportPresetProblems"));
+    box.exec();
+    return false;
 }
 
 void MainWindow::queueContentsForExport(const QString& path)
 {
     if (!m_composition || !m_rootComposition || !m_mediaManager || !m_exportQueue || path.isEmpty()) return;
+    if (!exportPresetUsable()) return;
     configureExportQueue();
     // The open tabs and playheads go into the snapshot as they are.
     storePlayheadInComposition();
@@ -3735,6 +4089,7 @@ void MainWindow::queueContentsForExport(const QString& path)
 void MainWindow::exportContents(const QString& path)
 {
     if (!m_composition || path.isEmpty() || (m_exportJob && m_exportJob->isRunning())) return;
+    if (!exportPresetUsable()) return;
     const double fps = m_composition->fpsDenominator() > 0
         ? double(m_composition->fpsNumerator()) / m_composition->fpsDenominator() : 30.0;
     render::ExportJob::Request request;
@@ -3747,6 +4102,8 @@ void MainWindow::exportContents(const QString& path)
     request.preRenderDirectory = preRenderRoot();
     request.hardwareEncoding = app::Settings::optionSettings()
                                    .value(QStringLiteral("Options/UseHardwareEncoding"), true).toBool();
+    applyRenderOptions(request);
+    request.preset = m_exportPanel->currentExportPreset();
     auto* job = new render::ExportJob(request, this);
     m_exportJob = job;
     connect(job, &render::ExportJob::progress, this, [this](int done, int total) {
@@ -3937,10 +4294,60 @@ bool MainWindow::doSaveProject(const QString& path)
     return true;
 }
 
+void MainWindow::storeViewerInComposition()
+{
+    if (!m_composition || !m_viewer) return;
+    composition::ViewerSetup setup = m_composition->viewerSetup();
+    QVector<composition::ViewerViewSetup> previous = setup.views;
+    setup.present = true;
+    // The reference's LayoutType by number of views; a row of four is kept
+    // as four.
+    switch (m_viewer->layout()) {
+    case ViewerWidget::ViewerLayout::Single: setup.layout = 0; break;
+    case ViewerWidget::ViewerLayout::Row: setup.layout = 2; break;
+    case ViewerWidget::ViewerLayout::TwoOverOne: setup.layout = 3; break;
+    case ViewerWidget::ViewerLayout::Four:
+    case ViewerWidget::ViewerLayout::RowFour: setup.layout = 4; break;
+    }
+    setup.activeView = m_viewer->activeView();
+    setup.views.clear();
+    for (int view = 0; view < m_viewer->viewCount() && view < int(m_viewStates.size()); ++view) {
+        composition::ViewerViewSetup entry;
+        entry.id = view < previous.size() ? previous.at(view).id : QString();
+        entry.type = m_viewer->viewType(view);
+        entry.cameraPosition = m_viewStates[view].position;
+        entry.cameraRotation = m_viewStates[view].rotation;
+        entry.cameraScale = m_viewStates[view].scale;
+        setup.views.append(entry);
+    }
+    m_composition->setViewerSetup(setup);
+}
+
+void MainWindow::applyViewerFromComposition()
+{
+    if (!m_composition || !m_viewer) return;
+    const composition::ViewerSetup& setup = m_composition->viewerSetup();
+    if (!setup.present || setup.views.isEmpty()) return;
+    const ViewerWidget::ViewerLayout layout = setup.layout >= 4 ? ViewerWidget::ViewerLayout::Four
+        : setup.layout == 3 ? ViewerWidget::ViewerLayout::TwoOverOne
+        : setup.layout == 2 ? ViewerWidget::ViewerLayout::Row : ViewerWidget::ViewerLayout::Single;
+    m_viewer->setLayout(layout);
+    for (int view = 0; view < setup.views.size() && view < int(m_viewStates.size()); ++view) {
+        const composition::ViewerViewSetup& entry = setup.views.at(view);
+        // The 2D view is this Viewer's active camera view.
+        m_viewer->setViewType(view, qMax(1, entry.type));
+        m_viewStates[view].position = entry.cameraPosition;
+        m_viewStates[view].rotation = entry.cameraRotation;
+        m_viewStates[view].scale = entry.cameraScale;
+    }
+    m_viewer->setActiveView(qBound(0, setup.activeView, m_viewer->viewCount() - 1));
+}
+
 void MainWindow::storePlayheadInComposition()
 {
     // CompositionAsset/<CTI>: the shot reopens where it was left.
     if (!m_composition) return;
+    storeViewerInComposition();
     const double fps = double(m_composition->fpsNumerator()) / qMax(1, m_composition->fpsDenominator());
     m_composition->setCurrentFrame(qRound64(m_playbackTime * fps));
     // <OpenCompositeShots>: the tabs, and the one in front.
@@ -4320,6 +4727,19 @@ void MainWindow::addDroppedMediaLayer(const QString& filePath, int above, double
         statusBar()->showMessage(tr("Use Import to place a 3D model"));
         return;
     }
+    if (asset.kind() == media::MediaKind::Model3DAnimation) {
+        // An animation plays on a model: dropped on a model layer's rows it
+        // becomes an instance of the file's first animation there.
+        if (above < 0 || above >= m_composition->layers().size()
+            || m_composition->layers().at(above).kind != composition::LayerKind::Model3D) {
+            statusBar()->showMessage(tr("Drop a 3D model animation onto a 3D model layer"));
+            return;
+        }
+        if (!m_timeline->insertModelAnimation(above, asset.sourcePath(), 0))
+            statusBar()->showMessage(QCoreApplication::translate("AnimationSettingsDialog",
+                                                                 "The animation could not be imported."));
+        return;
+    }
     offerCompositionMatch(asset);
     // The asset's own range: its Trimmer in/out points when it has them,
     // else all of it; a still lasts to the end of the shot.
@@ -4525,6 +4945,7 @@ bool MainWindow::openProjectFile(const QString& path)
     m_autoSaveFiles.clear();
     m_projectModified = false;
     m_composition = m_rootComposition;
+    applyViewerFromComposition();
     m_undoStack->clear();
     if (m_renderManager) m_renderManager->setComposition(m_composition);
     resetCompositionTabs();
@@ -4694,10 +5115,12 @@ void MainWindow::showLearnSidebar()
 // --- Layout panel -------------------------------------------------------
 //
 // The panel works in canvas pixels with the origin at the top left, which is
-// the space the renderer composites in: a layer is drawn centred on
-// (W/2 + position.x, H/2 - position.y) and scaled by its scale percentage. The
-// two conversions below are that formula and its inverse, and everything the
-// panel does - typing a number, mirroring, aligning - goes through them.
+// the space the renderer composites in. A layer's box is what it shows there
+// (render::layerGeometry, the renderer's own placement): footage at its size
+// and pixel aspect, text by its glyphs, turned about its anchor, a 3D sheet
+// through the camera. Typing a number, aligning or distributing moves and
+// scales the layer until that box is where the panel put it
+// (render::fitLayerToBox).
 
 QRectF MainWindow::selectedLayerBounds() const
 {
@@ -4711,19 +5134,11 @@ QRectF MainWindow::layerBounds(int layerIndex) const
         return QRectF();
     }
     const composition::Layer& layer = m_composition->layers().at(layerIndex);
-    const double fps = m_composition->fpsDenominator() > 0
-                           ? double(m_composition->fpsNumerator()) / m_composition->fpsDenominator()
-                           : 30.0;
-    const int frame = int(m_playbackTime * fps + 0.5);
-    const QPointF scale = layer.transform.scaleAt(frame);
-    const QPointF position = layer.transform.positionAt(frame);
-    // The size is taken from the magnitude: a mirrored layer has a negative
-    // scale, and a box with a negative width is not a box.
-    const double w = m_composition->displaySize().width() * qAbs(scale.x()) / 100.0;
-    const double h = m_composition->displaySize().height() * qAbs(scale.y()) / 100.0;
-    const QPointF centre(m_composition->displaySize().width() / 2.0 + position.x(),
-                         m_composition->displaySize().height() / 2.0 - position.y());
-    return QRectF(centre.x() - w / 2.0, centre.y() - h / 2.0, w, h);
+    const int frame = compositionFrameAt(*m_composition, m_playbackTime);
+    // A mirrored layer's quad is flipped; its bounding box is still a box.
+    const render::LayerGeometry geometry =
+        render::layerGeometry(*m_composition, layer, m_mediaManager.get(), frame);
+    return geometry.valid ? geometry.bounds() : QRectF();
 }
 
 void MainWindow::updateLayoutPanelSelection()
@@ -4734,13 +5149,8 @@ void MainWindow::updateLayoutPanelSelection()
     if (m_composition) {
         m_layoutPanel->setFrameRect(QRectF(0, 0, m_composition->displaySize().width(), m_composition->displaySize().height()));
     }
-    QVector<int> selected = m_selectedLayers;
-    if (selected.isEmpty() && m_selectedLayer >= 0) selected = {m_selectedLayer};
     QVector<QRectF> bounds;
-    for (int layerIndex : selected) {
-        const QRectF item = layerBounds(layerIndex);
-        if (!item.isEmpty()) bounds.append(item);
-    }
+    for (int layerIndex : layoutLayers()) bounds.append(layerBounds(layerIndex));
     if (bounds.isEmpty()) {
         m_layoutPanel->clearSelection();
     } else {
@@ -4765,6 +5175,7 @@ void MainWindow::activateComposition(
         m_renderManager->setComposition(composition);
     }
     m_composition = composition;
+    applyViewerFromComposition();
     m_selectedLayer = -1;
     m_selectedClip = -1;
     m_selectedLayers.clear();
@@ -4857,25 +5268,40 @@ void MainWindow::editLayoutTransforms(
     }, title));
 }
 
+QVector<int> MainWindow::layoutLayers() const
+{
+    QVector<int> selected = m_selectedLayers;
+    if (selected.isEmpty() && m_selectedLayer >= 0) selected = {m_selectedLayer};
+    QVector<int> boxed;
+    for (int layerIndex : selected) {
+        if (!layerBounds(layerIndex).isEmpty()) boxed.append(layerIndex);
+    }
+    return boxed;
+}
+
 void MainWindow::onLayoutSelectionBoundsEdited(const QVector<QRectF>& bounds)
 {
     if (!m_composition) return;
-    QVector<int> selected = m_selectedLayers;
-    if (selected.isEmpty() && m_selectedLayer >= 0) selected = {m_selectedLayer};
+    // The boxes the panel was given, in the same order.
+    const QVector<int> selected = layoutLayers();
     if (selected.size() != bounds.size()) return;
     for (const auto& box : bounds) if (box.isEmpty()) return;
-    const QSizeF size = m_composition->displaySize();
-    editLayoutTransforms(m_layoutPanel->windowTitle(), [selected, bounds, size](int index,
+    const std::shared_ptr<composition::Composition> shot = m_composition;
+    const std::shared_ptr<media::MediaManager> media = m_mediaManager;
+    editLayoutTransforms(m_layoutPanel->windowTitle(), [selected, bounds, shot, media](int index,
                            composition::LayerTransform& transform, int frame) {
-        const QRectF box = bounds.at(selected.indexOf(index));
-        const QPointF scale = transform.scaleAt(frame);
-        const QPointF resized(100.0 * box.width() / size.width() * (scale.x() < 0 ? -1 : 1),
-                              100.0 * box.height() / size.height() * (scale.y() < 0 ? -1 : 1));
+        const int boxIndex = selected.indexOf(index);
+        if (boxIndex < 0) return;
+        const QRectF box = bounds.at(boxIndex);
+        // The layer as it stands, with the transform being edited.
+        composition::Layer layer = shot->layers().at(index);
+        layer.transform = transform;
+        QPointF position, scale;
+        if (!render::fitLayerToBox(*shot, layer, media.get(), frame, box, &position, &scale)) return;
         writeLayoutPoint(transform.scaleXCurve, transform.scaleYCurve, frame,
-                         resized, transform.scalePercent);
+                         scale, transform.scalePercent);
         writeLayoutPoint(transform.positionXCurve, transform.positionYCurve, frame,
-                         QPointF(box.center().x() - size.width() / 2.0,
-                                 size.height() / 2.0 - box.center().y()), transform.position);
+                         position, transform.position);
     });
 }
 
@@ -5069,7 +5495,8 @@ double MainWindow::prepareAudioSource()
     };
     collect(*m_composition, 0, 1, 0, m_composition->durationSeconds(),
             Gain{[](double) { return 1.0; }, false});
-    m_audio->setClips(sources, m_composition->durationSeconds(), transitions);
+    m_audio->setClips(sources, m_composition->durationSeconds(), transitions,
+                      m_composition->audioSampleRate());
     m_audioClipStart = sources.isEmpty() ? -1 : 0;
     return m_audioClipStart;
 }
@@ -5271,64 +5698,19 @@ void MainWindow::handlePreRenderRequest(int layerIndex, int clipIndex, bool make
 {
     const composition::Clip* clip = m_composition ? m_composition->clipAt(layerIndex, clipIndex)
                                                   : nullptr;
-    if (!clip || !clip->nestedComposition) return;
-    const std::shared_ptr<composition::Composition> shot = clip->nestedComposition;
-    const QString folder = render::preRenderFolder(preRenderRoot(), *shot);
-    if (folder.isEmpty()) return;
-    if (QPointer<render::RenderManager> running = m_preRenderTasks.take(folder)) {
-        running->disconnect(this);
-        running->cancelAll();
-        running->deleteLater();
-    }
-    // A new pre-render replaces whatever the folder held for older states.
-    QDir(folder).removeRecursively();
-    if (!make) {
-        statusBar()->showMessage(tr("Removed the pre-render of %1").arg(shot->name()));
+    if (!clip || !clip->nestedComposition || !m_preRenders) return;
+    // The shot waits its turn in the pre-render queue, is rendered once over
+    // transparency at its own size into its folder, and RenderWorker reads
+    // those frames for every clip of it while its state still matches.
+    m_preRenders->setMediaManager(m_mediaManager);
+    m_preRenders->setPreRenderRoot(preRenderRoot());
+    if (make) {
+        m_preRenders->request(clip->nestedComposition);
+    } else {
+        m_preRenders->remove(clip->nestedComposition);
+        statusBar()->showMessage(tr("Removed the pre-render of %1").arg(clip->nestedComposition->name()));
         requestRenderFrame();
-        return;
     }
-    if (!QDir().mkpath(folder)) {
-        statusBar()->showMessage(tr("Could not create the pre-render directory."));
-        return;
-    }
-    // The shot is rendered once over transparency, at its own size, into the
-    // pre-render folder; RenderWorker then reads those frames for every clip
-    // of the shot while its state still matches.
-    auto* task = new render::RenderManager(this);
-    task->setComposition(shot);
-    task->setMediaManager(m_mediaManager);
-    task->setPreRenderDirectory(preRenderRoot());
-    task->setDiskCacheDirectory(folder);
-    const QString name = shot->name();
-    // A cache run that gives up emits Finished before Failed, so only a run
-    // whose progress reached the end counts as a finished pre-render.
-    const double fps = double(shot->fpsNumerator()) / qMax(1, shot->fpsDenominator());
-    auto incomplete = std::make_shared<bool>(qRound(shot->durationSeconds() * fps) > 0);
-    connect(task, &render::RenderManager::playbackCacheProgress, this,
-            [this, name, incomplete](int done, int total) {
-        *incomplete = done < total;
-        statusBar()->showMessage(tr("Pre-rendering %1: %2 / %3 frames").arg(name).arg(done).arg(total));
-    });
-    connect(task, &render::RenderManager::playbackCacheFailed, this,
-            [this, task, folder](const QString& reason) {
-        task->disconnect(this);
-        m_preRenderTasks.remove(folder);
-        statusBar()->showMessage(reason, 8000);
-        QTimer::singleShot(0, task, [task] { task->cancelAll(); task->deleteLater(); });
-    });
-    connect(task, &render::RenderManager::playbackCacheFinished, this,
-            [this, task, folder, incomplete] {
-        if (*incomplete) return; // Failed follows
-        task->disconnect(this);
-        m_preRenderTasks.remove(folder);
-        QTimer::singleShot(0, task, [task] { task->cancelAll(); task->deleteLater(); });
-        statusBar()->showMessage(tr("The media has been pre-rendered."));
-        requestRenderFrame();
-    });
-    m_preRenderTasks.insert(folder, task);
-    task->startPlaybackCache(0.0, QSize(qMax(1, shot->width()), qMax(1, shot->height())),
-                             true, true);
-    statusBar()->showMessage(tr("The pre-render is being prepared."));
 }
 
 void MainWindow::updateProxyPreview(bool force)
@@ -5353,8 +5735,7 @@ void MainWindow::updateProxyPreview(bool force)
         }
     }
     const bool use = !exporting && anyProxyReady
-        && (mode == QLatin1String("Proxy")
-            || (mode == QLatin1String("Auto") && m_playbackTimer.isActive()));
+        && app::proxyPreviewEnabled(mode, m_playbackTimer.isActive());
     if (use == m_previewUsesProxies && !force) return;
     m_previewUsesProxies = use;
     // Video frames and rendered frames of the other variant must not be reused.
@@ -5417,12 +5798,18 @@ void MainWindow::serviceVideoDecodeRequests()
                 decodePath = proxy;
             }
         }
-        media::VideoDecoder* decoder = decoderFor(decodePath, asset.hardwareDecoding());
-        QImage frame = decoder ? decoder->frameAt(seconds) : QImage();
-        if (decodePath != asset.filePath() && !frame.isNull() && asset.frameSize().isValid()
-            && frame.size() != asset.frameSize()) {
-            frame = frame.scaled(asset.frameSize(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-        }
+        // A frame that was slow to decode before may be in the media cache.
+        const QString cacheKey =
+            media::DecodedFrameCache::keyFor(decodePath, sourceMilliseconds, asset.frameSize());
+        const QImage frame = m_decodedFrames->fetch(cacheKey, [&] {
+            media::VideoDecoder* decoder = decoderFor(decodePath, asset.hardwareDecoding());
+            QImage decoded = decoder ? decoder->frameAt(seconds) : QImage();
+            if (decodePath != asset.filePath() && !decoded.isNull() && asset.frameSize().isValid()
+                && decoded.size() != asset.frameSize()) {
+                decoded = decoded.scaled(asset.frameSize(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+            }
+            return decoded;
+        });
         // Stored even when null: that records the attempt, so an unreadable
         // file is not queued again on every render.
         m_mediaManager->putVideoFrame(id, sourceMilliseconds, frame);

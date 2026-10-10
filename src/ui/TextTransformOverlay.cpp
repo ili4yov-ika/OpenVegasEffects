@@ -123,8 +123,16 @@ Qt::CursorShape resizeCursor(const QPointF& direction)
     }
 }
 
-QString commandTitle(Handle handle)
+QString commandTitle(Handle handle, bool text)
 {
+    if (!text) {
+        // The reference's own names for these edits of a layer.
+        switch (handle) {
+        case Handle::Move: return QCoreApplication::translate("QObject", "Move Layer");
+        case Handle::Rotate: return QCoreApplication::translate("QObject", "Rotation Z");
+        default: return QCoreApplication::translate("QObject", "Scale");
+        }
+    }
     switch (handle) {
     case Handle::Move:
         return QCoreApplication::translate("openvegas::ui::TextTransformOverlay", "Move Text");
@@ -153,6 +161,14 @@ QPolygonF TextTransformOverlay::quadFor(const Target& target)
 TextTransformOverlay::Geometry TextTransformOverlay::geometryOf(const Target& target)
 {
     Geometry geometry;
+    if (target.layer && target.geometry.valid && !target.geometry.inScene) {
+        // The renderer's own box for the layer.
+        geometry.local = target.geometry.local;
+        geometry.toCanvas = target.geometry.toCanvas;
+        geometry.pivotOffset = target.geometry.pivotOffset;
+        geometry.valid = !geometry.local.isEmpty();
+        return geometry;
+    }
     if (!target.layer || target.canvasSize.isEmpty() || target.style.text.isEmpty()) {
         return geometry;
     }
@@ -184,9 +200,20 @@ bool TextTransformOverlay::isActive() const
 {
     const ViewerWidget* owner = viewer();
     if (owner && owner->isSpherical()) return false;
-    // With a picker the overlay listens even without a framed layer, so text
-    // can be picked straight from the canvas.
+    // With a picker the overlay listens even without a framed layer, so a
+    // layer can be picked straight from the canvas.
     return m_drag != Handle::None || m_picker || (m_target && m_target().layer);
+}
+
+TextTransformOverlay::Target TextTransformOverlay::currentTarget() const
+{
+    Target target = m_target ? m_target() : Target();
+    // The Text tool works on text alone.
+    const ViewerWidget* owner = viewer();
+    if (target.layer && !target.text && owner && owner->tool() == ViewerWidget::ViewerTool::Text) {
+        return Target();
+    }
+    return target;
 }
 
 bool TextTransformOverlay::acceptsTool(int tool) const
@@ -197,7 +224,7 @@ bool TextTransformOverlay::acceptsTool(int tool) const
 
 QPolygonF TextTransformOverlay::canvasQuad() const
 {
-    const Geometry geometry = geometryOf(m_target ? m_target() : Target());
+    const Geometry geometry = geometryOf(currentTarget());
     if (!geometry.valid) return {};
     return geometry.toCanvas.map(cornersOf(geometry.local));
 }
@@ -226,7 +253,7 @@ QPointF TextTransformOverlay::handleWidget(Handle handle, const Geometry& geomet
 TextTransformOverlay::Handle TextTransformOverlay::handleAt(const QPointF& widgetPos,
                                                             const ViewerMapping& mapping) const
 {
-    const Geometry geometry = geometryOf(m_target ? m_target() : Target());
+    const Geometry geometry = geometryOf(currentTarget());
     if (!geometry.valid || !mapping.isValid() || mapping.isSpherical()) return Handle::None;
     const auto near = [&](Handle handle, double radius) {
         return QLineF(handleWidget(handle, geometry, mapping), widgetPos).length() <= radius;
@@ -245,7 +272,8 @@ TextTransformOverlay::Handle TextTransformOverlay::handleAt(const QPointF& widge
 void TextTransformOverlay::paint(QPainter& painter, const ViewerMapping& mapping)
 {
     if (mapping.isSpherical()) return;
-    const Geometry geometry = geometryOf(m_target ? m_target() : Target());
+    const Target target = currentTarget();
+    const Geometry geometry = geometryOf(target);
     if (!geometry.valid) return;
     QPolygonF quad;
     for (const QPointF& corner : geometry.toCanvas.map(cornersOf(geometry.local))) {
@@ -270,8 +298,8 @@ void TextTransformOverlay::paint(QPainter& painter, const ViewerMapping& mapping
     painter.setPen(QPen(m_hover == Handle::Rotate ? QColor(255, 200, 40) : kFrameColor, 1.0));
     painter.drawEllipse(knob, 4.0, 4.0);
 
-    // The layer origin the text turns about.
-    const QPointF origin = mapping.toWidget(geometry.toCanvas.map(QPointF(0.0, 0.0)));
+    // The point the layer turns about: its position, or its anchor point.
+    const QPointF origin = mapping.toWidget(pivotOf(target, geometry));
     painter.setPen(QPen(kFrameColor, 1.0));
     painter.drawLine(origin - QPointF(5, 0), origin + QPointF(5, 0));
     painter.drawLine(origin - QPointF(0, 5), origin + QPointF(0, 5));
@@ -281,15 +309,16 @@ bool TextTransformOverlay::mousePress(ViewerPointerEvent& event)
 {
     if (event.button != Qt::LeftButton || !m_target || event.mapping.isSpherical()) return false;
     Handle handle = handleAt(event.widgetPos, event.mapping);
-    // A press on other text selects it and drags it straight away.
+    // A press on another layer selects it and drags it straight away.
     if (handle == Handle::None && m_picker && m_picker(event.canvasPos)) {
         handle = handleAt(event.widgetPos, event.mapping) == Handle::Move ? Handle::Move
                                                                           : Handle::None;
         requestRepaint();
         if (handle == Handle::None) return true;   // selected; nothing to drag
     }
-    const Target target = m_target();
+    const Target target = currentTarget();
     if (handle == Handle::None || !target.layer || target.layer->locked) return false;
+    if (handle == Handle::Move && !target.movesAlone) return false;
     m_drag = handle;
     m_start = target;
     m_startGeometry = geometryOf(target);
@@ -320,7 +349,7 @@ void TextTransformOverlay::mouseRelease(ViewerPointerEvent& event)
     if (handle == Handle::None || !m_moved) return;
     const Target target = m_target ? m_target() : Target();
     if (target.layer && m_committed) {
-        m_committed(m_before, target.layer->transform, commandTitle(handle));
+        m_committed(m_before, target.layer->transform, commandTitle(handle, m_start.text));
     }
     hover(event);
     requestRepaint();
@@ -341,10 +370,19 @@ void TextTransformOverlay::hover(ViewerPointerEvent& event)
     } else if (handle == Handle::Rotate) {
         event.cursor = Qt::PointingHandCursor;
     } else {
-        const Geometry geometry = geometryOf(m_target ? m_target() : Target());
+        const Geometry geometry = geometryOf(currentTarget());
         const QPointF centre = event.mapping.toWidget(geometry.toCanvas.map(geometry.local.center()));
         event.cursor = resizeCursor(handleWidget(handle, geometry, event.mapping) - centre);
     }
+}
+
+QPointF TextTransformOverlay::pivotOf(const Target& target, const Geometry& geometry)
+{
+    if (!target.layer) return geometry.toCanvas.map(QPointF(0.0, 0.0));
+    const QPointF position = target.layer->transform.positionAt(target.frame);
+    return QPointF(target.canvasSize.width() / 2.0 + position.x(),
+                   target.canvasSize.height() / 2.0 - position.y())
+           + geometry.pivotOffset;
 }
 
 void TextTransformOverlay::applyDrag(const QPointF& canvasPos, Qt::KeyboardModifiers modifiers)
@@ -371,7 +409,8 @@ void TextTransformOverlay::applyDrag(const QPointF& canvasPos, Qt::KeyboardModif
     }
 
     if (m_drag == Handle::Rotate) {
-        const QPointF origin = m_startGeometry.toCanvas.map(QPointF(0.0, 0.0));
+        // About the point the renderer turns the layer about.
+        const QPointF origin = pivotOf(m_start, m_startGeometry);
         const QPointF from = m_pressCanvas - origin;
         const QPointF to = canvasPos - origin;
         if (std::hypot(to.x(), to.y()) < 1e-6 || std::hypot(from.x(), from.y()) < 1e-6) return;
@@ -408,7 +447,7 @@ void TextTransformOverlay::applyDrag(const QPointF& canvasPos, Qt::KeyboardModif
         if (scalesX(m_drag) && std::abs(spanX) > 1e-9) sx = reach.x() / spanX;
         if (scalesY(m_drag) && std::abs(spanY) > 1e-9) sy = reach.y() / spanY;
     }
-    // A handle dragged across its opposite does not mirror the text.
+    // A handle dragged across its opposite does not mirror the layer.
     const auto keepSide = [](double value, double start) {
         const double sign = start < 0.0 ? -1.0 : 1.0;
         return sign * qMax(0.01, value * sign);
@@ -418,11 +457,15 @@ void TextTransformOverlay::applyDrag(const QPointF& canvasPos, Qt::KeyboardModif
     QTransform placed;
     placed.rotate(angle0);
     placed.scale(sx, sy);
+    // The content's origin lands at `origin`; a layer turned about its anchor
+    // A has it at position + A - R A, so its position is taken back from it.
     const QPointF origin = fixedCanvas - placed.map(fixed);
+    const QPointF pivot = m_startGeometry.pivotOffset;
+    const QPointF centre = origin - pivot + rotation.map(pivot);
     writePairAtFrame(transform.scaleXCurve, transform.scaleYCurve, transform.scalePercent, frame,
                      QPointF(sx * 100.0, sy * 100.0));
     writePairAtFrame(transform.positionXCurve, transform.positionYCurve, transform.position,
-                     frame, QPointF(origin.x() - width / 2.0, height / 2.0 - origin.y()));
+                     frame, QPointF(centre.x() - width / 2.0, height / 2.0 - centre.y()));
 }
 
 } // namespace openvegas::ui

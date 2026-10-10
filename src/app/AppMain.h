@@ -35,6 +35,7 @@ public:
     composition::Composition* composition() const { return m_composition.get(); }
     cache::CacheDB* cacheDB() const { return m_cacheDB.get(); }
     render::RenderManager* renderManager() const { return m_renderManager.get(); }
+    const UserDataPaths& userDataPaths() const { return m_paths; }
 
 private:
     void initializeFolders();

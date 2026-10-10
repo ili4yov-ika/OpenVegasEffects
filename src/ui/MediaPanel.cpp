@@ -26,6 +26,7 @@
 #include "ui/Theme.h"
 #include "ui/EffectPlacement.h"
 #include "ui/MediaSettingsDialog.h"
+#include "ui/Model3DSettingsDialog.h"
 #include <QApplication>
 #include <QDrag>
 #include <QMouseEvent>
@@ -138,6 +139,10 @@ QString kindText(media::MediaKind kind)
         return QStringLiteral("Audio");
     case media::MediaKind::Composition:
         return QStringLiteral("Composition");
+    case media::MediaKind::Model3D:
+        return QStringLiteral("3D Model");
+    case media::MediaKind::Model3DAnimation:
+        return QStringLiteral("3D Model Animation");
     }
     return QString();
 }
@@ -179,6 +184,20 @@ MediaPanel::MediaPanel(QWidget* parent)
     connect(m_search, &QLineEdit::textChanged, this, [this](const QString&) { rebuildList(); });
     connect(form.toolButtonImport, &QToolButton::clicked,
             this, &MediaPanel::importCommandRequested);
+    // Its arrow offers the reference's Import entries this port has: media,
+    // and a file's 3D model animations.
+    {
+        auto* imports = new QMenu(form.toolButtonImport);
+        imports->setObjectName(QStringLiteral("mediaImportMenu"));
+        connect(imports->addAction(QCoreApplication::translate("biff::ui::media::MediaActions", "Media...")),
+                &QAction::triggered, this, &MediaPanel::importCommandRequested);
+        QAction* animation = imports->addAction(
+            QCoreApplication::translate("biff::ui::media::MediaActions", "3D Model Animation..."));
+        animation->setObjectName(QStringLiteral("mediaImportModelAnimation"));
+        connect(animation, &QAction::triggered, this, &MediaPanel::importModelAnimationRequested);
+        form.toolButtonImport->setMenu(imports);
+        form.toolButtonImport->setPopupMode(QToolButton::MenuButtonPopup);
+    }
     form.toolButtonImport->setIcon(QIcon(QStringLiteral(":/icons/open.svg")));
     form.MediaPanelNewFolderButton->setIcon(QIcon(QStringLiteral(":/icons/add.svg")));
     form.MediaPanelFolderButton->setIcon(QIcon(QStringLiteral(":/icons/open.svg")));
@@ -369,6 +388,50 @@ void MediaPanel::showMediaProperties(const core::Identifier& id)
     if (dialog.exec() != QDialog::Accepted) return;
     setMediaOverrides(id, dialog.result());
     if (!dialog.relinkPath().isEmpty()) emit relinkRequested(asset.filePath(), dialog.relinkPath());
+}
+
+void MediaPanel::showModelProperties(const core::Identifier& id)
+{
+    if (!m_manager) return;
+    const media::MediaAsset asset = m_manager->assetById(id);
+    if (!asset.isValid() || asset.kind() != media::MediaKind::Model3D) return;
+    struct State
+    {
+        model3d::ImportSettings settings;
+        QVector<model3d::Material> materials;
+    };
+    const State before{m_manager->modelSettings(id), m_manager->modelMaterialEdits(id)};
+    Model3DSettingsDialog dialog(asset.sourcePath(), before.settings, this, before.materials);
+    if (dialog.exec() != QDialog::Accepted) return;
+    const State after{dialog.settings(), dialog.editedMaterials()};
+    bool sameMaterials = before.materials.size() == after.materials.size();
+    for (int i = 0; sameMaterials && i < after.materials.size(); ++i)
+        sameMaterials = before.materials.at(i).name == after.materials.at(i).name
+                        && model3d::sameMaterialSettings(before.materials.at(i), after.materials.at(i));
+    if (before.settings == after.settings && sameMaterials) return;
+    // The edits first: a model read again with new settings takes them.
+    const QString path = asset.sourcePath();
+    const auto apply = [panel = QPointer<MediaPanel>(this), epoch = m_managerEpoch, id, path](const State& state) {
+        if (!panel || panel->m_managerEpoch != epoch || !panel->m_manager) return;
+        panel->m_manager->setModelMaterials(id, state.materials);
+        if (panel->m_manager->modelSettings(id) != state.settings) panel->m_manager->importModel(path, state.settings);
+        panel->refresh();
+        emit panel->mediaMetadataModified();
+    };
+    class Command : public QUndoCommand
+    {
+    public:
+        Command(std::function<void(const State&)> apply, State before, State after, const QString& text)
+            : QUndoCommand(text), m_apply(std::move(apply)), m_before(std::move(before)), m_after(std::move(after)) {}
+        void undo() override { m_apply(m_before); }
+        void redo() override { m_apply(m_after); }
+    private:
+        std::function<void(const State&)> m_apply;
+        State m_before, m_after;
+    };
+    auto* command = new Command(apply, before, after, dialog.windowTitle());
+    if (m_undoStack) m_undoStack->push(command);
+    else { command->redo(); delete command; }
 }
 
 void MediaPanel::refresh()
@@ -608,6 +671,7 @@ void MediaPanel::showContextMenu(const QPoint& position)
     QAction* properties = asset.kind() == media::MediaKind::Video
                                   || asset.kind() == media::MediaKind::Image
                                   || asset.kind() == media::MediaKind::Audio
+                                  || asset.kind() == media::MediaKind::Model3D
         ? menu.addAction(QCoreApplication::translate("biff::ui::media::MediaActions", "Properties"))
         : nullptr;
     if (properties) properties->setObjectName(QStringLiteral("mediaPropertiesAction"));
@@ -653,7 +717,8 @@ void MediaPanel::showContextMenu(const QPoint& position)
     });
     QAction* chosen = menu.exec(m_list->viewport()->mapToGlobal(position));
     if (chosen && chosen == properties) {
-        showMediaProperties(asset.id());
+        if (asset.kind() == media::MediaKind::Model3D) showModelProperties(asset.id());
+        else showMediaProperties(asset.id());
         return;
     }
     if (chosen != relink) return;

@@ -834,7 +834,9 @@ QWidget* OptionsDialog::buildRenderPage()
 
     m_antialiasing = new QComboBox(page);
     m_antialiasing->setObjectName(QStringLiteral("comboBoxAntialiasing"));
-    m_antialiasing->addItems({tr("Off"), tr("2x MSAA"), tr("4x MSAA"), tr("8x MSAA")});
+    for (int mode = 1; mode <= 9; ++mode)
+        m_antialiasing->addItem(QCoreApplication::translate("biff::ui::common",
+                                app::kAntialiasingLabels[mode - 1]), mode);
     form->addRow(tr("3D antialiasing:"), m_antialiasing);
     return page;
 }
@@ -1001,7 +1003,9 @@ QWidget* OptionsDialog::buildProxiesPage()
                     QStringLiteral("toolButtonSelectProxyDirectoryPath")));
     m_proxyQuality = new QComboBox(proxyGroup);
     m_proxyQuality->setObjectName(QStringLiteral("comboBoxProxyQuality"));
-    m_proxyQuality->addItems({tr("Low"), tr("Medium"), tr("High")});
+    m_proxyQuality->addItem(tr("Low"), QStringLiteral("Low"));
+    m_proxyQuality->addItem(tr("Medium"), QStringLiteral("Medium"));
+    m_proxyQuality->addItem(tr("High"), QStringLiteral("High"));
     proxyForm->addRow(tr("Proxy quality:"), m_proxyQuality);
 
     auto* proxyButtons = new QHBoxLayout;
@@ -1043,7 +1047,9 @@ QWidget* OptionsDialog::buildProxiesPage()
                     QStringLiteral("toolButtonSelectPreRenderDirectoryPath")));
     m_previewMode = new QComboBox(preRenderGroup);
     m_previewMode->setObjectName(QStringLiteral("comboBoxPreviewMode"));
-    m_previewMode->addItems({tr("Auto"), tr("Proxy"), tr("Full Resolution")});
+    m_previewMode->addItem(tr("Auto"), QStringLiteral("Auto"));
+    m_previewMode->addItem(tr("Proxy"), QStringLiteral("Proxy"));
+    m_previewMode->addItem(tr("Full Resolution"), QStringLiteral("Full Resolution"));
     preRenderForm->addRow(tr("Preview mode:"), m_previewMode);
     auto* preRenderButtons = new QHBoxLayout;
     auto* deleteProjectPreRender = new QPushButton(tr("Delete Project Pre-Renders"), preRenderGroup);
@@ -1054,6 +1060,7 @@ QWidget* OptionsDialog::buildProxiesPage()
     preRenderButtons->addWidget(deleteAllPreRender);
     preRenderForm->addRow(preRenderButtons);
     connect(deleteAllPreRender, &QPushButton::clicked, this, [this] {
+        emit preRendersAboutToBeDeleted();
         clearManagedPath(m_preRenderPath->text(), tr("all pre-render files"));
     });
     connect(deleteProjectPreRender, &QPushButton::clicked, this, [this] {
@@ -1070,6 +1077,7 @@ QWidget* OptionsDialog::buildProxiesPage()
                                      tr("No saved project is currently selected."));
             return;
         }
+        emit preRendersAboutToBeDeleted();
         clearManagedPath(QDir(preRenderRoot).filePath(project),
                          tr("pre-renders for project '%1'").arg(project), true);
     });
@@ -1221,7 +1229,7 @@ void OptionsDialog::onRestoreDefaults()
         m_modelTextureMaxSize->setValue(4096);
         m_shadowMapSize->setValue(2048);
         m_reflectionMapSize->setValue(1024);
-        m_antialiasing->setCurrentIndex(2);
+        m_antialiasing->setCurrentIndex(0);
     } else if (name == QStringLiteral("Quality Profiles")) {
         m_playbackQuality->setCurrentIndex(0);
         m_pausedQuality->setCurrentIndex(0);
@@ -1353,7 +1361,7 @@ bool OptionsDialog::saveSettings()
     s.setValue(kModelTextureMaxSize, m_modelTextureMaxSize->value());
     s.setValue(kShadowMapSize, m_shadowMapSize->value());
     s.setValue(kReflectionMapSize, m_reflectionMapSize->value());
-    s.setValue(kAntialiasing, m_antialiasing->currentText());
+    s.setValue(kAntialiasing, m_antialiasing->currentData());
     app::Settings::setPlaybackQualityProfile(m_playbackQuality->currentData().toString());
     app::Settings::setPausedQualityProfile(m_pausedQuality->currentData().toString());
     app::Settings::setPlaybackDownsampleMode(m_playbackResolution->currentData().toString());
@@ -1374,8 +1382,8 @@ bool OptionsDialog::saveSettings()
     s.setValue(kVoiceMuteOutput, m_voiceMuteOutput->isChecked());
     s.setValue(kProxyPath, QDir::toNativeSeparators(m_proxyPath->text().trimmed()));
     s.setValue(kPreRenderPath, QDir::toNativeSeparators(m_preRenderPath->text().trimmed()));
-    s.setValue(kProxyQuality, m_proxyQuality->currentText());
-    s.setValue(kPreviewMode, m_previewMode->currentText());
+    s.setValue(kProxyQuality, m_proxyQuality->currentData());
+    s.setValue(kPreviewMode, m_previewMode->currentData());
     s.setValue(kPreferIntegratedGpu, m_preferIntegratedGpu->isChecked());
     s.setValue(kAutosaveEnabled, m_autosaveEnabled->isChecked());
     s.setValue(kAutosaveMinutes, m_autosaveSeconds->value());
@@ -1486,8 +1494,8 @@ void OptionsDialog::loadSettings()
     m_modelTextureMaxSize->setValue(s.value(kModelTextureMaxSize, 4096).toInt());
     m_shadowMapSize->setValue(s.value(kShadowMapSize, 2048).toInt());
     m_reflectionMapSize->setValue(s.value(kReflectionMapSize, 1024).toInt());
-    m_antialiasing->setCurrentIndex(qMax(0, m_antialiasing->findText(
-        s.value(kAntialiasing, QStringLiteral("4x MSAA")).toString())));
+    m_antialiasing->setCurrentIndex(m_antialiasing->findData(
+        app::antialiasingMode(s.value(kAntialiasing, 1))));
     auto selectData = [](QComboBox* combo, const QVariant& value) {
         const int index = combo->findData(value);
         combo->setCurrentIndex(index >= 0 ? index : 0);
@@ -1516,10 +1524,10 @@ void OptionsDialog::loadSettings()
         defaultDataDirectory(QStringLiteral("Proxies"))).toString());
     m_preRenderPath->setText(s.value(kPreRenderPath,
         defaultDataDirectory(QStringLiteral("PreRenders"))).toString());
-    m_proxyQuality->setCurrentIndex(qMax(0, m_proxyQuality->findText(
-        s.value(kProxyQuality, QStringLiteral("Medium")).toString())));
-    m_previewMode->setCurrentIndex(qMax(0, m_previewMode->findText(
-        s.value(kPreviewMode, QStringLiteral("Auto")).toString())));
+    selectData(m_proxyQuality, app::proxyQualityToken(
+        s.value(kProxyQuality, QStringLiteral("Medium")).toString()));
+    selectData(m_previewMode, app::proxyPreviewToken(
+        s.value(kPreviewMode, QStringLiteral("Auto")).toString()));
     m_preferIntegratedGpu->setChecked(s.value(kPreferIntegratedGpu, false).toBool());
     // autosave:: reads the older AutoSaveEnabled/AutoSaveIntervalSeconds too.
     m_autosaveEnabled->setChecked(autosave::enabled());

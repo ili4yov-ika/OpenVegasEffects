@@ -243,15 +243,59 @@ void TimelineWidget::buildTransformRows(QTreeWidgetItem* parent, int index)
 }
 
 void TimelineWidget::buildTransformRow(QTreeWidgetItem* parent, int index,
-                                       composition::TransformProperty prop)
+                                       composition::TransformProperty prop,
+                                       const QString& modelNode, const QVector3D& pivot)
 {
     const auto& layer = m_comp->layers()[index];
-    auto* row = new QTreeWidgetItem(parent, {QCoreApplication::translate("Transform", composition::transformPropertyName(prop, layer.dimension))});
+    // A model node is always in the scene.
+    const auto dimension = modelNode.isEmpty() ? layer.dimension : composition::LayerDimension::ThreeD;
+    auto* row = new QTreeWidgetItem(parent, {QCoreApplication::translate("Transform", composition::transformPropertyName(prop, dimension))});
     row->setData(0, Qt::UserRole, index);
     row->setData(0, Qt::UserRole + 4, int(prop));
+    if (!modelNode.isEmpty()) {
+        row->setData(0, kModelNodeRole, modelNode);
+        row->setData(0, kModelNodeRole + 1, QVariant::fromValue(pivot));
+    }
     if (layer.transform.curve(prop, 0)) row->setIcon(0, QIcon(":/icons/key-frame-off.svg"));
     auto* axes = new QWidget(m_tree);
     auto* layout = new QHBoxLayout(axes); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(2);
+    if (!modelNode.isEmpty()) {
+        // The node's own transform, made when first changed (it starts where
+        // the node is: position and anchor point at its pivot).
+        const composition::LayerTransform resting =
+            composition::restingModelNodeTransform(pivot.x(), pivot.y(), pivot.z());
+        for (int axis = 0; axis < composition::axisCount(prop, dimension); ++axis) {
+            plugin::EffectParameterSpec spec;
+            spec.type = "double"; spec.decimals = 1; spec.displayName = row->text(0);
+            if (prop == composition::TransformProperty::Scale) spec.unit = "%";
+            auto read = [this, index, prop, axis, modelNode, resting]() -> QVariant {
+                const composition::ModelNodeTransform* node = m_comp->layers()[index].modelNode(modelNode);
+                return (node ? node->transform : resting).valueAt(prop, axis, currentFrame());
+            };
+            const int generation = m_treeGeneration;
+            auto write = [this, row, index, prop, axis, read, generation, modelNode, resting](QVariant value) {
+                if (m_rebuilding || generation != m_treeGeneration) return;
+                if (read().toDouble() == value.toDouble() || m_comp->layers()[index].locked) return;
+                m_tree->setCurrentItem(row);
+                editLayer(index, tr("Set %1").arg(row->text(0)), [=](composition::Layer& l) {
+                    composition::ModelNodeTransform* node = l.modelNode(modelNode);
+                    if (!node) {
+                        l.modelNodes.append({modelNode, resting});
+                        node = &l.modelNodes.last();
+                    }
+                    auto* curve = node->transform.curve(prop, axis);
+                    if (curve && !curve->isEmpty()) curve->set(currentFrame(), value.toDouble());
+                    else composition::setTransformValue(node->transform, prop, axis, value.toDouble());
+                });
+            };
+            layout->addWidget(timelineParameterEditor(axes, spec,
+                QStringLiteral("timelineModelNode_%1_%2_%3_%4").arg(index).arg(modelNode).arg(int(prop)).arg(axis),
+                read, write, m_valueReaders), 1);
+        }
+        axes->setEnabled(!layer.locked);
+        m_tree->setItemWidget(row, 1, axes);
+        return;
+    }
     for (int axis = 0; axis < composition::axisCount(prop, layer.dimension); ++axis) {
         plugin::EffectParameterSpec spec;
         spec.type = "double"; spec.decimals = 1; spec.displayName = row->text(0);
@@ -293,11 +337,22 @@ QVector<composition::KeyFrameList*> TimelineWidget::selectedCurves()
     if (!row->data(0, Qt::UserRole).isValid()) return curves;
     const int index = row->data(0, Qt::UserRole).toInt();
     if (index < 0 || index >= m_comp->layers().size() || m_comp->layers()[index].locked) return curves;
-    if (row->data(0, Qt::UserRole + 4).isValid()) {
+    if (row->data(0, kLayerPropertyRole).isValid()) {
+        if (auto* curve = composition::keyedLayerProperty(m_comp->layerRef(index),
+                                                          row->data(0, kLayerPropertyRole).toString()).curve)
+            curves.append(curve);
+    } else if (row->data(0, kModelAnimationPropertyRole).isValid()) {
+        if (auto* curve = modelAnimationCurve(m_comp->layerRef(index), row->data(0, kModelAnimationRole).toString(),
+                                              row->data(0, kModelAnimationPropertyRole).toInt()))
+            curves.append(curve);
+    } else if (row->data(0, Qt::UserRole + 4).isValid()) {
         auto& layer = m_comp->layerRef(index);
         const auto prop = composition::TransformProperty(row->data(0, Qt::UserRole + 4).toInt());
-        for (int axis = 0; axis < composition::axisCount(prop, layer.dimension); ++axis)
-            if (auto* c = layer.transform.curve(prop, axis)) curves.append(c);
+        TimelineLane lane;
+        lane.modelNode = row->data(0, kModelNodeRole).toString();
+        if (auto* transform = laneTransform(layer, lane))
+            for (int axis = 0; axis < composition::axisCount(prop, laneDimension(layer, lane)); ++axis)
+                if (auto* c = transform->curve(prop, axis)) curves.append(c);
     } else if (auto* curve = selectedCurve()) curves.append(curve);
     return curves;
 }
@@ -311,8 +366,23 @@ void TimelineWidget::updateKeyButtons()
         if (!m_comp || l < 0 || l >= m_comp->layers().size()) continue;
         const auto& layer = m_comp->layers()[l];
         bool animated = false;
-        if (item->data(0, Qt::UserRole + 4).isValid()) animated = layer.transform.isAnimated(
-            composition::TransformProperty(item->data(0, Qt::UserRole + 4).toInt()), layer.dimension);
+        if (item->data(0, kLayerPropertyRole).isValid()) {
+            const composition::KeyedLayerProperty property = composition::keyedLayerProperty(
+                const_cast<composition::Layer&>(layer), item->data(0, kLayerPropertyRole).toString());
+            animated = property.curve && !property.curve->isEmpty();
+        } else if (item->data(0, kModelAnimationPropertyRole).isValid()) {
+            const composition::KeyFrameList* curve = modelAnimationCurve(
+                layer, item->data(0, kModelAnimationRole).toString(),
+                item->data(0, kModelAnimationPropertyRole).toInt());
+            animated = curve && !curve->isEmpty();
+        } else if (item->data(0, Qt::UserRole + 4).isValid()) {
+            TimelineLane lane;
+            lane.modelNode = item->data(0, kModelNodeRole).toString();
+            const composition::LayerTransform* transform = laneTransform(layer, lane);
+            animated = transform && transform->isAnimated(
+                composition::TransformProperty(item->data(0, Qt::UserRole + 4).toInt()),
+                laneDimension(layer, lane));
+        }
         else if (item->data(0, Qt::UserRole + 3).isValid()) animated = layer.clips[item->data(0, Qt::UserRole + 1).toInt()]
             .effects[item->data(0, Qt::UserRole + 2).toInt()].isAnimated(item->data(0, Qt::UserRole + 3).toInt());
         item->setIcon(0, QIcon(animated ? ":/icons/key-frame-full.svg" : ":/icons/key-frame-off.svg"));

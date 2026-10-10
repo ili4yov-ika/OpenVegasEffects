@@ -257,9 +257,32 @@ struct RenderInvocation
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QHash<int, QString> valueOverrides;
+    // A reduced preview's scale and the NativeReducedValues it applies to.
+    float valueScale = 1.0f;
+    int reducedValues = NativeReducesNothing;
 };
 
 thread_local RenderInvocation* g_renderInvocation = nullptr;
+
+// Modules that read the render scale in their context and reduce their own
+// pixel values with it (the SDK's blur helpers): the host reduces only their
+// points. Found as reducedPreviewModules was.
+const QSet<QString>& ownPixelScaleModules()
+{
+    static const QSet<QString> names {
+    "360Blur", "360Glow", "360GlowDarks", "360Unsharpen", "Gleam", "MatteCleaner",
+    "SurfaceRayTrace"
+    };
+    return names;
+}
+
+// What the host reduces for a module in a reduced preview: its px values and
+// its points, both in the layer's pixels.
+int reducedValuesOf(const ModuleRecord& record)
+{
+    return ownPixelScaleModules().contains(QFileInfo(record.filePath).completeBaseName())
+        ? int(NativeReducesPoints) : int(NativeReducesPixels | NativeReducesPoints);
+}
 
 int parameterIndex(const char* key)
 {
@@ -293,10 +316,55 @@ QString parameterValue(const char* key)
     return g_renderInvocation->module->parameters.at(index).defaultValue;
 }
 
+// Values in pixels that a module registered without the "px" unit, by file
+// name - found as reducedPreviewModules was: halving each unit-less number in
+// turn (hfpl_runtime_probe render-scale-search) and keeping those that bring
+// the reduced picture to the full one reduced, at both sizes and both sets of
+// values.
+const QHash<QString, QSet<QString>>& unmarkedPixelValues()
+{
+    static const QHash<QString, QSet<QString>> values {
+        {QStringLiteral("Diffuse"), {QStringLiteral("radius_f")}},
+        {QStringLiteral("Glint"), {QStringLiteral("size")}},
+        {QStringLiteral("HighpassSharpen"), {QStringLiteral("radius")}},
+        {QStringLiteral("LightRays"), {QStringLiteral("radius")}},
+        {QStringLiteral("Magnify"), {QStringLiteral("irisRadius")}},
+        {QStringLiteral("Shake"), {QStringLiteral("amount")}},
+        {QStringLiteral("Sharpen"), {QStringLiteral("edgeSize")}},
+    };
+    return values;
+}
+
+// The factor a value registered in pixels is read with: the reduced
+// preview's scale when the module's px values are reduced.
+float pixelValueScale(const char* key)
+{
+    if (!g_renderInvocation || !(g_renderInvocation->reducedValues & NativeReducesPixels)
+        || g_renderInvocation->valueScale >= 1.0f) {
+        return 1.0f;
+    }
+    const int index = parameterIndex(key);
+    if (index < 0) return 1.0f;
+    const EffectParameterSpec& parameter = g_renderInvocation->module->parameters.at(index);
+    if (parameter.unit.startsWith(QLatin1String("px"), Qt::CaseInsensitive))
+        return g_renderInvocation->valueScale;
+    const auto unmarked = unmarkedPixelValues().constFind(
+        QFileInfo(g_renderInvocation->module->filePath).completeBaseName());
+    return unmarked != unmarkedPixelValues().constEnd() && unmarked->contains(parameter.name)
+        ? g_renderInvocation->valueScale : 1.0f;
+}
+
+// The factor a point is read with.
+float pointValueScale()
+{
+    return g_renderInvocation && (g_renderInvocation->reducedValues & NativeReducesPoints)
+        ? qMin(1.0f, g_renderInvocation->valueScale) : 1.0f;
+}
+
 float scalarParameter(quint64, const char* key, quint32)
 {
     bool ok = false;
-    const float value = parameterValue(key).toFloat(&ok);
+    const float value = parameterValue(key).toFloat(&ok) * pixelValueScale(key);
     if (qEnvironmentVariableIsSet("OPENVEGAS_HFPL_RENDER_TRACE")) {
         std::fprintf(stderr, "[hfpl-render] scalar %s=%g ok=%d\n",
                      key ? key : "<null>", double(value), ok ? 1 : 0);
@@ -337,17 +405,19 @@ QVector<float> vectorParameter(const char* key, int componentCount)
 void point2dParameter(quint64, const char* key, quint32, float* x, float* y)
 {
     const QVector<float> value = vectorParameter(key, 2);
-    if (x) *x = value.at(0);
-    if (y) *y = value.at(1);
+    const float scale = pointValueScale();
+    if (x) *x = value.at(0) * scale;
+    if (y) *y = value.at(1) * scale;
 }
 
 void point3dParameter(quint64, const char* key, quint32,
                       float* x, float* y, float* z)
 {
     const QVector<float> value = vectorParameter(key, 3);
-    if (x) *x = value.at(0);
-    if (y) *y = value.at(1);
-    if (z) *z = value.at(2);
+    const float scale = pointValueScale();
+    if (x) *x = value.at(0) * scale;
+    if (y) *y = value.at(1) * scale;
+    if (z) *z = value.at(2) * scale;
 }
 
 void layerIdParameter(quint64, const char* key, quint32, char* layerId)
@@ -868,7 +938,8 @@ int integerParameter(quint64, const char* key, quint32)
     bool ok = false;
     const int numeric = value.toInt(&ok);
     if (ok) {
-        return numeric;
+        const float scale = pixelValueScale(key);
+        return scale < 1.0f ? qRound(numeric * scale) : numeric;
     }
     const QStringList& choices = g_renderInvocation->module->parameters.at(index).choices;
     for (int i = 0; i < choices.size(); ++i) {
@@ -1022,7 +1093,7 @@ int instanceLayerInfo(quint64 host, const char* layerId, quint32 frame, void* in
     if (!layer.valid) return -5;
     // tagBiffLayerInfo: ID, +0x28 type, +0x2c start frame, +0x34 length,
     // +0x41 visible, +0x6c/+0x70 source size, +0x74 the world matrix.
-    if (layerId) std::strncpy(static_cast<char*>(info), layerId, 0x27);
+    if (layerId) std::memcpy(info, layerId, qstrnlen(layerId, 0x27));
     const qint32 type = layer.type, start = layer.startFrame,
                  duration = qMax(1, layer.durationFrames);
     const qint32 width = qMax(1, layer.size.width()), height = qMax(1, layer.size.height());
@@ -1993,7 +2064,7 @@ public:
         QVector<QByteArray> polygonRecords(input.size());
         for (qsizetype index = 0; index < input.size(); ++index) {
             NativeGeometryBatch& batch = input[index];
-            char* record = records.data() + index * 0x80;
+            char* batchRecord = records.data() + index * 0x80;
             QByteArray& polygons = polygonRecords[index];
             polygons = QByteArray(batch.polygons.size() * 0x18, '\0');
             for (qsizetype p = 0; p < batch.polygons.size(); ++p) {
@@ -2013,14 +2084,14 @@ public:
             const qint32 vertexCount = qint32(batch.vertices.size());
             const qint32 triangleCount = qint32(batch.triangles.size());
             const qint32 polygonCount = qint32(batch.polygons.size());
-            std::memcpy(record + 0x00, &vertices, sizeof(vertices));
-            std::memcpy(record + 0x08, &vertexCount, sizeof(vertexCount));
-            std::memcpy(record + 0x10, &triangles, sizeof(triangles));
-            std::memcpy(record + 0x18, &triangleCount, sizeof(triangleCount));
-            std::memcpy(record + 0x20, &polygonPointer, sizeof(polygonPointer));
-            std::memcpy(record + 0x28, &polygonCount, sizeof(polygonCount));
-            std::memcpy(record + 0x2c, batch.extents, sizeof(batch.extents));
-            std::memcpy(record + 0x3c, batch.matrix, sizeof(batch.matrix));
+            std::memcpy(batchRecord + 0x00, &vertices, sizeof(vertices));
+            std::memcpy(batchRecord + 0x08, &vertexCount, sizeof(vertexCount));
+            std::memcpy(batchRecord + 0x10, &triangles, sizeof(triangles));
+            std::memcpy(batchRecord + 0x18, &triangleCount, sizeof(triangleCount));
+            std::memcpy(batchRecord + 0x20, &polygonPointer, sizeof(polygonPointer));
+            std::memcpy(batchRecord + 0x28, &polygonCount, sizeof(polygonCount));
+            std::memcpy(batchRecord + 0x2c, batch.extents, sizeof(batch.extents));
+            std::memcpy(batchRecord + 0x3c, batch.matrix, sizeof(batch.matrix));
         }
         QByteArray shape(0x10, '\0');
         void* recordPointer = records.data();
@@ -2800,7 +2871,9 @@ public:
                     sizeof(textureHeight));
         const float uvBounds[] = {0.0f, 0.0f, 1.0f, 1.0f};
         std::memcpy(inputTextureBlock.data() + 0x1c, uvBounds, sizeof(uvBounds));
-        const float textureScale = 1.0f;
+        // The render scale (+0x2c/+0x30 of the textures and the context):
+        // 1 at full size, smaller for a reduced preview.
+        const float textureScale = transition ? 1.0f : qBound(0.01f, time.renderScale, 1.0f);
         std::memcpy(inputTextureBlock.data() + 0x2c, &textureScale,
                     sizeof(textureScale));
         std::memcpy(inputTextureBlock.data() + 0x30, &textureScale,
@@ -2887,12 +2960,15 @@ public:
             std::memcpy(frameBlock.data() + 0x18, &outputPointer,
                         sizeof(outputPointer));
         }
-        // RenderContext carries the horizontal/vertical render scale at
-        // +0x2c/+0x30. Zero makes the SDK blur helper divide by zero even
-        // when the requested radius is zero.
+        // RenderContext: +0x24 the normalisation factor (Plugin2DEffect::Render
+        // param 13, its own argument, 1 here - zero makes the SDK blur helper
+        // divide by zero), +0x2c/+0x30 the render scale (param 11, written to
+        // both). The scale is read from the context only: a probe of the 241
+        // modules with the scale in the textures alone changes nothing, and
+        // with it in +0x24 as well 53 of them drew a reduced preview wrong.
         if (!transition) {
-            std::memcpy(frameBlock.data() + 0x24, &textureScale,
-                        sizeof(textureScale));
+            const float normalization = 1.0f;
+            std::memcpy(frameBlock.data() + 0x24, &normalization, sizeof(normalization));
         }
         std::memcpy(frameBlock.data() + 0x2c, &textureScale,
                     sizeof(textureScale));
@@ -2937,6 +3013,8 @@ public:
             };
             std::memcpy(frameBlock.data() + 0x38, transforms.data(),
                         sizeof(transforms));
+            // The texture's own size, reduced with it (the full size here
+            // drew 204 of the 241 modules wrong).
             std::memcpy(frameBlock.data() + 0x60, &frameWidth, sizeof(frameWidth));
             std::memcpy(frameBlock.data() + 0x64, &frameHeight, sizeof(frameHeight));
             // The time: milliseconds at +0x6c/+0x70, frames at +0x98/+0x9c,
@@ -2966,6 +3044,9 @@ public:
         RenderInvocation invocation {&record, &parameterValues, &m_scratchPool,
                                      &m_scratchVboPool, &m_scratchRenderbufferPool,
                                      width, height};
+        invocation.valueScale = textureScale;
+        invocation.reducedValues = transition ? int(NativeReducesNothing)
+            : time.reducedValues >= 0 ? time.reducedValues : reducedValuesOf(record);
         RenderInvocation* previousInvocation = g_renderInvocation;
         g_renderInvocation = &invocation;
         if (qEnvironmentVariableIsSet("OPENVEGAS_HFPL_RENDER_DIAGNOSTIC_STUBS")) {
@@ -3228,7 +3309,11 @@ public:
             gl->glReadPixels(0, 0, targetWidth, targetHeight, GL_RGBA, GL_UNSIGNED_BYTE, drawn.bits());
             if (gl->glGetError() == GL_NO_ERROR) {
                 // GL rows run bottom-up; the module draws in a Y-down view.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+                *overlay = drawn.flipped(Qt::Vertical);
+#else
                 *overlay = drawn.mirrored(false, true);
+#endif
             }
         }
         if (target) {
@@ -3576,6 +3661,66 @@ void registerNativeGeometryModule(
     g_registry.insert(id.value(), record);
 }
 
+namespace {
+
+// The modules that draw a reduced preview right: the picture of the halved
+// layer through the module at scale 0.5, with the host reducing their values
+// (reducedValuesOf), against the full picture through it halved - a mean
+// channel difference under 2 of 255 at 256x256 and 144x144, with the defaults
+// and with every ranged number a third into its range and every point moved
+// off the centre (hfpl_runtime_probe render-scale-pixels), and a picture the
+// module changed; seven more once their values in pixels registered without
+// the unit are reduced too (unmarkedPixelValues). The others - noise,
+// distortions, effects that depend on the pixel grid, ones that need other
+// frames - are drawn full and reduced.
+const QSet<QString>& reducedPreviewModules()
+{
+    static const QSet<QString> names {
+    "360Blur", "360Bulge", "360ChannelBlur", "360FisheyeConverter", "360Glow", "360GlowDarks",
+    "360Magnify", "360Text", "360Twirl", "360Unsharpen", "4PointRamp", "AlphaBrightnessContrast",
+    "AngleBlur", "AnimatedLasers", "AudioSpectrum", "AudioWaveform", "AutoColor", "AutoContrast",
+    "AutoLevels", "AutoLightFlares", "AutoVolumetrics", "BezierWarp", "BilateralBlur",
+    "BleachBypass", "BoxBlur", "BrightnessContrast", "Bulge", "Caustics", "CenterWipe",
+    "ChannelBlur", "ChannelMixer", "ChromaBlur", "ChromaKey", "ChromaticAberration", "Clone",
+    "ColorBalance", "ColorCorrection", "ColorDifferenceKey", "ColorTemperature", "ColorVibrance",
+    "Crop", "CrushBlacksWhites", "CrushBlacksWhitesAlpha", "CustomGray", "DayForNight", "Dehaze",
+    "Denoise", "DepthMatte", "Diffuse", "DistanceField", "DropShadow", "DuoTone", "Echo",
+    "EdgeDistortion", "EnvironmentMapTransform", "Evaporate", "Exposure", "ExposurePro", "Fill",
+    "Flicker", "Gamma", "Gleam", "Glint", "Glow", "GlowDarks", "GlowImproved", "HSL",
+    "HighpassSharpen", "HueColorize", "HueKey", "HueShift", "InnerGlow", "Invert", "InvertAlpha",
+    "LeaveColor", "LensBlur", "LensDistort", "Letterbox", "Levels", "LightFlares", "LightFlaresV2",
+    "LightLeak", "LightRays", "LightsaberV2Glow", "LinearWipe", "LuminanceKey", "Magnify",
+    "MatteCleaner", "MotionLock", "NeonGlow", "PageCurl", "Parallax", "PiP", "Pinwheel",
+    "PixelSort", "ProSkinRetouch", "Projector", "PulpScifiTitleCrawl", "QuadWarp", "RadialBlur",
+    "RadialGradient", "RadialReveal", "RadioWaves", "Ramp", "Reflection", "RemoveStockBackground",
+    "ShadowHighlight", "Shake", "Sharpen", "Shatter", "Solarize", "Sphere", "SpillSuppressor",
+    "SplitScreenMasking", "SurfaceRayTrace", "Text", "ThreeStripColor", "Threshold", "TimeWarp",
+    "Tint", "ToneColoring", "Twirl", "TwoStripColor", "Unsharpen", "VerticalVideo", "Vibrance",
+    "WaterCaustics", "WireRemoval", "Wireframe", "YUVColorCorrection", "YUVColorTransform",
+    "ZoomBlur"
+    };
+    return names;
+}
+
+} // namespace
+
+bool nativeEffectRendersReduced(const core::Identifier& id)
+{
+    QMutexLocker lock(&g_registryMutex);
+    const auto it = g_registry.constFind(id.value());
+    if (it == g_registry.constEnd() || !it->frameRenderingVerified || it->behaviorRenderingVerified
+        || it->geometryRenderingVerified) {
+        return false;
+    }
+    return reducedPreviewModules().contains(QFileInfo(it->filePath).completeBaseName());
+}
+
+bool isNativeModule(const core::Identifier& id)
+{
+    QMutexLocker lock(&g_registryMutex);
+    return g_registry.contains(id.value());
+}
+
 bool nativeEffectFrameRenderingVerified(const core::Identifier& id)
 {
     QMutexLocker lock(&g_registryMutex);
@@ -3705,10 +3850,19 @@ NativeCustomUiResult runInstanceCall(int message, const core::Identifier& id,
                                      const QStringList& values, const NativeCustomUiView& view,
                                      const QByteArray& event, ThreadRenderer::Context context,
                                      const std::function<void(char*)>& prepare = {},
-                                     QByteArray* serialized = nullptr, float* matrix = nullptr)
+                                     QByteArray* serialized = nullptr, float* matrix = nullptr,
+                                     bool anyModule = false)
 {
     ModuleRecord record;
-    if (!customUiRecord(id, &record)) return {};
+    if (!customUiRecord(id, &record)) {
+        // The controls' visibility asks any module; so does
+        // hfpl_runtime_probe's property-states mode.
+        if (!anyModule && !qEnvironmentVariableIsSet("OPENVEGAS_HFPL_PROBE_ANY_INSTANCE")) return {};
+        QMutexLocker lock(&g_registryMutex);
+        const auto it = g_registry.constFind(id.value());
+        if (it == g_registry.constEnd()) return {};
+        record = it.value();
+    }
     if (!g_threadRenderer) g_threadRenderer = std::make_unique<ThreadRenderer>();
     return g_threadRenderer->customUi(message, id.value(), record, values, view, event, nullptr,
                                       context, prepare, serialized, matrix);
@@ -3728,6 +3882,75 @@ NativeCustomUiResult nativePropertyChanged(const core::Identifier& id, const QSt
     const qint32 one = 1;
     std::memcpy(event.data() + 0x18, &one, sizeof(one));
     return runInstanceCall(7, id, values, view, event, ThreadRenderer::Context::Render);
+}
+
+namespace {
+
+QByteArray propertyChangedEvent(const QByteArray& name, qint32 frame)
+{
+    // PluginFile::NotifyPropertyChanged: {key, 0, 0, frame, 1, 0}.
+    const char* namePointer = name.constData();
+    QByteArray event(0x30, '\0');
+    std::memcpy(event.data() + 0x00, &namePointer, sizeof(namePointer));
+    std::memcpy(event.data() + 0x14, &frame, sizeof(frame));
+    const qint32 one = 1;
+    std::memcpy(event.data() + 0x18, &one, sizeof(one));
+    return event;
+}
+
+QMutex g_controllingKeysMutex;
+// By plugin ID: the properties whose change switched controls; absent until
+// the module was tried.
+QHash<QString, QStringList> g_controllingKeys;
+// By instance key: the values the controls were last worked out for.
+QHash<QString, QStringList> g_controlValues;
+
+} // namespace
+
+void refreshNativeControlStates(const core::Identifier& id, const QStringList& values,
+                                const QString& instanceKey)
+{
+    if (instanceKey.isEmpty()) return;
+    QStringList keys;
+    bool learned = false;
+    {
+        QMutexLocker lock(&g_controllingKeysMutex);
+        const auto known = g_controllingKeys.constFind(id.value());
+        learned = known != g_controllingKeys.constEnd();
+        if (learned) {
+            if (known->isEmpty() || g_controlValues.value(instanceKey) == values) return;
+            keys = *known;
+        }
+        g_controlValues.insert(instanceKey, values);
+    }
+    const QVector<EffectParameterSpec> parameters = nativeParameters(id);
+    if (!learned) {
+        for (const EffectParameterSpec& parameter : parameters) {
+            if (parameter.type != QLatin1String("button") && parameter.type != QLatin1String("label"))
+                keys << parameter.name;
+        }
+    }
+    NativeCustomUiView view;
+    view.area = QSize(1920, 1080);
+    view.target = view.area;
+    view.instanceKey = instanceKey;
+    QStringList controlling;
+    QHash<QString, bool> states;
+    for (const QString& key : std::as_const(keys)) {
+        const QByteArray name = key.toLatin1();
+        const NativeCustomUiResult result = runInstanceCall(
+            7, id, values, view, propertyChangedEvent(name, 0), ThreadRenderer::Context::Render,
+            {}, nullptr, nullptr, true);
+        if (result.enabled.isEmpty()) continue;
+        controlling << key;
+        for (auto it = result.enabled.cbegin(); it != result.enabled.cend(); ++it)
+            states.insert(it.key(), it.value());
+    }
+    if (!learned) {
+        QMutexLocker lock(&g_controllingKeysMutex);
+        g_controllingKeys.insert(id.value(), controlling);
+    }
+    if (!states.isEmpty()) setNativeControlStates(instanceKey, states);
 }
 
 NativeCustomUiResult nativeBackgroundProcess(const core::Identifier& id, const QStringList& values,
@@ -3844,9 +4067,14 @@ void setNativeControlStates(const QString& instanceKey, const QHash<QString, boo
 
 bool nativeControlShown(const QString& instanceKey, const QString& key)
 {
+    return nativeControlShown(instanceKey, key, true);
+}
+
+bool nativeControlShown(const QString& instanceKey, const QString& key, bool fallback)
+{
     QMutexLocker lock(&g_controlStatesMutex);
     const auto it = g_controlStates.constFind(instanceKey);
-    return it == g_controlStates.constEnd() || it->value(key, true);
+    return it == g_controlStates.constEnd() ? fallback : it->value(key, fallback);
 }
 
 void clearNativeControlStates(const QString& instanceKey)

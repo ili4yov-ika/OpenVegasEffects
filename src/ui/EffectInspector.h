@@ -50,6 +50,8 @@ signals:
 private:
     using TransformProp = composition::TransformProperty;
     void buildLayerProperties(const composition::Layer& layer);
+    // The Dimension row: 2D or 3D, with the camera a 3D layer needs first.
+    void setLayerDimension(int index);
     void buildTracks(const composition::Layer& layer);
     void buildMasks(const composition::Layer& layer);
     void buildEffects(const composition::Layer& layer, bool behaviors = false);
@@ -58,6 +60,8 @@ private:
     // Rows of controls a native module switched off are hidden, the others
     // shown again (plugin::nativeControlShown).
     void applyControlStates();
+    // Asks a native effect's module which of its controls it shows.
+    void refreshModuleControls(int effectIndex);
     void updateHeader();
 
     composition::Layer* layerRef();

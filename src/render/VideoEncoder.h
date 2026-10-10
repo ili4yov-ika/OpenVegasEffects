@@ -17,6 +17,20 @@ QString chooseH264Encoder(const QString& ffmpeg, bool hardware);
 // FFmpeg output options for that encoder: codec, quality and pixel format.
 QStringList h264EncoderArguments(const QString& encoder);
 
+// An export preset's H.264 rate: profile (0 Baseline, 1 Main, 2 High), a
+// constant or a variable bit rate with its ceiling, in bits per second, and
+// the key frame interval in frames (0 leaves it to the encoder).
+struct H264Rate
+{
+    int profile = 2;
+    bool constant = false;
+    int bitRate = 16000000;
+    int maxBitRate = 24000000;
+    int keyFrameInterval = 0;
+};
+// The same encoder at that rate, in each encoder's own options.
+QStringList h264EncoderArguments(const QString& encoder, const H264Rate& rate);
+
 // Whether one encoder really encodes with this FFmpeg (cached per process).
 bool h264EncoderWorks(const QString& ffmpeg, const QString& encoder);
 

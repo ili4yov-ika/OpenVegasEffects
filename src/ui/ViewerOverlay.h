@@ -25,6 +25,7 @@ struct ViewerMapping
     QRectF imageRect;    // where the flat canvas sits (pan included)
     QSizeF canvasSize;   // composition pixels
     const Viewer360View* sphere = nullptr;
+    int view = -1;       // which of the Viewer's views
 
     bool isValid() const { return !viewRect.isEmpty() && !canvasSize.isEmpty(); }
     bool isSpherical() const { return sphere != nullptr; }
@@ -60,6 +61,11 @@ public:
 
     // Whether the overlay is shown and asks for events at all right now.
     virtual bool isActive() const { return true; }
+    // An overlay of the 3D scene itself (its cameras and lights): drawn in
+    // every view, those with a camera of their own (Top, Front, ...) too,
+    // and given the pointer there. The others draw over the active view of
+    // the shot's picture only.
+    virtual bool inSceneViews() const { return false; }
     // The tools the overlay works under; the Hand tool always pans.
     virtual bool acceptsTool(int tool) const;
 

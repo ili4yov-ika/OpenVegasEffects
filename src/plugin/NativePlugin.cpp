@@ -424,6 +424,10 @@ struct DiagnosticServiceCall
     std::array<quint64, 11> arguments {};
     std::array<wchar_t, 160> wideArgument1 {};
     std::array<char, 96> ansiArgument2 {};
+    // The sliders' unit (CreateFloatSlider/CreateIntSlider and their
+    // WithDisplayRange forms: label, unit, key): UTF-16 like the label -
+    // read as 8-bit text "px" came out "p" and "Hz" "H".
+    std::array<wchar_t, 64> wideArgument2 {};
     std::array<char, 160> ansiArgument3 {};
     // Combo registration passes its translated choices as one UTF-16 string
     // separated by '|'. Text editors pass their default and file editors their
@@ -452,7 +456,7 @@ quint64 diagnosticFloatBits(float value)
 }
 
 int __cdecl diagnosticFloatSliderWithDisplayRange(
-    quint64 host, const wchar_t* label, const char* unit, const char* key,
+    quint64 host, const wchar_t* label, const wchar_t* unit, const char* key,
     int flags, float minimum, float maximum, float displayMinimum,
     float displayMaximum, float defaultValue, int displayMode)
 {
@@ -469,8 +473,8 @@ int __cdecl diagnosticFloatSliderWithDisplayRange(
                           diagnosticFloatBits(defaultValue), quint32(displayMode)};
         copyWideStringGuarded(label, call.wideArgument1.data(),
                               int(call.wideArgument1.size()));
-        copyAnsiStringGuarded(unit, call.ansiArgument2.data(),
-                              int(call.ansiArgument2.size()));
+        copyWideStringGuarded(unit, call.wideArgument2.data(),
+                              int(call.wideArgument2.size()));
         copyAnsiStringGuarded(key, call.ansiArgument3.data(),
                               int(call.ansiArgument3.size()));
     }
@@ -478,7 +482,7 @@ int __cdecl diagnosticFloatSliderWithDisplayRange(
 }
 
 int __cdecl diagnosticIntSliderWithDisplayRange(
-    quint64 host, const wchar_t* label, const char* unit, const char* key,
+    quint64 host, const wchar_t* label, const wchar_t* unit, const char* key,
     int flags, int minimum, int maximum, int displayMinimum,
     int displayMaximum, int defaultValue)
 {
@@ -493,8 +497,8 @@ int __cdecl diagnosticIntSliderWithDisplayRange(
                           quint32(displayMaximum), quint32(defaultValue), 0};
         copyWideStringGuarded(label, call.wideArgument1.data(),
                               int(call.wideArgument1.size()));
-        copyAnsiStringGuarded(unit, call.ansiArgument2.data(),
-                              int(call.ansiArgument2.size()));
+        copyWideStringGuarded(unit, call.wideArgument2.data(),
+                              int(call.wideArgument2.size()));
         copyAnsiStringGuarded(key, call.ansiArgument3.data(),
                               int(call.ansiArgument3.size()));
     }
@@ -518,6 +522,10 @@ quint64 diagnosticServiceStub(quint64 a0, quint64 a1, quint64 a2, quint64 a3,
                               call.ansiArgument2.data(), int(call.ansiArgument2.size()));
         copyAnsiStringGuarded(reinterpret_cast<const char*>(quintptr(a3)),
                               call.ansiArgument3.data(), int(call.ansiArgument3.size()));
+        if constexpr (Index * sizeof(void*) == 0x60 || Index * sizeof(void*) == 0x68) {
+            copyWideStringGuarded(reinterpret_cast<const wchar_t*>(quintptr(a2)),
+                                  call.wideArgument2.data(), int(call.wideArgument2.size()));
+        }
         if constexpr (Index * sizeof(void*) == 0x240
                       || Index * sizeof(void*) == 0x248
                       || Index * sizeof(void*) == 0x250
@@ -717,7 +725,7 @@ QVector<EffectParameterSpec> parametersFromDiagnosticCalls()
 
         if (call.offset == 0x60 || call.offset == 0x68
             || call.offset == 0x220 || call.offset == 0x228) {
-            parameter.unit = QString::fromUtf8(call.ansiArgument2.data()).trimmed();
+            parameter.unit = QString::fromWCharArray(call.wideArgument2.data()).trimmed();
             parameter.name = QString::fromUtf8(call.ansiArgument3.data()).trimmed();
             if (call.offset == 0x60 || call.offset == 0x220) {
                 parameter.type = QStringLiteral("double");
@@ -732,21 +740,21 @@ QVector<EffectParameterSpec> parametersFromDiagnosticCalls()
                     continue;
                 }
                 parameter.defaultValue = QString::number(defaultValue, 'g', 8);
-                const float registeredStep = call.offset == 0x220
-                                                 ? 0.0f : lowFloat(call.arguments[8]);
+                // The last argument is the precision the slider shows
+                // (CreateFloatSlider's int, ...WithDisplayRange's eleventh):
+                // decimals, held to 0..3 as Tannen holds them. It is not a
+                // step - read as one it came out 1e-45.
+                const int precision = qint32(call.arguments[call.offset == 0x220 ? 10 : 8]);
+                parameter.decimals = qBound(0, precision, 3);
                 const double displaySpan = call.offset == 0x220
                                                ? double(lowFloat(call.arguments[8])
                                                         - lowFloat(call.arguments[7]))
                                                : parameter.maximum - parameter.minimum;
                 const double span = parameter.maximum - parameter.minimum;
-                parameter.step = std::isfinite(registeredStep) && registeredStep > 0.0f
-                                     ? registeredStep
-                                     : (displaySpan > 0.0
-                                            ? qMax(displaySpan / 100.0, 0.001)
-                                            : span > 0.0 ? qMax(span / 100.0, 0.001) : 1.0);
-                parameter.decimals = parameter.step < 0.01 ? 3
-                                     : parameter.step < 0.1 ? 2
-                                     : parameter.step < 1.0 ? 1 : 0;
+                const double smallest = std::pow(10.0, -parameter.decimals);
+                parameter.step = qMax(smallest, displaySpan > 0.0 ? displaySpan / 100.0
+                                                : span > 0.0      ? span / 100.0
+                                                                  : 1.0);
             } else {
                 parameter.type = QStringLiteral("int");
                 parameter.minimum = qint32(call.arguments[5]);
@@ -754,9 +762,9 @@ QVector<EffectParameterSpec> parametersFromDiagnosticCalls()
                 const int defaultIndex = call.offset == 0x228 ? 9 : 7;
                 parameter.defaultValue = QString::number(qint32(call.arguments[defaultIndex]));
                 parameter.decimals = 0;
-                const qint32 registeredStep = call.offset == 0x228
-                                                  ? 0 : qint32(call.arguments[8]);
-                parameter.step = registeredStep > 0 ? registeredStep : 1.0;
+                // CreateIntSlider has no step (eight arguments: what was read
+                // as one came off the stack - 9e8 for BoxBlur's radius).
+                parameter.step = 1.0;
             }
         } else if (call.offset == 0x70) {
             parameter.name = QString::fromUtf8(call.ansiArgument2.data()).trimmed();
@@ -893,6 +901,11 @@ QVector<EffectParameterSpec> parametersFromDiagnosticCalls()
             parameter.displayName = parameter.name;
         }
         parameter.group = groups.join(QStringLiteral(" / "));
+        // The control's options: the sliders take a unit before the key, so
+        // theirs come one argument later than every other Create*'s.
+        const bool slider = call.offset == 0x60 || call.offset == 0x68
+                            || call.offset == 0x220 || call.offset == 0x228;
+        parameter.hidden = (quint32(call.arguments[slider ? 4 : 3]) & 0x2) != 0;
         keys.insert(parameter.name);
         result.append(parameter);
     }
@@ -1559,6 +1572,7 @@ QJsonObject nativePluginToJson(const NativePluginInfo& info)
         item.insert(QStringLiteral("type"), parameter.type);
         item.insert(QStringLiteral("defaultValue"), parameter.defaultValue);
         item.insert(QStringLiteral("unit"), parameter.unit);
+        if (parameter.hidden) item.insert(QStringLiteral("hidden"), true);
         item.insert(QStringLiteral("fileFilter"), parameter.fileFilter);
         item.insert(QStringLiteral("minimum"), parameter.minimum);
         item.insert(QStringLiteral("maximum"), parameter.maximum);
@@ -1627,6 +1641,7 @@ NativePluginInfo nativePluginFromJson(const QJsonObject& object)
             parameter.choices.append(choice.toString());
         }
         parameter.group = item.value(QStringLiteral("group")).toString();
+        parameter.hidden = item.value(QStringLiteral("hidden")).toBool();
         if (!parameter.name.isEmpty()) {
             info.parameters.append(parameter);
         }

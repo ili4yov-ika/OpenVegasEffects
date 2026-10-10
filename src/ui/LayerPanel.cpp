@@ -82,6 +82,24 @@ LayerPanel::LayerPanel(QWidget* parent) : QDockWidget(parent)
     m_opacity = form.layerOpacity;
     m_cameraFov = form.layerCameraFov;
     m_cameraFovLabel = form.cameraFovLabel;
+    {
+        // Under the field of view: a camera's Near and Far Clip Distance, as
+        // the reference's CameraSettingsDialog names them.
+        int row = 0;
+        QFormLayout::ItemRole role = QFormLayout::FieldRole;
+        form.form->getWidgetPosition(m_cameraFov, &row, &role);
+        const auto clip = [&](const char* text, QDoubleSpinBox** spin, QLabel** label, int at) {
+            *label = new QLabel(QCoreApplication::translate("CameraSettingsDialog", text), form.pageLayer);
+            *spin = new QDoubleSpinBox(form.pageLayer);
+            (*spin)->setRange(0.001, 10000000.0);
+            (*spin)->setDecimals(3);
+            form.form->insertRow(at, *label, *spin);
+        };
+        clip(QT_TRANSLATE_NOOP("CameraSettingsDialog", "Near Clip Distance:"), &m_cameraNear, &m_cameraNearLabel, row + 1);
+        clip(QT_TRANSLATE_NOOP("CameraSettingsDialog", "Far Clip Distance:"), &m_cameraFar, &m_cameraFarLabel, row + 2);
+        m_cameraNear->setObjectName(QStringLiteral("layerCameraNearClip"));
+        m_cameraFar->setObjectName(QStringLiteral("layerCameraFarClip"));
+    }
     m_dimension = form.layerDimension;
     m_parent = form.layerParent;
     m_labelColor = form.layerLabelColor;
@@ -153,7 +171,24 @@ void LayerPanel::buildEditor(QFormLayout* form)
         editLayer(tr("Set Layer Parent"), [value](auto& l) { l.parentLayerId = value; });
     });
     connect(m_cameraFov, &QDoubleSpinBox::editingFinished, this, [this] {
-        if (!m_updating) editLayer(tr("Field of view"), [this](auto& l) { l.cameraFieldOfView = m_cameraFov->value(); });
+        // The vertical angle, kept as the camera's zoom against the shot's height.
+        if (m_updating || !m_composition) return;
+        const double zoom = composition::CameraSettings::zoomForVerticalFieldOfView(
+            m_cameraFov->value(), m_composition->displaySize().height());
+        editLayer(tr("Field of view"), [zoom](auto& l) {
+            l.camera.zoom = zoom;
+            l.camera.zoomCurve.clear();
+        });
+    });
+    connect(m_cameraNear, &QDoubleSpinBox::editingFinished, this, [this] {
+        if (m_updating) return;
+        const double value = m_cameraNear->value();
+        editLayer(m_cameraNearLabel->text().remove(QLatin1Char(':')), [value](auto& l) { l.camera.nearClip = value; });
+    });
+    connect(m_cameraFar, &QDoubleSpinBox::editingFinished, this, [this] {
+        if (m_updating) return;
+        const double value = m_cameraFar->value();
+        editLayer(m_cameraFarLabel->text().remove(QLatin1Char(':')), [value](auto& l) { l.camera.farClip = value; });
     });
     connect(m_labelColor, &QPushButton::clicked, this, [this] { chooseColor(false); });
     connect(m_planeColor, &QPushButton::clicked, this, [this] { chooseColor(true); });
@@ -197,12 +232,22 @@ void LayerPanel::refresh()
     updateColorButton(m_labelColor, layer.labelColor); updateColorButton(m_planeColor, layer.planeColor);
     const bool plane = layer.kind == composition::LayerKind::Plane;
     m_planeColorLabel->setVisible(plane); m_planeColor->setVisible(plane);
-    m_cameraFov->setValue(layer.cameraFieldOfView);
-    m_cameraFov->setVisible(layer.kind == composition::LayerKind::Camera);
-    m_cameraFovLabel->setVisible(layer.kind == composition::LayerKind::Camera);
+    m_cameraFov->setValue(composition::CameraSettings::verticalFieldOfView(
+        layer.camera.zoom > 0.0 ? layer.camera.zoom
+                                : composition::CameraSettings::lensZoom(composition::CameraSettings::kNewCameraLensAngle,
+                                                                        m_composition->displaySize().width()),
+        m_composition->displaySize().height()));
+    const bool isCamera = layer.kind == composition::LayerKind::Camera;
+    m_cameraFov->setVisible(isCamera);
+    m_cameraFovLabel->setVisible(isCamera);
+    m_cameraNear->setValue(layer.camera.nearClip);
+    m_cameraFar->setValue(layer.camera.farClip);
+    for (QWidget* widget : QList<QWidget*>{m_cameraNear, m_cameraFar, m_cameraNearLabel, m_cameraFarLabel})
+        widget->setVisible(isCamera);
     m_id->setText(layer.id.value()); m_stack->setCurrentWidget(m_pageLayer);
     for (QWidget* editor : QList<QWidget*>{static_cast<QWidget*>(m_name), m_visible, m_muted,
-                            m_blend, m_opacity, m_parent, m_labelColor, m_planeColor, m_cameraFov})
+                            m_blend, m_opacity, m_parent, m_labelColor, m_planeColor, m_cameraFov,
+                            m_cameraNear, m_cameraFar})
         editor->setEnabled(!layer.locked);
     const bool sceneObject = layer.kind == composition::LayerKind::Camera
         || layer.kind == composition::LayerKind::Light || layer.kind == composition::LayerKind::Model3D;

@@ -273,7 +273,21 @@ QImage MediaAsset::interpretFrame(const QImage& frame) const
 
 QString MediaAsset::sourcePath() const
 {
+    if (m_kind == MediaKind::Model3DAnimation && m_filePath.endsWith(QLatin1String(kModelAnimationMarker)))
+        return m_filePath.chopped(int(qstrlen(kModelAnimationMarker)));
     return isImageSequence() ? m_sequenceFiles.first() : m_filePath;
+}
+
+MediaAsset MediaAsset::fromModelAnimation(const QString& file, double durationSeconds, double frameRate)
+{
+    MediaAsset asset;
+    const QString path = QFileInfo(file).absoluteFilePath();
+    asset.setFilePath(path + QLatin1String(kModelAnimationMarker));
+    asset.m_kind = MediaKind::Model3DAnimation;
+    asset.m_fileName = QFileInfo(path).fileName();
+    asset.m_durationSeconds = qMax(0.0, durationSeconds);
+    asset.m_fileFrameRate = frameRate;
+    return asset;
 }
 
 } // namespace media

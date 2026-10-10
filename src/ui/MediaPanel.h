@@ -61,6 +61,9 @@ public:
     void setMediaOverrides(const core::Identifier& id, const media::MediaAsset& edited);
     // Media > Properties (MediaSettingsDialog) for a video or image asset.
     void showMediaProperties(const core::Identifier& id);
+    // A model's Properties: the Model3DSettingsDialog on its import settings
+    // and material edits; what it changes is one step of History.
+    void showModelProperties(const core::Identifier& id);
     void refresh();
     QString selectedFilePath() const;
 
@@ -68,6 +71,8 @@ signals:
     void mediaActivated(const QString& filePath);
     void importRequested(const QStringList& paths);
     void importCommandRequested();
+    // Import > 3D Model Animation... (the reference's MediaActions entry).
+    void importModelAnimationRequested();
     void mediaRemoved(const QString& filePath);
     void mediaMetadataModified();
     void relinkRequested(const QString& oldPath, const QString& newPath);

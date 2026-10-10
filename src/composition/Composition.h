@@ -10,6 +10,7 @@
 #include <QStringList>
 #include <QUuid>
 #include <QVector>
+#include <QVector3D>
 
 #include <cmath>
 #include <memory>
@@ -23,6 +24,28 @@ namespace composition {
 // layers towards fogColor by their distance from the camera (model3d::Fog;
 // FogFalloff 0/1/2 = Linear, Exponential, Exponential²). The defaults are the
 // reference's own for a new shot.
+// The Viewer as the shot left it (CompositionAsset/ViewerState, Version 5):
+// its layout - the reference's LayoutType, 0 or 1 one view, 2 two, 3 three,
+// 4 four - and the views in their places, each its ViewType (0 the 2D view,
+// 1 the active camera, 2 perspective, 3..8 Front, Back, Left, Right, Top,
+// Bottom) and its own camera.
+struct ViewerViewSetup
+{
+    QString id;                  // the State's ID
+    int type = 1;
+    QVector3D cameraPosition;
+    QVector3D cameraRotation;    // radians
+    double cameraScale = 1.0;
+};
+
+struct ViewerSetup
+{
+    bool present = false;        // read from the file, or left by the Viewer
+    int layout = 0;
+    int activeView = 0;
+    QVector<ViewerViewSetup> views;   // by place in the layout
+};
+
 struct CompositionRenderSettings
 {
     bool fogEnabled = false;
@@ -192,6 +215,9 @@ public:
     // area, in frames. Out < 0 means the whole shot.
     long long currentFrame() const { return m_currentFrame; }
     void setCurrentFrame(long long frame) { m_currentFrame = qMax(0LL, frame); }
+    // CompositionAsset's <ViewerState>.
+    const ViewerSetup& viewerSetup() const { return m_viewerSetup; }
+    void setViewerSetup(const ViewerSetup& setup) { m_viewerSetup = setup; }
     long long workIn() const { return m_workIn; }
     long long workOut() const { return m_workOut; }
     void setWorkArea(long long in, long long out) { m_workIn = qMax(0LL, in); m_workOut = out; }
@@ -254,6 +280,7 @@ private:
     EditorSequence m_editorSequence;
     CompositionRenderSettings m_renderSettings;
     long long m_currentFrame = 0;
+    ViewerSetup m_viewerSetup;
     long long m_workIn = 0;
     long long m_workOut = -1;
     core::Identifier m_projectId = core::Identifier(

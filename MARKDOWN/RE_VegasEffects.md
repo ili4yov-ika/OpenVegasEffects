@@ -1,5 +1,29 @@
 ﻿# RE / Анализ VegasEffects.exe (VEGAS Effects, ex-HitFilm)
 
+> Группа Material таймлайна (10 октября 2026): `AssetLayerGroupFactory` `FUN_1405e0130` — строки по
+> `LayerType`: Illuminated (все), Receives Shadows (кроме Effect3D), Casts Shadows, Cast Shadows If
+> Visibility Is Off (все), Receives/Casts Reflections и Cast Reflections If Visibility Is Off
+> (Asset, Text, Model), Self Shadow Bias (только Model), Environment Map (None / Use Composite Shot /
+> Use Layer, Layer; Model и Text), Casts/Receives Ambient Occlusion и группа Ambient Occlusion
+> (Samples, Sample Radius, Intensity, Depth Scale, Bias, Blur Radius, Depth Falloff, Include Semi
+> Transparent Triangles), Billboarded Lights и Billboarded Shadows (кроме Text и Model), Ambient,
+> Diffuse, Specular, Shininess, Emissive (кроме Model), Specular/Diffuse Reflectivity (Asset, Text).
+
+> Контролы 3D-объектов Вьювера (10 октября 2026): `biff::ui::viewer::CameraLayerControl` (vtable
+> 0x141328af0; слот 16 `FUN_1409c07b0` — тело камеры `FUN_1409c1130` и рамка обзора
+> `FUN_1409c2690` через `FluxCamera::FrustumLineData` с обрезкой `ClipLineSegmentNearPlane`;
+> `FUN_1409c0bd0` — не рисовать камеру, через которую смотрит вид), `LightLayerControl`
+> (0x141328658; слот 15 `FUN_1409bc650` собирает части по `LightSourceType`: точечный —
+> `OriginControl` + `PointLightReachControl`, прожектор — `SpotLightControl`, направленный —
+> `OriginControl`), `PointLayerControl` (0x141327ff0), `OriginControl` (0x14132a1b8, подпись
+> «Position»; слот 16 `FUN_1409ebf80` — текстурный квадрат-иконка, слот 5 — область попадания),
+> `PointLightReachControl` (0x14132a560; слот 16 `FUN_1409eef70` — кольцо из 100 точек радиусом
+> Reach на экране), `SpotLightControl` (0x14132a690; слот 16 `FUN_1409f0900` — кольца на 40 и 250
+> единицах (`UNK_141333258`, `UNK_1413332f0`) и образующие `FUN_1409f1900`),
+> `SpotLightTargetControl` (0x14132be60). Цвет — статический `BiffColor` 0x14155dd40 = (0.25, 0.5,
+> 1, 1) (`FUN_140182d40`), толщина — масштаб интерфейса × 1.5 (`DAT_141333150`). Источник
+> «defaultLight» (`FUN_1404ec560`) — свет превью модели в `Model3DSettingsDialog`, не сцены.
+
 Технический разбор исполняемого файла `VegasEffects.exe` из дистрибутива VEGAS Effects.
 Инструменты: Ghidra 12.1.2 (GUI) + GhidraMCP-мост на `http://127.0.0.1:8080`.
 Проект Ghidra: `%LOCALAPPDATA%\Temp\opencode\ghidramcp\proj\VegasEffects.gpr`.
@@ -33,6 +57,7 @@
 ### Наблюдаемые подсистемы (строки/импорты)
 - OFX-хост: `"OFX Plugins"`, `"Delete OpenFX Plugins Cache"`, `tannen::biff::PluginManager`
 - Внешняя интеграция: `"Open in VEGAS Image..."`, `?IsVegasImageFile@ImageAsset@project@biff@@`, реестр `SOFTWARE\MAGIX\VEGAS Pro`
+- Проверка драйвера GPU при запуске (10 октября 2026): `FUN_1401c2ce0` → класс GPU `FUN_1401bffe0` (таблица из 46 записей {класс, производитель, модель}: Intel по поколениям 7..0, Radeon RX Vega M — 7; производитель — начало `GL_RENDERER`, модель — конец, без учёта регистра; не найдено — 8), данные драйвера `FUN_1401bf8f0` (SetupDiGetClassDevs по классу Display, `SetupDiOpenDevRegKey`, значения DriverVersion/DriverDate/DriverDesc; адаптер выбирается по взаимному вхождению описания и renderer; запасная версия — слово `GL_VERSION`), порог: классы 5–7 — `parts[-2] * 10000 + parts[-1] >= 0xf5af6` (1006326), 3–4 — `parts[-1] >= 0x13c1` (5057), 2 — `>= 0x13c3` (5059). Окно «%1 : Outdated GPU Driver», свойство `add-messagebox-auto-accept` = `ShowGPUDriverWarning`, кнопки Continue (Ignore) / Exit (Abort), ссылка `https://downloadcenter.intel.com/`.
 - Рендер: `biff::ui::viewer::RenderManager`, `RenderCache`, `RenderExceptionReporter`, `prerender::ui::biff::PreRenderManager` (Proxy & Pre-Renders)
 - Экспорт/сервер: `biff::ui::exporter::Server`, `VegasEffectsServer`, `VegasEffectsRenderClient`, `HitFilmRenderClient`; `QLocalServer`/`QLocalSocket` (named-pipe IPC)
 - Лицензия: `"License is empty, no server request is required."`, `"License out of date. Requesting new license..."`
@@ -1069,7 +1094,15 @@ HD Anamorphic. The port's dialog has them all (alpha only for files with alpha, 
 hardware decoding only for decoded video, a sequence's rate without "From File"); levels and
 the matrix are applied relative to libVLC's defaults, which it does not report. The same resampling fixed previews at another size than the shot (Half, Quarter,
 Antialiased, the Layer panel's 960x540), which used to get full-scale content cropped into the
-smaller frame; they now cost a full-size render.
+smaller frame. Since October 2026 a preview at most 3/4 of the shot is drawn at its size: layers
+are placed in the shot's full square units through the painter's scale, the built-in blur radius
+and mask feather scale with it; a native 2D effect checked to draw a reduced preview right (132 of 241,
+with the scale in RenderContext +0x2c/+0x30 and the host reducing its "px" values and its points)
+is drawn at the preview's size, and a clip with any other native module
+is drawn full and reduced once its effects ran; a shot with motion blur
+or a native module on a grade layer is drawn full and reduced. The 3D scene is drawn reduced
+through the full shot's camera: sheets keep their size in scene units with fewer pixels, models
+and geometry text are rasterised into the smaller frame.
 
 Templates (`biff::ui::common::TemplateManager`): one `<GUID>.hft` per template in the folder
 `DataLocation_Resolve_Folder(1)` resolves - registry `HKLM\SOFTWARE\<org>\<app>\Paths\Templates`
@@ -1234,6 +1267,15 @@ with `<TLk>/<SLk>/<InInf>/<OuInf>/<TInPt>/<TOuPt>/<SInPt>/<SOuPt>`.
   `Export/ExportDirectory` (reference setting), format combo (PNG/JPEG/OpenEXR/ProRes) and
   `Export Frame`/`Export Contents` buttons. `exportFrameRequested(path)` renders the current viewer
   frame to `frame-yyyyMMdd-hhmmss.<ext>`.
+- **Export presets** (October 2026): `biff::ui::exporter::ExportPresetManager` (ctor 140697640 writes
+  `Options/DefaultExportPreset` = "YouTube 1080p HD" when unset) loads `*.hfxp` (DAT_14154aa68) from the
+  `ExportPresets` user folder (140697e30, folder via FUN_14069a6a0); FUN_14069a7d0 reads `<Preset>` and
+  picks the class by its first child: `MP4` (MP4ExportPreset, FUN_1406c53a0: `ExportPreset` base by
+  FUN_1406a1660 - attributes Version, IsUserCreated, child Comment - then the PropertyManager; up to version
+  3 converts sample/bit rate indices to Hz/bps, adds `width_useSource`/`height_useSource`), `AVI`, `MOV`,
+  `WAV`, `ImageSequence` (tag from FUN_1406ced10). Kind names come from translated statics
+  ("MPEG-4 (.mp4)", "QuickTime (.mov)", ...). The built-in presets' names and comments are in the
+  `ExportPreset` context of the catalogues; their files are not part of the installation.
 - Trimmer in/out points are **persisted** as `MediaAsset` `<InPoint>`/`<OutPoint>` (frames) on save and
   restored on load via `MediaManager::assetByFilePathForEdit`; frames assumed 30 fps per the
   reference `FrameRate` default.

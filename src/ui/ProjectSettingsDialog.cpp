@@ -33,15 +33,6 @@ const BitDepthChoice kBitDepths[] = {
     {QT_TRANSLATE_NOOP("biff::ui::viewer::ViewerActions", "32-bit Float - Linear Color"), 1002, true},
 };
 
-// Antialiasing modes 1..9 (FUN_140268720).
-const char* const kAntialiasing[] = {
-    QT_TRANSLATE_NOOP("biff::ui::common", "4x MSAA"),  QT_TRANSLATE_NOOP("biff::ui::common", "8x MSAA"),
-    QT_TRANSLATE_NOOP("biff::ui::common", "16x MSAA"), QT_TRANSLATE_NOOP("biff::ui::common", "32x MSAA"),
-    QT_TRANSLATE_NOOP("biff::ui::common", "8x CSAA"),  QT_TRANSLATE_NOOP("biff::ui::common", "8xQ CSAA"),
-    QT_TRANSLATE_NOOP("biff::ui::common", "16x CSAA"), QT_TRANSLATE_NOOP("biff::ui::common", "16xQ CSAA"),
-    QT_TRANSLATE_NOOP("biff::ui::common", "32x CSAA"),
-};
-
 const char* const kFrameRates[] = {
     QT_TRANSLATE_NOOP("ProjectSettingsDialog", "23.976"), QT_TRANSLATE_NOOP("ProjectSettingsDialog", "24"),
     QT_TRANSLATE_NOOP("ProjectSettingsDialog", "25 (PAL)"),
@@ -138,7 +129,7 @@ ProjectSettingsDialog::ProjectSettingsDialog(const Values& values, bool newProje
     m_antialiasing = new QComboBox(rendering);
     m_antialiasing->setObjectName(QStringLiteral("comboBoxAntialiasingMode"));
     for (int mode = 1; mode <= 9; ++mode)
-        m_antialiasing->addItem(QCoreApplication::translate("biff::ui::common", kAntialiasing[mode - 1]), mode);
+        m_antialiasing->addItem(QCoreApplication::translate("biff::ui::common", app::kAntialiasingLabels[mode - 1]), mode);
     renderForm->addRow(QCoreApplication::translate("ProjectSettingsDialog", "Antialiasing Mode:"), m_antialiasing);
     m_reflection = mapSizeSpin(rendering, "spinBoxReflectionMapSize");
     renderForm->addRow(QCoreApplication::translate("ProjectSettingsDialog", "Reflection Map Size:"), m_reflection);

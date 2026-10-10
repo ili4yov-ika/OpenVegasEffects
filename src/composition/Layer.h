@@ -4,6 +4,8 @@
 
 #include "core/Identifier.h"
 
+#include <array>
+
 #include <QColor>
 #include <QPointF>
 #include <QRectF>
@@ -293,6 +295,13 @@ struct LayerTransform
         const double v = curve.valueAt(frame).toDouble(&ok);
         return ok ? v : fallback;
     }
+    // A colour property's value at `frame`: its keys' colour, or its own.
+    static QColor curveColor(const KeyFrameList& curve, int frame, const QColor& fallback)
+    {
+        if (curve.isEmpty()) return fallback;
+        const QVariant value = curve.valueAt(frame);
+        return value.typeId() == QMetaType::QColor ? value.value<QColor>() : fallback;
+    }
 
     QPointF positionAt(int frame) const
     {
@@ -363,6 +372,277 @@ struct LayerTransform
         return qBound(0.0, curveValue(opacityCurve, frame, fallback * 100.0) / 100.0, 1.0);
     }
 };
+
+// One node of a model layer's model, moved, turned and scaled on its own -
+// the reference's Model3DTransformNode, whose properties are a layer's 3D
+// transform (position, anchorPoint, scale, orientation, rotationX/Y/Z) in
+// the model's units. Kept only for the nodes that were changed, by their
+// path of names (model3d::Mesh::nodePath). Position and anchor point start
+// at the node's pivot, so a new one leaves the node where it was.
+struct ModelNodeTransform
+{
+    QString path;
+    LayerTransform transform;
+};
+
+// One of a model's materials with a texture map taken from elsewhere - the
+// reference's Model3DMaterialOverride ("Override Materials": for each map a
+// source, None / From File / Use Layer, and a layer). Its properties are
+// <map>MapSource and <map>MapLayerID for the diffuse, specular, normal, bump,
+// emissive, occlusion, metallic, roughness and specular-glossiness maps, and
+// bumpMapScale.
+struct ModelMaterialOverride
+{
+    enum class MapSource { None = 0, FromFile = 1, UseLayer = 2 };
+    enum class Map { Diffuse, Specular, Normal, Bump, Emissive, Occlusion,
+                     Metallic, Roughness, SpecularGlossiness };
+    static constexpr int kMapCount = 9;
+    struct MapOverride
+    {
+        MapSource source = MapSource::FromFile;
+        core::Identifier layer;               // with UseLayer: whose picture
+    };
+    QString material;                         // the material's name in the model
+    std::array<MapOverride, kMapCount> maps;
+    double bumpMapScale = 1.0;
+
+    MapOverride& map(Map which) { return maps[size_t(which)]; }
+    const MapOverride& map(Map which) const { return maps[size_t(which)]; }
+    // The properties' stem: "diffuse" for diffuseMapSource / diffuseMapLayerID.
+    static const char* mapKey(Map which)
+    {
+        switch (which) {
+        case Map::Diffuse: return "diffuse";
+        case Map::Specular: return "specular";
+        case Map::Normal: return "normal";
+        case Map::Bump: return "bump";
+        case Map::Emissive: return "emissive";
+        case Map::Occlusion: return "occlusion";
+        case Map::Metallic: return "metallic";
+        case Map::Roughness: return "roughness";
+        case Map::SpecularGlossiness: return "specularGlossiness";
+        }
+        return "";
+    }
+};
+
+// A light layer's own properties (LightLayer Version 4: its LightType, and
+// the properties LightLayerGroupFactory shows in the timeline's Light group),
+// with the reference's defaults (LightLayer property setup, Project.dll
+// 1802fce00). The type numbers are the reference's, the ones Flux's lighting
+// shader takes too. Its colours and numbers animate; Cast Shadows and
+// Falloff are static (CreateProperty's static flag set), as the type is.
+struct LightSettings
+{
+    enum class Type { Ambient = 1, Point = 2, Spot = 3, Directional = 4 };
+    enum class Falloff { None = 1, Linear = 2, Curve = 3 };
+
+    Type type = Type::Point;
+    QColor color = QColor(255, 255, 255);
+    double intensity = 100.0;           // percent
+    KeyFrameList intensityCurve;
+    bool castShadows = false;
+    Falloff falloff = Falloff::None;
+    double reach = 1000.0;              // pixels
+    double coneAngle = 15.0;            // spotlightAngle, degrees
+    double feather = 50.0;              // spotlightFeather, percent
+    double shadowOpacity = 50.0;        // percent
+    double shadowDiffusion = 0.0;       // percent
+    QColor shadowColor = QColor(0, 0, 0);
+    KeyFrameList colorCurve;
+    KeyFrameList reachCurve;
+    KeyFrameList coneAngleCurve;
+    KeyFrameList featherCurve;
+    KeyFrameList shadowOpacityCurve;
+    KeyFrameList shadowDiffusionCurve;
+    KeyFrameList shadowColorCurve;
+
+    double intensityAt(int frame) const { return LayerTransform::curveValue(intensityCurve, frame, intensity); }
+    QColor colorAt(int frame) const { return LayerTransform::curveColor(colorCurve, frame, color); }
+    double reachAt(int frame) const { return LayerTransform::curveValue(reachCurve, frame, reach); }
+    double coneAngleAt(int frame) const { return LayerTransform::curveValue(coneAngleCurve, frame, coneAngle); }
+    double featherAt(int frame) const { return LayerTransform::curveValue(featherCurve, frame, feather); }
+    double shadowOpacityAt(int frame) const
+    {
+        return LayerTransform::curveValue(shadowOpacityCurve, frame, shadowOpacity);
+    }
+    double shadowDiffusionAt(int frame) const
+    {
+        return LayerTransform::curveValue(shadowDiffusionCurve, frame, shadowDiffusion);
+    }
+    QColor shadowColorAt(int frame) const { return LayerTransform::curveColor(shadowColorCurve, frame, shadowColor); }
+};
+
+// A camera layer's lens and clipping, as the reference's CameraLayer keeps
+// them: its "zoom" - the distance in pixels at which the shot's frame fills
+// the lens, what the field of view follows from (CameraLayer::
+// CalculateVerticalFOV, Project.dll 0x1802f08e0: 2 atan(height / 2 / zoom),
+// kept between 0.001 rad and just under pi) - its "focusDistance",
+// "aperture" and "blurDoF" (the timeline's Lens group,
+// CameraLayerGroupFactory), whether depth of field is on (HasDoF), its
+// NearClip and FarClip and its film size; with what "New Camera" gets
+// (VegasEffects.exe 0x140a45760: a 35 mm lens, aperture 17.72, blur 100 %;
+// CameraLayer's constructor: clipping 1 to 100000, film 36 x 20.25 mm).
+struct CameraSettings
+{
+    // CameraLayer::HorizontalFieldOfView (0x1802f0230): the horizontal angles
+    // of a 36 mm film behind 24, 28, 35, 50 and 80 mm lenses.
+    static constexpr double kLensAngles[5] = {73.7398, 65.4705, 54.4322, 39.5978, 25.3608};
+    static constexpr double kNewCameraLensAngle = 54.4322;
+
+    double zoom = 0.0;          // pixels; 0 until it is given one
+    KeyFrameList zoomCurve;
+    double focusDistance = 0.0;
+    double aperture = 17.72;
+    double blur = 100.0;        // percent
+    bool depthOfField = false;
+    double nearClip = 1.0;
+    double farClip = 100000.0;
+    double filmWidth = 36.0;
+    double filmHeight = 20.25;
+
+    // The Lens group animates whole (CameraLayer's properties, Project.dll
+    // 0x1802eec70, none static).
+    KeyFrameList focusDistanceCurve;
+    KeyFrameList apertureCurve;
+    KeyFrameList blurCurve;
+
+    double zoomAt(int frame) const { return LayerTransform::curveValue(zoomCurve, frame, zoom); }
+    double focusDistanceAt(int frame) const
+    {
+        return LayerTransform::curveValue(focusDistanceCurve, frame, focusDistance);
+    }
+    double apertureAt(int frame) const { return LayerTransform::curveValue(apertureCurve, frame, aperture); }
+    double blurAt(int frame) const { return LayerTransform::curveValue(blurCurve, frame, blur); }
+    // CameraLayer::CalculateLensZoom: a lens of `angleDegrees` (horizontal)
+    // across a frame `width` pixels wide.
+    static double lensZoom(double angleDegrees, double width)
+    {
+        return width / (2.0 * std::tan(angleDegrees * 0.017453292519943295 * 0.5));
+    }
+    // The vertical field of view, in degrees, of a `zoom` for a frame
+    // `height` pixels tall.
+    static double verticalFieldOfView(double zoom, double height)
+    {
+        double radians = zoom > 0.0 ? 2.0 * std::atan(height * 0.5 / zoom) : 0.001;
+        radians = std::max(radians, 0.001);
+        if (radians >= 3.141592653589793) radians = 3.1315928;
+        return radians * 57.29577951308232;
+    }
+    // The zoom that gives a vertical field of view, the other way round.
+    static double zoomForVerticalFieldOfView(double degrees, double height)
+    {
+        return height * 0.5 / std::tan(degrees * 0.017453292519943295 * 0.5);
+    }
+};
+
+// How a layer in the 3D scene takes lights and shadows: the reference's
+// layer properties illuminated, castShadows, castShadowsIfLayerDisabled
+// (it still casts them while its visibility is off), receiveShadows,
+// billboardedLights (lit as if it faced each light), billboardedShadows (a
+// layer that turns to face the camera turns to face the light for its
+// shadow instead), shadowColor, a model's selfShadowBias (1..1000) and its
+// material - matAmbient, matDiffuse, matSpecular, matShininess (percent;
+// Flux divides them by 100) and matEmissiveColor, which animate - shown in
+// the timeline's Material group (AssetLayerGroupFactory), with the defaults
+// the reference creates them with (Project.dll 0x1802e52c0, 0x1802a5fc0).
+struct SurfaceShading
+{
+    bool illuminated = true;
+    bool castShadows = false;
+    bool castShadowsIfInvisible = false;
+    bool receiveShadows = true;
+    bool billboardedLights = false;
+    bool billboardedShadows = false;
+    double selfShadowBias = 1.0;
+    QColor shadowColor = QColor(0, 0, 0);
+    double ambient = 100.0;
+    double diffuse = 50.0;
+    double specular = 50.0;
+    double shininess = 100.0;
+    QColor emissive = QColor(0, 0, 0);
+    KeyFrameList ambientCurve;
+    KeyFrameList diffuseCurve;
+    KeyFrameList specularCurve;
+    KeyFrameList shininessCurve;
+    KeyFrameList emissiveCurve;
+
+    double ambientAt(int frame) const { return LayerTransform::curveValue(ambientCurve, frame, ambient); }
+    double diffuseAt(int frame) const { return LayerTransform::curveValue(diffuseCurve, frame, diffuse); }
+    double specularAt(int frame) const { return LayerTransform::curveValue(specularCurve, frame, specular); }
+    double shininessAt(int frame) const { return LayerTransform::curveValue(shininessCurve, frame, shininess); }
+    QColor emissiveAt(int frame) const { return LayerTransform::curveColor(emissiveCurve, frame, emissive); }
+};
+
+// An animation playing on a model layer - the reference's
+// Model3DAnimationAssetInstance (Project.dll; XML Version 1: ID, Name,
+// AssetID and a PropertyManager with "strength" (float, 100 by default),
+// "loop" and "customPlayback" (both off) and "playback" (float, 0)) with what
+// it keeps on its Model3DAnimationAsset (Version 3: Filename, AnimationIndex,
+// OverrideFrameRate, FrameRate). The Timeline shows it under the layer's
+// "Animations" as Strength, Loop, Custom Playback and Playback.
+struct ModelAnimationInstance
+{
+    core::Identifier id = core::Identifier(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    QString name;
+    QString filePath;              // the animation's file; empty: the model's own
+    int animationIndex = 0;        // which of the file's animations
+    bool frameRateOverridden = false;
+    double frameRate = 24.0;       // with frameRateOverridden
+    double strength = 100.0;       // percent of the motion
+    KeyFrameList strengthCurve;
+    bool loop = false;
+    bool customPlayback = false;
+    double playback = 0.0;         // with customPlayback: the animation's frame
+    KeyFrameList playbackCurve;
+
+    double strengthAt(int frame) const
+    {
+        return LayerTransform::curveValue(strengthCurve, frame, strength);
+    }
+    double playbackAt(int frame) const
+    {
+        return LayerTransform::curveValue(playbackCurve, frame, playback);
+    }
+    // Its frame rate as Model3DAnimationAsset::FrameRate gives it: the
+    // override or the file's, rounded to three places, the rounded NTSC
+    // rates read as the exact ones.
+    double rate(double fileRate) const
+    {
+        double value = frameRateOverridden && frameRate > 0.0 ? frameRate : qMax(1.0, fileRate);
+        value = std::round(value * 1000.0) / 1000.0;
+        if (qFuzzyCompare(value, 23.976)) return 24000.0 / 1001.0;
+        if (qFuzzyCompare(value, 29.97)) return 30000.0 / 1001.0;
+        if (qFuzzyCompare(value, 59.94)) return 60000.0 / 1001.0;
+        return value;
+    }
+    // The animation's frame at the shot's `frame`, as
+    // Model3DAnimationAssetInstance::AssetFrame (Project.dll 18013a900)
+    // works it out: with Custom Playback the Playback value; otherwise the
+    // time into the layer in the animation's frames - at its own rate, so an
+    // overridden rate plays it faster or slower - and with Loop wrapped
+    // around its length (fmod by frame count - 1). `fileRate` is the rate
+    // its frames are counted in (model3d::kModelAnimationFrameRate).
+    double animationFrame(int frame, double shotFps, int frameCount, double fileRate) const
+    {
+        if (customPlayback) return playbackAt(frame);
+        double at = frame * rate(fileRate) / qMax(1e-9, shotFps);
+        if (loop && frameCount > 1) at = std::fmod(at, double(frameCount - 1));
+        return at;
+    }
+};
+
+// A new transform for a model node that leaves it where it is: position and
+// anchor point at its pivot (x, y, z in the model's units).
+inline LayerTransform restingModelNodeTransform(double x, double y, double z)
+{
+    LayerTransform transform;
+    transform.position = QPointF(x, y);
+    transform.positionZ = z;
+    transform.anchorPoint = transform.position;
+    transform.anchorPointZ = z;
+    return transform;
+}
 
 // A point tracker follows a small image patch through the source frames. Its
 // coordinates are source-image pixels; keeping them separate from Transform
@@ -459,8 +739,12 @@ struct Layer
     // reference calls the link a Model3DAssetInstance; one asset can be
     // instanced by several layers, so the layer holds only the id.
     core::Identifier modelAssetId;
-    // Vertical FOV shared by the scene camera and 360 preview.
-    double cameraFieldOfView = 39.6;
+    // A camera layer's lens and clipping.
+    CameraSettings camera;
+    // A Light layer's own properties.
+    LightSettings light;
+    // Lights and shadows on a layer in the 3D scene.
+    SurfaceShading surface;
     int zIndex = 0;
     // Reference default for a newly created layer (see SAMPLES/screenshots).
     QString blendMode = QStringLiteral("None");
@@ -479,7 +763,127 @@ struct Layer
     QVector<Clip> clips;
     QVector<LayerMask> masks;
     QVector<MotionTrack> motionTracks;
+    // Model3D: the nodes of its model given a transform of their own.
+    QVector<ModelNodeTransform> modelNodes;
+    const ModelNodeTransform* modelNode(const QString& path) const
+    {
+        for (const ModelNodeTransform& node : modelNodes)
+            if (node.path == path) return &node;
+        return nullptr;
+    }
+    ModelNodeTransform* modelNode(const QString& path)
+    {
+        for (ModelNodeTransform& node : modelNodes)
+            if (node.path == path) return &node;
+        return nullptr;
+    }
+    // Model3D: the animations playing on it, their motion added together.
+    QVector<ModelAnimationInstance> modelAnimations;
+    // Model3D: its materials with maps from elsewhere, by material name.
+    QVector<ModelMaterialOverride> materialOverrides;
+    const ModelMaterialOverride* materialOverride(const QString& material) const
+    {
+        for (const ModelMaterialOverride& entry : materialOverrides)
+            if (entry.material == material) return &entry;
+        return nullptr;
+    }
+    ModelMaterialOverride* materialOverride(const QString& material)
+    {
+        for (ModelMaterialOverride& entry : materialOverrides)
+            if (entry.material == material) return &entry;
+        return nullptr;
+    }
 };
+
+// A keyable property of a light, a camera's lens or a layer's Material, by
+// the name the reference saves it under ("color", "spotlightAngle",
+// "focusDistance", "matEmissiveColor"...): its keys, and the value it has
+// without them - a number or a colour.
+struct KeyedLayerProperty
+{
+    KeyFrameList* curve = nullptr;
+    double* number = nullptr;
+    QColor* color = nullptr;
+    bool isValid() const { return curve != nullptr; }
+};
+
+inline KeyedLayerProperty keyedLayerProperty(Layer& layer, const QString& name)
+{
+    const auto number = [](KeyFrameList& curve, double& value) { return KeyedLayerProperty{&curve, &value, nullptr}; };
+    const auto colour = [](KeyFrameList& curve, QColor& value) { return KeyedLayerProperty{&curve, nullptr, &value}; };
+    if (layer.kind == LayerKind::Light) {
+        LightSettings& light = layer.light;
+        if (name == QLatin1String("color")) return colour(light.colorCurve, light.color);
+        if (name == QLatin1String("intensity")) return number(light.intensityCurve, light.intensity);
+        if (name == QLatin1String("reach")) return number(light.reachCurve, light.reach);
+        if (name == QLatin1String("spotlightAngle")) return number(light.coneAngleCurve, light.coneAngle);
+        if (name == QLatin1String("spotlightFeather")) return number(light.featherCurve, light.feather);
+        if (name == QLatin1String("shadowOpacity")) return number(light.shadowOpacityCurve, light.shadowOpacity);
+        if (name == QLatin1String("shadowDiffusion")) return number(light.shadowDiffusionCurve, light.shadowDiffusion);
+        if (name == QLatin1String("shadowColor")) return colour(light.shadowColorCurve, light.shadowColor);
+        return {};
+    }
+    if (layer.kind == LayerKind::Camera) {
+        CameraSettings& camera = layer.camera;
+        if (name == QLatin1String("zoom")) return number(camera.zoomCurve, camera.zoom);
+        if (name == QLatin1String("focusDistance")) return number(camera.focusDistanceCurve, camera.focusDistance);
+        if (name == QLatin1String("aperture")) return number(camera.apertureCurve, camera.aperture);
+        if (name == QLatin1String("blurDoF")) return number(camera.blurCurve, camera.blur);
+        return {};
+    }
+    SurfaceShading& surface = layer.surface;
+    if (name == QLatin1String("matAmbient")) return number(surface.ambientCurve, surface.ambient);
+    if (name == QLatin1String("matDiffuse")) return number(surface.diffuseCurve, surface.diffuse);
+    if (name == QLatin1String("matSpecular")) return number(surface.specularCurve, surface.specular);
+    if (name == QLatin1String("matShininess")) return number(surface.shininessCurve, surface.shininess);
+    if (name == QLatin1String("matEmissiveColor")) return colour(surface.emissiveCurve, surface.emissive);
+    return {};
+}
+
+// Its value at `frame`: a double or a QColor.
+inline QVariant keyedLayerPropertyAt(const Layer& layer, const QString& name, int frame)
+{
+    const KeyedLayerProperty property = keyedLayerProperty(const_cast<Layer&>(layer), name);
+    if (!property.isValid()) return QVariant();
+    if (property.color) return QVariant(LayerTransform::curveColor(*property.curve, frame, *property.color));
+    return QVariant(LayerTransform::curveValue(*property.curve, frame, *property.number));
+}
+
+// An edit at `frame`: the key there once the property has keys, its own
+// value otherwise.
+inline void setKeyedLayerProperty(Layer& layer, const QString& name, const QVariant& value, int frame)
+{
+    const KeyedLayerProperty property = keyedLayerProperty(layer, name);
+    if (!property.isValid()) return;
+    const QVariant stored = property.color ? QVariant(value.value<QColor>()) : QVariant(value.toDouble());
+    if (!property.curve->isEmpty()) {
+        property.curve->set(frame, stored);
+    } else if (property.color) {
+        *property.color = stored.value<QColor>();
+    } else {
+        *property.number = stored.toDouble();
+    }
+}
+
+// A key at `frame` with the value there, or that key gone; the last one
+// leaves its value as the property's own.
+inline void toggleKeyedLayerProperty(Layer& layer, const QString& name, int frame)
+{
+    const KeyedLayerProperty property = keyedLayerProperty(layer, name);
+    if (!property.isValid()) return;
+    const QVariant now = keyedLayerPropertyAt(layer, name, frame);
+    KeyFrameList& curve = *property.curve;
+    if (curve.contains(frame)) {
+        curve.removeAt(frame);
+        if (curve.isEmpty()) {
+            if (property.color) *property.color = now.value<QColor>();
+            else *property.number = now.toDouble();
+        }
+    } else {
+        if (curve.isEmpty()) curve.setDefaultValue(now);
+        curve.set(frame, now);
+    }
+}
 
 // An audio level curve between frames: a fade evaluated only per frame would
 // step its gain 60 times a second instead of gliding.

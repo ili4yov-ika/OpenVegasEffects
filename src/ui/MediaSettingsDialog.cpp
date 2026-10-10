@@ -146,10 +146,12 @@ MediaSettingsDialog::MediaSettingsDialog(const media::MediaAsset& asset, QWidget
         auto* video = new QGroupBox(QCoreApplication::translate("MediaSettingsDialog", "Video"), this);
         auto* videoForm = new QFormLayout(video);
         const QSize size = asset.frameSize();
-        videoForm->addRow(translated("Format:"), valueLabel(asset.fileStreams().videoFormat.isEmpty()
-                           ? QStringLiteral("-") : asset.fileStreams().videoFormat, video));
-        videoForm->addRow(translated("Codec:"), valueLabel(asset.fileStreams().videoCodec.isEmpty()
-                           ? QStringLiteral("-") : asset.fileStreams().videoCodec, video));
+        videoForm->addRow(QCoreApplication::translate("MediaSettingsDialog", "Format:"),
+                          valueLabel(asset.fileStreams().videoFormat.isEmpty()
+                                         ? QStringLiteral("-") : asset.fileStreams().videoFormat, video));
+        videoForm->addRow(QCoreApplication::translate("MediaSettingsDialog", "Codec:"),
+                          valueLabel(asset.fileStreams().videoCodec.isEmpty()
+                                         ? QStringLiteral("-") : asset.fileStreams().videoCodec, video));
         videoForm->addRow(QCoreApplication::translate("MediaSettingsDialog", "Resolution:"),
                           valueLabel(size.isValid() ? QStringLiteral("%1 x %2").arg(size.width()).arg(size.height())
                                                     : QStringLiteral("-"), video));
@@ -239,37 +241,38 @@ MediaSettingsDialog::MediaSettingsDialog(const media::MediaAsset& asset, QWidget
     }
 
     if (!asset.fileStreams().audio.isEmpty() || audioOnly) {
-        auto* audio = new QGroupBox(translated("Audio"), this);
+        auto* audio = new QGroupBox(QCoreApplication::translate("MediaSettingsDialog", "Audio"), this);
         auto* audioForm = new QFormLayout(audio);
         m_audioStream = new QComboBox(audio);
         m_audioStream->setObjectName(QStringLiteral("mediaSettingsAudioStream"));
-        m_audioStream->addItem(translated("Automatic"), -1);
+        m_audioStream->addItem(QCoreApplication::translate("MediaSettingsDialog", "Automatic"), -1);
         const auto& streams = asset.fileStreams().audio;
         for (int i = 0; i < streams.size(); ++i) {
             const auto& stream = streams.at(i);
-            QString label = translated("Stream %1").arg(i + 1);
+            QString label = QCoreApplication::translate("MediaSettingsDialog", "Stream %1").arg(i + 1);
             if (!stream.name.isEmpty()) label += QStringLiteral(" — ") + stream.name;
             if (!stream.language.isEmpty()) label += QStringLiteral(" (%1)").arg(stream.language);
             m_audioStream->addItem(label, i);
         }
         int selected = m_audioStream->findData(asset.audioStreamIndex());
         if (selected < 0) {
-            m_audioStream->addItem(translated("Unavailable stream %1").arg(asset.audioStreamIndex() + 1),
+            m_audioStream->addItem(QCoreApplication::translate("MediaSettingsDialog", "Unavailable stream %1")
+                                       .arg(asset.audioStreamIndex() + 1),
                                    asset.audioStreamIndex());
             selected = m_audioStream->count() - 1;
         }
         m_audioStream->setCurrentIndex(selected);
         m_audioStream->setEnabled(!streams.isEmpty());
-        audioForm->addRow(translated("Audio Stream:"), m_audioStream);
+        audioForm->addRow(QCoreApplication::translate("MediaSettingsDialog", "Audio Stream:"), m_audioStream);
         auto* format = valueLabel(QString(), audio);
         auto* codec = valueLabel(QString(), audio);
         auto* sampleRate = valueLabel(QString(), audio);
         sampleRate->setObjectName(QStringLiteral("mediaSettingsSampleRate"));
         auto* channels = valueLabel(QString(), audio);
-        audioForm->addRow(translated("Format:"), format);
-        audioForm->addRow(translated("Codec:"), codec);
-        audioForm->addRow(translated("Sample Rate:"), sampleRate);
-        audioForm->addRow(translated("Channels:"), channels);
+        audioForm->addRow(QCoreApplication::translate("MediaSettingsDialog", "Format:"), format);
+        audioForm->addRow(QCoreApplication::translate("MediaSettingsDialog", "Codec:"), codec);
+        audioForm->addRow(QCoreApplication::translate("MediaSettingsDialog", "Sample Rate:"), sampleRate);
+        audioForm->addRow(QCoreApplication::translate("MediaSettingsDialog", "Channels:"), channels);
         const auto showStream = [this, format, codec, sampleRate, channels] {
             const auto& available = m_asset.fileStreams().audio;
             int index = m_audioStream->currentData().toInt();
@@ -281,7 +284,9 @@ MediaSettingsDialog::MediaSettingsDialog(const media::MediaAsset& asset, QWidget
             format->setText(stream && !stream->format.isEmpty() ? stream->format : unknown);
             codec->setText(stream && !stream->codec.isEmpty() ? stream->codec : unknown);
             sampleRate->setText(stream && stream->sampleRate
-                               ? translated("%1 Hz").arg(stream->sampleRate) : unknown);
+                                   ? QCoreApplication::translate("MediaSettingsDialog", "%1 Hz")
+                                         .arg(stream->sampleRate)
+                                   : unknown);
             channels->setText(stream && stream->channels ? QString::number(stream->channels) : unknown);
         };
         showStream();

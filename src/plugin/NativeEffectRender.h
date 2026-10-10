@@ -53,6 +53,11 @@ void registerNativeGeometryModule(
     const QString& dependencyDirectory, bool renderingVerified,
     const QVector<EffectParameterSpec>& parameters = {});
 bool nativeEffectFrameRenderingVerified(const core::Identifier& id);
+// Any registered native module (2D, behaviour, geometry, transition, audio).
+bool isNativeModule(const core::Identifier& id);
+// A 2D effect whose render at a reduced preview's size (NativeFrameTime::
+// renderScale) matches its full render reduced; the others are drawn full.
+bool nativeEffectRendersReduced(const core::Identifier& id);
 bool nativeGeometryRenderingVerified(const core::Identifier& id);
 bool nativeVideoTransitionRenderingVerified(const core::Identifier& id);
 bool nativeAudioEffectRenderingVerified(const core::Identifier& id);
@@ -393,7 +398,23 @@ void clearNativeInstanceTransforms(const QString& instanceKey = QString());
 // it off with the transform calculated. A control never set is shown.
 void setNativeControlStates(const QString& instanceKey, const QHash<QString, bool>& states);
 bool nativeControlShown(const QString& instanceKey, const QString& key);
+// The same, with what to answer for a control the module has said nothing
+// about: shown unless it was registered hidden (option 0x2).
+bool nativeControlShown(const QString& instanceKey, const QString& key, bool fallback);
 void clearNativeControlStates(const QString& instanceKey = QString());
+// The controls a native module shows for these values. In the reference a
+// control registered with option 0x2 starts hidden (the controls panel makes
+// its row with visible = !(Options & 2)) and the module switches rows on and
+// off with SetPropertyState as properties change (NotifyPropertyChanged,
+// Notify 7) - Animated Lasers shows a beam's controls for each beam asked
+// for, Colorama a phase for each colour, Levels a channel's. The port asks
+// the module (any native module, not only those living on an instance) with
+// Notify 7 for each property that switches controls and keeps the answer
+// under `instanceKey`. The first time for a module every property but
+// buttons and labels is tried and those that switched something are
+// remembered; after that only they are, and only when the values changed.
+void refreshNativeControlStates(const core::Identifier& id, const QStringList& values,
+                                const QString& instanceKey);
 
 // SaveTrackingData/GetNumberOfFeatures/GetTrackingData (+0x3b0..+0x3c0): the
 // features a module tracked between two frames of a footage asset - each
@@ -420,12 +441,31 @@ int nativeCursorShape(int code);
 // frame and the layer's frame at +0x98/+0x9c and the layer's length in frames
 // at +0xa0 (a layer frame past the end is held on the last one). Effects that
 // move by themselves - noise, grain, flicker, shake - read them.
+// What the host reduces by the render scale for a module in a reduced
+// preview, on top of the scale in its RenderContext (which a few modules read
+// themselves): the values registered in pixels (unit "px", "px/s"), and the
+// points - pixel offsets from the layer's centre, as BezierWarp's corners at
+// +/-640, +/-360 of a 1280x720 frame are.
+enum NativeReducedValues
+{
+    NativeReducesNothing = 0,
+    NativeReducesPixels = 1,
+    NativeReducesPoints = 2
+};
+
 struct NativeFrameTime
 {
     int frame = 0;
     int layerFrame = 0;
     int layerFrames = 1;
     double frameRate = 30.0;
+    // The render scale of a reduced preview (Half 0.5, Quarter 0.25):
+    // RenderContext +0x2c/+0x30 (and the textures'), which the SDK's helpers
+    // multiply pixel sizes by.
+    float renderScale = 1.0f;
+    // NativeReducedValues flags for this render; -1 takes the module's own
+    // (nativeEffectReducedValues).
+    int reducedValues = -1;
 };
 
 // Executes the 2D BIFF GPU path (Notify 8 once per render thread, Notify 10 per

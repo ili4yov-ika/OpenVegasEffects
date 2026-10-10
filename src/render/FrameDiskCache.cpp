@@ -33,21 +33,33 @@ bool FrameDiskCache::contains(const QString& key) const
 bool FrameDiskCache::load(const QString& key, const QSize& size, QByteArray* rgba) const
 {
     if (!isEnabled() || key.isEmpty() || !rgba) return false;
-    QFile file(pathFor(key));
-    if (!file.open(QIODevice::ReadWrite)) return false;
+    const QString path = pathFor(key);
+    // Opening a missing file for writing creates it, empty - and an entry
+    // that exists is never stored again, so the frame was lost for good.
+    if (!QFileInfo::exists(path)) return false;
+    QFile file(path);
+    // Opened for writing only to mark it used; a read-only cache, or a file
+    // another process holds for a moment, is still a hit, just not touched.
+    const bool touch = file.open(QIODevice::ReadWrite);
+    if (!touch && !file.open(QIODevice::ReadOnly)) return false;
     QDataStream stream(&file);
     stream.setByteOrder(QDataStream::LittleEndian);
     quint32 magic = 0, version = 0;
     qint32 width = 0, height = 0;
     QByteArray compressed;
     stream >> magic >> version >> width >> height >> compressed;
-    if (stream.status() != QDataStream::Ok || magic != kMagic || version != kVersion
-        || QSize(width, height) != size) {
+    const auto discard = [&] {
+        // A damaged entry (written whole by QSaveFile, so not one in
+        // progress) goes, so the frame can be stored again.
+        file.close();
+        QFile::remove(path);
         return false;
-    }
+    };
+    if (stream.status() != QDataStream::Ok || magic != kMagic || version != kVersion) return discard();
+    if (QSize(width, height) != size) return false;
     QByteArray pixels = qUncompress(compressed);
-    if (pixels.size() != qsizetype(width) * height * 4) return false;
-    file.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
+    if (pixels.size() != qsizetype(width) * height * 4) return discard();
+    if (touch) file.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
     *rgba = std::move(pixels);
     return true;
 }

@@ -17,6 +17,8 @@
 #include "core/Identifier.h"
 #include "media/MediaAsset.h"
 #include "media/MediaManager.h"
+#include <optional>
+
 #include "model3d/Renderer3D.h"
 #include "render/FrameDiskCache.h"
 
@@ -50,6 +52,11 @@ struct FrameRequest
     // pre-render are read from <this>/<composition id> instead of rendered.
     QString preRenderDirectory;
     std::shared_ptr<composition::Composition> compositionSnapshot;
+    // A Viewer view with a camera of its own (Perspective, Front, ...): the
+    // shot's 3D scene alone seen through it, with no fog, and the floor grid
+    // under it when asked for (Options ShowFloorPlane).
+    std::optional<model3d::Camera> viewCamera;
+    bool floorPlane = false;
 };
 
 // Cache key of a rendered frame: time, size and options plus everything the
@@ -87,6 +94,20 @@ signals:
 private:
     QImage renderFrameImage(double timeSeconds, const QSize& size, bool withEffects,
                             bool transparentBackground = false) const;
+    // The shot's frame at `scale` of its square size (Half 0.5, Quarter
+    // 0.25): drawn at that size when everything in it can be (frameScalesDown),
+    // else at full size and reduced.
+    QImage renderShotImage(double timeSeconds, double scale, bool withEffects,
+                           bool transparentBackground) const;
+    // Whether a reduced preview may draw the whole shot reduced: no native
+    // module on a grade layer that cannot be. The 3D scene is drawn reduced
+    // too (its camera is the full shot's, rasterised into the smaller frame),
+    // and so is motion blur, with the samples its smear needs at that size.
+    bool frameScalesDown() const;
+    // The shot's full square size while a reduced frame of `canvasSize` is
+    // drawn, else `canvasSize`: what the camera is set up for and what text
+    // geometry is laid out in.
+    QSize sceneCanvas(const QSize& canvasSize) const;
     // Applies the clip's enabled effects to an already-rendered clip image.
     void applyClipEffects(QImage& image, const composition::Clip& clip, int frame) const;
     // Runs native Behavior callbacks and applies their 2D matrix to the
@@ -108,10 +129,17 @@ private:
                                 double timeSeconds, const QSize& size, bool withEffects) const;
     // Takes the layer, not just its transform: a Plane needs its fill colour
     // and the kind decides what is drawn at all.
+    // In a reduced preview the content is laid out in `space` (the shot's
+    // full square size when not given) and drawn scaled into `canvasSize`.
     QImage renderClip(const composition::Layer& layer, const composition::Clip& clip,
-                      double localTimeSeconds, const QSize& canvasSize, int frame) const;
+                      double localTimeSeconds, const QSize& canvasSize, int frame,
+                      const QSize& space = QSize()) const;
     // Rasterises a 3D model layer over the whole canvas, transparent where the
     // model is not. Null when the layer has no geometry to draw.
+    // A layer's own picture at `frame` - its content and effects without its
+    // transform, at its own size - as a material's map takes it (Use Layer).
+    QImage layerTexture(const core::Identifier& layerId, const core::Identifier& forLayer,
+                        int frame) const;
     QImage renderModelLayer(const composition::Layer& layer, const QSize& canvasSize,
                             int frame) const;
     // Text with Geometry modules (Extrude, Bevel, Bend, Rotate Geometry):
@@ -125,11 +153,20 @@ private:
     // camera layer, or the default one the reference gives a composite shot
     // that has none.
     model3d::Camera sceneCamera(const QSize& canvasSize, int frame) const;
-    // Light the models are shaded by, taken from the first visible light layer
-    // and falling back to the reference's "defaultLight".
-    model3d::Light sceneLight(int frame) const;
+    // The lights a 3D layer is drawn with (render::sceneLightsOf) and its
+    // Material. A shot without a light layer draws its 3D layers unlit, as
+    // the reference does.
+    model3d::Lighting sceneLighting(const composition::Layer& layer, int frame) const;
     // The shot's fog (RenderSettings), for 3D layers only.
     model3d::Fog sceneFog() const;
+    // The depth of field of the shot's camera (its HasDoF, Focus Distance,
+    // Aperture and Blur), for its 3D scene only.
+    model3d::DepthOfField sceneDepthOfField(int frame) const;
+    // The project's 3D antialiasing mode (1..9), which nested shots take from
+    // the shot they are in, and the samples per pixel the 3D scene is drawn
+    // with for it (model3d::antialiasingSamples).
+    int antialiasingMode() const;
+    int sceneSamples() const;
     // A 3D picture layer's sheet in the scene (layer transform, Y up).
     static QMatrix4x4 layerPlaneMatrix(const composition::LayerTransform& transform, int frame);
     // Whether the layer is part of the 3D scene: a 3D media, plane or text
@@ -145,6 +182,22 @@ private:
     // fog by each pixel's distance from it.
     QImage renderClipIn3D(const composition::Layer& layer, const composition::Clip& clip,
                           double localTimeSeconds, const QSize& canvasSize, int frame) const;
+    // That sheet: its content drawn flat (`content`), its size in the
+    // scene's units and where the layer transform puts it.
+    struct SheetPicture
+    {
+        QImage content;
+        QSizeF sheet;
+        QMatrix4x4 model;
+    };
+    SheetPicture sheetPicture(const composition::Layer& layer, const composition::Clip& clip,
+                              double localTimeSeconds, const QSize& canvasSize, int frame) const;
+    // The shadow maps of the frame's lights (render::sceneLightsOf order):
+    // the visible 3D layers whose Material casts shadows - a sheet by its
+    // picture's opaque part, a model by its triangles - seen from each light
+    // that casts them, at the project's Shadow Map Size.
+    QVector<std::shared_ptr<const model3d::ShadowMap>> sceneShadowMaps(double timeSeconds,
+                                                                       const QSize& canvasSize) const;
     // Layer transform as a 4x4: anchor point, scale, orientation, the three
     // rotations and the position, in the order the reference applies them.
     static QMatrix4x4 layerModelMatrix(const composition::LayerTransform& transform, int frame);
@@ -165,7 +218,23 @@ private:
     QString m_preRenderDirectory;
     // Image-sequence stills by file; bounded, unlike single images (cost KiB).
     mutable QCache<QString, QImage> m_sequenceFrames{128 * 1024};
+    // Model textures reduced to the project's Model Texture Max Size, by
+    // picture and size (cost in KiB).
+    mutable QCache<QString, QImage> m_limitedTextures{64 * 1024};
     mutable bool m_frameComplete = true;
+    // The shadow maps of the frame being drawn (sceneShadowMaps).
+    mutable QVector<std::shared_ptr<const model3d::ShadowMap>> m_shadowMaps;
+    // The scale the frame being drawn is at (1 at full size): layers are
+    // placed in the shot's full square units and drawn through it.
+    mutable double m_renderScale = 1.0;
+    // Set on the worker of a nested shot: the antialiasing of the project it
+    // is drawn in. 0 takes the composition's own.
+    int m_antialiasingMode = 0;
+    // The frame's view camera and floor (FrameRequest).
+    std::optional<model3d::Camera> m_viewCamera;
+    bool m_floorPlane = false;
+    // The floor grid of a view, on the y = 0 plane.
+    void paintFloorGrid(QImage& image) const;
 };
 
 class RenderManager : public QObject
@@ -187,6 +256,13 @@ public:
                       bool renderEffects = true, bool transparentBackground = false);
     // Where pre-rendered nested shots are looked up (empty: never).
     void setPreRenderDirectory(const QString& directory) { m_preRenderDirectory = directory; }
+    // Frames for a Viewer view with its own camera (FrameRequest::viewCamera);
+    // none renders the shot as it is.
+    void setViewCamera(const std::optional<model3d::Camera>& camera, bool floorPlane = false)
+    {
+        m_viewCamera = camera;
+        m_floorPlane = floorPlane;
+    }
     void cancelAll();
     void startPlaybackCache(double fromSeconds, const QSize& size, bool renderEffects = true,
                             bool transparentBackground = false);
@@ -201,6 +277,9 @@ public:
     void setMediaVariant(const QString& variant) { m_mediaVariant = variant; }
     const FrameDiskCache& diskCache() const { return m_diskCache; }
     int diskCacheHits() const { return m_diskCacheHits; }
+    // Whether the frame frameReady is delivering had every picture it needed:
+    // false when a video frame was not decoded yet or a nested shot missed one.
+    bool lastFrameComplete() const { return m_lastFrameComplete; }
 
 signals:
     void stateChanged(render::RenderState state);
@@ -232,7 +311,10 @@ private:
     bool m_cacheEffects = true;
     bool m_cacheTransparent = false;
     QString m_preRenderDirectory;
+    std::optional<model3d::Camera> m_viewCamera;
+    bool m_floorPlane = false;
     QElapsedTimer m_cacheWait;
+    bool m_lastFrameComplete = true;
 
     std::shared_ptr<composition::Composition> m_composition;
     std::shared_ptr<media::MediaManager> m_mediaManager;

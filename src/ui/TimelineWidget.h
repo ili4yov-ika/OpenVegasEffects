@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QVector3D>
 #include <QDockWidget>
 #include <QTreeWidget>
 #include <QElapsedTimer>
@@ -38,7 +39,26 @@ class WaveformCache;
 namespace plugin {
 class PluginManager;
 }
+namespace model3d {
+struct Mesh;
+}
 namespace ui {
+
+// Tree rows of a model node (its row and its Transform rows) carry the
+// node's path (model3d::Mesh::nodePath) under this role.
+constexpr int kModelNodeRole = Qt::UserRole + 6;
+// A row of a model animation's keyed property: the instance's id, and which
+// property (ModelAnimationProperty).
+constexpr int kModelAnimationRole = Qt::UserRole + 8;
+constexpr int kModelAnimationPropertyRole = Qt::UserRole + 9;
+// A row of a light's, a camera lens's or a Material's property that
+// animates: the reference's name of it (composition::keyedLayerProperty).
+constexpr int kLayerPropertyRole = Qt::UserRole + 10;
+// The keyed properties of a model animation instance, as its rows show them.
+enum class ModelAnimationProperty { Strength = 0, Playback = 1 };
+
+// A property row of a layer group (TimelineTreeRows.cpp).
+struct TimelinePropertyRow;
 
 // One horizontal lane of the track area, matching a visible row of the layer
 // tree so the two halves line up the way the reference Editor does.
@@ -58,10 +78,84 @@ struct TimelineLane
     // int), for the rows under Transform. Those keyframes live on the layer's
     // LayerTransform, not on an effect, so they need their own marker.
     int transformProp = -1;
+    // For a Transform row of a model node: the node's path. Its keys are on
+    // the node's transform, not the layer's.
+    QString modelNode;
+    // For a Strength or Playback row of a model animation: the instance's
+    // id and the property (ModelAnimationProperty cast to int).
+    QString modelAnimation;
+    int animationProperty = -1;
+    // For a row of a light's, a lens's or a Material's property: its name.
+    QString layerProperty;
 
     bool isParameterRow() const { return parameterIndex >= 0; }
     bool isTransformRow() const { return transformProp >= 0; }
+    // A row with one curve of its own: a model animation's or a layer
+    // property's.
+    bool isAnimationRow() const { return animationProperty >= 0 || !layerProperty.isEmpty(); }
 };
+
+// The curve of a model animation's property: its Strength or Playback keys.
+inline composition::KeyFrameList* modelAnimationCurve(composition::Layer& layer, const QString& instance,
+                                                     int property)
+{
+    for (composition::ModelAnimationInstance& animation : layer.modelAnimations) {
+        if (animation.id.value() != instance) continue;
+        return property == int(ModelAnimationProperty::Playback) ? &animation.playbackCurve
+                                                                 : &animation.strengthCurve;
+    }
+    return nullptr;
+}
+inline const composition::KeyFrameList* modelAnimationCurve(const composition::Layer& layer,
+                                                           const QString& instance, int property)
+{
+    return modelAnimationCurve(const_cast<composition::Layer&>(layer), instance, property);
+}
+// The one curve of an animation row: a model animation's Strength or
+// Playback, or a light's, a lens's or a Material's property.
+inline composition::KeyFrameList* laneAnimationCurve(composition::Layer& layer, const TimelineLane& lane)
+{
+    if (!lane.layerProperty.isEmpty()) return composition::keyedLayerProperty(layer, lane.layerProperty).curve;
+    return modelAnimationCurve(layer, lane.modelAnimation, lane.animationProperty);
+}
+inline const composition::KeyFrameList* laneAnimationCurve(const composition::Layer& layer,
+                                                          const TimelineLane& lane)
+{
+    return laneAnimationCurve(const_cast<composition::Layer&>(layer), lane);
+}
+
+// The transform a lane's keys are on - its layer's, or a model node's (null
+// while the node has none) - and the dimension its axes follow.
+inline const composition::LayerTransform* laneTransform(const composition::Layer& layer,
+                                                        const TimelineLane& lane)
+{
+    if (lane.modelNode.isEmpty()) return &layer.transform;
+    const composition::ModelNodeTransform* node = layer.modelNode(lane.modelNode);
+    return node ? &node->transform : nullptr;
+}
+inline composition::LayerTransform* laneTransform(composition::Layer& layer, const TimelineLane& lane)
+{
+    if (lane.modelNode.isEmpty()) return &layer.transform;
+    composition::ModelNodeTransform* node = layer.modelNode(lane.modelNode);
+    return node ? &node->transform : nullptr;
+}
+inline composition::LayerDimension laneDimension(const composition::Layer& layer,
+                                                 const TimelineLane& lane)
+{
+    return lane.modelNode.isEmpty() ? layer.dimension : composition::LayerDimension::ThreeD;
+}
+inline const composition::KeyFrameList* laneCurve(const composition::Layer& layer, const TimelineLane& lane,
+                                                  composition::TransformProperty prop, int axis)
+{
+    const composition::LayerTransform* transform = laneTransform(layer, lane);
+    return transform ? transform->curve(prop, axis) : nullptr;
+}
+inline composition::KeyFrameList* laneCurve(composition::Layer& layer, const TimelineLane& lane,
+                                            composition::TransformProperty prop, int axis)
+{
+    composition::LayerTransform* transform = laneTransform(layer, lane);
+    return transform ? transform->curve(prop, axis) : nullptr;
+}
 
 // Height of the time ruler across the top of the track canvas. The value
 // graph draws the same ruler, so both pages of the stack line up on time.
@@ -345,6 +439,8 @@ public:
     // selection. The tree then emits the usual clipSelected signal, keeping
     // every inspector on the same path.
     void selectLayer(int layerIndex);
+    // Makes a model node's row current (the layer's row for an empty path).
+    void selectModelNode(int layerIndex, const QString& path);
 
     // Needed to resolve effect parameter names for the layer tree.
     void setPluginManager(plugin::PluginManager* pluginManager);
@@ -416,6 +512,9 @@ signals:
     void timeScrubbed(double timeSeconds);
     void clipSelected(int layerIndex, int clipIndex);
     void layersSelected(const QVector<int>& layerIndices);
+    // A row of a model node (or one of its Transform rows) became current:
+    // that node's path; empty for any other row.
+    void modelNodeSelected(int layerIndex, const QString& path);
     // Carries the kind chosen in the button's menu; the reference opens the
     // same list from its "Open New Layer Menu" command.
     void newLayerRequested(composition::LayerKind kind);
@@ -434,6 +533,9 @@ signals:
     void compositionTabActivated(int index);
     void compositionTabCloseRequested(int index);
     void mediaDropped(const QString& filePath, int layerIndex, double seconds);
+    // A file's animations were taken into Media (the "+" menu's 3D Model
+    // Animation..., as the reference makes a Model3DAnimationAsset of it).
+    void modelAnimationImported();
     void compositeShotDropped(const QString& shotId, int layerIndex, double seconds);
 
 public:
@@ -441,19 +543,43 @@ public:
     // transition lands on the clip edge nearer `seconds`. Returns the new
     // effect's index, or -1 when the clip is missing or its layer locked.
     int addEffect(int layerIndex, int clipIndex, const plugin::EffectSpec& spec, double seconds);
+    // Insert 3D Model Animation Instance: animation `index` of `filePath`
+    // (empty: the model's own file) playing on a model layer, as one
+    // undoable edit. False when there is no such animation or the layer is
+    // locked.
+    bool insertModelAnimation(int layerIndex, const QString& filePath, int index);
 
 private:
     void beginModelEdit();
     void finishModelEdit(const QString& title, bool rebuild = false);
     void editLayer(int index, const QString& title, const std::function<void(composition::Layer&)>& edit,
                    bool rebuild = false);
+    // Override Materials of a model layer: each material's diffuse map source.
+    void addMaterialRows(int layerIndex, const model3d::Mesh& mesh, QTreeWidgetItem* parent);
+    // A light layer's Light group (LightLayerGroupFactory) and a 3D layer's
+    // Material group (AssetLayerGroupFactory): one editor a property.
+    void addLightRows(int layerIndex, QTreeWidgetItem* parent);
+    void addSurfaceRows(int layerIndex, QTreeWidgetItem* parent);
+    // A camera layer's Lens group (CameraLayerGroupFactory).
+    void addCameraRows(int layerIndex, QTreeWidgetItem* parent);
+    void addPropertyRows(int layerIndex, QTreeWidgetItem* parent, const QVector<TimelinePropertyRow>& rows,
+                         const QString& objectNamePrefix);
+    // Animations of a model layer: each instance's Strength, Loop, Custom
+    // Playback and Playback, its properties and its removal.
+    void addModelAnimationRows(int layerIndex, QTreeWidgetItem* parent);
+    // The Animations "+": the model's own animations, or one from a file.
+    void showModelAnimationMenu(int layerIndex, QWidget* anchor);
     void scheduleRefresh();
     void refreshValues();
     void applySearch();
     void updateKeyButtons();
     void showEffectMenu(int layer, bool behaviors, QWidget* anchor);
     void buildTransformRows(QTreeWidgetItem* parent, int layer);
-    void buildTransformRow(QTreeWidgetItem* parent, int layer, composition::TransformProperty prop);
+    // A Transform row of the layer, or of one of its model nodes when
+    // `modelNode` is given (`pivot` is where that node's position and anchor
+    // point start).
+    void buildTransformRow(QTreeWidgetItem* parent, int layer, composition::TransformProperty prop,
+                           const QString& modelNode = QString(), const QVector3D& pivot = QVector3D());
     void buildParameterEditor(QTreeWidgetItem* row, int layer, int clip, int effect, int parameter);
     QVector<composition::KeyFrameList*> selectedCurves();
     QUndoStack* m_undoStack = nullptr;

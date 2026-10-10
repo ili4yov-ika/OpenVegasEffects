@@ -3,6 +3,7 @@
 #include "ui_ExportPanel.h"
 
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
@@ -21,6 +22,10 @@
 
 #include "core/Log.h"
 #include "app/Settings.h"
+#include "ui/ExportPresets.h"
+
+#include <QSignalBlocker>
+#include <QTabWidget>
 
 namespace openvegas {
 namespace ui {
@@ -49,7 +54,11 @@ ExportPanel::ExportPanel(QWidget* parent)
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
-    outer->addWidget(body);
+    m_tabs = new QTabWidget(this);
+    m_tabs->setObjectName(QStringLiteral("export-panel-tabs"));
+    m_tabs->setDocumentMode(true);
+    m_tabs->addTab(body, QCoreApplication::translate("ExportPanelWidget", "Queue"));
+    outer->addWidget(m_tabs);
 
     connect(m_ui->toolButtonExportDirectory, &QToolButton::clicked,
             this, &ExportPanel::chooseDirectory);
@@ -98,13 +107,46 @@ void ExportPanel::setExportDirectory(const QString& path)
     m_ui->lineEditExportDirectory->setText(path);
 }
 
+void ExportPanel::setPresetManager(ExportPresetManager* manager)
+{
+    m_presets = manager;
+    if (!manager) return;
+    if (!m_presetsPage) {
+        m_presetsPage = new ExportPresetsPage(manager, m_tabs);
+        m_tabs->addTab(m_presetsPage, QCoreApplication::translate("ExportPanelWidget", "Presets"));
+    }
+    connect(manager, &ExportPresetManager::presetsChanged, this, &ExportPanel::fillPresets);
+    fillPresets();
+}
+
+void ExportPanel::fillPresets()
+{
+    if (!m_presets) return;
+    // The choice stays when it still exists; otherwise the default.
+    QString chosen = m_ui->comboBoxPreset->currentData().toString();
+    if (!m_presets->contains(chosen)) chosen = m_presets->defaultPreset();
+    const QSignalBlocker blocker(m_ui->comboBoxPreset);
+    m_ui->comboBoxPreset->clear();
+    for (const render::ExportPreset& preset : m_presets->presets())
+        m_ui->comboBoxPreset->addItem(render::exportPresetDisplayName(preset), preset.name);
+    m_ui->comboBoxPreset->setCurrentIndex(qMax(0, m_ui->comboBoxPreset->findData(chosen)));
+}
+
 QString ExportPanel::currentPreset() const
 {
-    return m_ui->comboBoxPreset->currentText();
+    const QString name = m_ui->comboBoxPreset->currentData().toString();
+    return name.isEmpty() ? m_ui->comboBoxPreset->currentText() : name;
+}
+
+render::ExportPreset ExportPanel::currentExportPreset() const
+{
+    return m_presets ? m_presets->preset(currentPreset()) : render::ExportPreset();
 }
 
 QString ExportPanel::extensionForPreset() const
 {
+    const render::ExportPreset preset = currentExportPreset();
+    if (preset.isValid()) return preset.extension();
     const QString p = currentPreset().toLower();
     if (p.contains(QStringLiteral(".mp4"))) {
         return QStringLiteral("mp4");
@@ -143,9 +185,11 @@ QString ExportPanel::buildOutputPath(const QString& extension) const
 QString ExportPanel::outputPath() const
 {
     const QString extension = extensionForPreset();
-    // A single frame is an image even when the contents preset is a movie.
-    return buildOutputPath(extension == QLatin1String("mp4") || extension == QLatin1String("mov")
-                               ? QStringLiteral("png") : extension);
+    // A single frame is an image even when the contents preset is a movie
+    // or a sound.
+    const bool image = extension == QLatin1String("png") || extension == QLatin1String("jpg")
+                       || extension == QLatin1String("bmp") || extension == QLatin1String("exr");
+    return buildOutputPath(image ? extension : QStringLiteral("png"));
 }
 
 void ExportPanel::chooseDirectory()

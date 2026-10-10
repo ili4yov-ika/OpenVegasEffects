@@ -85,11 +85,26 @@ QVector<float> waveformColumns(const WaveformPeaks& peaks, double sourceStart, d
     return heights;
 }
 
+namespace {
+
+WaveformStore& defaultStore()
+{
+    static WaveformStore store {QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
+                                    .filePath(QStringLiteral("waveforms")), {}, {}};
+    return store;
+}
+
+} // namespace
+
+void WaveformCache::setDefaultStore(const WaveformStore& store)
+{
+    defaultStore() = store;
+}
+
 WaveformCache::WaveformCache(QObject* parent)
     : QObject(parent)
     , m_ffmpeg(QStandardPaths::findExecutable(QStringLiteral("ffmpeg")))
-    , m_cacheDirectory(QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
-                           .filePath(QStringLiteral("waveforms")))
+    , m_store(defaultStore())
 {
 }
 
@@ -195,8 +210,8 @@ void WaveformCache::finishDecode(const QString& key, const QString& filePath, bo
 
 bool WaveformCache::loadFromDisk(const QString& key)
 {
-    if (m_cacheDirectory.isEmpty()) return false;
-    QFile file(QDir(m_cacheDirectory).filePath(key + QStringLiteral(".peaks")));
+    if (m_store.directory.isEmpty()) return false;
+    QFile file(QDir(m_store.directory).filePath(key + QStringLiteral(".peaks")));
     if (!file.open(QIODevice::ReadOnly)) return false;
     QDataStream stream(&file);
     stream.setByteOrder(QDataStream::LittleEndian);
@@ -209,19 +224,21 @@ bool WaveformCache::loadFromDisk(const QString& key)
         return false;
     }
     m_ready.insert(key, std::move(peaks));
+    if (m_store.used) m_store.used(key);
     return true;
 }
 
 void WaveformCache::saveToDisk(const QString& key, const WaveformPeaks& peaks) const
 {
-    if (m_cacheDirectory.isEmpty() || !QDir().mkpath(m_cacheDirectory)) return;
-    QSaveFile file(QDir(m_cacheDirectory).filePath(key + QStringLiteral(".peaks")));
+    if (m_store.directory.isEmpty() || !QDir().mkpath(m_store.directory)) return;
+    const QString path = QDir(m_store.directory).filePath(key + QStringLiteral(".peaks"));
+    QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)) return;
     QDataStream stream(&file);
     stream.setByteOrder(QDataStream::LittleEndian);
     stream.setFloatingPointPrecision(QDataStream::SinglePrecision);
     stream << kCacheMagic << kCacheVersion << peaks.peak << peaks.rms;
-    if (stream.status() == QDataStream::Ok) file.commit();
+    if (stream.status() == QDataStream::Ok && file.commit() && m_store.stored) m_store.stored(key, path);
 }
 
 } // namespace media

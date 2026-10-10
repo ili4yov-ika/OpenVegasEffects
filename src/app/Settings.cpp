@@ -104,6 +104,16 @@ void Settings::setShowCheckerboard2D(bool enabled)
     writeOption(QStringLiteral("Options/ShowCheckerboard2D"), enabled);
 }
 
+bool Settings::showCheckerboard3D()
+{
+    return readOption(QStringLiteral("Options/ShowCheckerboard3D"), true).toBool();
+}
+
+bool Settings::showFloorPlane()
+{
+    return readOption(QStringLiteral("Options/ShowFloorPlane"), true).toBool();
+}
+
 QString Settings::viewerBackgroundColor()
 {
     const QString stored =

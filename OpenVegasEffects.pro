@@ -44,7 +44,9 @@ INCLUDEPATH += $$UI_DIR
 
 HEADERS += \
     src/app/AppMain.h \
+    src/app/GpuDriver.h \
     src/app/Settings.h \
+    src/app/OptionValues.h \
     src/app/ProjectDefaults.h \
     src/app/Translations.h \
     src/app/UserDataPaths.h \
@@ -69,7 +71,9 @@ HEADERS += \
     src/media/MediaStreamInfo.h \
     src/media/AudioCapture.h \
     src/media/AudioPlayer.h \
+    src/media/AudioFormat.h \
     src/media/AudioWaveform.h \
+    src/media/DecodedFrameCache.h \
     src/media/ProxyMedia.h \
     src/media/PcmWave.h \
     src/media/ExrImage.h \
@@ -89,12 +93,18 @@ HEADERS += \
     src/model3d/ModelImportSettings.h \
     src/model3d/ModelLoader.h \
     src/model3d/AlembicReader.h \
+    src/model3d/FbxReader.h \
+    src/model3d/GltfReader.h \
+    src/model3d/LwoReader.h \
+    src/model3d/ThreeDsReader.h \
+    src/render/PreRenderManager.h \
     src/model3d/Renderer3D.h \
     src/render/AudioExport.h \
     src/render/FrameDiskCache.h \
     src/render/VideoEncoder.h \
     src/render/RenderManager.h \
     src/render/TextGeometry.h \
+    src/render/LayerGeometry.h \
     src/render/TextRender.h \
     src/ui/AboutDialog.h \
     src/ui/AudioMetersPanel.h \
@@ -122,6 +132,7 @@ HEADERS += \
     src/ui/CompositionSettingsDialog.h \
     src/app/AVTemplates.h \
     src/render/ExportJob.h \
+    src/render/ExportPreset.h \
     src/ui/ExportQueue.h \
     src/ui/ExportQueueView.h \
     src/ui/TextureWarning.h \
@@ -138,6 +149,7 @@ HEADERS += \
     src/ui/TrackPanel.h \
     src/ui/TrimmerPanel.h \
     src/ui/ExportPanel.h \
+    src/ui/ExportPresets.h \
     src/ui/Theme.h \
     src/ui/TimelineValueGraphView.h \
     src/ui/TimelineWidget.h \
@@ -145,8 +157,11 @@ HEADERS += \
     src/ui/ViewerOverlay.h \
     src/ui/Viewer360View.h \
     src/ui/TextTransformOverlay.h \
+    src/ui/ModelNodeOverlay.h \
+    src/ui/SceneObjectOverlay.h \
     src/ui/NativeCustomUiOverlay.h     src/ui/NativeInstanceHost.h \
     src/ui/MediaSettingsDialog.h \
+    src/ui/ModelAnimationDialog.h \
     src/ui/ViewerPanel.h \
     src/ui/ViewerTransportBar.h \
     src/ui/ViewScaleButton.h
@@ -154,6 +169,7 @@ HEADERS += \
 SOURCES += \
     src/main.cpp \
     src/app/AppMain.cpp \
+    src/app/GpuDriver.cpp \
     src/app/Settings.cpp \
     src/app/Translations.cpp \
     src/app/UserDataPaths.cpp \
@@ -168,6 +184,7 @@ SOURCES += \
     src/media/AudioCapture.cpp \
     src/media/AudioPlayer.cpp \
     src/media/AudioWaveform.cpp \
+    src/media/DecodedFrameCache.cpp \
     src/media/ProxyMedia.cpp \
     src/media/ExrImage.cpp \
     src/media/VideoProbe.cpp \
@@ -181,6 +198,11 @@ SOURCES += \
     src/project/VegfxSerializer.cpp \
     src/project/VegfxMerge.cpp \
     src/model3d/AlembicReader.cpp \
+    src/model3d/FbxReader.cpp \
+    src/model3d/GltfReader.cpp \
+    src/model3d/LwoReader.cpp \
+    src/model3d/ThreeDsReader.cpp \
+    src/render/PreRenderManager.cpp \
     src/model3d/Mesh.cpp \
     src/model3d/ModelImportSettings.cpp \
     src/model3d/ModelLoader.cpp \
@@ -190,6 +212,7 @@ SOURCES += \
     src/render/VideoEncoder.cpp \
     src/render/RenderManager.cpp \
     src/render/TextGeometry.cpp \
+    src/render/LayerGeometry.cpp \
     src/render/TextRender.cpp \
     src/ui/AboutDialog.cpp \
     src/ui/AudioMetersPanel.cpp \
@@ -215,6 +238,7 @@ SOURCES += \
     src/ui/CompositionSettingsDialog.cpp \
     src/app/AVTemplates.cpp \
     src/render/ExportJob.cpp \
+    src/render/ExportPreset.cpp \
     src/ui/ExportQueue.cpp \
     src/ui/ExportQueueView.cpp \
     src/ui/MediaPanel.cpp \
@@ -225,6 +249,7 @@ SOURCES += \
     src/ui/TrackPanel.cpp \
     src/ui/TrimmerPanel.cpp \
     src/ui/ExportPanel.cpp \
+    src/ui/ExportPresets.cpp \
     src/ui/Theme.cpp \
     src/ui/TimelineValueGraphView.cpp \
     src/ui/TimelineEditing.cpp \
@@ -233,8 +258,11 @@ SOURCES += \
     src/ui/ViewerWidget.cpp \
     src/ui/Viewer360View.cpp \
     src/ui/TextTransformOverlay.cpp \
+    src/ui/ModelNodeOverlay.cpp \
+    src/ui/SceneObjectOverlay.cpp \
     src/ui/NativeCustomUiOverlay.cpp     src/ui/NativeInstanceHost.cpp \
     src/ui/MediaSettingsDialog.cpp \
+    src/ui/ModelAnimationDialog.cpp \
     src/ui/ViewerPanel.cpp \
     src/ui/ViewerTransportBar.cpp \
     src/ui/ViewScaleButton.cpp
@@ -266,6 +294,12 @@ TRANSLATIONS += \
     translations/openvegaseffects_ru.ts \
     translations/openvegaseffects_ja.ts \
     translations/openvegaseffects_zh_CN.ts
+# The plug-ins' own strings: compiled and embedded, never run through lupdate
+# (tools/plugin_translations.py writes them).
+EXTRA_TRANSLATIONS += \
+    translations/openvegaseffects_plugins_ru.ts \
+    translations/openvegaseffects_plugins_ja.ts \
+    translations/openvegaseffects_plugins_zh_CN.ts
 QM_FILES_RESOURCE_PREFIX = /i18n
 
 win32:RC_ICONS = resources/icons/logo.ico

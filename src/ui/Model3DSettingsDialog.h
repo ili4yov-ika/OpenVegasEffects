@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <functional>
 
 #include "model3d/Mesh.h"
 #include "model3d/ModelImportSettings.h"
@@ -21,16 +22,22 @@ namespace ui {
 // Advanced, Materials and Groups - with an Update Preview button. The Advanced
 // tab is its Model3DAdvancedPane, whose four groups (Coordinate System, 3D
 // Model Unit/Scale, Normals, UV Mapping) and their controls are reproduced
-// field for field from the reference's own widget names.
+// field for field from the reference's own widget names. The Materials tab is
+// its Model3DMaterialsTree: each material with the settings of its
+// Illumination Model (Model3DMaterialDataDelegate's rows), editable;
+// `materials` are edits made before, laid over the file's own by name.
 class Model3DSettingsDialog : public QDialog
 {
     Q_OBJECT
 
 public:
     Model3DSettingsDialog(const QString& filePath, const model3d::ImportSettings& initial,
-                          QWidget* parent = nullptr);
+                          QWidget* parent = nullptr,
+                          const QVector<model3d::Material>& materials = QVector<model3d::Material>());
 
     model3d::ImportSettings settings() const;
+    // The materials whose settings differ from the file's own, as edited.
+    QVector<model3d::Material> editedMaterials() const;
     // Geometry the dialog last read with the settings shown. Reusing it saves
     // the caller a second parse of the same file.
     const model3d::Mesh& mesh() const { return m_mesh; }
@@ -46,9 +53,15 @@ private:
     QWidget* buildMaterialsTab();
     QWidget* buildGroupsTab();
     void applyToControls(const model3d::ImportSettings& settings);
+    // The Materials tab's rows for the materials of the mesh shown.
+    void rebuildMaterialRows();
 
     QString m_filePath;
     model3d::Mesh m_mesh;
+    // The file's own materials, and the edits laid over them.
+    QVector<model3d::Material> m_fileMaterials;
+    QVector<model3d::Material> m_edits;
+    QVector<std::function<void()>> m_materialReaders;
     bool m_meshValid = false;
 
     QLineEdit* m_path = nullptr;

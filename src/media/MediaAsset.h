@@ -22,6 +22,9 @@ enum class MediaKind
     // same asset list as the footage, which is why they live here rather than
     // in a store of their own.
     Model3D,
+    // A file's 3D model animations (the reference's Model3DAnimationAsset,
+    // listed under "3D Model Animations"), to drop onto model layers.
+    Model3DAnimation,
 };
 
 // Per-asset proxy, as in the reference's ProxyMediaMenu (None, Performance,
@@ -41,6 +44,11 @@ enum class ProxyMode
 // carry it unchanged.
 inline constexpr char kImageSequenceMarker[] = "#sequence";
 
+// A model animation asset's path is its file plus this marker, which keeps it
+// apart from the same file imported as a 3D model (the reference keeps the two
+// as separate assets of one file).
+inline constexpr char kModelAnimationMarker[] = "#animation";
+
 // The other files of the contiguous numbered run that `file` belongs to,
 // sorted, including `file` itself; empty when it has no numbered neighbours.
 QStringList findImageSequence(const QString& file);
@@ -52,6 +60,9 @@ public:
 
     static MediaAsset fromFile(const QString& filePath);
     static MediaAsset fromImageSequence(const QStringList& files, double frameRate);
+    // The animations of `file`, the first lasting `durationSeconds` and
+    // counted in `frameRate` frames a second.
+    static MediaAsset fromModelAnimation(const QString& file, double durationSeconds, double frameRate);
 
     ProxyMode proxyMode() const { return m_proxyMode; }
     void setProxyMode(ProxyMode mode) { m_proxyMode = mode; }

@@ -7,7 +7,10 @@
 #include <QString>
 #include <QVector>
 
+#include <functional>
 #include <memory>
+
+#include "render/ExportPreset.h"
 
 namespace openvegas {
 namespace composition {
@@ -63,6 +66,18 @@ public:
     void setMediaManager(std::shared_ptr<media::MediaManager> media) { m_media = std::move(media); }
     void setPreRenderDirectory(const QString& directory) { m_preRenderDirectory = directory; }
     void setHardwareEncoding(bool on) { m_hardwareEncoding = on; }
+    // Options > Render: frames rendered at once, and Turbo's cache folder.
+    void setRenderOptions(int renderThreads, const QString& cacheDirectory)
+    {
+        m_renderThreads = renderThreads;
+        m_cacheDirectory = cacheDirectory;
+    }
+    // The preset a task was queued with, by its name; a name nothing knows
+    // (tasks queued before presets) exports by the output's suffix.
+    void setPresetResolver(std::function<render::ExportPreset(const QString&)> resolver)
+    {
+        m_presetResolver = std::move(resolver);
+    }
     // Where snapshots are written (Options' Default Snapshot Directory).
     void setSnapshotDirectory(const QString& directory) { m_snapshotDirectory = directory; }
     // The tasks file; empty keeps the queue in memory only.
@@ -112,7 +127,10 @@ private:
     QString m_preRenderDirectory;
     QString m_snapshotDirectory;
     QString m_tasksFile;
+    std::function<render::ExportPreset(const QString&)> m_presetResolver;
     bool m_hardwareEncoding = true;
+    int m_renderThreads = 0;
+    QString m_cacheDirectory;
     bool m_running = false;
     QPointer<render::ExportJob> m_job;
     QString m_jobTaskId;

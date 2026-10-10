@@ -29,6 +29,11 @@ QString proxyFilePath(const QString& proxyRoot, const QString& projectName,
 QStringList proxyEncodeArguments(const QString& source, const QString& output, ProxyMode mode,
                                  const QString& quality, const QString& encoder);
 
+// Commit a completed .part file without removing a previous proxy on failure.
+// The input remains available on failure and is removed only after commit.
+bool publishProxyFile(const QString& completedPath, const QString& outputPath,
+                      QString* error = nullptr);
+
 // Builds proxies one at a time in the background, as the reference's
 // ProxyMediaManager queue does. The file only appears under its final name
 // once FFmpeg has succeeded, so a half-written proxy is never read.

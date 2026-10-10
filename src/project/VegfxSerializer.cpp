@@ -453,6 +453,36 @@ double propScalar(const QDomElement& propertyManager, const QString& name, doubl
     return fl.isNull() ? fallback : fl.text().toDouble();
 }
 
+// A <b>, <i> or <cl> property's constant value (<cl> holds A R G B, 0..1).
+bool propBool(const QDomElement& propertyManager, const QString& name, bool fallback)
+{
+    const QDomElement b = propValueHolder(propElement(propertyManager, name)).firstChildElement(QStringLiteral("b"));
+    if (b.isNull()) return fallback;
+    const QString text = b.text().trimmed();
+    return text == QLatin1String("1") || text.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0;
+}
+
+int propInt(const QDomElement& propertyManager, const QString& name, int fallback)
+{
+    const QDomElement i = propValueHolder(propElement(propertyManager, name)).firstChildElement(QStringLiteral("i"));
+    bool ok = false;
+    const int value = i.text().trimmed().toInt(&ok);
+    return ok ? value : fallback;
+}
+
+QColor propColor(const QDomElement& propertyManager, const QString& name, const QColor& fallback)
+{
+    const QDomElement cl = propValueHolder(propElement(propertyManager, name)).firstChildElement(QStringLiteral("cl"));
+    if (cl.isNull()) return fallback;
+    const auto channel = [&](const char* key, double otherwise) {
+        bool ok = false;
+        const double value = cl.attribute(QString::fromLatin1(key)).toDouble(&ok);
+        return ok ? qBound(0.0, value, 1.0) : otherwise;
+    };
+    return QColor::fromRgbF(float(channel("R", fallback.redF())), float(channel("G", fallback.greenF())),
+                            float(channel("B", fallback.blueF())), float(channel("A", fallback.alphaF())));
+}
+
 // Reference temporal type ids, as recovered from VegasEffects.exe
 // ("Set Keyframe Temporal Type" and the toolButtonKeyFrameType* group).
 composition::TemporalType temporalTypeFromId(int id)
@@ -468,8 +498,9 @@ composition::TemporalType temporalTypeFromId(int id)
 // <Animation> of a scalar property. Key times are milliseconds - calibrated
 // against this project, whose rotation runs 0..29933 over a 1800-frame, 60 fps
 // composition - while <StartFrame>/<EndFrame> elsewhere are frames.
-// One axis of an animated point property (<p3>/<sc>/<or> inside <Vl>), or the
-// scalar itself when `attribute` is empty (<fl>).
+// One axis of an animated point property (<p3>/<sc>/<or> inside <Vl>), one
+// channel of a colour (<cl>, "R", "G", "B" or "A"), or the scalar itself when
+// `attribute` is empty (<fl>).
 composition::KeyFrameList propAnimation(const QDomElement& prop, double fps,
                                         const QString& attribute)
 {
@@ -503,7 +534,7 @@ composition::KeyFrameList propAnimation(const QDomElement& prop, double fps,
             numeric = fl.text().toDouble();
         } else {
             QDomElement holder;
-            for (const char* tag : {"p3", "sc", "or"}) {
+            for (const char* tag : {"p3", "sc", "or", "cl"}) {
                 holder = value.firstChildElement(QString::fromLatin1(tag));
                 if (!holder.isNull()) {
                     break;
@@ -582,6 +613,232 @@ composition::KeyFrameList propAnimation(const QDomElement& prop, double fps,
         curve.add(kf);
     }
     return curve;
+}
+
+// <Animation> of a colour property: one key per <Key>, its whole <cl> as a
+// QColor, timed and eased as the red channel reads.
+composition::KeyFrameList propColorAnimation(const QDomElement& prop, double fps)
+{
+    const composition::KeyFrameList red = propAnimation(prop, fps, QStringLiteral("R"));
+    const composition::KeyFrameList green = propAnimation(prop, fps, QStringLiteral("G"));
+    const composition::KeyFrameList blue = propAnimation(prop, fps, QStringLiteral("B"));
+    const composition::KeyFrameList alpha = propAnimation(prop, fps, QStringLiteral("A"));
+    composition::KeyFrameList curve;
+    for (composition::KeyFrame key : red.all()) {
+        const auto channel = [&](const composition::KeyFrameList& list, double fallback) {
+            const composition::KeyFrame* at = list.at(key.frame);
+            return float(qBound(0.0, at ? at->value.toDouble() : fallback, 1.0));
+        };
+        key.value = QVariant(QColor::fromRgbF(channel(red, 0.0), channel(green, 0.0), channel(blue, 0.0),
+                                              channel(alpha, 1.0)));
+        curve.add(key);
+    }
+    return curve;
+}
+
+// A model's import settings. The reference keeps them on its Model3DAsset
+// (Model3DImportOptions::Serialize, Project.dll 1802a5970) as ImportFlipZY,
+// ImportCenterAnchor, ImportAutoNormalize, ImportModelScale,
+// ImportAutoSmoothingAngle, ImportFlipNormals, ImportUnifyNormals and
+// ImportFlipUVs, with the unit as ImportModelUnits (LinearType 3001 mm ...
+// 3010 pixel) and the normal method as ImportNormalGen (NormalGenerationType
+// 0..3); this port writes no Model3DAsset, so the same elements sit under its
+// own OpenVegasModelImport on the layer. Projects written before the codes
+// were known carry the unit and method by name (OpenVegasUnit,
+// OpenVegasNormalMethod); those are still read, "FromFile" as a pixel.
+const char* const kLegacyUnitNames[] = {"Millimeter", "Centimeter", "Decimeter", "Meter", "Kilometer", "Inch"};
+const char* const kLegacyNormalMethodNames[] = {"FromFile", "FromFileAutoSmoothing", "GenerateFaceted",
+                                                "GenerateFacetedAutoSmoothing"};
+
+QDomElement modelImportSettingsElement(QDomDocument& doc, const model3d::ImportSettings& settings)
+{
+    QDomElement element = doc.createElement(QStringLiteral("OpenVegasModelImport"));
+    const auto flag = [&](const char* name, bool value) {
+        addText(doc, element, QString::fromLatin1(name), value ? QStringLiteral("1") : QStringLiteral("0"));
+    };
+    const auto number = [&](const char* name, double value) {
+        addText(doc, element, QString::fromLatin1(name), QString::number(value, 'g', 10));
+    };
+    flag("ImportFlipZY", settings.flipYZAxis);
+    flag("ImportCenterAnchor", settings.centerAnchorPoint);
+    flag("ImportAutoNormalize", settings.autoNormalize);
+    number("ImportModelScale", settings.singleUnitScale);
+    number("ImportAutoSmoothingAngle", settings.autoSmoothingAngle);
+    flag("ImportFlipNormals", settings.flipNormals);
+    flag("ImportUnifyNormals", settings.unifyNormals);
+    flag("ImportFlipUVs", settings.flipUVCoordinates);
+    addText(doc, element, QStringLiteral("ImportModelUnits"), QString::number(model3d::unitCode(settings.unit)));
+    addText(doc, element, QStringLiteral("ImportNormalGen"), QString::number(int(settings.normalMethod)));
+    return element;
+}
+
+// What modelImportSettingsElement wrote; the defaults when it is absent.
+model3d::ImportSettings readModelImportSettings(const QDomElement& element)
+{
+    model3d::ImportSettings settings;
+    if (element.isNull()) return settings;
+    const auto flag = [&](const char* name, bool fallback) {
+        const QDomElement child = element.firstChildElement(QString::fromLatin1(name));
+        return child.isNull() ? fallback : child.text().trimmed() != QLatin1String("0");
+    };
+    const auto number = [&](const char* name, double fallback) {
+        bool ok = false;
+        const double value = element.firstChildElement(QString::fromLatin1(name)).text().toDouble(&ok);
+        return ok ? value : fallback;
+    };
+    settings.flipYZAxis = flag("ImportFlipZY", settings.flipYZAxis);
+    settings.centerAnchorPoint = flag("ImportCenterAnchor", settings.centerAnchorPoint);
+    settings.autoNormalize = flag("ImportAutoNormalize", settings.autoNormalize);
+    settings.singleUnitScale = number("ImportModelScale", settings.singleUnitScale);
+    settings.autoSmoothingAngle = number("ImportAutoSmoothingAngle", settings.autoSmoothingAngle);
+    settings.flipNormals = flag("ImportFlipNormals", settings.flipNormals);
+    settings.unifyNormals = flag("ImportUnifyNormals", settings.unifyNormals);
+    settings.flipUVCoordinates = flag("ImportFlipUVs", settings.flipUVCoordinates);
+    using Unit = model3d::ImportSettings::Unit;
+    using NormalMethod = model3d::ImportSettings::NormalMethod;
+    bool ok = false;
+    const int code = element.firstChildElement(QStringLiteral("ImportModelUnits")).text().trimmed().toInt(&ok);
+    if (!ok || !model3d::unitFromCode(code, &settings.unit)) {
+        const QString unit = element.firstChildElement(QStringLiteral("OpenVegasUnit")).text().trimmed();
+        if (unit == QLatin1String("FromFile") || unit == QLatin1String("Pixel")) settings.unit = Unit::Pixel;
+        for (int i = 0; i < 6; ++i)
+            if (unit == QLatin1String(kLegacyUnitNames[i])) settings.unit = Unit(i);
+    }
+    const int method = element.firstChildElement(QStringLiteral("ImportNormalGen")).text().trimmed().toInt(&ok);
+    if (ok && method >= 0 && method <= 3) {
+        settings.normalMethod = NormalMethod(method);
+    } else {
+        const QString normals = element.firstChildElement(QStringLiteral("OpenVegasNormalMethod")).text().trimmed();
+        const NormalMethod legacy[] = {NormalMethod::FromFile, NormalMethod::FromFileAutoSmoothing,
+                                       NormalMethod::GenerateFaceted, NormalMethod::GenerateFacetedAutoSmoothing};
+        for (int i = 0; i < 4; ++i)
+            if (normals == QLatin1String(kLegacyNormalMethodNames[i])) settings.normalMethod = legacy[i];
+    }
+    return settings;
+}
+
+// A model's material as the reference writes it in its Model3DAsset's
+// <Materials> (Model3DMaterial, Project.dll 0x1802bf450, Version 7):
+// percentages for Opacity, the reflectivities, Refraction Amount, the
+// Cook-Torrance, Metallic-Roughness and Specular-Glossiness factors, Alpha
+// Cut Off and Occlusion Strength; colours as <… R G B A/>, the Fresnel term
+// as <CK_Fresnel X Y Z/>, the rest as text (%g). The port keeps it under the
+// model layer, beside its OpenVegasModelImport.
+QDomElement modelMaterialElement(QDomDocument& doc, const model3d::Material& material, const QString& id)
+{
+    QDomElement element = doc.createElement(QStringLiteral("Material"));
+    element.setAttribute(QStringLiteral("Version"), 7);
+    const auto text = [&](const char* name, const QString& value) {
+        addText(doc, element, QString::fromLatin1(name), value);
+    };
+    const auto number = [&](const char* name, double value) { text(name, QString::number(value)); };
+    const auto color = [&](const char* name, const QColor& value) {
+        QDomElement c = doc.createElement(QString::fromLatin1(name));
+        c.setAttribute(QStringLiteral("R"), QString::number(value.redF()));
+        c.setAttribute(QStringLiteral("G"), QString::number(value.greenF()));
+        c.setAttribute(QStringLiteral("B"), QString::number(value.blueF()));
+        c.setAttribute(QStringLiteral("A"), QString::number(value.alphaF()));
+        element.appendChild(c);
+    };
+    text("ID", id);
+    text("Name", material.name);
+    number("IlluminationModel", int(material.illuminationModel));
+    text("DiffuseTextureFilename", material.diffuseMap);
+    number("DiffuseTextureHasAlphaChannel", material.diffuseImage.hasAlphaChannel() ? 1 : 0);
+    text("SpecularTextureFilename", material.specularMap);
+    text("BumpTextureFilename", material.bumpMap);
+    text("NormalTextureFilename", material.normalMap);
+    number("MaxBumpDepth", material.bumpScale);
+    color("DiffuseColor", material.diffuseColor);
+    color("SpecularColor", material.specularColor);
+    color("AmbientColor", material.ambientColor);
+    color("EmissiveColor", material.emissiveColor);
+    number("Shininess", material.shininess);
+    number("DiffuseReflectivity", material.diffuseReflectivity * 100.0);
+    number("SpecularReflectivity", material.specularReflectivity * 100.0);
+    number("Opacity", material.opacity * 100.0);
+    number("RefractionIndex", material.indexOfRefraction);
+    number("RefractionAmount", material.refractionAmount * 100.0);
+    number("CK_SpecularReflectance", material.cookTorranceSpecularReflectance * 100.0);
+    {
+        QDomElement f = doc.createElement(QStringLiteral("CK_Fresnel"));
+        f.setAttribute(QStringLiteral("X"), QString::number(material.cookTorranceFresnel.x()));
+        f.setAttribute(QStringLiteral("Y"), QString::number(material.cookTorranceFresnel.y()));
+        f.setAttribute(QStringLiteral("Z"), QString::number(material.cookTorranceFresnel.z()));
+        element.appendChild(f);
+    }
+    number("CK_Roughness", material.cookTorranceRoughness * 100.0);
+    number("ReflectionType", 1);
+    number("OverrideMaterial", 0);
+    text("EmissiveTextureFilename", material.emissiveMap);
+    text("OcclusionTextureFilename", material.occlusionMap);
+    number("OcclusionStrength", material.occlusionStrength * 100.0);
+    text("MetallicTextureFilename", material.metallicMap);
+    text("RoughnessTextureFilename", material.roughnessMap);
+    text("ClearCoatIntensityTextureFilename", QString());
+    text("ClearCoatRoughnessTextureFilename", QString());
+    text("ClearCoatNormalTextureFilename", QString());
+    number("MR_MetallicFactor", material.metallic * 100.0);
+    number("MR_RoughnessFactor", material.roughness * 100.0);
+    number("MR_ClearCoatFactor", material.clearCoat * 100.0);
+    number("MR_ClearCoatRoughnessFactor", material.clearCoatRoughness * 100.0);
+    text("SG_SpecularTextureFilename", material.specularGlossinessMap);
+    text("SG_GlossinessTextureFilename", material.specularGlossinessMap);
+    number("SG_GlossinessFactor", material.glossiness * 100.0);
+    number("AlphaCutOff", material.alphaCutOff * 100.0);
+    number("AlphaMode", int(material.alphaMode));
+    return element;
+}
+
+// What modelMaterialElement wrote, over `material` (the file's own).
+void readModelMaterial(const QDomElement& element, model3d::Material* material)
+{
+    const auto number = [&](const char* name, double fallback) {
+        bool ok = false;
+        const double value = element.firstChildElement(QString::fromLatin1(name)).text().trimmed().toDouble(&ok);
+        return ok ? value : fallback;
+    };
+    const auto color = [&](const char* name, const QColor& fallback) {
+        const QDomElement c = element.firstChildElement(QString::fromLatin1(name));
+        if (c.isNull()) return fallback;
+        const auto channel = [&](const char* key, double otherwise) {
+            bool ok = false;
+            const double value = c.attribute(QString::fromLatin1(key)).toDouble(&ok);
+            return float(ok ? qBound(0.0, value, 1.0) : otherwise);
+        };
+        return QColor::fromRgbF(channel("R", fallback.redF()), channel("G", fallback.greenF()),
+                                channel("B", fallback.blueF()), channel("A", fallback.alphaF()));
+    };
+    const int model = int(number("IlluminationModel", int(material->illuminationModel)));
+    if (model >= 0 && model <= 3) material->illuminationModel = model3d::IlluminationModel(model);
+    material->bumpScale = number("MaxBumpDepth", material->bumpScale);
+    material->diffuseColor = color("DiffuseColor", material->diffuseColor);
+    material->specularColor = color("SpecularColor", material->specularColor);
+    material->ambientColor = color("AmbientColor", material->ambientColor);
+    material->emissiveColor = color("EmissiveColor", material->emissiveColor);
+    material->shininess = number("Shininess", material->shininess);
+    material->diffuseReflectivity = number("DiffuseReflectivity", material->diffuseReflectivity * 100.0) / 100.0;
+    material->specularReflectivity = number("SpecularReflectivity", material->specularReflectivity * 100.0) / 100.0;
+    material->opacity = qBound(0.0, number("Opacity", material->opacity * 100.0) / 100.0, 1.0);
+    material->indexOfRefraction = number("RefractionIndex", material->indexOfRefraction);
+    material->refractionAmount = number("RefractionAmount", material->refractionAmount * 100.0) / 100.0;
+    material->cookTorranceSpecularReflectance =
+        number("CK_SpecularReflectance", material->cookTorranceSpecularReflectance * 100.0) / 100.0;
+    const QDomElement fresnel = element.firstChildElement(QStringLiteral("CK_Fresnel"));
+    if (!fresnel.isNull())
+        material->cookTorranceFresnel = QVector3D(fresnel.attribute(QStringLiteral("X")).toFloat(),
+                                                  fresnel.attribute(QStringLiteral("Y")).toFloat(),
+                                                  fresnel.attribute(QStringLiteral("Z")).toFloat());
+    material->cookTorranceRoughness = number("CK_Roughness", material->cookTorranceRoughness * 100.0) / 100.0;
+    material->occlusionStrength = number("OcclusionStrength", material->occlusionStrength * 100.0) / 100.0;
+    material->metallic = number("MR_MetallicFactor", material->metallic * 100.0) / 100.0;
+    material->roughness = number("MR_RoughnessFactor", material->roughness * 100.0) / 100.0;
+    material->clearCoat = number("MR_ClearCoatFactor", material->clearCoat * 100.0) / 100.0;
+    material->clearCoatRoughness = number("MR_ClearCoatRoughnessFactor", material->clearCoatRoughness * 100.0) / 100.0;
+    material->glossiness = number("SG_GlossinessFactor", material->glossiness * 100.0) / 100.0;
+    material->alphaCutOff = number("AlphaCutOff", material->alphaCutOff * 100.0) / 100.0;
+    const int alpha = int(number("AlphaMode", int(material->alphaMode)));
+    if (alpha >= 0 && alpha <= 3) material->alphaMode = model3d::AlphaMode(alpha);
 }
 
 composition::LayerTransform readTransform(const QDomElement& propertyManager, double fps)
@@ -902,6 +1159,73 @@ void appendScalarProp(QDomDocument& doc, QDomElement& propertyManager, const QSt
                           inner.appendChild(
                               doc.createTextNode(QString::number(key.value.toDouble(), 'f', 4)));
                           value.appendChild(inner);
+                      });
+        }
+        prop.appendChild(animation);
+    }
+    propertyManager.appendChild(prop);
+}
+
+// A constant <b>, <i> or <cl> property, as the reference writes them
+// (Type 1, its value under <Static>).
+void appendStaticProp(QDomDocument& doc, QDomElement& propertyManager, const QString& name,
+                      const std::function<void(QDomElement&)>& value)
+{
+    QDomElement prop = doc.createElement(QStringLiteral("Prop"));
+    prop.setAttribute(QStringLiteral("Type"), 1);
+    addText(doc, prop, QStringLiteral("Name"), name);
+    QDomElement holder = doc.createElement(QStringLiteral("Static"));
+    value(holder);
+    prop.appendChild(holder);
+    propertyManager.appendChild(prop);
+}
+
+void appendBoolProp(QDomDocument& doc, QDomElement& propertyManager, const QString& name, bool value)
+{
+    appendStaticProp(doc, propertyManager, name, [&](QDomElement& holder) {
+        addText(doc, holder, QStringLiteral("b"), value ? QStringLiteral("1") : QStringLiteral("0"));
+    });
+}
+
+void appendIntProp(QDomDocument& doc, QDomElement& propertyManager, const QString& name, int value)
+{
+    appendStaticProp(doc, propertyManager, name, [&](QDomElement& holder) {
+        addText(doc, holder, QStringLiteral("i"), QString::number(value));
+    });
+}
+
+QDomElement colorElement(QDomDocument& doc, const QColor& value)
+{
+    QDomElement cl = doc.createElement(QStringLiteral("cl"));
+    cl.setAttribute(QStringLiteral("A"), QString::number(value.alphaF(), 'g', 6));
+    cl.setAttribute(QStringLiteral("R"), QString::number(value.redF(), 'g', 6));
+    cl.setAttribute(QStringLiteral("G"), QString::number(value.greenF(), 'g', 6));
+    cl.setAttribute(QStringLiteral("B"), QString::number(value.blueF(), 'g', 6));
+    return cl;
+}
+
+// A colour property - one that animates (Type 0, as the reference marks its
+// colours): its own value, and its keys when it has any, each a whole <cl>.
+void appendColorProp(QDomDocument& doc, QDomElement& propertyManager, const QString& name, const QColor& value,
+                     const composition::KeyFrameList& curve = composition::KeyFrameList(), double fps = 30.0)
+{
+    QDomElement prop = doc.createElement(QStringLiteral("Prop"));
+    prop.setAttribute(QStringLiteral("Type"), 0);
+    addText(doc, prop, QStringLiteral("Name"), name);
+    QDomElement holder = doc.createElement(QStringLiteral("Static"));
+    holder.appendChild(colorElement(doc, value));
+    prop.appendChild(holder);
+    const QVector<composition::KeyFrame> keys = curve.all();
+    if (!keys.isEmpty()) {
+        QDomElement animation = doc.createElement(QStringLiteral("Animation"));
+        for (int i = 0; i < keys.size(); ++i) {
+            const composition::KeyFrame& key = keys.at(i);
+            const bool hasPrevious = i > 0;
+            const bool hasNext = i + 1 < keys.size();
+            appendKey(doc, animation, key, fps, hasPrevious ? keyTimeMs(keys.at(i - 1).frame, fps) : 0.0,
+                      hasNext ? keyTimeMs(keys.at(i + 1).frame, fps) : 0.0, 0.0, 0.0, hasPrevious, hasNext,
+                      [&doc, &key](QDomElement& holder) {
+                          holder.appendChild(colorElement(doc, key.value.value<QColor>()));
                       });
         }
         prop.appendChild(animation);
@@ -1418,7 +1742,9 @@ void readEmbeddedCompositions(
                 ? composition::LayerDimension::ThreeD : composition::LayerDimension::TwoD;
             bool validFov = false;
             const double cameraFov = layerNode.attribute(QStringLiteral("CameraFieldOfView")).toDouble(&validFov);
-            if (validFov && std::isfinite(cameraFov)) layer.cameraFieldOfView = qBound(20.0, cameraFov, 140.0);
+            if (validFov && std::isfinite(cameraFov))
+                layer.camera.zoom = composition::CameraSettings::zoomForVerticalFieldOfView(
+                    qBound(1.0, cameraFov, 179.0), comp->displaySize().height());
             const QColor plane(layerNode.attribute(QStringLiteral("PlaneColor")));
             if (plane.isValid()) layer.planeColor = plane;
             layer.modelAssetId = core::Identifier(layerNode.attribute(QStringLiteral("ModelAssetID")));
@@ -1504,6 +1830,121 @@ void linkNestedShots(composition::Composition* root,
 
 // One <CompositionAsset>: the shot's own settings and its layers. An
 // AssetLayer whose <AssetID> is one of `shotIds` nests that shot.
+// CompositionAsset/<ViewerState Version="5"> as the reference writes it
+// (PanelRenderState::Serialize, Project.dll 1803c0b00): CurrentLayout,
+// Layout0..4 with the State IDs in their places (PosN) and the splitters
+// (SpN), and the Views' States. A shot the Viewer never showed gets the
+// reference's own default, one 2D view.
+QDomElement viewerStateElement(QDomDocument& doc, const composition::ViewerSetup& setup)
+{
+    QDomElement element = doc.createElement(QStringLiteral("ViewerState"));
+    element.setAttribute(QStringLiteral("Version"), QStringLiteral("5"));
+    QVector<composition::ViewerViewSetup> views = setup.views;
+    if (!setup.present || views.isEmpty()) {
+        composition::ViewerViewSetup only;
+        only.type = 0;
+        views = {only};
+    }
+    for (composition::ViewerViewSetup& view : views)
+        if (view.id.isEmpty()) view.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const int current = setup.present ? qBound(0, setup.layout, 4) : 0;
+    addText(doc, element, QStringLiteral("CurrentLayout"), QString::number(current));
+    // The reference's splitter defaults per layout.
+    const char* const splitters[5][3] = {{nullptr, nullptr, nullptr}, {nullptr, nullptr, nullptr},
+                                         {"0.5", "0", "0"}, {"0.5", "0", "0.5"}, {"0.5", "0.5", "0.5"}};
+    for (int layout = 0; layout < 5; ++layout) {
+        QDomElement node = doc.createElement(QStringLiteral("Layout%1").arg(layout));
+        if (layout == current) {
+            for (int place = 0; place < views.size(); ++place)
+                node.setAttribute(QStringLiteral("Pos%1").arg(place), views.at(place).id);
+        } else if (layout == 0) {
+            node.setAttribute(QStringLiteral("Pos0"), views.first().id);
+        }
+        for (int s = 0; s < 3; ++s)
+            if (splitters[layout][s]) node.setAttribute(QStringLiteral("Sp%1").arg(s), QString::fromLatin1(splitters[layout][s]));
+        element.appendChild(node);
+    }
+    QDomElement list = doc.createElement(QStringLiteral("Views"));
+    const auto vector = [&](const QString& name, const QVector3D& v) {
+        QDomElement e = doc.createElement(name);
+        e.setAttribute(QStringLiteral("X"), QString::number(v.x(), 'g', 9));
+        e.setAttribute(QStringLiteral("Y"), QString::number(v.y(), 'g', 9));
+        e.setAttribute(QStringLiteral("Z"), QString::number(v.z(), 'g', 9));
+        return e;
+    };
+    for (int place = 0; place < views.size(); ++place) {
+        const composition::ViewerViewSetup& view = views.at(place);
+        QDomElement state = doc.createElement(QStringLiteral("State"));
+        state.setAttribute(QStringLiteral("CameraScale"), QString::number(view.cameraScale, 'g', 9));
+        state.setAttribute(QStringLiteral("Active"), place == setup.activeView ? QStringLiteral("1") : QStringLiteral("0"));
+        state.setAttribute(QStringLiteral("TextureScale"), QStringLiteral("1"));
+        state.setAttribute(QStringLiteral("Type"), QString::number(view.type));
+        state.setAttribute(QStringLiteral("Layout"), QString::number(current));
+        state.setAttribute(QStringLiteral("ID"), view.id);
+        QDomElement texturePosition = doc.createElement(QStringLiteral("TexturePosition"));
+        texturePosition.setAttribute(QStringLiteral("X"), QStringLiteral("0"));
+        texturePosition.setAttribute(QStringLiteral("Y"), QStringLiteral("0"));
+        state.appendChild(texturePosition);
+        QDomElement anchor = doc.createElement(QStringLiteral("TextureAnchorPoint"));
+        anchor.setAttribute(QStringLiteral("X"), QStringLiteral("0"));
+        anchor.setAttribute(QStringLiteral("Y"), QStringLiteral("0"));
+        state.appendChild(anchor);
+        state.appendChild(vector(QStringLiteral("CameraPosition"), view.cameraPosition));
+        state.appendChild(vector(QStringLiteral("CameraRotation"), view.cameraRotation));
+        // The reference's view options as a new view has them.
+        QDomElement options = doc.createElement(QStringLiteral("Options"));
+        for (const auto& [key, value] : {std::pair<const char*, const char*>{"Gz", "0"}, {"Vol", "1"}, {"BiTo", "1"},
+                                         {"MoPa", "1"}, {"TrCb", "0"}, {"TrPa", "1"}, {"Ch", "0"}, {"WoAx", "1"}})
+            options.setAttribute(QString::fromLatin1(key), QString::fromLatin1(value));
+        QDomElement colour = doc.createElement(QStringLiteral("BGColor"));
+        colour.setAttribute(QStringLiteral("A"), QStringLiteral("1"));
+        colour.setAttribute(QStringLiteral("R"), QStringLiteral("0"));
+        colour.setAttribute(QStringLiteral("G"), QStringLiteral("0"));
+        colour.setAttribute(QStringLiteral("B"), QStringLiteral("0"));
+        options.appendChild(colour);
+        state.appendChild(options);
+        list.appendChild(state);
+    }
+    element.appendChild(list);
+    return element;
+}
+
+// What viewerStateElement wrote, or the reference: the current layout's
+// views in their places.
+composition::ViewerSetup readViewerState(const QDomElement& element)
+{
+    composition::ViewerSetup setup;
+    if (element.isNull()) return setup;
+    setup.layout = qBound(0, elemText(element, QStringLiteral("CurrentLayout")).toInt(), 4);
+    QHash<QString, QDomElement> states;
+    const QDomElement list = element.firstChildElement(QStringLiteral("Views"));
+    for (QDomElement state = list.firstChildElement(QStringLiteral("State")); !state.isNull();
+         state = state.nextSiblingElement(QStringLiteral("State")))
+        states.insert(state.attribute(QStringLiteral("ID")), state);
+    const QDomElement layout = element.firstChildElement(QStringLiteral("Layout%1").arg(setup.layout));
+    const auto vector = [](const QDomElement& e) {
+        return QVector3D(e.attribute(QStringLiteral("X")).toFloat(), e.attribute(QStringLiteral("Y")).toFloat(),
+                         e.attribute(QStringLiteral("Z")).toFloat());
+    };
+    for (int place = 0; place < 4; ++place) {
+        const QString id = layout.attribute(QStringLiteral("Pos%1").arg(place));
+        if (id.isEmpty() || !states.contains(id)) break;
+        const QDomElement state = states.value(id);
+        composition::ViewerViewSetup view;
+        view.id = id;
+        view.type = qBound(0, state.attribute(QStringLiteral("Type")).toInt(), 8);
+        bool ok = false;
+        const double scale = state.attribute(QStringLiteral("CameraScale")).toDouble(&ok);
+        view.cameraScale = ok && scale > 0.0 ? scale : 1.0;
+        view.cameraPosition = vector(state.firstChildElement(QStringLiteral("CameraPosition")));
+        view.cameraRotation = vector(state.firstChildElement(QStringLiteral("CameraRotation")));
+        if (state.attribute(QStringLiteral("Active")) == QLatin1String("1")) setup.activeView = place;
+        setup.views.append(view);
+    }
+    setup.present = !setup.views.isEmpty();
+    return setup;
+}
+
 void readCompositionAsset(const QDomElement& compositionAsset,
                           composition::Composition* composition,
                           const QMap<QString, QString>& assetPathByGuid,
@@ -1513,6 +1954,7 @@ void readCompositionAsset(const QDomElement& compositionAsset,
     const QString compositionId = elemText(compositionAsset, QStringLiteral("ID"));
     if (!compositionId.isEmpty()) composition->setId(core::Identifier(compositionId));
     composition->setCurrentFrame(elemText(compositionAsset, QStringLiteral("CTI")).toLongLong());
+    composition->setViewerSetup(readViewerState(compositionAsset.firstChildElement(QStringLiteral("ViewerState"))));
     {
         // <InPoint>/<OutPoint>; older saves of this port spelled them In/Out.
         const bool native = !compositionAsset.firstChildElement(QStringLiteral("OutPoint")).isNull();
@@ -1674,6 +2116,82 @@ void readCompositionAsset(const QDomElement& compositionAsset,
             layer.opacity = opacityPct / 100.0;
         }
         layer.transform = readTransform(pm, fps);
+        if (layerKind == composition::LayerKind::Camera) {
+            // CameraLayer: its lens properties and the elements beside them.
+            composition::CameraSettings& camera = layer.camera;
+            camera.zoom = propScalar(pm, QStringLiteral("zoom"), camera.zoom);
+            camera.zoomCurve = propAnimation(propElement(pm, QStringLiteral("zoom")), fps, QString());
+            camera.focusDistance = propScalar(pm, QStringLiteral("focusDistance"), camera.focusDistance);
+            camera.focusDistanceCurve = propAnimation(propElement(pm, QStringLiteral("focusDistance")), fps, QString());
+            camera.aperture = propScalar(pm, QStringLiteral("aperture"), camera.aperture);
+            camera.apertureCurve = propAnimation(propElement(pm, QStringLiteral("aperture")), fps, QString());
+            camera.blur = propScalar(pm, QStringLiteral("blurDoF"), camera.blur);
+            camera.blurCurve = propAnimation(propElement(pm, QStringLiteral("blurDoF")), fps, QString());
+            const auto number = [&](const char* name, double fallback) {
+                bool ok = false;
+                const double value = elemText(lw, QString::fromLatin1(name)).toDouble(&ok);
+                return ok && std::isfinite(value) ? value : fallback;
+            };
+            camera.depthOfField = number("HasDoF", camera.depthOfField ? 1 : 0) != 0.0;
+            camera.nearClip = number("NearClip", camera.nearClip);
+            camera.farClip = number("FarClip", camera.farClip);
+            camera.filmWidth = number("HorizontalFilmSize", camera.filmWidth);
+            camera.filmHeight = number("VerticalFilmSize", camera.filmHeight);
+        }
+        if (layerKind == composition::LayerKind::Light) {
+            // LightLayer: its <LightType> and its own properties.
+            composition::LightSettings& light = layer.light;
+            bool typeOk = false;
+            const int type = elemText(lw, QStringLiteral("LightType")).toInt(&typeOk);
+            if (typeOk && type >= 1 && type <= 4) light.type = composition::LightSettings::Type(type);
+            light.color = propColor(pm, QStringLiteral("color"), light.color);
+            light.intensity = propScalar(pm, QStringLiteral("intensity"), light.intensity);
+            light.intensityCurve = propAnimation(propElement(pm, QStringLiteral("intensity")), fps, QString());
+            light.castShadows = propBool(pm, QStringLiteral("castShadows"), light.castShadows);
+            const int falloff = propInt(pm, QStringLiteral("falloff"), int(light.falloff));
+            if (falloff >= 1 && falloff <= 3) light.falloff = composition::LightSettings::Falloff(falloff);
+            light.reach = propScalar(pm, QStringLiteral("reach"), light.reach);
+            light.coneAngle = propScalar(pm, QStringLiteral("spotlightAngle"), light.coneAngle);
+            light.feather = propScalar(pm, QStringLiteral("spotlightFeather"), light.feather);
+            light.shadowOpacity = propScalar(pm, QStringLiteral("shadowOpacity"), light.shadowOpacity);
+            light.shadowDiffusion = propScalar(pm, QStringLiteral("shadowDiffusion"), light.shadowDiffusion);
+            light.shadowColor = propColor(pm, QStringLiteral("shadowColor"), light.shadowColor);
+            const auto keys = [&](const char* name) {
+                return propAnimation(propElement(pm, QString::fromLatin1(name)), fps, QString());
+            };
+            light.colorCurve = propColorAnimation(propElement(pm, QStringLiteral("color")), fps);
+            light.reachCurve = keys("reach");
+            light.coneAngleCurve = keys("spotlightAngle");
+            light.featherCurve = keys("spotlightFeather");
+            light.shadowOpacityCurve = keys("shadowOpacity");
+            light.shadowDiffusionCurve = keys("shadowDiffusion");
+            light.shadowColorCurve = propColorAnimation(propElement(pm, QStringLiteral("shadowColor")), fps);
+        } else {
+            layer.surface.illuminated = propBool(pm, QStringLiteral("illuminated"), layer.surface.illuminated);
+            layer.surface.castShadows = propBool(pm, QStringLiteral("castShadows"), layer.surface.castShadows);
+            layer.surface.receiveShadows = propBool(pm, QStringLiteral("receiveShadows"), layer.surface.receiveShadows);
+            layer.surface.shadowColor = propColor(pm, QStringLiteral("shadowColor"), layer.surface.shadowColor);
+            layer.surface.ambient = propScalar(pm, QStringLiteral("matAmbient"), layer.surface.ambient);
+            layer.surface.diffuse = propScalar(pm, QStringLiteral("matDiffuse"), layer.surface.diffuse);
+            layer.surface.specular = propScalar(pm, QStringLiteral("matSpecular"), layer.surface.specular);
+            layer.surface.shininess = propScalar(pm, QStringLiteral("matShininess"), layer.surface.shininess);
+            layer.surface.emissive = propColor(pm, QStringLiteral("matEmissiveColor"), layer.surface.emissive);
+            composition::SurfaceShading& surface = layer.surface;
+            surface.castShadowsIfInvisible =
+                propBool(pm, QStringLiteral("castShadowsIfLayerDisabled"), surface.castShadowsIfInvisible);
+            surface.billboardedLights = propBool(pm, QStringLiteral("billboardedLights"), surface.billboardedLights);
+            surface.billboardedShadows = propBool(pm, QStringLiteral("billboardedShadows"), surface.billboardedShadows);
+            surface.selfShadowBias = qBound(1.0, propScalar(pm, QStringLiteral("selfShadowBias"), surface.selfShadowBias),
+                                            1000.0);
+            const auto keys = [&](const char* name) {
+                return propAnimation(propElement(pm, QString::fromLatin1(name)), fps, QString());
+            };
+            surface.ambientCurve = keys("matAmbient");
+            surface.diffuseCurve = keys("matDiffuse");
+            surface.specularCurve = keys("matSpecular");
+            surface.shininessCurve = keys("matShininess");
+            surface.emissiveCurve = propColorAnimation(propElement(pm, QStringLiteral("matEmissiveColor")), fps);
+        }
         // Audio > Level. Its keys are composition milliseconds like every
         // other layer property - project_1's music layer fades out over
         // 29.70-30.05 s of its 30 s shot - not times inside the media.
@@ -1682,9 +2200,14 @@ void readCompositionAsset(const QDomElement& compositionAsset,
             layer.transform.audioLevel = propScalar(pm, QStringLiteral("audioLevel"), 0.0);
             layer.transform.audioLevelCurve = propAnimation(levelProp, fps, QString());
         }
+        // Written by this port before cameras kept their zoom: the vertical
+        // angle, turned into the zoom that gives it in this shot.
         bool validCameraFov = false;
         const double cameraFov = lw.attribute(QStringLiteral("OpenVegasCameraFieldOfView")).toDouble(&validCameraFov);
-        if (validCameraFov && std::isfinite(cameraFov)) layer.cameraFieldOfView = qBound(20.0, cameraFov, 140.0);
+        if (validCameraFov && std::isfinite(cameraFov) && layer.kind == composition::LayerKind::Camera
+            && propElement(pm, QStringLiteral("zoom")).isNull())
+            layer.camera.zoom = composition::CameraSettings::zoomForVerticalFieldOfView(
+                qBound(1.0, cameraFov, 179.0), composition->displaySize().height());
         readMasksExtension(lw, &layer);
         readMotionTracksExtension(lw, &layer);
 
@@ -1720,14 +2243,98 @@ void readCompositionAsset(const QDomElement& compositionAsset,
         const QString modelPath = resolveAssetPath(
             lw.attribute(QStringLiteral("OpenVegasModelPath")), projectDir, nullptr);
         if (layerKind == composition::LayerKind::Model3D && !modelPath.isEmpty() && media) {
-            const core::Result imported =
-                media->importModel(modelPath, model3d::ImportSettings());
+            // Imported again as it was: the size and axes the import gave it
+            // are what the layer's and its nodes' values are in.
+            const core::Result imported = media->importModel(
+                modelPath, readModelImportSettings(lw.firstChildElement(QStringLiteral("OpenVegasModelImport"))));
             if (imported.isFailure()) {
                 OV_LOG_WARN(QStringLiteral("Could not reload 3D model %1: %2")
                                 .arg(modelPath, imported.message()));
             } else {
                 layer.modelAssetId = media->assetByFilePath(modelPath).id();
+                // Its materials as they were edited.
+                const QDomElement materials = lw.firstChildElement(QStringLiteral("Materials"));
+                if (!materials.isNull()) {
+                    const model3d::Mesh mesh = media->modelMesh(layer.modelAssetId);
+                    QVector<model3d::Material> edited;
+                    for (QDomElement element = materials.firstChildElement(QStringLiteral("Material"));
+                         !element.isNull(); element = element.nextSiblingElement(QStringLiteral("Material"))) {
+                        model3d::Material material;
+                        material.name = elemText(element, QStringLiteral("Name"));
+                        for (const model3d::Material& own : mesh.materials)
+                            if (own.name == material.name) material = own;
+                        readModelMaterial(element, &material);
+                        edited.append(material);
+                    }
+                    if (!edited.isEmpty()) media->setModelMaterials(layer.modelAssetId, edited);
+                }
             }
+        }
+        // Nodes given a transform of their own, written below.
+        const QDomElement nodes = lw.firstChildElement(QStringLiteral("OpenVegasModelNodes"));
+        for (QDomElement node = nodes.firstChildElement(QStringLiteral("Model3DTransformNode"));
+             !node.isNull(); node = node.nextSiblingElement(QStringLiteral("Model3DTransformNode"))) {
+            composition::ModelNodeTransform state;
+            state.path = elemText(node, QStringLiteral("GroupName"));
+            if (state.path.isEmpty()) continue;
+            state.transform = readTransform(node.firstChildElement(QStringLiteral("PropertyManager")), fps);
+            layer.modelNodes.append(state);
+        }
+        const QDomElement overrides = lw.firstChildElement(QStringLiteral("OverriddenModel3DMaterialList"));
+        for (QDomElement element = overrides.firstChildElement(QStringLiteral("Model3DMaterialOverride"));
+             !element.isNull();
+             element = element.nextSiblingElement(QStringLiteral("Model3DMaterialOverride"))) {
+            composition::ModelMaterialOverride entry;
+            entry.material = elemText(element, QStringLiteral("Name"));
+            if (entry.material.isEmpty()) continue;
+            const QDomElement properties = element.firstChildElement(QStringLiteral("PropertyManager"));
+            const auto value = [&](const QString& name, const QString& tag) {
+                return propValueHolder(propElement(properties, name)).firstChildElement(tag).text();
+            };
+            for (int m = 0; m < composition::ModelMaterialOverride::kMapCount; ++m) {
+                const auto which = composition::ModelMaterialOverride::Map(m);
+                const QString key = QString::fromLatin1(composition::ModelMaterialOverride::mapKey(which));
+                bool ok = false;
+                const int source = value(key + QStringLiteral("MapSource"), QStringLiteral("i")).toInt(&ok);
+                if (ok && source >= 0 && source <= 2)
+                    entry.map(which).source = composition::ModelMaterialOverride::MapSource(source);
+                entry.map(which).layer = core::Identifier(value(key + QStringLiteral("MapLayerID"), QStringLiteral("id")));
+            }
+            entry.bumpMapScale = propScalar(properties, QStringLiteral("bumpMapScale"), 1.0);
+            layer.materialOverrides.append(entry);
+        }
+        // Animations playing on the model (written below).
+        const QDomElement animations = lw.firstChildElement(QStringLiteral("OpenVegasModelAnimations"));
+        for (QDomElement element = animations.firstChildElement(QStringLiteral("Model3DAnimationAssetInstance"));
+             !element.isNull();
+             element = element.nextSiblingElement(QStringLiteral("Model3DAnimationAssetInstance"))) {
+            composition::ModelAnimationInstance instance;
+            const QString id = elemText(element, QStringLiteral("ID"));
+            if (!id.isEmpty()) instance.id = core::Identifier(id);
+            instance.name = elemText(element, QStringLiteral("Name"));
+            const QDomElement properties = element.firstChildElement(QStringLiteral("PropertyManager"));
+            const auto flag = [&](const QString& name) {
+                const QString text = propValueHolder(propElement(properties, name))
+                                         .firstChildElement(QStringLiteral("b")).text().trimmed();
+                return text == QLatin1String("1") || text.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0;
+            };
+            instance.strength = propScalar(properties, QStringLiteral("strength"), 100.0);
+            instance.strengthCurve =
+                propAnimation(propElement(properties, QStringLiteral("strength")), fps, QString());
+            instance.loop = flag(QStringLiteral("loop"));
+            instance.customPlayback = flag(QStringLiteral("customPlayback"));
+            instance.playback = propScalar(properties, QStringLiteral("playback"), 0.0);
+            instance.playbackCurve =
+                propAnimation(propElement(properties, QStringLiteral("playback")), fps, QString());
+            const QDomElement asset = element.firstChildElement(QStringLiteral("Model3DAnimationAsset"));
+            const QString stored = elemText(asset, QStringLiteral("Filename"));
+            if (!stored.isEmpty()) instance.filePath = resolveAssetPath(stored, projectDir, nullptr);
+            instance.animationIndex = qMax(0, elemText(asset, QStringLiteral("AnimationIndex")).toInt());
+            instance.frameRateOverridden = elemText(asset, QStringLiteral("OverrideFrameRate")).toInt() != 0;
+            bool rateOk = false;
+            const double rate = elemText(asset, QStringLiteral("FrameRate")).toDouble(&rateOk);
+            if (rateOk && rate > 0.0) instance.frameRate = rate;
+            layer.modelAnimations.append(instance);
         }
 
         const long long start = elemText(named, QStringLiteral("StartFrame")).toLongLong();
@@ -1953,6 +2560,16 @@ static core::Result loadProjectImpl(const QString& filePath,
                                 .arg(stored, filename));
             }
             core::Result r = core::Result::ok();
+            if (tag == QStringLiteral("Model3DAnimationAsset")) {
+                // A file's animations in Media, apart from the same file as a model.
+                QString animationPath;
+                r = media->importModelAnimation(filename, &animationPath);
+                filename = r.isSuccess() ? animationPath : filename + QLatin1String(media::kModelAnimationMarker);
+                assetPathByGuid.insert(id, filename);
+                source->assetIdByPath.insert(QDir::cleanPath(filename), id);
+                if (r.isFailure()) media->registerMissingFile(filename);
+                continue;
+            }
             if (tag == QStringLiteral("MediaAsset")
                 && elemText(a, QStringLiteral("IsImageSequence")).toInt() == 1) {
                 // Rebuilt from the first still and the files now beside it.
@@ -2377,7 +2994,16 @@ static QDomDocument projectDocument(const QString& filePath,
             wrapper.setAttribute(QStringLiteral("OpenVegasKind"),
                                  composition::layerKindToken(layer.kind));
             wrapper.setAttribute(QStringLiteral("OpenVegasMuted"), layer.muted ? 1 : 0);
-            wrapper.setAttribute(QStringLiteral("OpenVegasCameraFieldOfView"), QString::number(layer.cameraFieldOfView, 'g', 17));
+            if (layer.kind == composition::LayerKind::Camera) {
+                // CameraLayer's own elements: depth of field, clipping, film.
+                addText(doc, wrapper, QStringLiteral("HasDoF"), layer.camera.depthOfField ? QStringLiteral("1") : QStringLiteral("0"));
+                addText(doc, wrapper, QStringLiteral("NearClip"), QString::number(layer.camera.nearClip, 'g', 9));
+                addText(doc, wrapper, QStringLiteral("FarClip"), QString::number(layer.camera.farClip, 'g', 9));
+                addText(doc, wrapper, QStringLiteral("HorizontalFilmSize"), QString::number(layer.camera.filmWidth, 'g', 9));
+                addText(doc, wrapper, QStringLiteral("VerticalFilmSize"), QString::number(layer.camera.filmHeight, 'g', 9));
+            }
+            if (layer.kind == composition::LayerKind::Light)
+                addText(doc, wrapper, QStringLiteral("LightType"), QString::number(int(layer.light.type)));
             if (layer.kind == composition::LayerKind::Plane)
                 wrapper.setAttribute(QStringLiteral("OpenVegasPlaneColor"), layer.planeColor.name(QColor::HexArgb));
 
@@ -2415,6 +3041,139 @@ static QDomDocument projectDocument(const QString& filePath,
                 // a path is what a relink would work from.
                 wrapper.setAttribute(QStringLiteral("OpenVegasModelPath"),
                                      storedPath(mediaPathFromId(layer.modelAssetId)));
+                if (media.hasModel(layer.modelAssetId)) {
+                    wrapper.appendChild(modelImportSettingsElement(doc, media.modelSettings(layer.modelAssetId)));
+                    // The materials as the Materials tab left them.
+                    QDomElement materials = doc.createElement(QStringLiteral("Materials"));
+                    const QString path = mediaPathFromId(layer.modelAssetId);
+                    for (const model3d::Material& material : media.modelMesh(layer.modelAssetId).materials) {
+                        const QUuid id = QUuid::createUuidV5(QUuid(QStringLiteral("{6ba7b811-9dad-11d1-80b4-00c04fd430c8}")),
+                                                             path + QLatin1Char('/') + material.name);
+                        materials.appendChild(modelMaterialElement(doc, material, id.toString(QUuid::WithoutBraces)));
+                    }
+                    wrapper.appendChild(materials);
+                }
+            }
+            if (layer.kind == composition::LayerKind::Model3D && !layer.modelNodes.isEmpty()) {
+                // The nodes given a transform of their own, each as the
+                // reference writes a Model3DTransformNode (Version 3, its
+                // group's name, a PropertyManager with the node's 3D
+                // transform). The reference nests them in a
+                // Model3DAssetInstance this port does not write, so they
+                // travel under its own prefix, keyed by the node's path.
+                QDomElement nodes = doc.createElement(QStringLiteral("OpenVegasModelNodes"));
+                for (const composition::ModelNodeTransform& node : layer.modelNodes) {
+                    QDomElement nodeElement = doc.createElement(QStringLiteral("Model3DTransformNode"));
+                    nodeElement.setAttribute(QStringLiteral("Version"), QStringLiteral("3"));
+                    addText(doc, nodeElement, QStringLiteral("GroupName"), node.path);
+                    const composition::LayerTransform& nt = node.transform;
+                    QDomElement properties = doc.createElement(QStringLiteral("PropertyManager"));
+                    properties.setAttribute(QStringLiteral("Version"), QStringLiteral("7"));
+                    appendPointProp(doc, properties, QStringLiteral("anchorPoint"), QStringLiteral("p3"),
+                                    nt.anchorPoint, composition::KeyFrameList(),
+                                    composition::KeyFrameList(), shotFps, nt.anchorPointZ);
+                    appendPointProp(doc, properties, QStringLiteral("position"), QStringLiteral("p3"),
+                                    nt.position, nt.positionXCurve, nt.positionYCurve, shotFps,
+                                    nt.positionZ, nt.positionZCurve);
+                    appendPointProp(doc, properties, QStringLiteral("scale"), QStringLiteral("sc"),
+                                    nt.scalePercent, nt.scaleXCurve, nt.scaleYCurve, shotFps,
+                                    nt.scaleZPercent, nt.scaleZCurve);
+                    appendPointProp(doc, properties, QStringLiteral("orientation"), QStringLiteral("or"),
+                                    QPointF(nt.orientationX, nt.orientationY), nt.orientationXCurve,
+                                    nt.orientationYCurve, shotFps, nt.orientationZ, nt.orientationZCurve);
+                    appendScalarProp(doc, properties, QStringLiteral("rotationX"), nt.rotationXDegrees,
+                                     nt.rotationXCurve, shotFps);
+                    appendScalarProp(doc, properties, QStringLiteral("rotationY"), nt.rotationYDegrees,
+                                     nt.rotationYCurve, shotFps);
+                    appendScalarProp(doc, properties, QStringLiteral("rotationZ"), nt.rotationDegrees,
+                                     nt.rotationCurve, shotFps);
+                    nodeElement.appendChild(properties);
+                    nodes.appendChild(nodeElement);
+                }
+                wrapper.appendChild(nodes);
+            }
+            if (layer.kind == composition::LayerKind::Model3D && !layer.materialOverrides.isEmpty()) {
+                // Override Materials, as the reference writes them: an
+                // OverriddenModel3DMaterialList of Model3DMaterialOverride
+                // (Version 6: ID, Model3DMaterialID, Model3DAssetID, Name and a
+                // PropertyManager with <map>MapSource / <map>MapLayerID). The
+                // material is named; its ID in the reference is the asset's.
+                QDomElement list = doc.createElement(QStringLiteral("OverriddenModel3DMaterialList"));
+                for (const composition::ModelMaterialOverride& entry : layer.materialOverrides) {
+                    QDomElement overrideElement = doc.createElement(QStringLiteral("Model3DMaterialOverride"));
+                    overrideElement.setAttribute(QStringLiteral("Version"), QStringLiteral("6"));
+                    addText(doc, overrideElement, QStringLiteral("Name"), entry.material);
+                    QDomElement properties = doc.createElement(QStringLiteral("PropertyManager"));
+                    properties.setAttribute(QStringLiteral("Version"), QStringLiteral("7"));
+                    const auto prop = [&](const QString& name, const QString& tag, const QString& value) {
+                        QDomElement p = doc.createElement(QStringLiteral("Prop"));
+                        addText(doc, p, QStringLiteral("Name"), name);
+                        QDomElement stat = doc.createElement(QStringLiteral("Static"));
+                        addText(doc, stat, tag, value);
+                        p.appendChild(stat);
+                        properties.appendChild(p);
+                    };
+                    for (int m = 0; m < composition::ModelMaterialOverride::kMapCount; ++m) {
+                        const auto which = composition::ModelMaterialOverride::Map(m);
+                        const QString key = QString::fromLatin1(composition::ModelMaterialOverride::mapKey(which));
+                        prop(key + QStringLiteral("MapSource"), QStringLiteral("i"),
+                             QString::number(int(entry.map(which).source)));
+                        prop(key + QStringLiteral("MapLayerID"), QStringLiteral("id"),
+                             entry.map(which).layer.value());
+                    }
+                    appendScalarProp(doc, properties, QStringLiteral("bumpMapScale"), entry.bumpMapScale,
+                                     composition::KeyFrameList(), shotFps);
+                    overrideElement.appendChild(properties);
+                    list.appendChild(overrideElement);
+                }
+                wrapper.appendChild(list);
+            }
+            if (layer.kind == composition::LayerKind::Model3D && !layer.modelAnimations.isEmpty()) {
+                // Animations, each as the reference writes a
+                // Model3DAnimationAssetInstance (Version 1: ID, Name, a
+                // PropertyManager with strength, loop, playback and
+                // customPlayback) with what its Model3DAnimationAsset keeps
+                // (Version 3: Name, Filename, OverrideFrameRate, FrameRate,
+                // AnimationIndex) inside it. The reference keeps the asset in
+                // the project's asset list and the instance in the layer's
+                // Model3DAssetInstance, which this port does not write.
+                QDomElement list = doc.createElement(QStringLiteral("OpenVegasModelAnimations"));
+                for (const composition::ModelAnimationInstance& instance : layer.modelAnimations) {
+                    QDomElement instanceElement = doc.createElement(QStringLiteral("Model3DAnimationAssetInstance"));
+                    instanceElement.setAttribute(QStringLiteral("Version"), QStringLiteral("1"));
+                    addText(doc, instanceElement, QStringLiteral("ID"), instance.id.value());
+                    addText(doc, instanceElement, QStringLiteral("Name"), instance.name);
+                    QDomElement properties = doc.createElement(QStringLiteral("PropertyManager"));
+                    properties.setAttribute(QStringLiteral("Version"), QStringLiteral("7"));
+                    const auto flag = [&](const QString& name, bool value) {
+                        QDomElement p = doc.createElement(QStringLiteral("Prop"));
+                        p.setAttribute(QStringLiteral("Type"), 1);
+                        addText(doc, p, QStringLiteral("Name"), name);
+                        QDomElement stat = doc.createElement(QStringLiteral("Static"));
+                        addText(doc, stat, QStringLiteral("b"), value ? QStringLiteral("1") : QStringLiteral("0"));
+                        p.appendChild(stat);
+                        properties.appendChild(p);
+                    };
+                    flag(QStringLiteral("loop"), instance.loop);
+                    appendScalarProp(doc, properties, QStringLiteral("strength"), instance.strength,
+                                     instance.strengthCurve, shotFps);
+                    appendScalarProp(doc, properties, QStringLiteral("playback"), instance.playback,
+                                     instance.playbackCurve, shotFps);
+                    flag(QStringLiteral("customPlayback"), instance.customPlayback);
+                    instanceElement.appendChild(properties);
+                    QDomElement asset = doc.createElement(QStringLiteral("Model3DAnimationAsset"));
+                    asset.setAttribute(QStringLiteral("Version"), QStringLiteral("3"));
+                    addText(doc, asset, QStringLiteral("Name"), instance.name);
+                    if (!instance.filePath.isEmpty())
+                        addText(doc, asset, QStringLiteral("Filename"), storedPath(instance.filePath));
+                    addText(doc, asset, QStringLiteral("OverrideFrameRate"),
+                            QString::number(instance.frameRateOverridden ? 1 : 0));
+                    addText(doc, asset, QStringLiteral("FrameRate"), QString::number(instance.frameRate, 'g', 6));
+                    addText(doc, asset, QStringLiteral("AnimationIndex"), QString::number(instance.animationIndex));
+                    instanceElement.appendChild(asset);
+                    list.appendChild(instanceElement);
+                }
+                wrapper.appendChild(list);
             }
 
             // Only a media layer references an asset. Point/Light/Camera have no
@@ -2537,6 +3296,58 @@ static QDomDocument projectDocument(const QString& filePath,
                              t.rotationYCurve, shotFps);
             appendScalarProp(doc, pmEl, QStringLiteral("rotationZ"), t.rotationDegrees,
                              t.rotationCurve, shotFps);
+            if (layer.kind == composition::LayerKind::Camera) {
+                // CameraLayer's lens, by the reference's names.
+                const composition::CameraSettings& camera = layer.camera;
+                appendScalarProp(doc, pmEl, QStringLiteral("aperture"), camera.aperture, camera.apertureCurve, shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("zoom"), camera.zoom, camera.zoomCurve, shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("focusDistance"), camera.focusDistance,
+                                 camera.focusDistanceCurve, shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("blurDoF"), camera.blur, camera.blurCurve, shotFps);
+            }
+            if (layer.kind == composition::LayerKind::Light) {
+                // LightLayer's own properties, by the reference's names.
+                const composition::LightSettings& light = layer.light;
+                appendColorProp(doc, pmEl, QStringLiteral("color"), light.color, light.colorCurve, shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("intensity"), light.intensity, light.intensityCurve, shotFps);
+                appendBoolProp(doc, pmEl, QStringLiteral("castShadows"), light.castShadows);
+                appendIntProp(doc, pmEl, QStringLiteral("falloff"), int(light.falloff));
+                appendScalarProp(doc, pmEl, QStringLiteral("reach"), light.reach, light.reachCurve, shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("spotlightAngle"), light.coneAngle, light.coneAngleCurve,
+                                 shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("spotlightFeather"), light.feather, light.featherCurve,
+                                 shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("shadowOpacity"), light.shadowOpacity,
+                                 light.shadowOpacityCurve, shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("shadowDiffusion"), light.shadowDiffusion,
+                                 light.shadowDiffusionCurve, shotFps);
+                appendColorProp(doc, pmEl, QStringLiteral("shadowColor"), light.shadowColor, light.shadowColorCurve,
+                                shotFps);
+            } else if (layer.kind != composition::LayerKind::Camera && layer.kind != composition::LayerKind::Point) {
+                // How the layer takes lights and shadows in the 3D scene.
+                const composition::SurfaceShading& surface = layer.surface;
+                appendBoolProp(doc, pmEl, QStringLiteral("illuminated"), surface.illuminated);
+                appendBoolProp(doc, pmEl, QStringLiteral("castShadows"), surface.castShadows);
+                appendBoolProp(doc, pmEl, QStringLiteral("castShadowsIfLayerDisabled"), surface.castShadowsIfInvisible);
+                appendBoolProp(doc, pmEl, QStringLiteral("receiveShadows"), surface.receiveShadows);
+                appendBoolProp(doc, pmEl, QStringLiteral("billboardedLights"), surface.billboardedLights);
+                appendBoolProp(doc, pmEl, QStringLiteral("billboardedShadows"), surface.billboardedShadows);
+                if (layer.kind == composition::LayerKind::Model3D) {
+                    // A static <fl> (Type 1), as Model3DLayer keeps it.
+                    appendStaticProp(doc, pmEl, QStringLiteral("selfShadowBias"), [&](QDomElement& holder) {
+                        addText(doc, holder, QStringLiteral("fl"), QString::number(surface.selfShadowBias, 'g', 9));
+                    });
+                }
+                appendColorProp(doc, pmEl, QStringLiteral("shadowColor"), surface.shadowColor);
+                appendScalarProp(doc, pmEl, QStringLiteral("matAmbient"), surface.ambient, surface.ambientCurve, shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("matDiffuse"), surface.diffuse, surface.diffuseCurve, shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("matSpecular"), surface.specular, surface.specularCurve,
+                                 shotFps);
+                appendScalarProp(doc, pmEl, QStringLiteral("matShininess"), surface.shininess, surface.shininessCurve,
+                                 shotFps);
+                appendColorProp(doc, pmEl, QStringLiteral("matEmissiveColor"), surface.emissive, surface.emissiveCurve,
+                                shotFps);
+            }
             if (layer.kind == composition::LayerKind::Media) {
                 appendScalarProp(doc, pmEl, QStringLiteral("audioLevel"), layer.transform.audioLevel,
                                  layer.transform.audioLevelCurve, shotFps);
@@ -2559,6 +3370,7 @@ static QDomDocument projectDocument(const QString& filePath,
             layers.appendChild(wrapper);
         }
 
+        comp.appendChild(viewerStateElement(doc, shot.viewerSetup()));
         return comp;
     };
 
@@ -2587,6 +3399,25 @@ static QDomDocument projectDocument(const QString& filePath,
         const QString path = it.key();
         const QString guid = it.value();
         const media::MediaAsset recorded = media.assetByFilePath(path);
+        if (recorded.kind() == media::MediaKind::Model3DAnimation) {
+            // The reference's Model3DAnimationAsset (Version 3: ID,
+            // ParentFolderID, IsHidden, Name, Filename, OverrideFrameRate,
+            // FrameRate, AnimationIndex); the instances on layers keep their
+            // own rate and index here.
+            QDomElement m = doc.createElement(QStringLiteral("Model3DAnimationAsset"));
+            m.setAttribute(QStringLiteral("Version"), QStringLiteral("3"));
+            addText(doc, m, QStringLiteral("ID"), guid);
+            addText(doc, m, QStringLiteral("ParentFolderID"), QStringLiteral("00000000-0000-0000-0000-000000000000"));
+            addText(doc, m, QStringLiteral("IsHidden"), QStringLiteral("0"));
+            addText(doc, m, QStringLiteral("Name"), recorded.fileName());
+            addText(doc, m, QStringLiteral("Filename"), storedPath(recorded.sourcePath()));
+            addText(doc, m, QStringLiteral("OverrideFrameRate"), QStringLiteral("0"));
+            addText(doc, m, QStringLiteral("FrameRate"),
+                    QString::number(recorded.fileFrameRate() > 0.0 ? recorded.fileFrameRate() : 24.0, 'g', 6));
+            addText(doc, m, QStringLiteral("AnimationIndex"), QStringLiteral("0"));
+            assets.appendChild(m);
+            continue;
+        }
         // Image -> ImageAsset; Video/Audio -> MediaAsset (matches reference schema).
         const bool mediaAsset = recorded.kind() != media::MediaKind::Image;
         const QString tagName =

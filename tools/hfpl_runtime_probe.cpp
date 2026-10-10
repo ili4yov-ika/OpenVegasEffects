@@ -532,7 +532,7 @@ int main(int argc, char** argv)
     const QStringList args = app.arguments();
     if (args.size() < 2 || args.size() > 4) {
         err << "Usage: hfpl_runtime_probe <plugin-or-directory> [dependency-directory] "
-               "[message[,message...]|metadata|parameters|render|transition|audio|audio-transition|render-time|behavior|behavior-curve|behavior-stack|behavior-subobject|geometry|customui|track]\n";
+               "[message[,message...]|metadata|parameters|render|transition|audio|audio-transition|render-time|render-scale|render-scale-pixels|units|behavior|behavior-curve|behavior-stack|behavior-subobject|geometry|customui|track]\n";
         return 2;
     }
 
@@ -928,6 +928,340 @@ int main(int argc, char** argv)
         out.flush();
         openvegas::plugin::releaseNativeEffectThreadRenderer();
         return ok ? 0 : 1;
+    }
+
+    if (args.size() == 4 && (args.at(3) == QLatin1String("render-scale")
+                             || args.at(3) == QLatin1String("render-scale-varied"))) {
+        // "render-scale-varied" sets every ranged numeric parameter a third
+        // of the way into its range, so a module that does nothing with its
+        // defaults is tested doing something; the last column says how far
+        // its output at scale 1 is from its input (0: it changed nothing).
+        const bool varied = args.at(3) == QLatin1String("render-scale-varied");
+        // Whether a 2D effect honours the render scale: a 128x128 pattern
+        // through the module at scale 1 and then halved, against the halved
+        // pattern through it at scale 0.5 - the mean channel difference.
+        out << "file\trendered\tmean-difference\tat-scale-1\tchanged\n";
+        for (const QString& file : files) {
+            const QString dependencyDir = QFileInfo(args.at(2)).absoluteFilePath();
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+            QStringList values;
+            for (const auto& parameter : metadata.parameters) {
+                QString value = parameter.defaultValue;
+                const bool numeric = parameter.type == QLatin1String("double")
+                                     || parameter.type == QLatin1String("int");
+                // The spec's own ±100000 means no range was declared.
+                const bool ranged = parameter.minimum > -99999.0 && parameter.maximum < 99999.0
+                                    && parameter.maximum > parameter.minimum;
+                if (varied && numeric && ranged) {
+                    const double at = parameter.minimum + 0.35 * (parameter.maximum - parameter.minimum);
+                    value = parameter.type == QLatin1String("int") ? QString::number(qRound(at))
+                                                                   : QString::number(at);
+                }
+                values.append(value);
+            }
+            const openvegas::core::Identifier id(QStringLiteral("probe.native.scale"));
+            openvegas::plugin::clearNativeEffectModules();
+            openvegas::plugin::registerNativeEffectModule(id, file, dependencyDir, true,
+                                                          metadata.parameters);
+            QImage pattern(128, 128, QImage::Format_RGBA8888);
+            for (int y = 0; y < pattern.height(); ++y)
+                for (int x = 0; x < pattern.width(); ++x)
+                    pattern.setPixelColor(x, y, QColor((x / 16 + y / 16) % 2 ? 230 : 30,
+                                                       (x * 2) % 256, (y * 2) % 256));
+            const auto halve = [](const QImage& image) {
+                return image.convertToFormat(QImage::Format_RGBA8888_Premultiplied)
+                    .scaled(image.size() / 2, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                    .convertToFormat(QImage::Format_RGBA8888);
+            };
+            const auto difference = [](const QImage& a, const QImage& b) {
+                double sum = 0.0;
+                for (int y = 0; y < a.height(); ++y)
+                    for (int x = 0; x < a.width(); ++x) {
+                        const QColor p = a.pixelColor(x, y), q = b.pixelColor(x, y);
+                        sum += std::abs(p.red() - q.red()) + std::abs(p.green() - q.green())
+                               + std::abs(p.blue() - q.blue());
+                    }
+                return sum / (3.0 * a.width() * a.height());
+            };
+            QImage full = pattern;
+            openvegas::plugin::NativeFrameTime time;
+            bool ok = openvegas::plugin::applyNativeEffectToImage(full, id, values, time);
+            const QImage reference = halve(full);
+            QImage reduced = halve(pattern);
+            QImage unscaled = reduced;
+            time.renderScale = 0.5f;
+            ok = openvegas::plugin::applyNativeEffectToImage(reduced, id, values, time) && ok;
+            time.renderScale = 1.0f;
+            ok = openvegas::plugin::applyNativeEffectToImage(unscaled, id, values, time) && ok;
+            out << QFileInfo(file).baseName() << '\t' << (ok ? 1 : 0) << '\t'
+                << QString::number(difference(reference, reduced), 'f', 2) << '\t'
+                << QString::number(difference(reference, unscaled), 'f', 2) << '\t'
+                << QString::number(difference(full, pattern), 'f', 2) << '\n';
+            out.flush();
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        }
+        return 0;
+    }
+
+    if (args.size() == 4 && args.at(3) == QLatin1String("property-states")) {
+        // Which controls a module shows and hides itself: NotifyPropertyChanged
+        // (Notify 7) for each of its properties with the defaults, and what it
+        // gave SetPropertyState (byte 0, the row shown). The hidden column
+        // counts the controls registered with option 0x2 (hidden at first).
+        out << "file\thidden\tshown-by-module\thidden-by-module\tstill-hidden\n";
+        for (const QString& file : files) {
+            const QString dependencyDir = QFileInfo(args.at(2)).absoluteFilePath();
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+            QStringList hidden, values;
+            for (const auto& parameter : metadata.parameters) {
+                values << parameter.defaultValue;
+                if (parameter.hidden) hidden << parameter.name;
+            }
+            if (hidden.isEmpty()) continue;
+            const openvegas::core::Identifier id(QStringLiteral("probe.native.states"));
+            openvegas::plugin::clearNativeEffectModules();
+            openvegas::plugin::registerNativeEffectModule(id, file, dependencyDir, true,
+                                                          metadata.parameters);
+            openvegas::plugin::NativeCustomUiView view;
+            view.area = QSize(256, 256);
+            view.target = QSize(256, 256);
+            view.instanceKey = QStringLiteral("probe/0/0");
+            QHash<QString, bool> states;
+            int handled = 0;
+            for (const auto& parameter : metadata.parameters) {
+                if (parameter.type == QLatin1String("label")) continue;
+                const auto result = openvegas::plugin::nativePropertyChanged(id, values, view, parameter.name);
+                if (result.handled) ++handled;
+                for (auto it = result.enabled.cbegin(); it != result.enabled.cend(); ++it)
+                    states.insert(it.key(), it.value());
+            }
+            QStringList shown, off, still;
+            for (auto it = states.cbegin(); it != states.cend(); ++it) (it.value() ? shown : off) << it.key();
+            for (const QString& name : hidden) if (!states.value(name, false)) still << name;
+            out << QFileInfo(file).baseName() << '\t' << hidden.size() << '\t' << shown.size() << '\t'
+                << off.size() << '\t' << still.size() << "\thandled " << handled << '\t'
+                << still.mid(0, 6).join(QLatin1Char(',')) << "\tshown: " << shown.mid(0, 12).join(QLatin1Char(','))
+                << '\n';
+            out.flush();
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        }
+        return 0;
+    }
+
+    if (args.size() == 4 && args.at(3) == QLatin1String("units")) {
+        // Every parameter with its type and the unit the module registered.
+        out << "file\tparameter\ttype\tunit\tdefault\tminimum\tmaximum\tdecimals\tstep\thidden\n";
+        for (const QString& file : files) {
+            const QString dependencyDir = QFileInfo(args.at(2)).absoluteFilePath();
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+            for (const auto& parameter : metadata.parameters) {
+                out << QFileInfo(file).baseName() << '\t' << parameter.name << '\t' << parameter.type
+                    << '\t' << parameter.unit << '\t' << parameter.defaultValue << '\t'
+                    << parameter.minimum << '\t' << parameter.maximum << '\t' << parameter.decimals
+                    << '\t' << parameter.step << '\t' << (parameter.hidden ? 1 : 0) << '\n';
+            }
+            out.flush();
+        }
+        return 0;
+    }
+
+    if (args.size() == 4 && args.at(3) == QLatin1String("render-scale-search")) {
+        // Values in pixels a module registered without saying so (no "px"):
+        // with the host reducing what it knows (the module's own
+        // NativeReducedValues), each number without a unit is halved in turn
+        // as well and kept when the reduced picture comes closer to the full
+        // one reduced - at 256x256 and 144x144, with the defaults and with
+        // every ranged number a third into its range. Prints the worst mean
+        // channel difference before and after, and the names kept.
+        out << "file\tbefore\tafter\tpixels\n";
+        for (const QString& file : files) {
+            const QString dependencyDir = QFileInfo(args.at(2)).absoluteFilePath();
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+            const openvegas::core::Identifier id(QStringLiteral("probe.native.search"));
+            openvegas::plugin::clearNativeEffectModules();
+            openvegas::plugin::registerNativeEffectModule(id, file, dependencyDir, true,
+                                                          metadata.parameters);
+            const auto halve = [](const QImage& image) {
+                return image.convertToFormat(QImage::Format_RGBA8888_Premultiplied)
+                    .scaled(image.size() / 2, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                    .convertToFormat(QImage::Format_RGBA8888);
+            };
+            const auto difference = [](const QImage& a, const QImage& b) {
+                double sum = 0.0;
+                for (int y = 0; y < a.height(); ++y)
+                    for (int x = 0; x < a.width(); ++x) {
+                        const QColor p = a.pixelColor(x, y), q = b.pixelColor(x, y);
+                        sum += std::abs(p.red() - q.red()) + std::abs(p.green() - q.green())
+                               + std::abs(p.blue() - q.blue());
+                    }
+                return sum / (3.0 * a.width() * a.height());
+            };
+            struct Config { QImage pattern; QStringList values; QImage reference; };
+            QVector<Config> configs;
+            bool ok = true;
+            for (const int size : {256, 144}) {
+                QImage pattern(size, size, QImage::Format_RGBA8888);
+                for (int y = 0; y < size; ++y)
+                    for (int x = 0; x < size; ++x)
+                        pattern.setPixelColor(x, y, QColor((x * 8 / size + y * 8 / size) % 2 ? 230 : 30,
+                                                           x * 255 / size, y * 255 / size));
+                for (const bool varied : {false, true}) {
+                    QStringList values;
+                    for (const auto& parameter : metadata.parameters) {
+                        QString value = parameter.defaultValue;
+                        const bool numeric = parameter.type == QLatin1String("double")
+                                             || parameter.type == QLatin1String("int");
+                        const bool ranged = parameter.minimum > -99999.0 && parameter.maximum < 99999.0
+                                            && parameter.maximum > parameter.minimum;
+                        if (varied && numeric && ranged) {
+                            const double at = parameter.minimum + 0.35 * (parameter.maximum - parameter.minimum);
+                            value = parameter.type == QLatin1String("int") ? QString::number(qRound(at))
+                                                                           : QString::number(at);
+                        } else if (varied && parameter.type == QLatin1String("point2d")
+                                   && value == QLatin1String("0,0")) {
+                            value = QStringLiteral("%1,%2").arg(size * 0.15).arg(-size * 0.1);
+                        }
+                        values.append(value);
+                    }
+                    QImage full = pattern;
+                    openvegas::plugin::NativeFrameTime time;
+                    ok = openvegas::plugin::applyNativeEffectToImage(full, id, values, time) && ok;
+                    configs.append({pattern, values, halve(full)});
+                }
+            }
+            // The worst difference with these unit-less numbers halved too.
+            const auto worst = [&](const QSet<int>& halved) {
+                double result = 0.0;
+                for (const Config& config : configs) {
+                    QStringList values = config.values;
+                    for (int index : halved) {
+                        const double half = values.at(index).toDouble() * 0.5;
+                        values[index] = metadata.parameters.at(index).type == QLatin1String("int")
+                            ? QString::number(qRound(half)) : QString::number(half);
+                    }
+                    QImage reduced = halve(config.pattern);
+                    openvegas::plugin::NativeFrameTime time;
+                    time.renderScale = 0.5f;
+                    openvegas::plugin::applyNativeEffectToImage(reduced, id, values, time);
+                    result = qMax(result, difference(config.reference, reduced));
+                }
+                return result;
+            };
+            QVector<int> candidates;
+            for (int i = 0; i < metadata.parameters.size(); ++i) {
+                const auto& parameter = metadata.parameters.at(i);
+                if ((parameter.type == QLatin1String("double") || parameter.type == QLatin1String("int"))
+                    && parameter.unit.isEmpty() && parameter.choices.isEmpty())
+                    candidates << i;
+            }
+            QSet<int> kept;
+            const double before = worst(kept);
+            double best = before;
+            for (int round = 0; round < 3 && best >= 2.0; ++round) {
+                bool improved = false;
+                for (int index : std::as_const(candidates)) {
+                    if (kept.contains(index)) continue;
+                    QSet<int> trial = kept;
+                    trial.insert(index);
+                    const double score = worst(trial);
+                    if (score < best * 0.9 && score < best - 0.3) {
+                        best = score;
+                        kept = trial;
+                        improved = true;
+                    }
+                }
+                if (!improved) break;
+            }
+            QStringList names;
+            for (int index : std::as_const(kept)) names << metadata.parameters.at(index).name;
+            names.sort();
+            out << QFileInfo(file).baseName() << '\t' << (ok ? "" : "!") << QString::number(before, 'f', 2)
+                << '\t' << QString::number(best, 'f', 2) << '\t' << names.join(QLatin1Char(',')) << '\n';
+            out.flush();
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        }
+        return 0;
+    }
+
+    if (args.size() == 4 && args.at(3) == QLatin1String("render-scale-pixels")) {
+        // Which values the host has to reduce for a module to draw a reduced
+        // preview right (plugin::NativeReducedValues): a pattern through the
+        // module at scale 1 and halved, against the halved pattern through it
+        // at scale 0.5 with the host reducing nothing, the px values, the
+        // points, and both - the mean channel difference of each. At two
+        // sizes, with the defaults and with every ranged number a third into
+        // its range and every point at the centre moved off it; the last
+        // column how much the module changes the picture.
+        out << "file\tsize\tvalues\trendered\tnothing\tpixels\tpoints\tboth\tchanged\n";
+        for (const QString& file : files) {
+            const QString dependencyDir = QFileInfo(args.at(2)).absoluteFilePath();
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+            const openvegas::core::Identifier id(QStringLiteral("probe.native.pixels"));
+            openvegas::plugin::clearNativeEffectModules();
+            openvegas::plugin::registerNativeEffectModule(id, file, dependencyDir, true,
+                                                          metadata.parameters);
+            const auto halve = [](const QImage& image) {
+                return image.convertToFormat(QImage::Format_RGBA8888_Premultiplied)
+                    .scaled(image.size() / 2, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                    .convertToFormat(QImage::Format_RGBA8888);
+            };
+            const auto difference = [](const QImage& a, const QImage& b) {
+                double sum = 0.0;
+                for (int y = 0; y < a.height(); ++y)
+                    for (int x = 0; x < a.width(); ++x) {
+                        const QColor p = a.pixelColor(x, y), q = b.pixelColor(x, y);
+                        sum += std::abs(p.red() - q.red()) + std::abs(p.green() - q.green())
+                               + std::abs(p.blue() - q.blue());
+                    }
+                return sum / (3.0 * a.width() * a.height());
+            };
+            for (const int size : {256, 144}) {
+                QImage pattern(size, size, QImage::Format_RGBA8888);
+                for (int y = 0; y < size; ++y)
+                    for (int x = 0; x < size; ++x)
+                        pattern.setPixelColor(x, y, QColor((x * 8 / size + y * 8 / size) % 2 ? 230 : 30,
+                                                           x * 255 / size, y * 255 / size));
+                for (const bool varied : {false, true}) {
+                    QStringList values;
+                    for (const auto& parameter : metadata.parameters) {
+                        QString value = parameter.defaultValue;
+                        const bool numeric = parameter.type == QLatin1String("double")
+                                             || parameter.type == QLatin1String("int");
+                        const bool ranged = parameter.minimum > -99999.0 && parameter.maximum < 99999.0
+                                            && parameter.maximum > parameter.minimum;
+                        if (varied && numeric && ranged) {
+                            const double at = parameter.minimum + 0.35 * (parameter.maximum - parameter.minimum);
+                            value = parameter.type == QLatin1String("int") ? QString::number(qRound(at))
+                                                                           : QString::number(at);
+                        } else if (varied && parameter.type == QLatin1String("point2d")
+                                   && value == QLatin1String("0,0")) {
+                            value = QStringLiteral("%1,%2").arg(size * 0.15).arg(-size * 0.1);
+                        }
+                        values.append(value);
+                    }
+                    QImage full = pattern;
+                    openvegas::plugin::NativeFrameTime time;
+                    time.reducedValues = openvegas::plugin::NativeReducesNothing;
+                    bool ok = openvegas::plugin::applyNativeEffectToImage(full, id, values, time);
+                    const QImage reference = halve(full);
+                    time.renderScale = 0.5f;
+                    QStringList columns;
+                    for (int flags = 0; flags < 4; ++flags) {
+                        QImage reduced = halve(pattern);
+                        time.reducedValues = flags;
+                        ok = openvegas::plugin::applyNativeEffectToImage(reduced, id, values, time) && ok;
+                        columns << QString::number(difference(reference, reduced), 'f', 2);
+                    }
+                    out << QFileInfo(file).baseName() << '\t' << size << '\t'
+                        << (varied ? "varied" : "default") << '\t' << (ok ? 1 : 0) << '\t'
+                        << columns.join(QLatin1Char('\t')) << '\t'
+                        << QString::number(difference(full, pattern), 'f', 2) << '\n';
+                    out.flush();
+                }
+            }
+            openvegas::plugin::releaseNativeEffectThreadRenderer();
+        }
+        return 0;
     }
 
     if (args.size() == 4 && args.at(3) == QLatin1String("render-time")) {

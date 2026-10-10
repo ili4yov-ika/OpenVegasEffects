@@ -1,13 +1,20 @@
+#include "ui/ModelAnimationDialog.h"
 #include "ui/Theme.h"
+#include "ui/TimelineParameterEditor.h"
 #include "ui/TimelineRowDelegate.h"
 #include "ui/TimelineWidget.h"
+#include "plugin/NativeEffectRender.h"
 #include "plugin/PluginManager.h"
 #include "media/MediaManager.h"
+#include "model3d/ModelLoader.h"
+#include "composition/CompositionState.h"
 #include <QCheckBox>
 #include <QCoreApplication>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
@@ -15,6 +22,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QScrollBar>
 #include <QSet>
@@ -274,6 +282,8 @@ void TimelineWidget::rebuildTree()
                             target.motionTracks.append(track);
                         }, true);
                     });
+                } else if (name == "timelineAddModelAnimation_") {
+                    connect(add, &QToolButton::clicked, this, [this, i, add] { showModelAnimationMenu(i, add); });
                 } else connect(add, &QToolButton::clicked, this, [this, i, name, add] { showEffectMenu(i, name == "timelineAddBehavior_", add); });
             }
             return row;
@@ -329,7 +339,7 @@ void TimelineWidget::rebuildTree()
             search->setRange(2, 256); search->setValue(track.searchRadius); search->setSuffix(tr(" px search")); search->setToolTip(tr("Search radius")); tl->addWidget(search);
             auto* analyze = iconButton(controls, QStringLiteral("timelineTrackAnalyze_%1_%2").arg(i).arg(t), "play", tr("Analyze forward"));
             analyze->setEnabled(!layer.locked && !layer.clips.isEmpty()); tl->addWidget(analyze);
-            auto* remove = iconButton(controls, QStringLiteral("timelineTrackRemove_%1_%2").arg(i).arg(t), "close", tr("Remove track")); tl->addWidget(remove);
+            auto* remove = iconButton(controls, QStringLiteral("timelineTrackRemove_%1_%2").arg(i).arg(t), "tab-close", tr("Remove track")); tl->addWidget(remove);
             m_tree->setItemWidget(trackRow, 1, controls);
             const auto editTrack = [this, i, t](const QString& title, const std::function<void(composition::MotionTrack&)>& fn, bool rebuild = false) {
                 editLayer(i, title, [t, fn](composition::Layer& target) {
@@ -376,7 +386,7 @@ void TimelineWidget::rebuildTree()
             auto* feather = number(QStringLiteral("timelineMaskFeather_%1_%2").arg(i).arg(m), mask.feather, 0, 1000, tr("Feather (px)"));
             auto* expansion = number(QStringLiteral("timelineMaskExpansion_%1_%2").arg(i).arg(m), mask.expansion, -1000, 1000, tr("Expansion (px)"));
             auto* invert = new QCheckBox(tr("Invert"), controls); invert->setObjectName(QStringLiteral("timelineMaskInvert_%1_%2").arg(i).arg(m)); invert->setChecked(mask.inverted); ml->addWidget(invert);
-            auto* remove = iconButton(controls, QStringLiteral("timelineMaskRemove_%1_%2").arg(i).arg(m), "close", tr("Remove mask")); ml->addWidget(remove);
+            auto* remove = iconButton(controls, QStringLiteral("timelineMaskRemove_%1_%2").arg(i).arg(m), "tab-close", tr("Remove mask")); ml->addWidget(remove);
             m_tree->setItemWidget(maskRow, 1, controls);
             const auto editMask = [this, i, m](const QString& title, const std::function<void(composition::LayerMask&)>& fn, bool rebuild = false) {
                 editLayer(i, title, [m, fn](composition::Layer& l) { if (m < l.masks.size()) fn(l.masks[m]); }, rebuild);
@@ -404,12 +414,59 @@ void TimelineWidget::rebuildTree()
         // an animated branch makes its keyframes visible immediately instead
         // of leaving them hidden behind a collapsed Transform group.
         transform->setExpanded(hasTransformKeys);
+        if (layer.kind == composition::LayerKind::Camera) {
+            auto* lens = group(QCoreApplication::translate("CameraLayerGroupFactory", "Lens"), QString(), false);
+            addCameraRows(i, lens);
+            lens->setExpanded(true);
+        } else if (layer.kind == composition::LayerKind::Light) {
+            auto* light = group(QCoreApplication::translate("LightLayerGroupFactory", "Light"), QString(), false);
+            addLightRows(i, light);
+            light->setExpanded(true);
+        } else if (layer.kind == composition::LayerKind::Model3D
+                   || (layer.dimension == composition::LayerDimension::ThreeD
+                       && (layer.kind == composition::LayerKind::Media || layer.kind == composition::LayerKind::Plane
+                           || layer.kind == composition::LayerKind::Text))) {
+            addSurfaceRows(i, group(QCoreApplication::translate("AssetLayerGroupFactory", "Material"), QString(), false));
+        }
         if (layer.kind == composition::LayerKind::Model3D && m_media) {
+            // The model's nodes as the file nests them, each with the
+            // Transform of its own (the reference's Model3DTransformNode).
             auto* models = group(tr("Models"), QString(), false);
-            for (const auto& node : m_media->modelMesh(layer.modelAssetId).nodeNames) {
-                auto* model = new QTreeWidgetItem(models, {node});
+            const model3d::Mesh mesh = m_media->modelMesh(layer.modelAssetId);
+            QVector<QTreeWidgetItem*> nodeRows(mesh.nodes.size(), nullptr);
+            for (int n = 0; n < mesh.nodes.size(); ++n) {
+                const model3d::ModelNode& node = mesh.nodes.at(n);
+                QTreeWidgetItem* parentRow =
+                    node.parent >= 0 && node.parent < n && nodeRows.at(node.parent) ? nodeRows.at(node.parent) : models;
+                auto* model = new QTreeWidgetItem(parentRow, {node.name});
+                const QString path = mesh.nodePath(n);
                 model->setData(0, Qt::UserRole, i);
+                model->setData(0, kModelNodeRole, path);
+                nodeRows[n] = model;
+                auto* nodeTransform = new QTreeWidgetItem(model, {tr("Transform")});
+                nodeTransform->setData(0, Qt::UserRole, i);
+                nodeTransform->setData(0, kModelNodeRole, path);
+                for (const auto property : composition::modelNodeTransformProperties())
+                    buildTransformRow(nodeTransform, i, property, path, node.pivot);
+                const composition::ModelNodeTransform* state = layer.modelNode(path);
+                bool animated = false;
+                for (const auto property : composition::modelNodeTransformProperties())
+                    animated = animated || (state && state->transform.isAnimated(property, composition::LayerDimension::ThreeD));
+                nodeTransform->setExpanded(animated);
             }
+            if (mesh.nodes.isEmpty()) {
+                for (const auto& nodeName : mesh.nodeNames) {
+                    auto* model = new QTreeWidgetItem(models, {nodeName});
+                    model->setData(0, Qt::UserRole, i);
+                }
+            }
+            if (!mesh.materials.isEmpty()) addMaterialRows(i, mesh, group(
+                QCoreApplication::translate("Model3DFactory", "Override Materials"), QString(), false));
+            // The animations playing on it (Model3DAnimationAssetInstance).
+            auto* animations = group(QCoreApplication::translate("Model3DFactory", "Animations"),
+                                     "timelineAddModelAnimation_", true);
+            addModelAnimationRows(i, animations);
+            animations->setExpanded(!layer.modelAnimations.isEmpty());
         }
         auto* behaviors = group(tr("Behaviors"), "timelineAddBehavior_", true);
         for (int c = 0; c < layer.clips.size(); ++c) {
@@ -430,6 +487,541 @@ void TimelineWidget::rebuildTree()
     m_tree->verticalScrollBar()->setValue(scroll);
     m_rebuilding = false;
     applySearch(); refreshValues(); syncLanes();
+}
+
+// One property row of a layer group: its label, an editor of `spec`'s kind
+// reading `get` and writing through `set` as one undoable change - and, for a
+// property that animates, the reference's name of it (`keyed`): the row then
+// carries a key button and its lane the property's keys.
+struct TimelinePropertyRow
+{
+    const char* context;
+    const char* label;
+    QString key;
+    plugin::EffectParameterSpec spec;
+    std::function<QVariant(const composition::Layer&, int frame)> get;
+    std::function<void(composition::Layer&, const QVariant&, int frame)> set;
+    QString title;   // the undo text; "Set <label>" when empty
+    QString keyed = QString();
+};
+
+namespace {
+
+plugin::EffectParameterSpec numberSpec(double minimum, double maximum, const QString& unit, int decimals = 1)
+{
+    plugin::EffectParameterSpec spec;
+    spec.type = QStringLiteral("double");
+    spec.minimum = minimum;
+    spec.maximum = maximum;
+    spec.unit = unit;
+    spec.decimals = decimals;
+    return spec;
+}
+
+plugin::EffectParameterSpec choiceSpec(const char* context, std::initializer_list<std::pair<const char*, int>> items)
+{
+    plugin::EffectParameterSpec spec;
+    spec.type = QStringLiteral("choice");
+    for (const auto& item : items) {
+        spec.choices << QCoreApplication::translate(context, item.first);
+        spec.choiceValues << QString::number(item.second);
+    }
+    return spec;
+}
+
+plugin::EffectParameterSpec kindSpec(const char* type)
+{
+    plugin::EffectParameterSpec spec;
+    spec.type = QString::fromLatin1(type);
+    return spec;
+}
+
+QVariant boolValue(bool on) { return on ? QStringLiteral("true") : QStringLiteral("false"); }
+bool isOn(const QVariant& value) { return value.toString() == QLatin1String("true") || value.toString() == QLatin1String("1"); }
+
+// A row of a property that animates (composition::keyedLayerProperty), read
+// and written at the playhead: a key there once it has keys. A colour's
+// editor speaks "#rrggbb".
+TimelinePropertyRow keyedRow(const char* context, const char* label, const char* key, const char* name,
+                             const plugin::EffectParameterSpec& spec)
+{
+    const QString property = QString::fromLatin1(name);
+    const bool colour = spec.type == QLatin1String("color");
+    return {context, label, QString::fromLatin1(key), spec,
+            [property, colour](const composition::Layer& layer, int frame) {
+                const QVariant value = composition::keyedLayerPropertyAt(layer, property, frame);
+                return colour ? QVariant(value.value<QColor>().name()) : value;
+            },
+            [property, colour](composition::Layer& layer, const QVariant& value, int frame) {
+                composition::setKeyedLayerProperty(layer, property,
+                                                   colour ? QVariant(QColor(value.toString())) : QVariant(value.toDouble()),
+                                                   frame);
+            },
+            QString(), property};
+}
+
+// A static on/off row of a layer's Material.
+TimelinePropertyRow flagRow(const char* label, const char* key, bool composition::SurfaceShading::*member)
+{
+    return {"AssetLayerGroupFactory", label, QString::fromLatin1(key), kindSpec("bool"),
+            [member](const composition::Layer& layer, int) { return boolValue(layer.surface.*member); },
+            [member](composition::Layer& layer, const QVariant& value, int) { layer.surface.*member = isOn(value); },
+            QString()};
+}
+
+} // namespace
+
+void TimelineWidget::addLightRows(int l, QTreeWidgetItem* parent)
+{
+    // The reference's Light group (LightLayerGroupFactory), in its order:
+    // the kind of light and how it shines and casts shadows. Its colours
+    // and numbers animate; Type, Cast Shadows and Falloff do not.
+    using Light = composition::LightSettings;
+    const auto light = [](composition::Layer& layer) -> Light& { return layer.light; };
+    const QString percent = QStringLiteral("%");
+    const char* group = "LightLayerGroupFactory";
+    const QVector<TimelinePropertyRow> rows = {
+        {group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Type"), "type",
+         choiceSpec("LightLayerGroupFactory", {{QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Ambient"), 1},
+                                               {QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Point"), 2},
+                                               {QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Spot"), 3},
+                                               {QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Directional"), 4}}),
+         [](const composition::Layer& layer, int) { return QVariant(QString::number(int(layer.light.type))); },
+         [light](composition::Layer& layer, const QVariant& value, int) { light(layer).type = Light::Type(value.toInt()); },
+         QCoreApplication::translate("DataUtilities", "Set Light Layer Type")},
+        keyedRow(group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Color"), "color", "color", kindSpec("color")),
+        keyedRow(group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Intensity"), "intensity", "intensity",
+                 numberSpec(0.0, 10000.0, percent)),
+        {group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Cast Shadows"), "castShadows", kindSpec("bool"),
+         [](const composition::Layer& layer, int) { return boolValue(layer.light.castShadows); },
+         [light](composition::Layer& layer, const QVariant& value, int) { light(layer).castShadows = isOn(value); }, {}},
+        {group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Falloff"), "falloff",
+         choiceSpec("LightLayerGroupFactory", {{QT_TRANSLATE_NOOP("LightLayerGroupFactory", "None"), 1},
+                                               {QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Linear"), 2},
+                                               {QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Curve"), 3}}),
+         [](const composition::Layer& layer, int) { return QVariant(QString::number(int(layer.light.falloff))); },
+         [light](composition::Layer& layer, const QVariant& value, int) { light(layer).falloff = Light::Falloff(value.toInt()); }, {}},
+        keyedRow(group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Reach"), "reach", "reach",
+                 numberSpec(0.0, 1000000.0, QCoreApplication::translate("LightLayerGroupFactory", "px"))),
+        keyedRow(group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Cone Angle"), "coneAngle", "spotlightAngle",
+                 numberSpec(0.0, 180.0, QStringLiteral("\u00b0"))),
+        keyedRow(group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Feather"), "feather", "spotlightFeather",
+                 numberSpec(0.0, 100.0, percent)),
+        keyedRow(group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Shadow Opacity"), "shadowOpacity", "shadowOpacity",
+                 numberSpec(0.0, 100.0, percent)),
+        keyedRow(group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Shadow Diffusion"), "shadowDiffusion",
+                 "shadowDiffusion", numberSpec(0.0, 100.0, percent)),
+        keyedRow(group, QT_TRANSLATE_NOOP("LightLayerGroupFactory", "Shadow Color"), "shadowColor", "shadowColor",
+                 kindSpec("color")),
+    };
+    addPropertyRows(l, parent, rows, QStringLiteral("timelineLight_"));
+}
+
+void TimelineWidget::addCameraRows(int l, QTreeWidgetItem* parent)
+{
+    // The reference's Lens group: Zoom (the distance in pixels at which the
+    // shot's frame fills the lens), Focus Distance, Aperture and Blur, which
+    // the depth of field is drawn with and which all animate - and, first,
+    // whether the camera has one.
+    using Camera = composition::CameraSettings;
+    const auto camera = [](composition::Layer& layer) -> Camera& { return layer.camera; };
+    const QString px = QCoreApplication::translate("LightLayerGroupFactory", "px");
+    const char* group = "CameraLayerGroupFactory";
+    const QVector<TimelinePropertyRow> rows = {
+        // HasDoF: whether the camera blurs what is out of focus.
+        {"CompositionFactory", QT_TRANSLATE_NOOP("CompositionFactory", "Depth of Field"), "depthOfField",
+         kindSpec("bool"),
+         [](const composition::Layer& layer, int) { return boolValue(layer.camera.depthOfField); },
+         [camera](composition::Layer& layer, const QVariant& value, int) { camera(layer).depthOfField = isOn(value); },
+         QCoreApplication::translate("DataUtilities", "Set Camera Layer Depth of Field")},
+        keyedRow(group, QT_TRANSLATE_NOOP("CameraLayerGroupFactory", "Zoom"), "zoom", "zoom",
+                 numberSpec(0.0, 1000000.0, px)),
+        keyedRow(group, QT_TRANSLATE_NOOP("CameraLayerGroupFactory", "Focus Distance"), "focusDistance",
+                 "focusDistance", numberSpec(0.0, 1000000.0, px)),
+        keyedRow(group, QT_TRANSLATE_NOOP("CameraLayerGroupFactory", "Aperture"), "aperture", "aperture",
+                 numberSpec(0.0, 100000.0, px)),
+        keyedRow(group, QT_TRANSLATE_NOOP("CameraLayerGroupFactory", "Blur"), "blur", "blurDoF",
+                 numberSpec(0.0, 1000.0, QStringLiteral("%"))),
+    };
+    addPropertyRows(l, parent, rows, QStringLiteral("timelineCamera_"));
+}
+
+void TimelineWidget::addSurfaceRows(int l, QTreeWidgetItem* parent)
+{
+    // The part of the reference's Material group (AssetLayerGroupFactory,
+    // VegasEffects.exe 0x1405e0130) the renderer takes, in its order:
+    // whether lights and shadows reach the layer, whether it casts them
+    // while hidden, a model's Self Shadow Bias, a media or plane layer's
+    // Billboarded Lights and Shadows, and - but for a model, whose
+    // materials bring their own - its Ambient, Diffuse, Specular,
+    // Shininess and Emissive, which animate.
+    using Surface = composition::SurfaceShading;
+    const composition::LayerKind kind = m_comp->layers()[l].kind;
+    const bool model = kind == composition::LayerKind::Model3D;
+    const QString percent = QStringLiteral("%");
+    const char* group = "AssetLayerGroupFactory";
+    QVector<TimelinePropertyRow> rows = {
+        flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Illuminated"), "illuminated", &Surface::illuminated),
+        flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Receives Shadows"), "receiveShadows",
+                &Surface::receiveShadows),
+        flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Casts Shadows"), "castShadows", &Surface::castShadows),
+        flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Cast Shadows If Visibility Is Off"),
+                "castShadowsIfInvisible", &Surface::castShadowsIfInvisible),
+    };
+    if (model) {
+        rows.append({group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Self Shadow Bias"), "selfShadowBias",
+                     numberSpec(1.0, 1000.0, QString()),
+                     [](const composition::Layer& layer, int) { return QVariant(layer.surface.selfShadowBias); },
+                     [](composition::Layer& layer, const QVariant& value, int) {
+                         layer.surface.selfShadowBias = qBound(1.0, value.toDouble(), 1000.0);
+                     },
+                     QString()});
+    }
+    if (kind == composition::LayerKind::Media || kind == composition::LayerKind::Plane) {
+        rows.append(flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Billboarded Lights"), "billboardedLights",
+                            &Surface::billboardedLights));
+        rows.append(flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Billboarded Shadows"), "billboardedShadows",
+                            &Surface::billboardedShadows));
+    }
+    if (!model) {
+        rows.append(keyedRow(group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Ambient"), "ambient", "matAmbient",
+                             numberSpec(0.0, 1000.0, percent)));
+        rows.append(keyedRow(group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Diffuse"), "diffuse", "matDiffuse",
+                             numberSpec(0.0, 1000.0, percent)));
+        rows.append(keyedRow(group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Specular"), "specular", "matSpecular",
+                             numberSpec(0.0, 1000.0, percent)));
+        rows.append(keyedRow(group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Shininess"), "shininess",
+                             "matShininess", numberSpec(0.0, 10000.0, QString())));
+        rows.append(keyedRow(group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Emissive"), "emissive",
+                             "matEmissiveColor", kindSpec("color")));
+    }
+    addPropertyRows(l, parent, rows, QStringLiteral("timelineSurface_"));
+}
+
+void TimelineWidget::addPropertyRows(int l, QTreeWidgetItem* parent, const QVector<TimelinePropertyRow>& rows,
+                                     const QString& prefix)
+{
+    const composition::Layer& layer = m_comp->layers()[l];
+    const int generation = m_treeGeneration;
+    for (const TimelinePropertyRow& property : rows) {
+        auto* item = new QTreeWidgetItem(parent, {QCoreApplication::translate(property.context, property.label)});
+        item->setData(0, Qt::UserRole, l);
+        if (!property.keyed.isEmpty()) {
+            // Its key button, full while it has keys; its lane shows them.
+            item->setData(0, kLayerPropertyRole, property.keyed);
+            const composition::KeyedLayerProperty keyed =
+                composition::keyedLayerProperty(m_comp->layerRef(l), property.keyed);
+            item->setIcon(0, QIcon(keyed.curve && !keyed.curve->isEmpty() ? ":/icons/key-frame-full.svg"
+                                                                          : ":/icons/key-frame-off.svg"));
+            item->setToolTip(0, tr("Toggle keyframe at the playhead"));
+        }
+        plugin::EffectParameterSpec spec = property.spec;
+        spec.displayName = item->text(0);
+        const auto get = property.get;
+        const auto set = property.set;
+        const auto read = [this, l, get]() -> QVariant {
+            if (!m_comp || l >= m_comp->layers().size()) return QVariant();
+            return get(m_comp->layers()[l], currentFrame());
+        };
+        const QString title = property.title.isEmpty() ? tr("Set %1").arg(item->text(0)) : property.title;
+        const auto write = [this, l, read, set, generation, title](QVariant value) {
+            if (m_rebuilding || generation != m_treeGeneration || !m_comp || l >= m_comp->layers().size()) return;
+            if (read().toString() == value.toString() || m_comp->layers()[l].locked) return;
+            const int frame = currentFrame();
+            editLayer(l, title, [set, value, frame](composition::Layer& target) { set(target, value, frame); });
+        };
+        QWidget* editor = timelineParameterEditor(m_tree, spec, prefix + QStringLiteral("%1_%2").arg(l).arg(property.key),
+                                                  read, write, m_valueReaders);
+        editor->setEnabled(!layer.locked);
+        m_tree->setItemWidget(item, 1, editor);
+    }
+}
+
+void TimelineWidget::addMaterialRows(int l, const model3d::Mesh& mesh, QTreeWidgetItem* parent)
+{
+    // Override Materials (the reference's Model3DFactory group, a
+    // Model3DMaterialOverride per material): where each of a material's maps
+    // comes from - the model's file, nowhere, or a layer's picture - and how
+    // strongly the bump map turns the surface.
+    const composition::Layer& layer = m_comp->layers()[l];
+    using Override = composition::ModelMaterialOverride;
+    using Source = Override::MapSource;
+    struct MapRows { Override::Map map; const char* source; const char* layer; };
+    static const MapRows kMaps[] = {
+        {Override::Map::Diffuse, QT_TRANSLATE_NOOP("Model3DFactory", "Diffuse Map Source"),
+         QT_TRANSLATE_NOOP("Model3DFactory", "Diffuse Map Layer")},
+        {Override::Map::Specular, QT_TRANSLATE_NOOP("Model3DFactory", "Specular Map Source"),
+         QT_TRANSLATE_NOOP("Model3DFactory", "Specular Map Layer")},
+        {Override::Map::Normal, QT_TRANSLATE_NOOP("Model3DFactory", "Normal Map Source"),
+         QT_TRANSLATE_NOOP("Model3DFactory", "Normal Map Layer")},
+        {Override::Map::Bump, QT_TRANSLATE_NOOP("Model3DFactory", "Bump Map Source"),
+         QT_TRANSLATE_NOOP("Model3DFactory", "Bump Map Layer")},
+        {Override::Map::Emissive, QT_TRANSLATE_NOOP("Model3DFactory", "Emissive Map Source"),
+         QT_TRANSLATE_NOOP("Model3DFactory", "Emissive Map Layer")},
+        {Override::Map::Occlusion, QT_TRANSLATE_NOOP("Model3DFactory", "Occlusion Map Source"),
+         QT_TRANSLATE_NOOP("Model3DFactory", "Occlusion Map Layer")},
+        {Override::Map::Metallic, QT_TRANSLATE_NOOP("Model3DFactory", "Metallic Map Source"),
+         QT_TRANSLATE_NOOP("Model3DFactory", "Metallic Map Layer")},
+        {Override::Map::Roughness, QT_TRANSLATE_NOOP("Model3DFactory", "Roughness Map Source"),
+         QT_TRANSLATE_NOOP("Model3DFactory", "Roughness Map Layer")},
+        {Override::Map::SpecularGlossiness, QT_TRANSLATE_NOOP("Model3DFactory", "Specular-Glossiness Map Source"),
+         QT_TRANSLATE_NOOP("Model3DFactory", "Specular-Glossiness Map Layer")},
+    };
+    for (int m = 0; m < mesh.materials.size(); ++m) {
+        const QString name = mesh.materials.at(m).name;
+        auto* row = new QTreeWidgetItem(parent, {name.isEmpty()
+            ? QCoreApplication::translate("AssetLayerGroupFactory", "Material") : name});
+        row->setData(0, Qt::UserRole, l);
+        const Override* current = layer.materialOverride(name);
+        const QString title = QCoreApplication::translate("DataUtilities", "Set 3D Model Material Override");
+        const auto change = [this, l, name, title](const std::function<void(Override&)>& set) {
+            editLayer(l, title, [name, set](composition::Layer& target) {
+                Override* entry = target.materialOverride(name);
+                if (!entry) {
+                    target.materialOverrides.append(Override());
+                    entry = &target.materialOverrides.last();
+                    entry->material = name;
+                }
+                set(*entry);
+            }, true);
+        };
+        for (const MapRows& rows : kMaps) {
+            const Override::MapOverride state = current ? current->map(rows.map) : Override::MapOverride();
+            const QString key = QString::fromLatin1(Override::mapKey(rows.map));
+            auto* sourceRow = new QTreeWidgetItem(
+                row, {QCoreApplication::translate("Model3DFactory", rows.source)});
+            sourceRow->setData(0, Qt::UserRole, l);
+            auto* sources = new QComboBox(m_tree);
+            sources->setObjectName(QStringLiteral("timelineMaterialSource_%1_%2_%3").arg(l).arg(m).arg(key));
+            sources->addItem(QCoreApplication::translate("Model3DFactory", "None"), int(Source::None));
+            sources->addItem(QCoreApplication::translate("Model3DFactory", "From File"), int(Source::FromFile));
+            sources->addItem(QCoreApplication::translate("Model3DFactory", "Use Layer"), int(Source::UseLayer));
+            sources->setCurrentIndex(sources->findData(int(state.source)));
+            sources->setEnabled(!layer.locked);
+            m_tree->setItemWidget(sourceRow, 1, sources);
+            const Override::Map map = rows.map;
+            connect(sources, &QComboBox::activated, this, [sources, change, map](int index) {
+                const Source chosen = Source(sources->itemData(index).toInt());
+                change([chosen, map](Override& entry) { entry.map(map).source = chosen; });
+            });
+
+            auto* layerRow = new QTreeWidgetItem(
+                row, {QCoreApplication::translate("Model3DFactory", rows.layer)});
+            layerRow->setData(0, Qt::UserRole, l);
+            auto* layers = new QComboBox(m_tree);
+            layers->setObjectName(QStringLiteral("timelineMaterialLayer_%1_%2_%3").arg(l).arg(m).arg(key));
+            layers->addItem(QCoreApplication::translate("Model3DFactory", "None"), QString());
+            for (const composition::Layer& candidate : m_comp->layers()) {
+                // A model's picture cannot be a map of a model.
+                if (candidate.id == layer.id || candidate.kind == composition::LayerKind::Model3D) continue;
+                layers->addItem(candidate.name, candidate.id.value());
+            }
+            layers->setCurrentIndex(qMax(0, layers->findData(state.layer.value())));
+            layers->setEnabled(!layer.locked && state.source == Source::UseLayer);
+            m_tree->setItemWidget(layerRow, 1, layers);
+            connect(layers, &QComboBox::activated, this, [layers, change, map](int index) {
+                const core::Identifier id(layers->itemData(index).toString());
+                change([id, map](Override& entry) { entry.map(map).layer = id; });
+            });
+            if (rows.map != Override::Map::Bump) continue;
+            auto* scaleRow = new QTreeWidgetItem(
+                row, {QCoreApplication::translate("Model3DFactory", "Bump Map Scale")});
+            scaleRow->setData(0, Qt::UserRole, l);
+            auto* scale = new QDoubleSpinBox(m_tree);
+            scale->setObjectName(QStringLiteral("timelineMaterialBumpScale_%1_%2").arg(l).arg(m));
+            scale->setRange(0.0, 100.0); scale->setDecimals(2); scale->setSingleStep(0.1);
+            scale->setValue(current ? current->bumpMapScale : 1.0);
+            scale->setEnabled(!layer.locked);
+            m_tree->setItemWidget(scaleRow, 1, scale);
+            connect(scale, &QDoubleSpinBox::editingFinished, this, [scale, change] {
+                const double value = scale->value();
+                change([value](Override& entry) { entry.bumpMapScale = value; });
+            });
+        }
+    }
+}
+
+bool TimelineWidget::insertModelAnimation(int l, const QString& filePath, int index)
+{
+    if (!m_comp || l < 0 || l >= m_comp->layers().size()) return false;
+    const composition::Layer& layer = m_comp->layers()[l];
+    if (layer.kind != composition::LayerKind::Model3D || layer.locked) return false;
+    const QString modelFile = m_media ? m_media->assetById(layer.modelAssetId).sourcePath() : QString();
+    const bool own = filePath.isEmpty()
+        || QFileInfo(filePath).absoluteFilePath() == QFileInfo(modelFile).absoluteFilePath();
+    QVector<model3d::ModelAnimation> available;
+    if (own && m_media) {
+        available = m_media->modelMesh(layer.modelAssetId).animations;
+    } else if (const auto source = model3d::animationSource(filePath)) {
+        available = source->animations;
+    }
+    if (index < 0 || index >= available.size()) return false;
+    composition::ModelAnimationInstance instance;
+    instance.name = available.at(index).name;
+    instance.filePath = own ? QString() : QFileInfo(filePath).absoluteFilePath();
+    instance.animationIndex = index;
+    editLayer(l, QCoreApplication::translate("QObject", "Insert 3D Model Animation Instance"),
+              [instance](composition::Layer& target) { target.modelAnimations.append(instance); }, true);
+    return true;
+}
+
+void TimelineWidget::showModelAnimationMenu(int l, QWidget* anchor)
+{
+    if (!m_comp || l < 0 || l >= m_comp->layers().size()) return;
+    const composition::Layer& layer = m_comp->layers()[l];
+    QMenu menu(this);
+    menu.setObjectName(QStringLiteral("timelineModelAnimationMenu"));
+    if (m_media) {
+        const QVector<model3d::ModelAnimation> own = m_media->modelMesh(layer.modelAssetId).animations;
+        for (int a = 0; a < own.size(); ++a) {
+            menu.addAction(own.at(a).name, this, [this, l, a] { insertModelAnimation(l, QString(), a); });
+        }
+        if (!own.isEmpty()) menu.addSeparator();
+    }
+    const QString modelFile = m_media ? m_media->assetById(layer.modelAssetId).sourcePath() : QString();
+    menu.addAction(QCoreApplication::translate("biff::ui::media::MediaActions", "3D Model Animation..."),
+                   this, [this, l, modelFile] {
+        const QString chosen = QFileDialog::getOpenFileName(
+            this, QCoreApplication::translate("biff::ui::media::MediaActions", "Import 3D Model Animation"),
+            QFileInfo(modelFile).absolutePath(), model3d::animationFileFilter());
+        if (chosen.isEmpty()) return;
+        if (m_media && m_media->importModelAnimation(chosen).isSuccess()) emit modelAnimationImported();
+        if (!insertModelAnimation(l, chosen, 0)) {
+            QMessageBox::warning(this, QCoreApplication::translate("biff::ui::media::MediaActions",
+                                                                   "Import 3D Model Animation"),
+                                 QCoreApplication::translate("AnimationSettingsDialog",
+                                                             "The animation could not be imported."));
+        }
+    });
+    menu.exec(anchor ? anchor->mapToGlobal(QPoint(0, anchor->height())) : QCursor::pos());
+}
+
+void TimelineWidget::addModelAnimationRows(int l, QTreeWidgetItem* parent)
+{
+    // Each instance as the reference's Model3DFactory shows it - Strength,
+    // Loop, Custom Playback and Playback - with its properties
+    // (AnimationSettingsDialog) and its removal on the instance's row.
+    const composition::Layer& layer = m_comp->layers()[l];
+    const QString modelFile = m_media ? m_media->assetById(layer.modelAssetId).sourcePath() : QString();
+    for (int a = 0; a < layer.modelAnimations.size(); ++a) {
+        const composition::ModelAnimationInstance& instance = layer.modelAnimations.at(a);
+        const core::Identifier id = instance.id;
+        auto* row = new QTreeWidgetItem(parent, {instance.name.isEmpty()
+            ? QCoreApplication::translate("DataUtilities", "3D Model Animation Instance") : instance.name});
+        row->setData(0, Qt::UserRole, l);
+        auto* controls = new QWidget(m_tree);
+        auto* cl = new QHBoxLayout(controls); cl->setContentsMargins(0, 0, 0, 0); cl->setSpacing(3);
+        cl->addStretch();
+        auto* properties = iconButton(controls, QStringLiteral("timelineModelAnimationProperties_%1_%2").arg(l).arg(a),
+                                      "settings", QCoreApplication::translate("Model3DAnimationAssetTreeWidget", "Show Properties"));
+        properties->setEnabled(!layer.locked); cl->addWidget(properties);
+        auto* remove = iconButton(controls, QStringLiteral("timelineModelAnimationRemove_%1_%2").arg(l).arg(a),
+                                  "tab-close", QCoreApplication::translate("QObject", "Remove 3D Model Animation Instance"));
+        remove->setEnabled(!layer.locked); cl->addWidget(remove);
+        m_tree->setItemWidget(row, 1, controls);
+        const auto change = [this, l, id](const QString& title,
+                                          const std::function<void(composition::ModelAnimationInstance&)>& set,
+                                          bool rebuild) {
+            editLayer(l, title, [id, set](composition::Layer& target) {
+                for (composition::ModelAnimationInstance& entry : target.modelAnimations)
+                    if (entry.id == id) set(entry);
+            }, rebuild);
+        };
+        const QString setProperty = QCoreApplication::translate("QObject", "Set Property");
+        connect(remove, &QToolButton::clicked, this, [this, l, id] {
+            editLayer(l, QCoreApplication::translate("QObject", "Remove 3D Model Animation Instance"),
+                      [id](composition::Layer& target) {
+                for (int k = 0; k < target.modelAnimations.size(); ++k)
+                    if (target.modelAnimations.at(k).id == id) { target.modelAnimations.removeAt(k); break; }
+            }, true);
+        });
+        connect(properties, &QToolButton::clicked, this, [this, instance, modelFile, change] {
+            ModelAnimationDialog dialog(instance, modelFile, this);
+            if (dialog.exec() != QDialog::Accepted) return;
+            const composition::ModelAnimationInstance edited = dialog.instance();
+            change(QCoreApplication::translate("QObject", "Edit 3D Model Animation Asset"),
+                   [edited](composition::ModelAnimationInstance& target) {
+                target.name = edited.name;
+                target.filePath = edited.filePath;
+                target.animationIndex = edited.animationIndex;
+                target.frameRateOverridden = edited.frameRateOverridden;
+                target.frameRate = edited.frameRate;
+            }, true);
+        });
+
+        // A value that has keys is set at the playhead; otherwise its own.
+        const auto keyed = [this](composition::KeyFrameList& curve, double& value, double next) {
+            if (curve.isEmpty()) { value = next; return; }
+            const double fps = m_comp && m_comp->fpsDenominator() > 0
+                ? double(m_comp->fpsNumerator()) / m_comp->fpsDenominator() : 30.0;
+            curve.set(qRound(playhead() * fps), next);
+        };
+        const auto addRow = [&](const char* label, QWidget* editor, int keyed = -1) {
+            auto* line = new QTreeWidgetItem(row, {QCoreApplication::translate("Model3DFactory", label)});
+            line->setData(0, Qt::UserRole, l);
+            if (keyed >= 0) {
+                // Strength and Playback animate: their keys show on the row's
+                // lane, and its key button sets one at the playhead.
+                line->setData(0, kModelAnimationRole, id.value());
+                line->setData(0, kModelAnimationPropertyRole, keyed);
+                const composition::KeyFrameList& curve = keyed == int(ModelAnimationProperty::Playback)
+                    ? instance.playbackCurve : instance.strengthCurve;
+                line->setIcon(0, QIcon(curve.isEmpty() ? ":/icons/key-frame-off.svg" : ":/icons/key-frame-full.svg"));
+            }
+            editor->setEnabled(editor->isEnabled() && !layer.locked);
+            m_tree->setItemWidget(line, 1, editor);
+        };
+        auto* strength = new QDoubleSpinBox(m_tree);
+        strength->setObjectName(QStringLiteral("timelineModelAnimationStrength_%1_%2").arg(l).arg(a));
+        strength->setRange(0.0, 100.0); strength->setDecimals(1); strength->setSuffix(QStringLiteral(" %"));
+        strength->setValue(instance.strength);
+        addRow(QT_TRANSLATE_NOOP("Model3DFactory", "Strength"), strength, int(ModelAnimationProperty::Strength));
+        connect(strength, &QDoubleSpinBox::editingFinished, this, [strength, change, setProperty, keyed] {
+            const double value = strength->value();
+            change(setProperty, [value, keyed](composition::ModelAnimationInstance& target) {
+                keyed(target.strengthCurve, target.strength, value);
+            }, false);
+        });
+        auto* loop = new QCheckBox(m_tree);
+        loop->setObjectName(QStringLiteral("timelineModelAnimationLoop_%1_%2").arg(l).arg(a));
+        loop->setChecked(instance.loop);
+        addRow(QT_TRANSLATE_NOOP("Model3DFactory", "Loop"), loop);
+        connect(loop, &QCheckBox::toggled, this, [change, setProperty](bool on) {
+            change(setProperty, [on](composition::ModelAnimationInstance& target) { target.loop = on; }, false);
+        });
+        auto* custom = new QCheckBox(m_tree);
+        custom->setObjectName(QStringLiteral("timelineModelAnimationCustomPlayback_%1_%2").arg(l).arg(a));
+        custom->setChecked(instance.customPlayback);
+        addRow(QT_TRANSLATE_NOOP("Model3DFactory", "Custom Playback"), custom);
+        connect(custom, &QCheckBox::toggled, this, [change, setProperty](bool on) {
+            change(setProperty, [on](composition::ModelAnimationInstance& target) { target.customPlayback = on; }, true);
+        });
+        auto* playback = new QDoubleSpinBox(m_tree);
+        playback->setObjectName(QStringLiteral("timelineModelAnimationPlayback_%1_%2").arg(l).arg(a));
+        playback->setRange(0.0, 1e6); playback->setDecimals(2);
+        playback->setValue(instance.playback);
+        playback->setEnabled(instance.customPlayback);
+        addRow(QT_TRANSLATE_NOOP("Model3DFactory", "Playback"), playback, int(ModelAnimationProperty::Playback));
+        connect(playback, &QDoubleSpinBox::editingFinished, this, [playback, change, setProperty, keyed] {
+            const double value = playback->value();
+            change(setProperty, [value, keyed](composition::ModelAnimationInstance& target) {
+                keyed(target.playbackCurve, target.playback, value);
+            }, false);
+        });
+        m_valueReaders.append([this, l, id, strength, playback] {
+            if (!m_comp || l >= m_comp->layers().size()) return;
+            const double fps = m_comp->fpsDenominator() > 0
+                ? double(m_comp->fpsNumerator()) / m_comp->fpsDenominator() : 30.0;
+            const int frame = qRound(playhead() * fps);
+            for (const composition::ModelAnimationInstance& entry : m_comp->layers()[l].modelAnimations) {
+                if (entry.id != id) continue;
+                const QSignalBlocker bs(strength), bp(playback);
+                if (!strength->hasFocus()) strength->setValue(entry.strengthAt(frame));
+                if (!playback->hasFocus()) playback->setValue(entry.playbackAt(frame));
+            }
+        });
+        row->setExpanded(true);
+    }
 }
 
 void TimelineWidget::addEffectRows(QTreeWidgetItem* parent, int l, int c, bool behaviors)
@@ -478,9 +1070,16 @@ void TimelineWidget::addEffectRows(QTreeWidgetItem* parent, int l, int c, bool b
             presets->setCurrentIndex(0);
         });
         QHash<QString, QTreeWidgetItem*> groups;
+        // The controls the module shows for its values, as in Controls
+        // (EffectInspector::refreshModuleControls).
+        const QString instanceKey =
+            QStringLiteral("%1/%2/%3").arg(m_comp->layers()[l].id.value()).arg(c).arg(e);
+        if (plugin::isNativeModule(effect.pluginId))
+            plugin::refreshNativeControlStates(effect.pluginId, effect.parameterValues, instanceKey);
         const int count = qMax(spec.parameters.size(), effect.parameterValues.size());
         for (int p = 0; p < count; ++p) {
             const auto param = spec.parameters.value(p);
+            if (!plugin::nativeControlShown(instanceKey, param.name, !param.hidden)) continue;
             QTreeWidgetItem* parameterParent = effectRow;
             if (!param.group.isEmpty()) {
                 if (!groups.contains(param.group)) { auto* g = new QTreeWidgetItem(effectRow, {param.group}); g->setExpanded(true); groups.insert(param.group, g); }

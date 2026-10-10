@@ -20,10 +20,13 @@ class QTemporaryDir;
 #include "composition/TextStyle.h"
 #include "license/LicenseManager.h"
 #include "media/AudioPlayer.h"
+#include "media/DecodedFrameCache.h"
 #include "media/MediaManager.h"
 #include "media/VideoProbe.h"
 #include "model3d/ModelImportSettings.h"
 #include "plugin/PluginManager.h"
+#include "render/PreRenderManager.h"
+#include "render/LayerGeometry.h"
 #include "render/RenderManager.h"
 #include "render/ExportJob.h"
 #include "ui/CameraRule.h"
@@ -62,8 +65,11 @@ class MainWindow;
 
 class OptionsDialog;
 class ExportQueue;
+class ExportPresetManager;
 class ExportQueueView;
 class TextTransformOverlay;
+class ModelNodeOverlay;
+class SceneObjectOverlay;
 class NativeCustomUiOverlay;
 class NativeInstanceHost;
 
@@ -100,6 +106,9 @@ private slots:
     void onRenderRequested();
     void onMotionTrackingRequested(int layerIndex, int trackIndex);
     void onImportMedia();
+    // Media > Import > 3D Model Animation...: the files' animations as Media
+    // assets, to drop onto model layers.
+    void onImportModelAnimation();
     // Viewer manipulation of the selected layer: Orbit turns it about the X
     // and Y axes, Select drags its position. Both edit the model directly and
     // ask for a re-render, which is what makes the viewer a way of placing a
@@ -184,8 +193,15 @@ private:
     // File > Project Settings... (or New Project Settings for File > New).
     void editProjectSettings(bool newProject);
     void storePlayheadInComposition();
+    // The Viewer's layout and views into the shot (<ViewerState>), and back
+    // when the shot is shown again.
+    void storeViewerInComposition();
+    void applyViewerFromComposition();
     void wireSignals();
     void requestRenderFrame();
+    // The Viewer's views with a camera of their own (Perspective, Front, ...),
+    // each drawn by a renderer of its own at `size`.
+    void requestViewFrames(const QSize& size, bool withEffects);
     void beginPlayback();
     void stopPlayback();
     // Picks the composition's first audio clip and hands it to the player.
@@ -227,6 +243,11 @@ private:
     // Timeline cache directory/retention and automatic render cache from
     // Options; `prune` removes expired frames (done once at startup).
     void applyTimelineCacheOptions(bool prune = false);
+    // Options/TimelineCache, or the default folder when unset.
+    static QString timelineCacheDirectory();
+    // Options > Render for an export: frames at once, and with Turbo the
+    // timeline cache its frames may come from.
+    static void applyRenderOptions(render::ExportJob::Request& request);
     void exportFrameToFile(const QString& path);
     // Reference "Export Frame": writes the shown frame into the snapshot
     // directory under a numbered name, without asking for a path.
@@ -242,7 +263,8 @@ private:
     // Imports a model and puts a 3D layer on the timeline for it. Reached from
     // importFiles(), which is where every route into the project ends up - the
     // Import command, a drop on the Media panel, a drop on the window.
-    bool addModelLayer(const QString& path, const model3d::ImportSettings& settings);
+    bool addModelLayer(const QString& path, const model3d::ImportSettings& settings,
+                       const QVector<model3d::Material>& materials = QVector<model3d::Material>());
     // Opens an undo macro named `text` for layers about to be added; when one
     // of them needs a camera the shot lacks, asks first (CameraRule) and puts
     // the camera in the macro. False on Cancel, with no macro left open;
@@ -258,6 +280,9 @@ private:
     // Bounding box of the selected layer in canvas pixels, for the Layout panel.
     QRectF selectedLayerBounds() const;
     QRectF layerBounds(int layerIndex) const;
+    // The selected layers that have a box for Layout (a camera, a light or
+    // a point shows nothing to align), in selection order.
+    QVector<int> layoutLayers() const;
     void editLayoutTransforms(const QString& title,
         const std::function<void(int, composition::LayerTransform&, int)>& edit);
     // The text effect on the selected clip, or null when it is not a text layer.
@@ -320,6 +345,8 @@ protected:
     QVector<std::shared_ptr<composition::Composition>> m_openCompositions;
     std::shared_ptr<media::MediaManager> m_mediaManager;
     render::RenderManager* m_renderManager = nullptr;
+    std::array<render::RenderManager*, 4> m_viewRenderers{};
+    std::array<render::ViewCameraState, 4> m_viewStates;
 
     EffectsPanel* m_effectsPanel = nullptr;
     MediaPanel* m_mediaPanel = nullptr;
@@ -345,8 +372,17 @@ protected:
     // Shown in the Viewer tab while the page is in the 360 Viewer tab.
     QWidget* m_viewerPlaceholder = nullptr;
     std::unique_ptr<TextTransformOverlay> m_textOverlay;
+    // The selected model layer's nodes in the Viewer, and the node selected
+    // in it (by path, on the layer with this id).
+    std::unique_ptr<ModelNodeOverlay> m_modelNodeOverlay;
+    QString m_selectedModelNodeLayer;
+    QString m_selectedModelNode;
+    QVector<composition::Layer> m_modelNodeDragBefore;
     // The custom UI of the selected native effect (MotionTrack, BendGeometry).
     std::unique_ptr<NativeCustomUiOverlay> m_customUiOverlay;
+    // The shot's cameras, lights and points in every view of the Viewer.
+    std::unique_ptr<SceneObjectOverlay> m_sceneObjectOverlay;
+    QVector<composition::Layer> m_sceneObjectDragBefore;
     // Native modules on an instance of their own (MotionTrack): footage,
     // background analysis, the matrices the renderer reads.
     std::unique_ptr<NativeInstanceHost> m_instanceHost;
@@ -383,6 +419,8 @@ protected:
     QHash<QString, std::shared_ptr<media::VideoDecoder>> m_videoDecoders;
     // Most recently used last; the front is evicted once the cap is passed.
     QStringList m_videoDecoderOrder;
+    // Frames that were slow to decode, kept in the media cache on disk.
+    media::DecodedFrameCache* m_decodedFrames = nullptr;
 
     QTimer m_playbackTimer;
     QTimer m_audioScrubTimer;
@@ -393,7 +431,8 @@ protected:
     bool m_previewUsesProxies = false;
     QTimer m_videoDecodeTimer;
     // Running pre-renders by folder, so a new request replaces the old one.
-    QHash<QString, QPointer<render::RenderManager>> m_preRenderTasks;
+    // Make/Remove Pre-Render(s): the queue the shots wait in.
+    render::PreRenderManager* m_preRenders = nullptr;
     QTimer m_autoSaveTimer;
     bool m_playing = false;
     int m_renderedFrameIndex = 0;
@@ -402,6 +441,9 @@ protected:
     QPointer<render::ExportJob> m_exportJob;
     ExportQueue* m_exportQueue = nullptr;
     ExportQueueView* m_exportQueueView = nullptr;
+    ExportPresetManager* m_exportPresets = nullptr;
+    // Whether the Export panel's preset can export the shot; says why not.
+    bool exportPresetUsable();
 };
 
 } // namespace ui

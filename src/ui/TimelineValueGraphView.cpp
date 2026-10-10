@@ -153,6 +153,22 @@ double TimelineValueGraphView::valueAtY(double y) const
     return m_valueLow + norm * (m_valueHigh - m_valueLow);
 }
 
+namespace {
+
+// The curves of a lane the graph can plot: those holding numbers. A colour's
+// keys (a light's Color, a Material's Emissive) show on the track canvas only.
+QVector<composition::KeyFrameList*> graphCurves(composition::Composition* comp, const TimelineLane& lane)
+{
+    QVector<composition::KeyFrameList*> curves = laneCurves(comp, lane);
+    curves.erase(std::remove_if(curves.begin(), curves.end(), [](const composition::KeyFrameList* curve) {
+        const composition::KeyFrame* first = curve ? curve->firstByTime() : nullptr;
+        return first && first->value.typeId() == QMetaType::QColor;
+    }), curves.end());
+    return curves;
+}
+
+} // namespace
+
 QVector<int> TimelineValueGraphView::animatedLanes() const
 {
     QVector<int> out;
@@ -161,7 +177,7 @@ QVector<int> TimelineValueGraphView::animatedLanes() const
     }
     auto* comp = m_comp.get();
     for (int i = 0; i < m_lanes.size(); ++i) {
-        const QVector<composition::KeyFrameList*> curves = laneCurves(comp, m_lanes.at(i));
+        const QVector<composition::KeyFrameList*> curves = graphCurves(comp, m_lanes.at(i));
         for (const composition::KeyFrameList* curve : curves) {
             if (curve && !curve->isEmpty()) {
                 out.append(i);
@@ -192,7 +208,7 @@ composition::KeyFrameList* TimelineValueGraphView::activeCurve() const
     // A point-valued transform row carries one curve per axis. The graph edits
     // one of them - the first that holds keys - because a node dragged in value
     // means one number, not a pair.
-    const QVector<composition::KeyFrameList*> curves = laneCurves(m_comp.get(), m_lanes.at(lane));
+    const QVector<composition::KeyFrameList*> curves = graphCurves(m_comp.get(), m_lanes.at(lane));
     for (composition::KeyFrameList* curve : curves) {
         if (curve && !curve->isEmpty()) {
             return curve;
@@ -421,7 +437,7 @@ void TimelineValueGraphView::paintEvent(QPaintEvent*)
         const QVector<int> animated = animatedLanes();
         for (int laneIndex : animated) {
             const QVector<composition::KeyFrameList*> curves =
-                laneCurves(comp, m_lanes.at(laneIndex));
+                graphCurves(comp, m_lanes.at(laneIndex));
             for (const composition::KeyFrameList* curve : curves) {
                 if (curve != active) {
                     drawCurve(curve, false);

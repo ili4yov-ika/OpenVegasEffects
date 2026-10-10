@@ -54,6 +54,10 @@ private slots:
     void onCategoryChanged(int row);
     void onRestoreDefaults();
 
+signals:
+    // Before the pre-render directory is deleted: running pre-renders stop.
+    void preRendersAboutToBeDeleted();
+
 private:
     QWidget* buildGeneralPage();
     QWidget* buildInterfacePage();

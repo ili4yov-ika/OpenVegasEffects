@@ -1,6 +1,7 @@
 #include "media/MediaManager.h"
 
 #include <QDir>
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QMutexLocker>
 #include <QStringList>
@@ -85,14 +86,46 @@ MediaKind MediaManager::kindForPath(const QString& filePath)
 void MediaManager::registerMissingFile(const QString& filePath)
 {
     if (!filePath.isEmpty() && !assetByFilePath(filePath).isValid()) {
+        if (filePath.endsWith(QLatin1String(kModelAnimationMarker))) {
+            m_assets.push_back(MediaAsset::fromModelAnimation(
+                filePath.chopped(int(qstrlen(kModelAnimationMarker))), 0.0, 0.0));
+            return;
+        }
         MediaAsset asset;
         asset.setFilePath(filePath);
         m_assets.push_back(asset);
     }
 }
 
+core::Result MediaManager::importModelAnimation(const QString& filePath, QString* assetPath)
+{
+    const QString file = filePath.endsWith(QLatin1String(kModelAnimationMarker))
+        ? filePath.chopped(int(qstrlen(kModelAnimationMarker))) : filePath;
+    const QFileInfo info(file);
+    if (!info.exists()) {
+        return core::Result::fail(core::ResultStatus::MissingResource,
+                                  QStringLiteral("File not found: %1").arg(file));
+    }
+    const QString marked = info.absoluteFilePath() + QLatin1String(kModelAnimationMarker);
+    if (assetPath) *assetPath = marked;
+    for (const MediaAsset& existing : m_assets) {
+        if (existing.filePath() == marked) return core::Result::ok();
+    }
+    const auto source = model3d::animationSource(info.absoluteFilePath());
+    if (!source || source->animations.isEmpty()) {
+        return core::Result::fail(core::ResultStatus::InvalidArgument,
+                                  QCoreApplication::translate("AnimationSettingsDialog",
+                                                              "The animation could not be imported."));
+    }
+    const model3d::ModelAnimation& first = source->animations.first();
+    m_assets.push_back(MediaAsset::fromModelAnimation(info.absoluteFilePath(), first.duration, first.frameRate));
+    return core::Result::ok();
+}
+
 core::Result MediaManager::importFile(const QString& filePath)
 {
+    // A model animation asset's path (dragged from Media, or stored).
+    if (filePath.endsWith(QLatin1String(kModelAnimationMarker))) return importModelAnimation(filePath);
     // An image-sequence asset path (dragged from Media, or stored in a
     // project): the asset itself, or the run around its first still.
     if (filePath.endsWith(QLatin1String(kImageSequenceMarker))) {
@@ -164,7 +197,11 @@ core::Result MediaManager::importModel(const QString& filePath, const model3d::I
 
     {
         QMutexLocker lock(&m_videoMutex);
-        m_models.insert(asset.id().value(), loaded.mesh);
+        model3d::Mesh mesh = loaded.mesh;
+        m_modelSourceMaterials.insert(asset.id().value(), mesh.materials);
+        model3d::applyMaterialSettings(mesh, m_modelMaterials.value(asset.id().value()));
+        m_models.insert(asset.id().value(), mesh);
+        ++m_modelRevisions[asset.id().value()];
         m_modelSettings.insert(asset.id().value(), settings);
     }
 
@@ -186,6 +223,12 @@ model3d::Mesh MediaManager::modelMesh(const core::Identifier& id) const
     return m_models.value(id.value());
 }
 
+quint64 MediaManager::modelRevision(const core::Identifier& id) const
+{
+    QMutexLocker lock(&m_videoMutex);
+    return m_modelRevisions.value(id.value());
+}
+
 bool MediaManager::hasModel(const core::Identifier& id) const
 {
     QMutexLocker lock(&m_videoMutex);
@@ -196,6 +239,25 @@ model3d::ImportSettings MediaManager::modelSettings(const core::Identifier& id) 
 {
     QMutexLocker lock(&m_videoMutex);
     return m_modelSettings.value(id.value());
+}
+
+void MediaManager::setModelMaterials(const core::Identifier& id, const QVector<model3d::Material>& materials)
+{
+    QMutexLocker lock(&m_videoMutex);
+    if (materials.isEmpty()) m_modelMaterials.remove(id.value());
+    else m_modelMaterials.insert(id.value(), materials);
+    if (!m_modelSourceMaterials.contains(id.value())) return;
+    model3d::Mesh mesh = m_models.value(id.value());
+    mesh.materials = m_modelSourceMaterials.value(id.value());
+    model3d::applyMaterialSettings(mesh, materials);
+    m_models.insert(id.value(), mesh);
+    ++m_modelRevisions[id.value()];
+}
+
+QVector<model3d::Material> MediaManager::modelMaterialEdits(const core::Identifier& id) const
+{
+    QMutexLocker lock(&m_videoMutex);
+    return m_modelMaterials.value(id.value());
 }
 
 core::Result MediaManager::importImageSequence(const QStringList& files, double frameRate,
@@ -245,6 +307,8 @@ void MediaManager::clear()
         QMutexLocker lock(&m_videoMutex);
         m_models.clear();
         m_modelSettings.clear();
+        m_modelMaterials.clear();
+        m_modelSourceMaterials.clear();
     }
     // The frame cache and the pending requests are keyed by asset id, so they
     // would otherwise outlive the assets they belong to.
@@ -258,6 +322,8 @@ void MediaManager::replaceProjectAssets(MediaManager&& staged)
     m_assets = std::move(staged.m_assets);
     m_models = std::move(staged.m_models);
     m_modelSettings = std::move(staged.m_modelSettings);
+    m_modelMaterials = std::move(staged.m_modelMaterials);
+    m_modelSourceMaterials = std::move(staged.m_modelSourceMaterials);
     m_videoFrames.clear(); m_videoFrameOrder.clear(); m_videoFrameBytes = 0;
     m_lastVideoFrames.clear(); m_videoRequests.clear();
 }
@@ -270,7 +336,12 @@ QString MediaManager::adoptAsset(const MediaManager& other, const core::Identifi
     m_assets.push_back(asset);
     if (other.m_models.contains(id.value())) {
         m_models.insert(id.value(), other.m_models.value(id.value()));
+        ++m_modelRevisions[id.value()];
         m_modelSettings.insert(id.value(), other.m_modelSettings.value(id.value()));
+        if (other.m_modelMaterials.contains(id.value()))
+            m_modelMaterials.insert(id.value(), other.m_modelMaterials.value(id.value()));
+        if (other.m_modelSourceMaterials.contains(id.value()))
+            m_modelSourceMaterials.insert(id.value(), other.m_modelSourceMaterials.value(id.value()));
     }
     return asset.filePath();
 }

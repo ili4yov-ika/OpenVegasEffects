@@ -1,4 +1,6 @@
 #include "media/ProxyMedia.h"
+#include "app/OptionValues.h"
+#include <QSaveFile>
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -53,8 +55,9 @@ QString proxyFilePath(const QString& proxyRoot, const QString& projectName,
 QStringList proxyEncodeArguments(const QString& source, const QString& output, ProxyMode mode,
                                  const QString& quality, const QString& encoder)
 {
-    const int level = quality.compare(QLatin1String("Low"), Qt::CaseInsensitive) == 0 ? 28
-        : quality.compare(QLatin1String("High"), Qt::CaseInsensitive) == 0 ? 18 : 23;
+    const QString token = app::proxyQualityToken(quality);
+    const int level = token == QLatin1String("Low") ? 28
+        : token == QLatin1String("High") ? 18 : 23;
     // Frame sizes stay even, which H.264 4:2:0 needs (the reference rejects
     // odd sources outright).
     const QString scale = mode == ProxyMode::Performance
@@ -77,6 +80,34 @@ QStringList proxyEncodeArguments(const QString& source, const QString& output, P
     }
     arguments << QStringLiteral("-f") << QStringLiteral("mp4") << output;
     return arguments;
+}
+
+bool publishProxyFile(const QString& completedPath, const QString& outputPath, QString* error)
+{
+    if (error) error->clear();
+    const auto fail = [error](const QString& message) {
+        if (error) *error = message;
+        return false;
+    };
+    QFile input(completedPath);
+    if (!input.open(QIODevice::ReadOnly)) return fail(input.errorString());
+    if (input.size() <= 0) return fail(ProxyGenerator::tr("The generated proxy file is empty."));
+    const QString source = QFileInfo(input).canonicalFilePath();
+    const QString target = QFileInfo(outputPath).canonicalFilePath();
+    if (!target.isEmpty() && source == target)
+        return fail(ProxyGenerator::tr("The proxy destination must differ from the temporary file."));
+    QSaveFile output(outputPath);
+    output.setDirectWriteFallback(false); // Never truncate an existing proxy.
+    if (!output.open(QIODevice::WriteOnly)) return fail(output.errorString());
+    while (!input.atEnd()) {
+        const QByteArray bytes = input.read(1024 * 1024);
+        if (bytes.isEmpty()) return fail(input.errorString());
+        if (output.write(bytes) != bytes.size()) return fail(output.errorString());
+    }
+    if (!output.commit()) return fail(output.errorString());
+    input.close();
+    QFile::remove(completedPath);
+    return true;
 }
 
 ProxyGenerator::ProxyGenerator(QObject* parent)
@@ -153,8 +184,8 @@ void ProxyGenerator::startNext()
         bool ok = status == QProcess::NormalExit && code == 0;
         QString error;
         if (ok) {
-            QFile::remove(m_current.output);
-            ok = QFile::rename(part, m_current.output);
+            ok = publishProxyFile(part, m_current.output, &error);
+            if (!ok) QFile::remove(part);
         } else {
             error = tr("Media transcoding failed. (Error code: %1)").arg(code);
             QFile::remove(part);
@@ -164,6 +195,7 @@ void ProxyGenerator::startNext()
     });
     connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError e) {
         if (e != QProcess::FailedToStart) return;
+        QFile::remove(m_current.output + QStringLiteral(".part"));
         process->deleteLater();
         m_process.clear();
         emit proxyFinished(m_current.source, m_current.output, false,

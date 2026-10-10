@@ -26,6 +26,7 @@ void appendPolyMesh(const AbcG::IPolyMesh& polyMesh, Mesh* mesh)
     if (schema.getNumSamples() == 0) {
         return;
     }
+    const int firstTriangle = mesh->triangles.size();
 
     AbcG::IPolyMeshSchema::Sample sample;
     // First sample: an animated mesh is read at the start of its own time
@@ -133,9 +134,11 @@ void appendPolyMesh(const AbcG::IPolyMesh& polyMesh, Mesh* mesh)
         corner += size_t(count);
     }
 
+    // Each polygon mesh is a node of the model, holding the faces just read.
     const QString name = QString::fromStdString(polyMesh.getName());
-    if (!name.isEmpty() && !mesh->nodeNames.contains(name)) {
-        mesh->nodeNames.append(name);
+    if (!name.isEmpty()) {
+        const int node = mesh->addNode(name);
+        for (int t = firstTriangle; t < mesh->triangles.size(); ++t) mesh->triangles[t].node = node;
     }
 }
 

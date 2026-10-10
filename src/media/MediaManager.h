@@ -43,6 +43,11 @@ public:
     // through a settings dialog the reference calls Model3DImport, and
     // re-importing with different settings has to replace what is stored.
     core::Result importModel(const QString& filePath, const model3d::ImportSettings& settings);
+    // Imports a file's 3D model animations as a Media asset (the reference's
+    // "Import 3D Model Animation"): fails when the file has none. The
+    // asset's path is the file plus kModelAnimationMarker; `assetPath`
+    // receives it.
+    core::Result importModelAnimation(const QString& filePath, QString* assetPath = nullptr);
     core::Result importFiles(const QStringList& paths);
 
     void removeAsset(const core::Identifier& id);
@@ -90,9 +95,18 @@ public:
     // Guarded like the frame cache: the render worker reads it from its own
     // thread while the GUI thread imports.
     model3d::Mesh modelMesh(const core::Identifier& id) const;
+    // Counts the imports of a model, so a holder of its geometry can tell
+    // when to read it again.
+    quint64 modelRevision(const core::Identifier& id) const;
     bool hasModel(const core::Identifier& id) const;
     // Settings the model was last imported with, so the dialog reopens on them.
     model3d::ImportSettings modelSettings(const core::Identifier& id) const;
+    // A model's materials as edited in its Materials tab (the reference keeps
+    // them on its Model3DAsset): their settings replace those of the
+    // materials with the same names, now and whenever the model is read
+    // again; an empty list goes back to the file's own.
+    void setModelMaterials(const core::Identifier& id, const QVector<model3d::Material>& materials);
+    QVector<model3d::Material> modelMaterialEdits(const core::Identifier& id) const;
 
 private:
     static MediaKind kindForPath(const QString& filePath);
@@ -118,7 +132,11 @@ private:
     // with beside it. Shares m_videoMutex: both are cross-thread reads of
     // decoded media, and neither is contended enough to want its own lock.
     QHash<QString, model3d::Mesh> m_models;
+    QHash<QString, quint64> m_modelRevisions;
     QHash<QString, model3d::ImportSettings> m_modelSettings;
+    QHash<QString, QVector<model3d::Material>> m_modelMaterials;
+    // Each model's materials as its file gives them, before the edits above.
+    QHash<QString, QVector<model3d::Material>> m_modelSourceMaterials;
 };
 
 } // namespace media
