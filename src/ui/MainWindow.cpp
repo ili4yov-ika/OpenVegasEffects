@@ -3846,6 +3846,11 @@ void MainWindow::onOptions()
         connect(m_optionsDialog, &OptionsDialog::preRendersAboutToBeDeleted, this, [this] {
             if (m_preRenders) m_preRenders->cancelAll();
         });
+        // Other plugin folders: looked through again, the menus rebuilt.
+        connect(m_optionsDialog, &OptionsDialog::pluginFoldersChanged, this, [this] {
+            if (m_pluginRescan) m_pluginRescan();
+            statusBar()->showMessage(tr("Plugins looked for again"));
+        });
         // Viewer preferences take effect when the dialog closes, so the
         // widgets that honour them re-read once rather than polling.
         connect(m_optionsDialog, &QDialog::finished, this, [this] {
@@ -3894,6 +3899,12 @@ void MainWindow::onOptions()
     m_optionsDialog->show();
     m_optionsDialog->raise();
     m_optionsDialog->activateWindow();
+}
+
+void MainWindow::showPluginOptions()
+{
+    onOptions();
+    if (m_optionsDialog) m_optionsDialog->showCategory(QStringLiteral("Plugins"));
 }
 
 void MainWindow::applyInterfacePreferences()

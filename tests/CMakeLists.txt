@@ -110,6 +110,7 @@ set_tests_properties(timeline_regression PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM
 add_executable(options_regression options_regression.cpp
     ../src/ui/OptionsDialog.cpp ../src/ui/OptionsDialog.h ../ui/OptionsDialog.ui
     ../src/ui/Theme.cpp ../src/app/Settings.cpp ../src/app/Translations.cpp
+    ../src/app/PluginFolders.cpp ../src/app/PluginFolders.h
     ../src/ui/PromptMessage.cpp ../src/ui/PromptMessage.h
     ../src/ui/AutoSave.cpp ../src/ui/AutoSave.h
     ../src/app/AVTemplates.cpp ../src/app/AVTemplates.h

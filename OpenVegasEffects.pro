@@ -46,6 +46,7 @@ HEADERS += \
     src/app/AppMain.h \
     src/app/GpuDriver.h \
     src/app/Settings.h \
+    src/app/PluginFolders.h \
     src/app/OptionValues.h \
     src/app/ProjectDefaults.h \
     src/app/Translations.h \
@@ -172,6 +173,7 @@ SOURCES += \
     src/app/AppMain.cpp \
     src/app/GpuDriver.cpp \
     src/app/Settings.cpp \
+    src/app/PluginFolders.cpp \
     src/app/Translations.cpp \
     src/app/UserDataPaths.cpp \
     src/cache/CacheDB.cpp \

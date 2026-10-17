@@ -85,6 +85,11 @@ public:
                    render::RenderManager* renderManager);
 
     void regenerateEffects(plugin::PluginManager* pluginManager);
+    // What scans the plugin folders again once Options > Plugins changed
+    // them (AppMain::rescanPlugins).
+    void setPluginRescan(std::function<void()> rescan) { m_pluginRescan = std::move(rescan); }
+    // Options, opened on its Plugins page.
+    void showPluginOptions();
 
     // Opens a project file, as used for the command line / shell file
     // association. Returns false when the file cannot be loaded.
@@ -393,6 +398,7 @@ protected:
     ViewerTransportBar* m_transportBar = nullptr;
     TimelineWidget* m_timeline = nullptr;
     OptionsDialog* m_optionsDialog = nullptr;
+    std::function<void()> m_pluginRescan;
 
     double m_inPoint = -1.0;
     double m_outPoint = -1.0;

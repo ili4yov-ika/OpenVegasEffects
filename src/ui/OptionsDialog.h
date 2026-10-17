@@ -47,6 +47,12 @@ public:
     // below root. Actions are addressed by stable objectName values.
     static void applyShortcuts(QWidget* root);
 
+    // Shows the page of a category ("Plugins"...).
+    void showCategory(const QString& name);
+    // Adds a folder to the Plugins page's list (what its "Add Folder..."
+    // button does once a folder is picked); saved with OK.
+    void addPluginFolder(const QString& folder);
+
 protected:
     void reject() override;
 
@@ -57,6 +63,8 @@ private slots:
 signals:
     // Before the pre-render directory is deleted: running pre-renders stop.
     void preRendersAboutToBeDeleted();
+    // OK changed where plugins are looked for: they are to be scanned again.
+    void pluginFoldersChanged();
 
 private:
     QWidget* buildGeneralPage();
@@ -68,6 +76,8 @@ private:
     QWidget* buildLabelsPage();
     QWidget* buildAutoSavePage();
     QWidget* buildExportPage();
+    QWidget* buildPluginsPage();
+    void updatePluginStatus();
     QWidget* buildCachePage();
     QWidget* buildVoiceoverPage();
     QWidget* buildProxiesPage();
@@ -83,6 +93,11 @@ private:
     int currentIndex() const;
 
     Ui::OptionsDialog* m_ui = nullptr;
+
+    // Plugins page.
+    QCheckBox* m_useInstallationPlugins = nullptr;
+    QLabel* m_installationPluginStatus = nullptr;
+    QListWidget* m_pluginFolders = nullptr;
 
     // General page controls.
     QSpinBox*  m_maxUndo = nullptr;

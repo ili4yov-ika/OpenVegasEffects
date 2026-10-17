@@ -213,6 +213,8 @@ add_executable(OpenVegasEffects WIN32
     src/app/OptionValues.h
     src/app/ProjectDefaults.h
     src/app/Settings.cpp
+    src/app/PluginFolders.h
+    src/app/PluginFolders.cpp
     src/app/Translations.h
     src/app/Translations.cpp
     src/app/AppMain.h

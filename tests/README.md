@@ -454,3 +454,9 @@ between composite clips and final MOV PCM against prepared input samples.
 `audioMixUsesSampleDelaysAndPadding` checks a 0.5 ms delay as exactly 22 samples
 at 44.1 kHz and padding to the requested output duration. Nested offline groups
 use PCM16; realtime still flattens groups and omits parent DSP/transitions.
+
+`options_regression::pluginsPageChoosesFolders` lays out a fake Program Files with VEGAS Effects and
+HitFilm Pro plugin trees: the installation's plugins are found and scanned, other FXhome programs' are
+offered, a folder chosen on Options > Plugins is saved with OK (and asks for a new scan only when the
+folders changed), the page's defaults clear it, and Options opens there by itself once when no folder
+has any plugin.
