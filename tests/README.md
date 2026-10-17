@@ -460,3 +460,6 @@ HitFilm Pro plugin trees: the installation's plugins are found and scanned, othe
 offered, a folder chosen on Options > Plugins is saved with OK (and asks for a new scan only when the
 folders changed), the page's defaults clear it, and Options opens there by itself once when no folder
 has any plugin.
+`nativeGlyphBehaviorsDrawReducedPreviews` also checks the Layout box of the DropInByChar text: while its
+letters drop in, it is the box of the same text without the glyph Behavior, as the reference frames a
+layer by its world transform only.

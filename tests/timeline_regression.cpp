@@ -2593,6 +2593,19 @@ private slots:
             clip.effects << text << behavior;
             layer.clips.append(clip);
         }
+        // The Layout box does not follow the glyphs: the reference frames a
+        // layer by its own extent times WorldTransformationAtTime
+        // (FUN_1403186c0), and a glyph Behavior moves no layer - while the
+        // letters drop in, the box is the one of the same text without it.
+        {
+            composition::Layer plain = shot->layers()[0];
+            plain.clips[0].effects.removeLast();
+            for (int frame : {6, 15, 90}) {
+                QCOMPARE(render::layerGeometry(*shot, shot->layers()[0], nullptr, frame).bounds(),
+                         render::layerGeometry(*shot, plain, nullptr, frame).bounds());
+                QCOMPARE(render::layerBehaviorTransformAt(*shot, nullptr, shot->layers()[0], frame), QTransform());
+            }
+        }
         render::RenderManager manager; manager.setComposition(shot);
         QSignalSpy frames(&manager, &render::RenderManager::frameReady);
         const auto frameAt = [&](double seconds, const QSize& size) {
