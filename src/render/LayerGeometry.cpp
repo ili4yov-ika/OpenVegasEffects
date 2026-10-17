@@ -432,6 +432,12 @@ int& simulationSuppressed()
     return suppressed;
 }
 
+double& simulationFrameShift()
+{
+    static thread_local double shift = 0.0;
+    return shift;
+}
+
 QMatrix4x4 layerWorldWithoutSimulationAt(const composition::Composition* composition,
                                          const composition::Layer& layer, int frame)
 {
@@ -444,6 +450,14 @@ QMatrix4x4 layerWorldWithoutSimulationAt(const composition::Composition* composi
 QMatrix4x4 layerParentMatrixAt(const composition::Composition* composition, const composition::Layer& layer,
                                int frame)
 {
+    // A body's world is its body, made from its world without any
+    // simulation: its parents' bodies do not carry it again.
+    if (simulationSuppressed() == 0 && layerIsSimulatedBody(layer)) {
+        ++simulationSuppressed();
+        const QMatrix4x4 parent = parentMatrixAt(composition, layer, frame, 0);
+        --simulationSuppressed();
+        return parent;
+    }
     return parentMatrixAt(composition, layer, frame, 0);
 }
 

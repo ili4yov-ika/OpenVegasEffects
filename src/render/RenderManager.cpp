@@ -1,6 +1,8 @@
 #include "render/RenderManager.h"
 #include "composition/CompositionState.h"
 #include <QCryptographicHash>
+#include "composition/CompositionState.h"
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
 #include <QRegularExpression>
@@ -785,22 +787,52 @@ QMatrix4x4 layerOwnBehaviorMatrixAt(const composition::Composition& composition,
     return total;
 }
 
-bool layerSimulationOffsetAt(const composition::Composition& composition, const media::MediaManager* media,
-                             const composition::Layer& layer, int frame, QVector3D* offset)
+bool layerIsSimulatedBody(const composition::Layer& layer)
 {
-    Q_UNUSED(media);
+    for (const composition::Clip& clip : layer.clips)
+        for (const composition::Effect& fx : clip.effects)
+            if (fx.enabled && plugin::nativeBehaviorSimulationRenderingVerified(fx.pluginId)) return true;
+    return false;
+}
+
+namespace {
+
+// Runs kept by the state of the shot they were made for.
+QMutex g_simulationMutex;
+QHash<QByteArray, plugin::NativeSimulationTrack> g_simulationTracks;
+QList<QByteArray> g_simulationOrder;
+
+QByteArray simulationKeyOf(const composition::Composition& composition)
+{
+    QByteArray state = composition::layerState(composition.layers());
+    state += QByteArray::number(composition.framesPerSecond(), 'g', 12);
+    state += QByteArray::number(composition.durationSeconds(), 'g', 12);
+    state += QByteArray::number(composition.displaySize().width()) + 'x'
+             + QByteArray::number(composition.displaySize().height());
+    return QCryptographicHash::hash(state, QCryptographicHash::Sha1);
+}
+
+} // namespace
+
+bool layerSimulationOffsetAt(const composition::Composition& composition, const media::MediaManager* media,
+                             const composition::Layer& layer, double frame, QVector3D* offset)
+{
     if (!offset || simulationSuppressed() > 0) return false;
+    frame += simulationFrameShift();
     const QVector<composition::Layer>& layers = composition.layers();
     int source = -1;
     for (int i = 0; i < layers.size(); ++i)
         if (layers.at(i).id == layer.id) source = i;
     if (source < 0) return false;
+    // Quick refusal: no simulated Behavior on it.
+    if (!layerIsSimulatedBody(layer)) return false;
     const double rate = composition.framesPerSecond();
+    const int whole = int(std::ceil(frame - 1e-9));
     const auto clipOf = [&](int index, int at) { return clipShownAt(composition, layers.at(index), at); };
     // A layer's range: its clip's, or its span (StartFrame .. EndFrame).
     const auto firstClipOf = [&](int index) -> const composition::Clip* {
         const composition::Layer& candidate = layers.at(index);
-        const composition::Clip* clip = clipOf(index, frame);
+        const composition::Clip* clip = clipOf(index, whole);
         if (!clip && !candidate.clips.isEmpty()) clip = &candidate.clips.first();
         return clip;
     };
@@ -841,9 +873,71 @@ bool layerSimulationOffsetAt(const composition::Composition& composition, const 
         const composition::Clip* clip = firstClipOf(index);
         return clip ? int(std::lround(clip->endSeconds() * rate)) : 0;
     };
-    const QSize canvas = composition.displaySize();
-    return plugin::simulateNativeBehaviorScene(offset, frame, canvas.width(), canvas.height(), rate, scene,
-                                               &composition, source);
+    scene.parentOf = [&](int index) {
+        const core::Identifier parent = layers.at(index).parentLayerId;
+        if (!parent.isValid()) return -1;
+        for (int i = 0; i < layers.size(); ++i)
+            if (layers.at(i).id == parent) return i;
+        return -1;
+    };
+    scene.flatAt = [&](int index) { return layers.at(index).dimension == composition::LayerDimension::TwoD; };
+    // FUN_18036c710: footage its asset's size, a grade (and a plane, a
+    // frame-sized asset) the frame's, text its box.
+    scene.sizeOf = [&](int index) {
+        const composition::Layer& candidate = layers.at(index);
+        const composition::Clip* clip = firstClipOf(index);
+        if (candidate.kind == composition::LayerKind::Grade || candidate.kind == composition::LayerKind::Plane)
+            return composition.displaySize();
+        if (!clip) return QSize();
+        if (const composition::Effect* text = textEffectOfClip(*clip)) {
+            QStringList values = text->parameterValues;
+            for (int p = 0; p < values.size(); ++p) values[p] = text->parameterAt(p, whole).toString();
+            const composition::TextStyle style = composition::textStyleFromParameters(values);
+            if (style.textMode == composition::TextStyle::TextMode::Paragraph) return style.paragraphSize.toSize();
+            return QSize();
+        }
+        if (clip->nestedComposition) return clip->nestedComposition->displaySize();
+        if (media && clip->mediaId.isValid()) return media->assetById(clip->mediaId).frameSize();
+        return QSize();
+    };
+    // The run so far for this state of the shot, gone on from where it
+    // stopped when it does not reach the frame yet.
+    const QByteArray key = simulationKeyOf(composition);
+    plugin::NativeSimulationTrack track;
+    {
+        QMutexLocker lock(&g_simulationMutex);
+        track = g_simulationTracks.value(key);
+    }
+    if (!track.reaches(whole)) {
+        const QSize canvas = composition.displaySize();
+        if (!plugin::simulateNativeBehaviorScene(track, whole, canvas.width(), canvas.height(), rate, scene,
+                                                 &composition))
+            return false;
+        QMutexLocker lock(&g_simulationMutex);
+        if (!g_simulationTracks.contains(key)) {
+            g_simulationOrder.append(key);
+            while (g_simulationOrder.size() > 8) g_simulationTracks.remove(g_simulationOrder.takeFirst());
+        }
+        if (!g_simulationTracks.value(key).reaches(track.last())) g_simulationTracks.insert(key, track);
+    }
+    const int body = int(track.bodies.indexOf(source));
+    if (body < 0) return false;
+    if (whole < track.first) {
+        *offset = QVector3D();
+        return true;
+    }
+    const int at = qMin(whole, track.last()) - track.first;
+    QVector3D position = track.positions.at(at).at(body);
+    QVector3D point = track.points.at(at).at(body);
+    const double back = double(whole) - frame;
+    if (back > 1e-6 && at > 0) {
+        // Taken back along its velocity; the world's point in between.
+        position -= track.velocities.at(at).at(body) * float(back / rate);
+        const QVector3D before = track.points.at(at - 1).at(body);
+        point = before + (point - before) * float(1.0 - back);
+    }
+    *offset = position - point;
+    return true;
 }
 
 QMatrix4x4 layerBehaviorMatrixAt(const composition::Composition& composition,
@@ -2685,9 +2779,15 @@ QImage RenderWorker::renderLayerClipImage(const composition::Layer& layer,
     const composition::CompositionRenderSettings& shutter = m_composition->renderSettings();
     // The travel in the pixels drawn: a reduced preview needs fewer samples
     // for the same smear.
-    const QVector<double> offsets = withEffects && layer.motionBlur && shutter.motionBlurEnabled
-            && shutter.shutterAngle > 0.0 && hasMotion(layer)
-        ? shutterOffsets(shutter, framePixelTravel(layer, frameNo, sceneCanvas(size))
+    // A simulated body moves without keys: its travel over the frame counts.
+    const bool blurring = withEffects && layer.motionBlur && shutter.motionBlurEnabled && shutter.shutterAngle > 0.0;
+    QVector3D atFrame, atNext;
+    const bool body = blurring && m_composition
+        && layerSimulationOffsetAt(*m_composition, m_mediaManager.get(), layer, frameNo, &atFrame)
+        && layerSimulationOffsetAt(*m_composition, m_mediaManager.get(), layer, frameNo + 1, &atNext);
+    const double simulatedTravel = body ? double((atNext - atFrame).toVector2D().length()) : 0.0;
+    const QVector<double> offsets = blurring && (hasMotion(layer) || simulatedTravel > 0.0)
+        ? shutterOffsets(shutter, (framePixelTravel(layer, frameNo, sceneCanvas(size)) + simulatedTravel)
                                       * qMin(1.0, m_renderScale))
         : QVector<double>();
     if (offsets.size() < 2) {
@@ -2698,10 +2798,27 @@ QImage RenderWorker::renderLayerClipImage(const composition::Layer& layer,
         // instead of picking up the colour of transparent pixels.
         std::vector<float> sum;
         QSize sampleSize;
+        // A simulated body between frames: a sheet takes it in its matrix
+        // while the sample is drawn, a 2D picture is moved by how far the
+        // body is from where it is at the frame (applyClipBehaviors puts
+        // that on after).
+        const bool sheet = layerDrawnAsSheet(layer, &clip);
         for (double offset : offsets) {
-            const QImage sample = renderClip(layerAtSubFrame(layer, frameNo + offset), clip,
-                                             qMax(0.0, localTime), size, frameNo)
-                                      .convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+            if (body && sheet) simulationFrameShift() = offset;
+            QImage sample = renderClip(layerAtSubFrame(layer, frameNo + offset), clip,
+                                       qMax(0.0, localTime), size, frameNo)
+                                .convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+            simulationFrameShift() = 0.0;
+            QVector3D between;
+            if (body && !sheet
+                && layerSimulationOffsetAt(*m_composition, m_mediaManager.get(), layer, frameNo + offset, &between)) {
+                const QSize scene = sceneCanvas(size);
+                const double sx = double(sample.width()) / qMax(1, scene.width());
+                const double sy = double(sample.height()) / qMax(1, scene.height());
+                sample = translatedSubpixel(sample, double(between.x() - atFrame.x()) * sx,
+                                            -double(between.y() - atFrame.y()) * sy)
+                             .convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+            }
             if (sum.empty()) {
                 sampleSize = sample.size();
                 sum.assign(size_t(sampleSize.width()) * size_t(sampleSize.height()) * 4, 0.0f);

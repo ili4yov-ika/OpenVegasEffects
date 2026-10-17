@@ -159,17 +159,37 @@ struct NativeSimulationScene
     std::function<bool(int layer, int frame)> activeAt;
     std::function<int(int layer)> startFrame;
     std::function<int(int layer)> endFrame;
+    // Its parent's index, -1 for none (a body's forces reach the bodies
+    // under it: SimulateLayers' list by ParentLayer).
+    std::function<int(int layer)> parentOf;
+    // The layer records' +0x08 (a 2D layer: Dimensions() == 0) and
+    // +0x0c/+0x10 (footage's or a grade's size, a text box's).
+    std::function<bool(int layer)> flatAt;
+    std::function<QSize(int layer)> sizeOf;
 };
 
-// Where the simulated body of layer `source` is at `timelineFrame`, as an
-// offset from where its world without the simulation puts it (the body's
-// matrix is that world moved by it: T(body - P) x W). Every body of the
-// shot is simulated together, from the first one's start, frame by frame:
-// the animation's velocity carried in, the modules' forces (Notify 103)
-// added, damping on the whole velocity. False when the layer is no body.
-bool simulateNativeBehaviorScene(QVector3D* offset, int timelineFrame, int canvasWidth, int canvasHeight,
+// The bodies of a shot simulated so far (CompositionAsset's cache at
+// +0x228): from `first`, per frame and body, where the body is, its
+// velocity V and the point P its world without the simulation has.
+struct NativeSimulationTrack
+{
+    int first = 0;
+    QVector<int> bodies;
+    QVector<QVector<QVector3D>> positions, velocities, points;
+    QVector<QVector3D> animation;   // A at the last frame, to go on from
+    int last() const { return first + int(positions.size()) - 1; }
+    bool reaches(int frame) const { return !bodies.isEmpty() && frame <= last(); }
+};
+
+// Simulates every body of the shot together up to `toFrame`, going on from
+// what `track` holds (an empty one starts at the first body's start): per
+// frame the animation's velocity carried in (D = A - A'), the modules'
+// forces (Notify 103, each for its own body and the bodies under it)
+// added, damping on the whole velocity, V = k V' + D, body = body' + V dt.
+// False when the shot has no body.
+bool simulateNativeBehaviorScene(NativeSimulationTrack& track, int toFrame, int canvasWidth, int canvasHeight,
                                  double frameRate, const NativeSimulationScene& scene,
-                                 const composition::Composition* composition, int source);
+                                 const composition::Composition* composition);
 
 // Host geometry of the Geometry ABI (PluginGeometryEffect::ProcessGeometry,
 // Notify 101). Flux hands text to these modules as batches of 0x80-byte

@@ -350,7 +350,9 @@ renderer draws. `behaviorsActInsideTheParent` turns a plane's parent a quarter c
 shift to the right moves the plane down, its box and its pixels alike.
 `simulatedBehaviorsMoveInTheWorld` (GL, the reference Gravity.hfpl) parents a falling plane under a point
 turned a quarter: it falls down the frame, not sideways, its box and pixels alike; a child of the falling
-plane falls with it, and a plane keyed across the frame with Drag lags behind its keys.
+plane falls with it, and a plane keyed across the frame with Drag lags behind its keys; a run read back
+from a later frame matches a fresh one, a body between frames lies between them, a child body with
+Drag falls about as far as its parent (its forces), and a falling plane without keys is motion blurred.
 `behaviorsMultiplyInTheReferencesOrder` gives a plane a quarter turn and then a shift to the right: the
 plane goes up (the last Behavior acts first), and a parent's shift carries its child as far; boxes and
 pixels agree. `trimmedLayerKeepsItsKeys` drags a clip's head a quarter

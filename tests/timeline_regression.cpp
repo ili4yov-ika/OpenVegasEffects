@@ -2241,13 +2241,81 @@ private slots:
                      qPrintable(QStringLiteral("%1,%2 against %3,%4").arg(childLater.x() - childStart.x())
                                     .arg(childLater.y() - childStart.y()).arg(fall.x()).arg(fall.y())));
         }
-        // Drag damps the whole velocity, the animation's too: a plane keyed
-        // to cross the frame at a steady speed lags behind its keys with it.
+        // The run is kept and gone on from: an earlier frame read after a
+        // later one is what a fresh run gives (the layer renamed: another
+        // state of the shot); between frames the body is taken back along
+        // its velocity, between where it is at the frames either side.
+        {
+            const composition::Layer& falling = shot->layers()[1];
+            QVector3D at4, at7, at8, between, fresh;
+            QVERIFY(render::layerSimulationOffsetAt(*shot, nullptr, falling, 4, &at4));
+            QVERIFY(render::layerSimulationOffsetAt(*shot, nullptr, falling, 7, &at7));
+            QVERIFY(render::layerSimulationOffsetAt(*shot, nullptr, falling, 8, &at8));
+            QVERIFY(render::layerSimulationOffsetAt(*shot, nullptr, falling, 7.5, &between));
+            QVERIFY2(between.y() < at7.y() && between.y() > at8.y(),
+                     qPrintable(QStringLiteral("%1 %2 %3").arg(at7.y()).arg(between.y()).arg(at8.y())));
+            shot->layerRef(1).name = QStringLiteral("Renamed");
+            QVERIFY(render::layerSimulationOffsetAt(*shot, nullptr, shot->layers()[1], 4, &fresh));
+            QVERIFY2((fresh - at4).length() < 1e-4f,
+                     qPrintable(QStringLiteral("%1 against %2").arg(fresh.y()).arg(at4.y())));
+        }
+        // A body moving without keys is blurred along its fall: its samples
+        // take it between frames.
+        {
+            auto falling = std::make_shared<composition::Composition>();
+            falling->setSize(320, 180); falling->setFrameRate(30, 1); falling->setDurationSeconds(2);
+            auto& plane = falling->addLayer("Falling");
+            plane.kind = composition::LayerKind::Plane;
+            plane.planeColor = Qt::red;
+            plane.transform.scalePercent = QPointF(10, 10);
+            composition::Effect fx; fx.pluginId = id; fx.name = "Gravity";
+            for (const auto& parameter : metadata.parameters) fx.parameterValues << parameter.defaultValue;
+            composition::Clip clip; clip.durationSeconds = 2; clip.effects << fx;
+            plane.clips << clip;
+            const auto redRows = [&](bool blurred) {
+                falling->layerRef(0).motionBlur = blurred;
+                render::RenderManager manager; manager.setComposition(falling);
+                QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+                manager.requestFrame(0, 16.0 / 30.0, QSize(320, 180));
+                if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 30000)) return -1;
+                const QByteArray bytes = frames[0][1].toByteArray();
+                const QImage image = QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                                            QImage::Format_RGBA8888).copy();
+                int rows = 0;
+                for (int y = 0; y < image.height(); ++y) {
+                    bool red = false;
+                    for (int x = 0; x < image.width() && !red; ++x) red = image.pixelColor(x, y).red() > 40;
+                    rows += red ? 1 : 0;
+                }
+                return rows;
+            };
+            const int sharp = redRows(false), smeared = redRows(true);
+            QVERIFY2(sharp > 0 && smeared >= sharp + 2, qPrintable(QStringLiteral("%1 %2").arg(sharp).arg(smeared)));
+        }
         const QString drag = dir + "/Plugins/Behavior/Drag.hfpl";
         if (!QFileInfo::exists(drag)) return;
         const core::Identifier dragId("test.native.drag");
         const auto dragMetadata = plugin::loadNativePluginMetadata(drag, dir);
         plugin::registerNativeBehaviorModule(dragId, drag, dir, true, dragMetadata.parameters);
+        // A child that is a body itself: its body stands for its world, so
+        // the parent's fall does not carry it again; the parent's forces
+        // come to it instead (SimulateLayers' list by ParentLayer) - it falls
+        // about as far, a little less with its own Drag, not twice as far.
+        {
+            composition::Layer& child = shot->layerRef(0);
+            composition::Effect fx; fx.pluginId = dragId; fx.name = "Drag";
+            for (const auto& parameter : dragMetadata.parameters) fx.parameterValues << parameter.defaultValue;
+            child.clips[0].effects << fx;
+            const composition::Layer& placed = shot->layers()[0];
+            const QPointF childStart = render::layerGeometry(*shot, placed, nullptr, 0).bounds().center();
+            const QPointF childLater = render::layerGeometry(*shot, placed, nullptr, 8).bounds().center();
+            const double fall = later.y() - start.y();
+            const double childFall = childLater.y() - childStart.y();
+            QVERIFY2(childFall > 0.5 * fall && childFall < fall + 0.05,
+                     qPrintable(QStringLiteral("%1 against %2").arg(childFall).arg(fall)));
+        }
+        // Drag damps the whole velocity, the animation's too: a plane keyed
+        // to cross the frame at a steady speed lags behind its keys with it.
         auto moving = std::make_shared<composition::Composition>();
         moving->setSize(320, 180); moving->setFrameRate(30, 1); moving->setDurationSeconds(2);
         {

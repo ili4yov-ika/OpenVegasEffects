@@ -2667,40 +2667,44 @@ public:
     //   the modules see the layers (FUN_18036cc80: a body its V, D and
     //   matrix; any other layer the world's moves in a frame and W);
     //   each body within its range adds what its simulated Behaviors give
-    //   (Notify 103: accelerations, forces averaged, damping multiplied):
-    //   D += a dt + f / n dt, k = damping^dt;
+    //   (Notify 103; the callbacks take only what is meant for that body:
+    //   accelerations summed, forces averaged, damping multiplied), and so
+    //   does every body under it: D += a dt + f / n dt, k *= damping^dt;
     //   V = k V' + D, body = body' + V dt, matrix T(body - P) x W.
-    bool simulateScene(QVector3D* offset, int timelineFrame, int canvasWidth, int canvasHeight,
+    bool simulateScene(NativeSimulationTrack& track, int toFrame, int canvasWidth, int canvasHeight,
                        double frameRate, const NativeSimulationScene& scene,
-                       const composition::Composition* composition, int source)
+                       const composition::Composition* composition)
     {
 #ifndef Q_OS_WIN
-        Q_UNUSED(offset); Q_UNUSED(timelineFrame); Q_UNUSED(canvasWidth); Q_UNUSED(canvasHeight);
-        Q_UNUSED(frameRate); Q_UNUSED(scene); Q_UNUSED(composition); Q_UNUSED(source);
+        Q_UNUSED(track); Q_UNUSED(toFrame); Q_UNUSED(canvasWidth); Q_UNUSED(canvasHeight);
+        Q_UNUSED(frameRate); Q_UNUSED(scene); Q_UNUSED(composition);
         return false;
 #else
         struct SimulationAccumulator {
+            int target = -1;
             float acceleration[3] {0.0f, 0.0f, 0.0f};
             float force[3] {0.0f, 0.0f, 0.0f};
             float forceWeight = 0.0f;
             float damping = 1.0f;
         } simulation;
-        const auto forceCallback = +[](void* opaque, int, float x, float y, float z, int mode) {
+        // FUN_180381180 / FUN_180381080: an object index that is not the
+        // body being simulated is left alone.
+        const auto forceCallback = +[](void* opaque, int index, float x, float y, float z, int mode) {
             auto* value = static_cast<SimulationAccumulator*>(opaque);
-            if (!value) return;
+            if (!value || index != value->target) return;
             float* destination = mode == 1 ? value->force : value->acceleration;
+            if (mode != 0 && mode != 1) return;
             destination[0] += x;
             destination[1] += y;
             destination[2] += z;
             if (mode == 1) value->forceWeight += 1.0f;
         };
-        const auto dampingCallback = +[](void* opaque, int, float damping) {
+        const auto dampingCallback = +[](void* opaque, int index, float damping) {
             auto* value = static_cast<SimulationAccumulator*>(opaque);
-            if (value) value->damping *= damping;
+            if (value && index == value->target) value->damping *= damping;
         };
         const int count = scene.layerCount;
-        if (!offset || count <= 0 || source < 0 || source >= count || !scene.worldAt || !scene.behaviorsAt)
-            return false;
+        if (count <= 0 || !scene.worldAt || !scene.behaviorsAt) return false;
         const auto entriesOf = [&](int layer, int frame) {
             QVector<BehaviorStackEntry> entries;
             // Asked before the registry is locked: the host's answer looks
@@ -2714,17 +2718,8 @@ public:
             }
             return entries;
         };
-        // The bodies: the layers with simulated Behaviors.
-        QVector<int> bodies;
-        for (int layer = 0; layer < count; ++layer)
-            if (!entriesOf(layer, timelineFrame).isEmpty()) bodies.append(layer);
-        if (!bodies.contains(source)) return false;
         const auto startOf = [&](int layer) { return scene.startFrame ? scene.startFrame(layer) : 0; };
-        int first = timelineFrame;
-        for (int body : bodies) first = qMin(first, startOf(body));
-        *offset = QVector3D();
-        if (timelineFrame <= first) return true;
-
+        const auto endOf = [&](int layer) { return scene.endFrame ? scene.endFrame(layer) : toFrame; };
         const double safeFrameRate = qMax(0.001, frameRate);
         const double timeStep = 1.0 / safeFrameRate;
         const float dt = float(timeStep);
@@ -2739,17 +2734,32 @@ public:
         };
         const auto pointOf = [&](int layer, int frame) { return worldOf(layer, frame).map(QVector3D()); };
 
-        struct Body {
-            int layer = 0;
-            QVector3D velocity, animation, point, position;
-        };
-        QVector<Body> state;
-        for (int body : bodies) {
-            Body entry;
-            entry.layer = body;
-            entry.point = pointOf(body, first);
-            entry.position = entry.point;
-            state.append(entry);
+        if (track.bodies.isEmpty()) {
+            // The bodies: the layers with simulated Behaviors, from the
+            // first one's start.
+            for (int layer = 0; layer < count; ++layer)
+                if (!entriesOf(layer, toFrame).isEmpty()) track.bodies.append(layer);
+            if (track.bodies.isEmpty()) return false;
+            track.first = toFrame;
+            for (int body : track.bodies) track.first = qMin(track.first, startOf(body));
+            QVector<QVector3D> points;
+            for (int body : track.bodies) points.append(pointOf(body, track.first));
+            track.positions = {points};
+            track.points = {points};
+            track.velocities = {QVector<QVector3D>(track.bodies.size())};
+            track.animation = QVector<QVector3D>(track.bodies.size());
+        }
+        const QVector<int>& bodies = track.bodies;
+        const int bodyCount = int(bodies.size());
+        // The bodies under each body (its descendants), by body.
+        QVector<QVector<int>> under(bodyCount);
+        for (int c = 0; c < bodyCount; ++c) {
+            int ancestor = scene.parentOf ? scene.parentOf(bodies[c]) : -1;
+            for (int guard = 0; ancestor >= 0 && guard < 64; ++guard) {
+                const int b = int(bodies.indexOf(ancestor));
+                if (b >= 0) under[b].append(c);
+                ancestor = scene.parentOf(ancestor);
+            }
         }
         // The layers' records the modules read (SC+0x30, 0x80 bytes each).
         QVector<QByteArray> ids;
@@ -2762,53 +2772,65 @@ public:
         QSet<QString> rejected;
         RenderInvocation* previousInvocation = g_renderInvocation;
 
-        for (int frame = first + 1; frame <= timelineFrame; ++frame) {
+        for (int frame = track.last() + 1; frame <= toFrame; ++frame) {
+            const QVector<QVector3D>& position = track.positions.last();
+            const QVector<QVector3D>& velocity = track.velocities.last();
+            const QVector<QVector3D>& point = track.points.last();
             // The bodies at the frame: the animation's velocity carried in,
             // each where it was.
-            QVector<QVector3D> change(state.size()), newPoint(state.size()), newAnimation(state.size());
-            QVector<float> damping(state.size(), 1.0f);
-            for (int b = 0; b < state.size(); ++b) {
-                newPoint[b] = pointOf(state[b].layer, frame);
-                newAnimation[b] = (newPoint[b] - state[b].point) / dt;
-                change[b] = newAnimation[b] - state[b].animation;
+            QVector<QVector3D> change(bodyCount), newPoint(bodyCount), newAnimation(bodyCount);
+            QVector<float> damping(bodyCount, 1.0f);
+            for (int b = 0; b < bodyCount; ++b) {
+                newPoint[b] = pointOf(bodies[b], frame);
+                newAnimation[b] = (newPoint[b] - point[b]) / dt;
+                change[b] = newAnimation[b] - track.animation[b];
             }
             for (int layer = 0; layer < count; ++layer) {
                 char* record = records.data() + layer * 0x80;
                 std::memset(record, 0, 0x80);
                 const char* id = ids.at(layer).constData();
                 std::memcpy(record, &id, sizeof(id));
+                record[0x08] = char(scene.flatAt && scene.flatAt(layer) ? 1 : 0);
+                const QSize size = scene.sizeOf ? scene.sizeOf(layer) : QSize();
+                const qint32 width = qMax(0, size.width()), height = qMax(0, size.height());
+                std::memcpy(record + 0x0c, &width, sizeof(width));
+                std::memcpy(record + 0x10, &height, sizeof(height));
                 const double startTime = double(startOf(layer)) * timeStep;
-                const double endTime = double(scene.endFrame ? scene.endFrame(layer) : timelineFrame) * timeStep;
+                const double endTime = double(endOf(layer)) * timeStep;
                 std::memcpy(record + 0x18, &startTime, sizeof(startTime));
                 std::memcpy(record + 0x20, &endTime, sizeof(endTime));
-                QVector3D velocity, acceleration;
+                QVector3D moving, accelerating;
                 QMatrix4x4 matrix;
-                const int b = bodies.indexOf(layer);
+                const int b = int(bodies.indexOf(layer));
                 if (b >= 0) {
-                    velocity = state[b].velocity + change[b];
-                    acceleration = change[b];
+                    moving = velocity[b] + change[b];
+                    accelerating = change[b];
                     QMatrix4x4 shift;
-                    shift.translate(state[b].position - newPoint[b]);
+                    shift.translate(position[b] - newPoint[b]);
                     matrix = shift * worldOf(layer, frame);
                 } else {
                     const QVector3D before = pointOf(layer, frame - 1), now = pointOf(layer, frame),
                                     after = pointOf(layer, frame + 1);
-                    velocity = after - now;
-                    acceleration = (after - now) - (now - before);
+                    moving = after - now;
+                    accelerating = (after - now) - (now - before);
                     matrix = worldOf(layer, frame);
                 }
-                const float v[3] {velocity.x(), velocity.y(), velocity.z()};
-                const float a[3] {acceleration.x(), acceleration.y(), acceleration.z()};
+                const float v[3] {moving.x(), moving.y(), moving.z()};
+                const float a[3] {accelerating.x(), accelerating.y(), accelerating.z()};
                 std::memcpy(record + 0x28, v, sizeof(v));
                 std::memcpy(record + 0x34, a, sizeof(a));
                 std::memcpy(record + 0x40, matrix.constData(), sizeof(float) * 16);
             }
             void* recordsPointer = records.data();
             // What each body's simulated Behaviors give within its range.
-            for (int b = 0; b < state.size(); ++b) {
-                const int layer = state[b].layer;
+            QVector<QVector3D> added(bodyCount);
+            QVector<float> factor(bodyCount, 1.0f);
+            QVector<bool> acted(bodyCount, false);
+            for (int b = 0; b < bodyCount; ++b) {
+                const int layer = bodies[b];
                 if (scene.activeAt && !scene.activeAt(layer, frame)) continue;
                 simulation = {};
+                simulation.target = layer;
                 bool any = false;
                 for (const BehaviorStackEntry& entry : entriesOf(layer, frame)) {
                     if (rejected.contains(entry.id)) continue;
@@ -2818,8 +2840,7 @@ public:
                     invocation.width = qMax(1, canvasWidth);
                     invocation.height = qMax(1, canvasHeight);
                     invocation.timelineFrame = frame;
-                    invocation.layerDurationFrames =
-                        qMax(1, (scene.endFrame ? scene.endFrame(layer) : timelineFrame) - startOf(layer));
+                    invocation.layerDurationFrames = qMax(1, endOf(layer) - startOf(layer));
                     invocation.frameRate = safeFrameRate;
                     invocation.composition = composition;
                     invocation.sourceLayerId = composition && layer < composition->layers().size()
@@ -2833,7 +2854,8 @@ public:
                     QByteArray context(0x80, '\0');
                     const int objectIndex = layer;
                     // Throw's impulse comes at the body's first step, t = 0.
-                    const double currentTime = double(qMax(0, frame - qMax(first, startOf(layer)) - 1)) * timeStep;
+                    const double currentTime =
+                        double(qMax(0, frame - qMax(track.first, startOf(layer)) - 1)) * timeStep;
                     std::memcpy(context.data() + 0x00, &objectIndex, sizeof(objectIndex));
                     std::memcpy(context.data() + 0x18, &currentTime, sizeof(currentTime));
                     std::memcpy(context.data() + 0x20, &timeStep, sizeof(timeStep));
@@ -2855,24 +2877,37 @@ public:
                     else rejected.insert(entry.id);
                 }
                 if (!any) continue;
-                QVector3D added(simulation.acceleration[0], simulation.acceleration[1], simulation.acceleration[2]);
+                QVector3D sum(simulation.acceleration[0], simulation.acceleration[1], simulation.acceleration[2]);
                 if (simulation.forceWeight > 0.0f)
-                    added += QVector3D(simulation.force[0], simulation.force[1], simulation.force[2])
-                             / simulation.forceWeight;
-                change[b] += added * dt;
-                damping[b] = float(std::pow(double(simulation.damping), timeStep));
+                    sum += QVector3D(simulation.force[0], simulation.force[1], simulation.force[2])
+                           / simulation.forceWeight;
+                added[b] = sum * dt;
+                factor[b] = float(std::pow(double(simulation.damping), timeStep));
+                acted[b] = true;
+            }
+            for (int b = 0; b < bodyCount; ++b) {
+                if (!acted[b]) continue;
+                change[b] += added[b];
+                damping[b] *= factor[b];
+                // And the bodies under it, within their ranges.
+                for (int c : under[b]) {
+                    if (scene.activeAt && !scene.activeAt(bodies[c], frame)) continue;
+                    change[c] += added[b];
+                    damping[c] *= factor[b];
+                }
             }
             // Integrated.
-            for (int b = 0; b < state.size(); ++b) {
-                state[b].velocity = damping[b] * state[b].velocity + change[b];
-                state[b].position += dt * state[b].velocity;
-                state[b].point = newPoint[b];
-                state[b].animation = newAnimation[b];
+            QVector<QVector3D> nextVelocity(bodyCount), nextPosition(bodyCount);
+            for (int b = 0; b < bodyCount; ++b) {
+                nextVelocity[b] = damping[b] * velocity[b] + change[b];
+                nextPosition[b] = position[b] + dt * nextVelocity[b];
             }
+            track.velocities.append(nextVelocity);
+            track.positions.append(nextPosition);
+            track.points.append(newPoint);
+            track.animation = newAnimation;
         }
         g_renderInvocation = previousInvocation;
-        const Body& body = state.at(bodies.indexOf(source));
-        *offset = body.position - body.point;
         return true;
 #endif
     }
@@ -4720,15 +4755,15 @@ bool evaluateNativeSubObjectBehavior(
         id.value(), record, parameterValues, sourceLayerId);
 }
 
-bool simulateNativeBehaviorScene(QVector3D* offset, int timelineFrame, int canvasWidth, int canvasHeight,
+bool simulateNativeBehaviorScene(NativeSimulationTrack& track, int toFrame, int canvasWidth, int canvasHeight,
                                  double frameRate, const NativeSimulationScene& scene,
-                                 const composition::Composition* composition, int source)
+                                 const composition::Composition* composition)
 {
     if (!g_behaviorThreadRenderer) {
         g_behaviorThreadRenderer = std::make_unique<BehaviorThreadRenderer>();
     }
-    return g_behaviorThreadRenderer->simulateScene(offset, timelineFrame, canvasWidth, canvasHeight, frameRate,
-                                                   scene, composition, source);
+    return g_behaviorThreadRenderer->simulateScene(track, toFrame, canvasWidth, canvasHeight, frameRate, scene,
+                                                   composition);
 }
 
 bool applyNativeEffectToImage(QImage& image, const core::Identifier& id,

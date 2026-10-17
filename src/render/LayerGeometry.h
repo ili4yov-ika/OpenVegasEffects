@@ -286,8 +286,12 @@ QMatrix4x4 layerOwnBehaviorMatrixAt(const composition::Composition& composition,
 // Where the simulated body of `layer` is at `frame`, moved from where its
 // world without the simulation puts it (plugin::simulateNativeBehaviorScene
 // over every body of the shot). False when the layer is no body.
+// Between frames (a motion blur sample) as FUN_18036c010 reads it: the
+// body at the next whole frame taken back along its velocity, against the
+// world's point in between. A run is kept per state of the shot and goes on
+// from where it stopped (the shot's cache at +0x228).
 bool layerSimulationOffsetAt(const composition::Composition& composition, const media::MediaManager* media,
-                             const composition::Layer& layer, int frame, QVector3D* offset);
+                             const composition::Layer& layer, double frame, QVector3D* offset);
 // A layer's world without any simulation - its own or its parents' - as
 // SimulateLayers measures it (PreAlignToMotion with the simulation off):
 // the parent's world x its Behaviors x its own placement.
@@ -296,6 +300,13 @@ QMatrix4x4 layerWorldWithoutSimulationAt(const composition::Composition* composi
 // Above zero while a world without simulation is being measured: no
 // simulation is run then, a parent's neither.
 int& simulationSuppressed();
+// Whether the layer has simulated Behaviors of its own - a body, whose
+// matrix takes the place of its whole world, its parents' simulation
+// included (the body's forces come to it instead).
+bool layerIsSimulatedBody(const composition::Layer& layer);
+// Added to the frame a simulated body is read at while a motion blur
+// sample of a 3D sheet is drawn (its sheet matrix takes the body in).
+double& simulationFrameShift();
 // Whether a 3D layer's clip is drawn as a sheet in the scene (renderClipIn3D)
 // - not text Geometry modules make a mesh of, nor a model.
 bool layerDrawnAsSheet(const composition::Layer& layer, const composition::Clip* clip);
