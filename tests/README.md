@@ -353,6 +353,8 @@ turned a quarter: it falls down the frame, not sideways, its box and pixels alik
 plane falls with it, and a plane keyed across the frame with Drag lags behind its keys; a run read back
 from a later frame matches a fresh one, a body between frames lies between them, a child body with
 Drag falls about as far as its parent (its forces), and a falling plane without keys is motion blurred.
+`behaviorsBlurAtTheirSubFrames` moves a plane without keys 8 pixels a frame with MotionTrack's matrices:
+motion blur smears it along its way about its box, and the module's matrices are read between frames.
 `behaviorsMultiplyInTheReferencesOrder` gives a plane a quarter turn and then a shift to the right: the
 plane goes up (the last Behavior acts first), and a parent's shift carries its child as far; boxes and
 pixels agree. `trimmedLayerKeepsItsKeys` drags a clip's head a quarter

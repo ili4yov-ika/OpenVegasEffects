@@ -432,7 +432,7 @@ int& simulationSuppressed()
     return suppressed;
 }
 
-double& simulationFrameShift()
+double& behaviorFrameShift()
 {
     static thread_local double shift = 0.0;
     return shift;

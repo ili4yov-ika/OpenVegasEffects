@@ -126,6 +126,12 @@ private:
                               const composition::Clip& clip,
                               int frame, int localFrame,
                               const QSize& canvasSize) const;
+    // What applyClipBehaviors puts on a picture of `imageSize` at `frame`
+    // (between frames too): the move about the picture's centre, and the
+    // opacity multiplier. A 3D sheet's move is in its sheet matrix: none.
+    QTransform clipBehaviorTransform(const composition::Layer& layer, const composition::Clip& clip,
+                                     double frame, const QSize& imageSize, const QSize& canvasSize,
+                                     double* opacity) const;
     void applyLayerMasks(QImage& image, const composition::Layer& layer) const;
     // A nested shot's frame from its pre-render, or null when there is none
     // for the shot's current state.

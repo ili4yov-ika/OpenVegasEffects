@@ -304,9 +304,10 @@ int& simulationSuppressed();
 // matrix takes the place of its whole world, its parents' simulation
 // included (the body's forces come to it instead).
 bool layerIsSimulatedBody(const composition::Layer& layer);
-// Added to the frame a simulated body is read at while a motion blur
-// sample of a 3D sheet is drawn (its sheet matrix takes the body in).
-double& simulationFrameShift();
+// Added to the frame Behaviors - and a simulated body - are read at while
+// a motion blur sample of a 3D sheet is drawn (its sheet matrix takes them
+// in): the reference's Behaviors run at the sub-frame's time.
+double& behaviorFrameShift();
 // Whether a 3D layer's clip is drawn as a sheet in the scene (renderClipIn3D)
 // - not text Geometry modules make a mesh of, nor a model.
 bool layerDrawnAsSheet(const composition::Layer& layer, const composition::Clip* clip);

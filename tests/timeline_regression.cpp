@@ -11416,6 +11416,60 @@ private slots:
                                                               .arg(child1.x()).arg(child1.y())));
         }
     }
+    // Motion blur samples a layer's Behaviors at their own times, as the
+    // reference runs them at the sub-frame's: a plane without keys that
+    // MotionTrack's matrices carry 8 pixels a frame is smeared along its
+    // way, about where its box is, and a module's matrices are read in
+    // between frames.
+    void behaviorsBlurAtTheirSubFrames() {
+        const core::Identifier id("test.behavior.blur.motiontrack");
+        plugin::registerNativeBehaviorModule(id, QStringLiteral("C:/nowhere/MotionTrack.hfpl"), QString(), false, {});
+        auto cleanup = qScopeGuard([] {
+            plugin::clearNativeInstanceTransforms();
+            plugin::clearNativeEffectModules();
+        });
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(1);
+        {
+            auto& plane = shot->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            plane.planeColor = Qt::red;
+            plane.transform.scalePercent = QPointF(10, 10);
+            composition::Effect motion; motion.pluginId = id; motion.name = "Motion Track";
+            composition::Clip clip; clip.durationSeconds = 1; clip.effects << motion;
+            plane.clips << clip;
+        }
+        const composition::Layer& plane = shot->layers()[0];
+        QVector<std::array<float, 16>> matrices(30, {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1});
+        for (int f = 0; f < 30; ++f) matrices[f][12] = 8.0f * (f - 10);
+        const QString key = render::nativeInstanceKey(plane.id, 0, 0);
+        plugin::setNativeInstanceTransforms(key, 0, matrices);
+        std::array<float, 16> between {};
+        QVERIFY(plugin::nativeInstanceTransformAt(key, 10.25, &between));
+        QCOMPARE(between[12], 2.0f);
+        const auto drawn = [&](bool blurred, double* centre) {
+            shot->layerRef(0).motionBlur = blurred;
+            render::RenderManager manager; manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 10.0 / 30.0, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 30000)) return -1;
+            const QByteArray bytes = frames[0][1].toByteArray();
+            const QImage image = QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                                        QImage::Format_RGBA8888).copy();
+            int first = -1, last = -1;
+            for (int x = 0; x < image.width(); ++x)
+                if (image.pixelColor(x, 90).red() > 25) { if (first < 0) first = x; last = x; }
+            *centre = (first + last + 1) / 2.0;
+            return first < 0 ? 0 : last - first + 1;
+        };
+        double sharpCentre = 0.0, smearedCentre = 0.0;
+        const int sharp = drawn(false, &sharpCentre), smeared = drawn(true, &smearedCentre);
+        const double box = render::layerGeometry(*shot, shot->layers()[0], nullptr, 10).bounds().center().x();
+        QVERIFY2(sharp > 0 && smeared >= sharp + 2,
+                 qPrintable(QStringLiteral("%1 %2").arg(sharp).arg(smeared)));
+        QVERIFY2(std::abs(sharpCentre - box) <= 1.5 && std::abs(smearedCentre - box) <= 1.5,
+                 qPrintable(QStringLiteral("%1 %2 box %3").arg(sharpCentre).arg(smearedCentre).arg(box)));
+    }
     // Under a turned and scaled parent: Fit Layer to Box turns the box with
     // the parent and moves the layer in the parent's units, so the box lands
     // where asked; and the footage an instance tracks is placed under its

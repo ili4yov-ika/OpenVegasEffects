@@ -2412,9 +2412,10 @@ public:
                   const QStringList& parameterValues,
                   const composition::Composition* composition,
                   const core::Identifier& sourceLayerId,
-                  const NativeBehaviorLayer& layer)
+                  const NativeBehaviorLayer& layer, double frameFraction = 0.0)
     {
 #ifndef Q_OS_WIN
+        Q_UNUSED(frameFraction);
         Q_UNUSED(layer);
         Q_UNUSED(result);
         Q_UNUSED(timelineFrame);
@@ -2470,9 +2471,9 @@ public:
         // has them: with frames the reveal/conceal modules ran 1000/fps
         // times too slow (FlyInFlyOut grew from 0.5 to 0.57 over a 120-frame
         // layer instead of reaching 1.0 at its 25 % mark, frame 30).
-        const auto milliseconds = [&invocation](int frame) {
+        const auto milliseconds = [&invocation, frameFraction](int frame) {
             return qint32(qBound<qint64>(
-                qint64(0), qRound64(double(frame) * 1000.0 / invocation.frameRate),
+                qint64(0), qRound64((double(frame) + frameFraction) * 1000.0 / invocation.frameRate),
                 qint64(std::numeric_limits<qint32>::max())));
         };
         const qint32 timeField = milliseconds(timelineFrame);
@@ -4478,6 +4479,20 @@ bool nativeInstanceTransformAt(const QString& instanceKey, int frame,
     return true;
 }
 
+bool nativeInstanceTransformAt(const QString& instanceKey, double frame, std::array<float, 16>* matrix)
+{
+    const int whole = int(std::floor(frame));
+    const float t = float(frame - whole);
+    std::array<float, 16> before {}, after {};
+    if (!nativeInstanceTransformAt(instanceKey, whole, &before)) return false;
+    if (t <= 0.0f || !nativeInstanceTransformAt(instanceKey, whole + 1, &after)) {
+        *matrix = before;
+        return true;
+    }
+    for (int i = 0; i < 16; ++i) (*matrix)[i] = before[i] + (after[i] - before[i]) * t;
+    return true;
+}
+
 namespace {
 QMutex g_controlStatesMutex;
 QHash<QString, QHash<QString, bool>> g_controlStates;
@@ -4711,7 +4726,7 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
                                  const QStringList& parameterValues,
                                  const composition::Composition* composition,
                                  const core::Identifier& sourceLayerId,
-                                 const NativeBehaviorLayer& layer)
+                                 const NativeBehaviorLayer& layer, double frameFraction)
 {
     ModuleRecord record;
     {
@@ -4728,7 +4743,7 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
     return g_behaviorThreadRenderer->evaluate(
         result, timelineFrame, localFrame, layerDurationFrames,
         canvasWidth, canvasHeight, frameRate, false, id.value(), record,
-        parameterValues, composition, sourceLayerId, layer);
+        parameterValues, composition, sourceLayerId, layer, frameFraction);
 }
 
 bool evaluateNativeSubObjectBehavior(

@@ -78,6 +78,27 @@ bool hasMotion(const composition::Layer& layer)
     return false;
 }
 
+QImage translatedSubpixel(const QImage& image, double dx, double dy);
+
+// `image` moved by `transform` about its centre: a whole translation as a
+// sub-pixel shift, anything else painted through.
+QImage movedAboutCentre(const QImage& image, const QTransform& transform)
+{
+    if (transform.isIdentity()) return image;
+    if (transform.type() == QTransform::TxTranslate) return translatedSubpixel(image, transform.dx(), transform.dy());
+    QImage transformed(image.size(), QImage::Format_RGBA8888);
+    transformed.fill(Qt::transparent);
+    QPainter painter(&transformed);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    const QPointF centre(image.width() / 2.0, image.height() / 2.0);
+    painter.translate(centre);
+    painter.setTransform(transform, true);
+    painter.translate(-centre);
+    painter.drawImage(QPoint(0, 0), image);
+    painter.end();
+    return transformed;
+}
+
 // The layer as it stands at a fractional frame: each animated 2D property is
 // interpolated between the frames either side and written back as static.
 composition::Layer layerAtSubFrame(const composition::Layer& layer, double frame)
@@ -656,67 +677,98 @@ QImage RenderWorker::renderClip(const composition::Layer& layer, const compositi
 
 namespace {
 
-// The Behaviors' matrices of the layer's clip at `frame`, in the clip's
-// order - from the frame's centre, Y up - whatever the layer's dimension.
-// The simulation its simulated Behaviors drive goes to `simulation` instead:
-// it is no Behavior matrix but where the simulated body is, which takes the
-// place of the layer's whole world (FUN_18036c010 after SimulateLayers).
-QVector<QMatrix4x4> behaviorMatricesAt(const composition::Composition& composition,
-                                       const media::MediaManager* media,
-                                       const composition::Layer& layer, int frame,
-                                       QMatrix4x4* simulation = nullptr)
+// A Behavior's parameters at `frame`, between frames too: numbers in between
+// their values at the frames either side, the rest as at the frame before.
+QStringList behaviorValuesAt(const composition::Effect& fx, double frame)
 {
-    QVector<QMatrix4x4> total;
-    if (simulation) simulation->setToIdentity();
-    const double rate = composition.fpsDenominator() > 0
-        ? double(composition.fpsNumerator()) / composition.fpsDenominator() : 30.0;
-    const double seconds = frame / rate;
-    const composition::Clip* clip = nullptr;
-    for (const composition::Clip& candidate : layer.clips) {
-        if (seconds >= candidate.startSeconds && seconds < candidate.endSeconds()) clip = &candidate;
+    const int whole = int(std::floor(frame));
+    const double t = frame - whole;
+    QStringList values = fx.parameterValues;
+    for (int parameter = 0; parameter < values.size(); ++parameter) {
+        const QVariant before = fx.parameterAt(parameter, whole);
+        values[parameter] = before.toString();
+        if (t <= 1e-9) continue;
+        bool a = false, b = false;
+        const double from = before.toString().toDouble(&a);
+        const double to = fx.parameterAt(parameter, whole + 1).toString().toDouble(&b);
+        if (a && b && from != to) values[parameter] = QString::number(from + (to - from) * t, 'g', 12);
     }
-    if (!clip) return total;
-    bool any = false;
-    for (const composition::Effect& fx : clip->effects) {
-        any = any || (fx.enabled && (plugin::nativeBehaviorUsesInstance(fx.pluginId)
-                                     || plugin::nativeBehaviorRenderingVerified(fx.pluginId)));
-    }
-    if (!any) return total;
-    const QSize scene = composition.displaySize();
-    const int localFrame = frame - int(std::lround(clip->startSeconds * rate));
-    const int durationFrames = qMax(1, qRound(clip->durationSeconds * rate));
-    const auto add = [&](const QMatrix4x4& matrix) { total.append(matrix); };
-    const qsizetype clipIndex = clip - layer.clips.constData();
-    QVector<plugin::NativeBehaviorRequest> simulationBehaviors;
-    for (qsizetype effectIndex = 0; effectIndex < clip->effects.size(); ++effectIndex) {
-        const composition::Effect& fx = clip->effects.at(effectIndex);
+    return values;
+}
+
+// The Behaviors of `clip` at `frame` (between frames too, as the reference
+// runs them at the sub-frame's time): their matrices in the clip's order -
+// from the frame's centre, Y up - and their opacity together. Simulated
+// Behaviors give no matrix here (SimulateLayers moves the body).
+struct ClipBehaviors
+{
+    QVector<QMatrix4x4> matrices;
+    double opacity = 1.0;
+};
+
+ClipBehaviors clipBehaviorsAt(const composition::Composition& composition, const media::MediaManager* media,
+                              const composition::Layer& layer, const composition::Clip& clip, double frame,
+                              const QSize& scene)
+{
+    ClipBehaviors result;
+    const double rate = composition.framesPerSecond();
+    const int whole = int(std::floor(frame));
+    const double fraction = frame - whole;
+    const int localFrame = whole - int(std::lround(clip.startSeconds * rate));
+    const int durationFrames = qMax(1, qRound(clip.durationSeconds * rate));
+    const qsizetype clipIndex = &clip - layer.clips.constData();
+    for (qsizetype effectIndex = 0; effectIndex < clip.effects.size(); ++effectIndex) {
+        const composition::Effect& fx = clip.effects.at(effectIndex);
         if (fx.enabled && plugin::nativeBehaviorUsesInstance(fx.pluginId)) {
+            // Matrices the module's own instance gave on the GUI thread, on
+            // the canvas from its centre, Y up (NativeInstanceHost::bake).
             std::array<float, 16> matrix {};
-            if (plugin::nativeInstanceTransformAt(nativeInstanceKey(layer.id, int(clipIndex), int(effectIndex)),
-                                                  frame, &matrix))
-                add(QMatrix4x4(matrix.data()).transposed());
+            if (clipIndex >= 0 && clipIndex < layer.clips.size()
+                && plugin::nativeInstanceTransformAt(nativeInstanceKey(layer.id, int(clipIndex), int(effectIndex)),
+                                                     frame, &matrix))
+                result.matrices.append(QMatrix4x4(matrix.data()).transposed());
             continue;
         }
         if (!fx.enabled || !plugin::nativeBehaviorRenderingVerified(fx.pluginId)
             || plugin::nativeBehaviorSubObjectRenderingVerified(fx.pluginId))
             continue;
-        QStringList values = fx.parameterValues;
-        for (int parameter = 0; parameter < values.size(); ++parameter)
-            values[parameter] = fx.parameterAt(parameter, frame).toString();
-        if (plugin::nativeBehaviorSimulationRenderingVerified(fx.pluginId))
-            simulationBehaviors.push_back({fx.pluginId, values});
+        const QStringList values = behaviorValuesAt(fx, frame);
         plugin::NativeBehaviorResult behavior;
-        if (!plugin::evaluateNativeBehaviorFrame(behavior, frame, localFrame, durationFrames, scene.width(),
+        if (!plugin::evaluateNativeBehaviorFrame(behavior, whole, localFrame, durationFrames, scene.width(),
                                                  scene.height(), rate, fx.pluginId, values, &composition, layer.id,
-                                                 behaviorLayerAt(&composition, layer, *clip, textEffectOfClip(*clip), frame,
-                                                                 scene, media)))
+                                                 behaviorLayerAt(&composition, layer, clip, textEffectOfClip(clip), whole,
+                                                                 scene, media),
+                                                 fraction))
             continue;
-        add(behavior.transformation);
+        result.opacity *= behavior.opacity;
+        result.matrices.append(behavior.transformation);
     }
-    Q_UNUSED(simulationBehaviors);
+    return result;
+}
+
+const composition::Clip* clipShownAt(const composition::Composition& composition,
+                                     const composition::Layer& layer, int frame);
+
+// The Behaviors' matrices of the layer's clip at `frame`, in the clip's
+// order - from the frame's centre, Y up - whatever the layer's dimension.
+// The simulation its simulated Behaviors drive goes to `simulation` instead:
+// it is no Behavior matrix but where the simulated body is, which takes the
+// place of the layer's whole world (FUN_18036c010 after SimulateLayers).
+// While a motion blur sample of a sheet is drawn, they are read between
+// frames (behaviorFrameShift).
+QVector<QMatrix4x4> behaviorMatricesAt(const composition::Composition& composition,
+                                       const media::MediaManager* media,
+                                       const composition::Layer& layer, int frame,
+                                       QMatrix4x4* simulation = nullptr)
+{
+    if (simulation) simulation->setToIdentity();
+    const double at = frame + behaviorFrameShift();
+    const composition::Clip* clip = clipShownAt(composition, layer, int(std::floor(at)));
+    if (!clip) return {};
+    QVector<QMatrix4x4> total = clipBehaviorsAt(composition, media, layer, *clip, at, composition.displaySize()).matrices;
     QVector3D offset;
     if (simulation && simulationSuppressed() == 0
-        && layerSimulationOffsetAt(composition, media, layer, frame, &offset))
+        && layerSimulationOffsetAt(composition, media, layer, at, &offset))
         simulation->translate(offset);
     return total;
 }
@@ -818,7 +870,6 @@ bool layerSimulationOffsetAt(const composition::Composition& composition, const 
                              const composition::Layer& layer, double frame, QVector3D* offset)
 {
     if (!offset || simulationSuppressed() > 0) return false;
-    frame += simulationFrameShift();
     const QVector<composition::Layer>& layers = composition.layers();
     int source = -1;
     for (int i = 0; i < layers.size(); ++i)
@@ -1056,127 +1107,71 @@ void RenderWorker::applyClipEffects(QImage& image, const composition::Clip& clip
     }
 }
 
+QTransform RenderWorker::clipBehaviorTransform(const composition::Layer& layer, const composition::Clip& clip,
+                                               double frame, const QSize& imageSize, const QSize& canvasSize,
+                                               double* opacity) const
+{
+    if (opacity) *opacity = 1.0;
+    if (!m_composition) return QTransform();
+    // A 3D sheet took its Behaviors' matrices into its place in the scene
+    // (layerSheetMatrixAt); only their opacity is left for the picture.
+    const bool sheet = layerDrawnAsSheet(layer, &clip);
+    // The modules see the shot at full size, also in a reduced preview; what
+    // they move is moved by as much of the reduced picture.
+    const QSize scene = sceneCanvas(canvasSize);
+    const ClipBehaviors behaviors = clipBehaviorsAt(*m_composition, m_mediaManager.get(), layer, clip, frame, scene);
+    if (opacity) *opacity = qBound(0.0, behaviors.opacity, 1.0);
+    if (sheet) return QTransform();
+    const QTransform toScene = QTransform::fromScale(double(scene.width()) / qMax(1, imageSize.width()),
+                                                     double(scene.height()) / qMax(1, imageSize.height()));
+    // The picture is already under the layer's parent; the Behaviors act
+    // inside it (ParentTransformationAtTime: the parent's world x the
+    // Behaviors), so each is taken through the parent undone and redone -
+    // about the frame's centre, as the matrices are.
+    QTransform intoParent, outOfParent;
+    const QTransform parent = layerCanvasParentAt(m_composition.get(), layer, int(std::floor(frame)), QSizeF(scene));
+    bool invertible = true;
+    const QTransform unparent = parent.inverted(&invertible);
+    if (!parent.isIdentity() && invertible) {
+        const QTransform toCentre = QTransform::fromTranslate(-scene.width() / 2.0, -scene.height() / 2.0);
+        const QTransform fromCentre = QTransform::fromTranslate(scene.width() / 2.0, scene.height() / 2.0);
+        intoParent = fromCentre * unparent * toCentre;
+        outOfParent = fromCentre * parent * toCentre;
+    }
+    // Behavior matrices are in composition space - from the frame's centre,
+    // Y up (Drop lifts a layer's lower edge to +height/2, the top) - so the
+    // whole matrix is mirrored into the image's rows, rotation and shear
+    // included: a module's clockwise turn stays clockwise on screen.
+    // Gathered in the reference's order - B1 x B2 x ..., the last one
+    // nearest the layer, so it acts first.
+    QTransform combined;
+    for (const QMatrix4x4& matrix : behaviors.matrices) {
+        const float* m = matrix.constData();
+        combined = toScene * intoParent
+                   * QTransform(double(m[0]), -double(m[1]), -double(m[4]), double(m[5]),
+                                double(m[12]), -double(m[13]))
+                   * outOfParent * toScene.inverted() * combined;
+    }
+    // The simulated body takes the place of the layer's world
+    // (FUN_18036c010): its move is in the world, after the parent.
+    QVector3D simulated;
+    if (layerSimulationOffsetAt(*m_composition, m_mediaManager.get(), layer, frame, &simulated))
+        combined = combined * toScene * QTransform::fromTranslate(double(simulated.x()), -double(simulated.y()))
+                   * toScene.inverted();
+    return combined;
+}
+
 double RenderWorker::applyClipBehaviors(QImage& image,
                                         const composition::Layer& layer,
                                         const composition::Clip& clip,
                                         int frame, int localFrame,
                                         const QSize& canvasSize) const
 {
+    Q_UNUSED(localFrame);
     double opacity = 1.0;
-    // A 3D sheet took its Behaviors' matrices into its place in the scene
-    // (layerSheetMatrixAt); only their opacity is left for the picture.
-    const bool sheet = layerDrawnAsSheet(layer, &clip);
-    // The picture is already under the layer's parent; the Behaviors act
-    // inside it (ParentTransformationAtTime: the parent's world x the
-    // Behaviors), so each is taken through the parent undone and redone -
-    // about the frame's centre, as the matrices are.
-    const double frameRate = m_composition
-        ? double(m_composition->fpsNumerator())
-              / qMax(1, m_composition->fpsDenominator())
-        : 30.0;
-    const int durationFrames = m_composition
-        ? qMax(1, qRound(clip.durationSeconds
-                         * frameRate))
-        : 1;
-    QVector<plugin::NativeBehaviorRequest> simulationBehaviors;
-    // The modules see the shot at full size, also in a reduced preview; what
-    // they move is moved by as much of the reduced picture.
-    const QSize scene = sceneCanvas(canvasSize);
-    const QTransform toScene = QTransform::fromScale(double(scene.width()) / qMax(1, image.width()),
-                                                     double(scene.height()) / qMax(1, image.height()));
-    // Behavior matrices are in composition space - from the frame's centre,
-    // Y up (Drop lifts a layer's lower edge to +height/2, the top) - so the
-    // whole matrix is mirrored into the image's rows, rotation and shear
-    // included: a module's clockwise turn stays clockwise on screen.
-    QTransform intoParent, outOfParent;
-    if (!sheet && m_composition) {
-        const QTransform parent = layerCanvasParentAt(m_composition.get(), layer, frame, QSizeF(scene));
-        bool invertible = true;
-        const QTransform unparent = parent.inverted(&invertible);
-        if (!parent.isIdentity() && invertible) {
-            const QTransform toCentre = QTransform::fromTranslate(-scene.width() / 2.0, -scene.height() / 2.0);
-            const QTransform fromCentre = QTransform::fromTranslate(scene.width() / 2.0, scene.height() / 2.0);
-            intoParent = fromCentre * unparent * toCentre;
-            outOfParent = fromCentre * parent * toCentre;
-        }
-    }
-    // Gathered in the reference's order - B1 x B2 x ..., the last one
-    // nearest the layer, so it acts first - and put on the picture once.
-    QTransform combined;
-    const auto applyTransformation = [&combined, &toScene, sheet, &intoParent, &outOfParent](const QMatrix4x4& matrix) {
-        if (sheet) return;
-        const float* m = matrix.constData();
-        const QTransform transform = toScene * intoParent
-            * QTransform(double(m[0]), -double(m[1]), -double(m[4]), double(m[5]),
-                         double(m[12]), -double(m[13]))
-            * outOfParent * toScene.inverted();
-        combined = transform * combined;
-    };
-    const auto moveImage = [&image](const QTransform& transform) {
-        if (transform.isIdentity()) return;
-        if (transform.type() == QTransform::TxTranslate) {
-            image = translatedSubpixel(image, transform.dx(), transform.dy());
-            return;
-        }
-        QImage transformed(image.size(), QImage::Format_RGBA8888);
-        transformed.fill(Qt::transparent);
-        QPainter painter(&transformed);
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        const QPointF centre(image.width() / 2.0, image.height() / 2.0);
-        painter.translate(centre);
-        painter.setTransform(transform, true);
-        painter.translate(-centre);
-        painter.drawImage(QPoint(0, 0), image);
-        image = std::move(transformed);
-    };
-    const qsizetype clipIndex = &clip - layer.clips.constData();
-    for (qsizetype effectIndex = 0; effectIndex < clip.effects.size(); ++effectIndex) {
-        const composition::Effect& fx = clip.effects.at(effectIndex);
-        if (fx.enabled && plugin::nativeBehaviorUsesInstance(fx.pluginId)
-            && clipIndex >= 0 && clipIndex < layer.clips.size()) {
-            // Matrices the module's own instance gave on the GUI thread, on
-            // the canvas from its centre, Y up (NativeInstanceHost::bake).
-            std::array<float, 16> matrix {};
-            const QString key = QStringLiteral("%1/%2/%3").arg(layer.id.value()).arg(clipIndex)
-                                    .arg(effectIndex);
-            if (plugin::nativeInstanceTransformAt(key, frame, &matrix))
-                applyTransformation(QMatrix4x4(matrix.data()).transposed());
-            continue;
-        }
-        if (!fx.enabled || !plugin::nativeBehaviorRenderingVerified(fx.pluginId)
-            || plugin::nativeBehaviorSubObjectRenderingVerified(fx.pluginId)) {
-            continue;
-        }
-        QStringList values = fx.parameterValues;
-        for (int parameter = 0; parameter < values.size(); ++parameter) {
-            values[parameter] = fx.parameterAt(parameter, frame).toString();
-        }
-        if (plugin::nativeBehaviorSimulationRenderingVerified(fx.pluginId)) {
-            simulationBehaviors.push_back({fx.pluginId, values});
-        }
-        plugin::NativeBehaviorResult behavior;
-        if (!plugin::evaluateNativeBehaviorFrame(
-                behavior, frame, localFrame, durationFrames,
-                scene.width(), scene.height(), frameRate,
-                fx.pluginId, values, m_composition.get(), layer.id,
-                behaviorLayerAt(m_composition.get(), layer, clip, textEffectOf(clip), frame, scene,
-                                m_mediaManager.get()))) {
-            continue;
-        }
-        opacity *= behavior.opacity;
-        applyTransformation(behavior.transformation);
-    }
-    Q_UNUSED(simulationBehaviors);
-    QVector3D simulated;
-    if (!sheet && m_composition
-        && layerSimulationOffsetAt(*m_composition, m_mediaManager.get(), layer, frame, &simulated)) {
-        // The simulated body takes the place of the layer's world
-        // (FUN_18036c010): its move is in the world, after the parent.
-        combined = combined * toScene * QTransform::fromTranslate(double(simulated.x()), -double(simulated.y()))
-                   * toScene.inverted();
-    }
-    moveImage(combined);
-    return qBound(0.0, opacity, 1.0);
+    const QTransform transform = clipBehaviorTransform(layer, clip, frame, image.size(), canvasSize, &opacity);
+    if (!transform.isIdentity()) image = movedAboutCentre(image, transform);
+    return opacity;
 }
 
 void RenderWorker::applyLayerMasks(QImage& image, const composition::Layer& layer) const
@@ -2779,16 +2774,21 @@ QImage RenderWorker::renderLayerClipImage(const composition::Layer& layer,
     const composition::CompositionRenderSettings& shutter = m_composition->renderSettings();
     // The travel in the pixels drawn: a reduced preview needs fewer samples
     // for the same smear.
-    // A simulated body moves without keys: its travel over the frame counts.
+    // What moves the layer over the frame besides its keys - its Behaviors,
+    // a simulated body, its parent - shows in its box: the farthest a
+    // corner of it goes counts as well.
     const bool blurring = withEffects && layer.motionBlur && shutter.motionBlurEnabled && shutter.shutterAngle > 0.0;
-    QVector3D atFrame, atNext;
-    const bool body = blurring && m_composition
-        && layerSimulationOffsetAt(*m_composition, m_mediaManager.get(), layer, frameNo, &atFrame)
-        && layerSimulationOffsetAt(*m_composition, m_mediaManager.get(), layer, frameNo + 1, &atNext);
-    const double simulatedTravel = body ? double((atNext - atFrame).toVector2D().length()) : 0.0;
-    const QVector<double> offsets = blurring && (hasMotion(layer) || simulatedTravel > 0.0)
-        ? shutterOffsets(shutter, (framePixelTravel(layer, frameNo, sceneCanvas(size)) + simulatedTravel)
-                                      * qMin(1.0, m_renderScale))
+    double boxTravel = 0.0;
+    if (blurring && m_composition) {
+        const LayerGeometry now = layerGeometry(*m_composition, layer, m_mediaManager.get(), frameNo);
+        const LayerGeometry next = layerGeometry(*m_composition, layer, m_mediaManager.get(), frameNo + 1);
+        if (now.valid && next.valid && now.quad.size() == next.quad.size())
+            for (int corner = 0; corner < now.quad.size(); ++corner)
+                boxTravel = qMax(boxTravel, QLineF(now.quad.at(corner), next.quad.at(corner)).length());
+    }
+    const double travel = qMax(framePixelTravel(layer, frameNo, sceneCanvas(size)), boxTravel);
+    const QVector<double> offsets = blurring && (hasMotion(layer) || boxTravel > 0.01)
+        ? shutterOffsets(shutter, travel * qMin(1.0, m_renderScale))
         : QVector<double>();
     if (offsets.size() < 2) {
         clipImage = renderClip(offsets.isEmpty() ? layer : layerAtSubFrame(layer, frameNo + offsets[0]),
@@ -2798,26 +2798,42 @@ QImage RenderWorker::renderLayerClipImage(const composition::Layer& layer,
         // instead of picking up the colour of transparent pixels.
         std::vector<float> sum;
         QSize sampleSize;
-        // A simulated body between frames: a sheet takes it in its matrix
-        // while the sample is drawn, a 2D picture is moved by how far the
-        // body is from where it is at the frame (applyClipBehaviors puts
-        // that on after).
+        // Each sample's Behaviors at its own time, as the reference runs them
+        // at the sub-frame's (simulated bodies taken back between frames):
+        // a sheet takes them in its matrix while the sample is drawn, a 2D
+        // picture is moved by how its Behaviors there differ from the
+        // frame's (applyClipBehaviors puts the frame's on after), and faded
+        // by how their opacity does.
         const bool sheet = layerDrawnAsSheet(layer, &clip);
+        double opacityAtFrame = 1.0;
+        const QTransform atFrameMove = withEffects
+            ? clipBehaviorTransform(layer, clip, frameNo, size, size, &opacityAtFrame) : QTransform();
+        bool invertible = true;
+        const QTransform undoFrame = atFrameMove.inverted(&invertible);
         for (double offset : offsets) {
-            if (body && sheet) simulationFrameShift() = offset;
+            if (withEffects && sheet) behaviorFrameShift() = offset;
             QImage sample = renderClip(layerAtSubFrame(layer, frameNo + offset), clip,
                                        qMax(0.0, localTime), size, frameNo)
                                 .convertToFormat(QImage::Format_RGBA8888_Premultiplied);
-            simulationFrameShift() = 0.0;
-            QVector3D between;
-            if (body && !sheet
-                && layerSimulationOffsetAt(*m_composition, m_mediaManager.get(), layer, frameNo + offset, &between)) {
-                const QSize scene = sceneCanvas(size);
-                const double sx = double(sample.width()) / qMax(1, scene.width());
-                const double sy = double(sample.height()) / qMax(1, scene.height());
-                sample = translatedSubpixel(sample, double(between.x() - atFrame.x()) * sx,
-                                            -double(between.y() - atFrame.y()) * sy)
-                             .convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+            behaviorFrameShift() = 0.0;
+            if (withEffects) {
+                double opacityThen = 1.0;
+                const QTransform then = clipBehaviorTransform(layer, clip, frameNo + offset, sample.size(), size,
+                                                              &opacityThen);
+                if (!sheet && invertible) {
+                    const QTransform difference = then * undoFrame;
+                    if (!difference.isIdentity())
+                        sample = movedAboutCentre(sample.convertToFormat(QImage::Format_RGBA8888), difference)
+                                     .convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+                }
+                if (opacityAtFrame > 1e-6 && std::abs(opacityThen - opacityAtFrame) > 1e-6) {
+                    const float ratio = float(opacityThen / opacityAtFrame);
+                    for (int y = 0; y < sample.height(); ++y) {
+                        uchar* row = sample.scanLine(y);
+                        for (int x = 0; x < sample.width() * 4; ++x)
+                            row[x] = uchar(qBound(0, int(std::lround(row[x] * ratio)), 255));
+                    }
+                }
             }
             if (sum.empty()) {
                 sampleSize = sample.size();

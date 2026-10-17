@@ -133,6 +133,9 @@ bool evaluateNativeBehavior(NativeBehaviorResult& result, int timelineFrame,
 // Frame-only 102/104 path used before the layer's simulation behaviors are
 // evaluated together. Calling the simulation modules separately would reset
 // velocity between Acceleration, Gravity and Drag.
+// `frameFraction` puts the module between frames (a motion blur sample):
+// its times are milliseconds (tagBiffBehaviorMC +0x08/+0x0c), as the
+// reference's ParentTransformationAtTime hands it the sub-frame's.
 bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame,
                                  int localFrame, int layerDurationFrames,
                                  int canvasWidth, int canvasHeight, double frameRate,
@@ -140,7 +143,8 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
                                  const QStringList& parameterValues = {},
                                  const composition::Composition* composition = nullptr,
                                  const core::Identifier& sourceLayerId = {},
-                                 const NativeBehaviorLayer& layer = {});
+                                 const NativeBehaviorLayer& layer = {},
+                                 double frameFraction = 0.0);
 bool evaluateNativeSubObjectBehavior(
     NativeSubObjectResult& result, int timelineFrame, int localFrame,
     int layerDurationFrames, int canvasWidth, int canvasHeight,
@@ -497,6 +501,9 @@ QVector<EffectParameterSpec> nativeParameters(const core::Identifier& id);
 void setNativeInstanceTransforms(const QString& instanceKey, int firstFrame,
                                  const QVector<std::array<float, 16>>& matrices);
 bool nativeInstanceTransformAt(const QString& instanceKey, int frame,
+                               std::array<float, 16>* matrix);
+// Between frames: the matrices either side, in between.
+bool nativeInstanceTransformAt(const QString& instanceKey, double frame,
                                std::array<float, 16>* matrix);
 void clearNativeInstanceTransforms(const QString& instanceKey = QString());
 
