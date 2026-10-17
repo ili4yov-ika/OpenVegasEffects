@@ -469,3 +469,7 @@ again. `preRenderCarriesTheShotsAudio` pre-renders a shot with a tone: its pre-r
 as a WAV, export takes it for the nested shot, and an edited shot no longer matches it.
 `options_regression::renderMapSizesReachNewProjects` sets the shadow and reflection map sizes in
 Options > Render and finds them in a new project's render settings.
+`sliceAndStretchCutAndTrimACameraSpan` slices a camera's bar in two (the copy from the cut on, both
+keeping the key) and rate-stretches its end, which trims it. `multiClipLayersGoOutAsSlices` saves a plane
+with two clips as two layers - the second marked OpenVegasSliceOf, its range its clip's - reads it back as
+one layer with both clips, and without the mark as two layers, as the reference would.

@@ -19,6 +19,7 @@
 #include <QCoreApplication>
 #include <QSettings>
 #include <QTreeWidgetItemIterator>
+#include <QUuid>
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -1029,7 +1030,7 @@ void TimelineCanvas::mousePressEvent(QMouseEvent* event)
             return;
         }
         if (m_tool == EditorTool::Slice) {
-            if (sliceClipAt(event->pos())) {
+            if (sliceClipAt(event->pos()) || sliceSpanAt(event->pos())) {
                 update();
                 emit clipsEdited();
             }
@@ -1074,9 +1075,12 @@ void TimelineCanvas::mousePressEvent(QMouseEvent* event)
             m_selLayer = layerIndex;
             m_selClip = -1;
             emit clipSelected(layerIndex, -1);
-            // Select moves and trims it; the other tools work on material,
-            // which a span has none of.
-            if (m_tool == EditorTool::Select) {
+            // Select moves and trims it. Rate Stretch on its end trims it as
+            // well: the reference's stretch (FUN_1405cae00) changes the speed
+            // only of a layer with a speed to change and otherwise sets the
+            // start or end as a trim does, the keys staying on the shot.
+            if (m_tool == EditorTool::Select
+                || (m_tool == EditorTool::Stretch && edge != ClipEdge::None)) {
                 m_dragSpanLayer = layerIndex;
                 m_dragSpanEdge = edge;
                 m_dragStartTime = timeAtX(event->pos().x());
@@ -1723,6 +1727,25 @@ bool TimelineCanvas::sliceClipAt(const QPoint& pos)
     tail.sourceStartSeconds = clip.sourceStartSeconds + (cut - clip.startSeconds) * clip.speed;
     clip.durationSeconds = cut - clip.startSeconds;
     layer.clips.insert(clipIndex + 1, tail);
+    return true;
+}
+
+bool TimelineCanvas::sliceSpanAt(const QPoint& pos)
+{
+    int layerIndex = -1;
+    if (!m_comp || !spanAt(pos, &layerIndex, nullptr)) return false;
+    composition::Layer& layer = m_comp->layerRef(layerIndex);
+    if (layer.locked) return false;
+    const double cut = snapTime(timeAtX(pos.x()), -1, -1);
+    const double kMinimum = 1.0 / qMax(1.0, frameRate());
+    const double end = composition::layerSpanEnd(layer, m_comp->durationSeconds());
+    if (cut <= layer.spanStartSeconds + kMinimum || cut >= end - kMinimum) return false;
+    composition::Layer tail = layer;
+    tail.id = core::Identifier(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    tail.spanStartSeconds = cut;
+    layer.spanEndSeconds = cut;
+    // Inserted beside it ("Insert Layer"), one place on in the list.
+    m_comp->insertLayer(layerIndex + 1, tail);
     return true;
 }
 

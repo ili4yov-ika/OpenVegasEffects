@@ -11051,6 +11051,112 @@ private slots:
         QCOMPARE(comp->layers()[0].spanEndSeconds, 15.0);
         QCOMPARE(comp->layers()[0].transform.positionXCurve.locations(), (QVector<int> {10 * fps}));
     }
+    // The shot timeline's other tools on a camera's bar, as the reference
+    // has them: Slice cuts the layer in two (Slice Layer: a copy from the cut
+    // on, the keys of both where they were), Rate Stretch on its end trims
+    // it (no speed to change on a camera, FUN_1405cae00).
+    void sliceAndStretchCutAndTrimACameraSpan() {
+        composition::Layer camera;
+        camera.name = "Camera"; camera.kind = composition::LayerKind::Camera;
+        camera.dimension = composition::LayerDimension::ThreeD;
+        camera.spanStartSeconds = 5.0; camera.spanEndSeconds = 15.0;
+        const int fps = comp->fpsNumerator() / qMax(1, comp->fpsDenominator());
+        camera.transform.positionXCurve.set(12 * fps, 20.0);
+        QVERIFY(comp->insertLayer(0, camera));
+        panel->setComposition(comp);
+        panel->setSnapEnabled(false);
+        auto* canvas = panel->findChild<ui::TimelineCanvas*>(); const int y = ui::kTimelineRulerHeight + 11;
+        const auto xFor = [&](double seconds) {
+            return int(std::lround(seconds * canvas->pixelsPerSecond())) - canvas->hScrollOffset();
+        };
+        const int historyBefore = history.count();
+        const int layersBefore = comp->layers().size();
+        panel->setTool(ui::EditorTool::Slice);
+        QTest::mouseClick(canvas, Qt::LeftButton, Qt::NoModifier, QPoint(xFor(8.0), y));
+        QCOMPARE(comp->layers().size(), layersBefore + 1);
+        const composition::Layer& head = comp->layers()[0];
+        const composition::Layer& tail = comp->layers()[1];
+        QCOMPARE(head.kind, composition::LayerKind::Camera);
+        QCOMPARE(tail.kind, composition::LayerKind::Camera);
+        QVERIFY(head.id != tail.id);
+        QCOMPARE(head.spanStartSeconds, 5.0);
+        QVERIFY(std::abs(head.spanEndSeconds - 8.0) < 0.1);
+        QCOMPARE(tail.spanStartSeconds, head.spanEndSeconds);
+        QCOMPARE(tail.spanEndSeconds, 15.0);
+        QCOMPARE(head.transform.positionXCurve.locations(), (QVector<int> {12 * fps}));
+        QCOMPARE(tail.transform.positionXCurve.locations(), (QVector<int> {12 * fps}));
+        QCOMPARE(history.count(), historyBefore + 1);
+        // Rate Stretch on the tail's end: a trim, the key where it was.
+        panel->setTool(ui::EditorTool::Stretch);
+        history.undo();
+        QCOMPARE(comp->layers().size(), layersBefore);
+        const double end = comp->layers()[0].spanEndSeconds;
+        const int second = int(std::lround(canvas->pixelsPerSecond()));
+        const QPoint from(xFor(end) - 3, y), to(xFor(end) - 3 - 2 * second, y);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, from);
+        QMouseEvent move(QEvent::MouseMove, to, canvas->mapToGlobal(to), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas, &move);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, to);
+        QVERIFY2(comp->layers()[0].spanEndSeconds < end - 1.5,
+                 qPrintable(QString::number(comp->layers()[0].spanEndSeconds)));
+        QCOMPARE(comp->layers()[0].spanStartSeconds, 5.0);
+        QCOMPARE(comp->layers()[0].transform.positionXCurve.locations(), (QVector<int> {12 * fps}));
+        panel->setTool(ui::EditorTool::Select);
+    }
+    // A layer of this port with two clips goes out as two layers, as the
+    // reference's Slice Layer would leave it - the second marked
+    // OpenVegasSliceOf, its range its clip's - and comes back as one layer
+    // with both clips; the reference, without this port's attributes, reads
+    // two layers.
+    void multiClipLayersGoOutAsSlices() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        media::MediaManager media;
+        composition::Composition shot;
+        shot.setSize(320, 180); shot.setFrameRate(30, 1); shot.setDurationSeconds(4);
+        {
+            auto& plane = shot.addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            composition::Clip first; first.startSeconds = 0.0; first.durationSeconds = 1.0;
+            composition::Clip second; second.startSeconds = 2.0; second.durationSeconds = 1.0;
+            plane.clips << first << second;
+            plane.transform.positionXCurve.set(75, 30.0);
+        }
+        const QString path = temp.filePath("slices.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(path, shot, media).isSuccess());
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
+        const QString xml = QString::fromUtf8(file.readAll());
+        file.close();
+        QCOMPARE(xml.count(QStringLiteral("<AssetLayer ")), 2);
+        QCOMPARE(xml.count(QStringLiteral("OpenVegasSliceOf=\"%1\"").arg(shot.layers()[0].id.value())), 1);
+        QVERIFY(xml.contains(QRegularExpression(QStringLiteral("<StartFrame>60</StartFrame>\\s*<EndFrame>90</EndFrame>"))));
+        const auto load = [&](const QString& text) {
+            QFile out(path); if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) return composition::Composition();
+            out.write(text.toUtf8()); out.close();
+            composition::Composition loaded; media::MediaManager media2;
+            if (!project::VegfxSerializer::loadFromFile(path, &loaded, &media2).isSuccess()) return composition::Composition();
+            return loaded;
+        };
+        const composition::Composition back = load(xml);
+        QCOMPARE(back.layers().size(), 1);
+        QCOMPARE(back.layers()[0].clips.size(), 2);
+        QCOMPARE(back.layers()[0].transform.positionXCurve.locations(), (QVector<int> {75}));
+        // As the reference sees it: two layers of one range each, the key
+        // on both at its frame of the shot.
+        QString reference = xml;
+        reference.remove(QRegularExpression(QStringLiteral(" OpenVegasSliceOf=\"[^\"]*\"")));
+        reference.remove(QRegularExpression(QStringLiteral("<OpenVegasClips[^>]*>.*?</OpenVegasClips>"),
+                                            QRegularExpression::DotMatchesEverythingOption));
+        const composition::Composition seen = load(reference);
+        QCOMPARE(seen.layers().size(), 2);
+        QVector<double> starts;
+        for (const composition::Layer& layer : seen.layers()) {
+            QCOMPARE(layer.clips.size(), 1);
+            starts << layer.clips[0].startSeconds;
+            QCOMPARE(layer.transform.positionXCurve.locations(), (QVector<int> {75}));
+        }
+        std::sort(starts.begin(), starts.end());
+        QCOMPARE(starts, (QVector<double> {0.0, 2.0}));
+    }
     // Key times in the file are relative to the layer's start, as the
     // reference writes them (StartFrame), and come back on the shot's
     // timeline; a save of this port from before kept them on the shot's

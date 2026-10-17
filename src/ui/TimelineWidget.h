@@ -319,6 +319,10 @@ private:
     void beginClipDrag(int layerIndex, int clipIndex, ClipEdge edge, double pressTime);
     // Cuts the clip under the pointer in two at the time clicked.
     bool sliceClipAt(const QPoint& pos);
+    // Slice on a layer without clips: the reference's Slice Layer
+    // (FUN_14059e770) - a copy of the layer from the cut on, the layer
+    // itself ending there, the keys of both where they were.
+    bool sliceSpanAt(const QPoint& pos);
     // Track Select Forwards: picks the first clip at or after the click.
     void selectFromHere(const QPoint& pos);
     void updateToolCursor(const QPoint& pos);

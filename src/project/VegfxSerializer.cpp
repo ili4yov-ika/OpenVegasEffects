@@ -2059,6 +2059,9 @@ void readCompositionAsset(const QDomElement& compositionAsset,
         if (kindIt == kLayerElements.constEnd()) {
             continue;
         }
+        // A later clip of a layer of this port, written as a layer of its own
+        // for the reference: the layer's OpenVegasClips already holds it.
+        if (lw.hasAttribute(QStringLiteral("OpenVegasSliceOf"))) continue;
         composition::LayerKind layerKind = kindIt.value();
         const QString kindAttr = lw.attribute(QStringLiteral("OpenVegasKind"));
         if (!kindAttr.isEmpty()) {
@@ -3032,7 +3035,31 @@ static QDomDocument projectDocument(const QString& filePath,
             return qMax(0LL, qRound64(seconds * shotFps));
         };
 
+        // A layer of this port may hold several clips; a reference layer has
+        // one range. Its second and later clips go out as layers of their own
+        // as well - what the reference's Slice Layer makes (a copy of the
+        // layer, its keys kept) - marked OpenVegasSliceOf so this port leaves
+        // them out on reading: the first one's OpenVegasClips has them all.
+        struct WrittenLayer
+        {
+            composition::Layer layer;
+            QString sliceOf;
+        };
+        QVector<WrittenLayer> writtenLayers;
         for (const composition::Layer& shotLayer : shot.layers()) {
+            writtenLayers.append({shotLayer, QString()});
+            for (int c = 1; c < shotLayer.clips.size(); ++c) {
+                composition::Layer slice = shotLayer;
+                slice.clips = {shotLayer.clips.at(c)};
+                // The same identity on every save of the same layer.
+                slice.id = core::Identifier(
+                    QUuid::createUuidV5(QUuid(shotLayer.id.value()),
+                                        QStringLiteral("slice:%1").arg(c)).toString(QUuid::WithoutBraces));
+                writtenLayers.append({slice, shotLayer.id.value()});
+            }
+        }
+        for (const WrittenLayer& written : std::as_const(writtenLayers)) {
+            const composition::Layer& shotLayer = written.layer;
             // Keys go out relative to the layer's start (its StartFrame below),
             // as the reference keeps them.
             composition::Layer layer = shotLayer;
@@ -3074,6 +3101,8 @@ static QDomDocument projectDocument(const QString& filePath,
             wrapper.setAttribute(QStringLiteral("Version"),
                                  text ? QStringLiteral("13") : QStringLiteral("17"));
             // Distinguishes Plane from Media, which share AssetLayer.
+            if (!written.sliceOf.isEmpty())
+                wrapper.setAttribute(QStringLiteral("OpenVegasSliceOf"), written.sliceOf);
             wrapper.setAttribute(QStringLiteral("OpenVegasKind"),
                                  composition::layerKindToken(layer.kind));
             wrapper.setAttribute(QStringLiteral("OpenVegasKeyTimes"), QStringLiteral("layer"));
@@ -3325,7 +3354,7 @@ static QDomDocument projectDocument(const QString& filePath,
                 layer.clips.cbegin(), layer.clips.cend(), [](const composition::Clip& c) {
                     return bool(c.nestedComposition) || c.nestedCompositionId.isValid();
                 });
-            appendClipsExtension(doc, wrapper, layer.clips, hasNestedClip);
+            if (written.sliceOf.isEmpty()) appendClipsExtension(doc, wrapper, layer.clips, hasNestedClip);
             appendMasksExtension(doc, wrapper, layer.masks);
             appendMotionTracksExtension(doc, wrapper, layer.motionTracks);
 
