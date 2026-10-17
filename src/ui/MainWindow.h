@@ -26,6 +26,7 @@ class QTemporaryDir;
 #include "model3d/ModelImportSettings.h"
 #include "plugin/PluginManager.h"
 #include "render/PreRenderManager.h"
+#include "render/NestedAudioMix.h"
 #include "render/LayerGeometry.h"
 #include "render/RenderManager.h"
 #include "render/ExportJob.h"
@@ -402,6 +403,8 @@ protected:
     std::function<void()> m_pluginRescan;
     // The media's audio conformed to the shot's rate, read by playback.
     media::ConformedAudioCache* m_conformedAudio = nullptr;
+    // Mixes of nested shots whose composite clips process them.
+    render::NestedAudioMixCache* m_nestedMixes = nullptr;
 
     double m_inPoint = -1.0;
     double m_outPoint = -1.0;

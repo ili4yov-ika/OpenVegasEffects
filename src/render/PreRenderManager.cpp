@@ -40,62 +40,6 @@ PreRenderManager::~PreRenderManager()
     if (m_audioThread) m_audioThread->wait();
 }
 
-namespace {
-
-// The shot's mix - its layers, nested shots and audio effects, as export
-// mixes them - written to `path` as 16-bit stereo PCM. True with no file
-// when the shot has no audio.
-bool writePreRenderAudio(const composition::Composition& shot, const media::MediaManager* media,
-                         const QString& root, const QString& path, QString* error)
-{
-    const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
-    if (ffmpeg.isEmpty()) {
-        if (error) *error = QStringLiteral("FFmpeg was not found");
-        return false;
-    }
-    QTemporaryDir temporary(QDir(QFileInfo(path).absolutePath()).filePath(QStringLiteral("audio-XXXXXX")));
-    if (!temporary.isValid()) {
-        if (error) *error = QStringLiteral("No room for the pre-render's audio");
-        return false;
-    }
-    const double fps = shot.fpsDenominator() > 0 ? double(shot.fpsNumerator()) / shot.fpsDenominator() : 30.0;
-    ExportAudioRequest request;
-    request.composition = &shot;
-    request.media = media;
-    request.ffmpeg = ffmpeg;
-    request.ffprobe = QStandardPaths::findExecutable(QStringLiteral("ffprobe"));
-    request.temporaryDirectory = temporary.path();
-    request.frameRate = fps;
-    request.exportStart = 0.0;
-    request.exportEnd = shot.durationSeconds();
-    // Nested shots of its own that are pre-rendered play theirs.
-    request.preRenderDirectory = root;
-    QVector<ExportAudioInput> inputs;
-    if (!buildExportAudioInputs(request, inputs, error)) return false;
-    if (inputs.isEmpty()) return true;
-    const int rate = media::normalizedAudioSampleRate(shot.audioSampleRate());
-    QStringList arguments {QStringLiteral("-y")};
-    arguments += exportAudioInputArguments(inputs);
-    arguments << QStringLiteral("-filter_complex") << exportAudioMixFilter(inputs, rate, 0)
-              << QStringLiteral("-map") << QStringLiteral("[aout]")
-              << QStringLiteral("-t") << QString::number(shot.durationSeconds(), 'f', 6)
-              << QStringLiteral("-c:a") << QStringLiteral("pcm_s16le")
-              << QStringLiteral("-ar") << QString::number(rate) << QStringLiteral("-ac") << QStringLiteral("2");
-    // Written beside, then put in place: a reader never sees half a file.
-    const QString partial = path + QStringLiteral(".part.wav");
-    arguments << partial;
-    QProcess process;
-    process.start(ffmpeg, arguments);
-    if (!process.waitForFinished(-1) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-        QFile::remove(partial);
-        if (error) *error = QString::fromLocal8Bit(process.readAllStandardError()).right(400);
-        return false;
-    }
-    QFile::remove(path);
-    return QFile::rename(partial, path);
-}
-
-} // namespace
 
 void PreRenderManager::mixAudio(const QString& id)
 {
@@ -113,7 +57,7 @@ void PreRenderManager::mixAudio(const QString& id)
     QPointer<PreRenderManager> self(this);
     QThread* thread = QThread::create([snapshot, path, root, media, generation, id, self] {
         QString error;
-        const bool ok = writePreRenderAudio(*snapshot, media.get(), root, path, &error);
+        const bool ok = writeCompositionAudio(*snapshot, media.get(), root, path, &error);
         if (!ok) OV_LOG_WARN(QStringLiteral("Pre-render audio of %1: %2").arg(id, error));
         if (PreRenderManager* manager = self.data()) {
             QMetaObject::invokeMethod(manager, [self, generation, id] {

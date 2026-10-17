@@ -47,6 +47,7 @@
 #include "render/ExportJob.h"
 #include "media/AudioWaveform.h"
 #include "media/ConformedAudio.h"
+#include "render/NestedAudioMix.h"
 #include "ui/EffectPlacement.h"
 #include "ui/TextureWarning.h"
 #include "ui/CameraRule.h"
@@ -12112,6 +12113,76 @@ private slots:
         QVERIFY(cache.conformed(source, -1, 48000).isEmpty());
         QVERIFY(ready.wait(30000));
         QCOMPARE(stored.size(), 3);
+    }
+    // A composite clip that processes what it plays - a native audio effect,
+    // an audio transition on it - has playback play its shot's mix and put
+    // the processing on that (the reference's DSP after the child mix): the
+    // mix is made once per state of the shot, in the background, and an
+    // edited shot is mixed again.
+    void nestedShotsAreMixedBeforeTheirClipsProcessThem() {
+        const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
+        if (ffmpeg.isEmpty()) QSKIP("FFmpeg is required");
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString source = dir.filePath("tone.wav");
+        {
+            QFile wave(source); QVERIFY(wave.open(QIODevice::WriteOnly));
+            QDataStream stream(&wave); stream.setByteOrder(QDataStream::LittleEndian);
+            const quint32 frames = 24000;
+            stream.writeRawData("RIFF", 4); stream << quint32(36 + frames * 4);
+            stream.writeRawData("WAVEfmt ", 8);
+            stream << quint32(16) << quint16(1) << quint16(2) << quint32(48000)
+                   << quint32(192000) << quint16(4) << quint16(16);
+            stream.writeRawData("data", 4); stream << quint32(frames * 4);
+            for (quint32 frame = 0; frame < frames; ++frame) stream << qint16(2000) << qint16(2000);
+        }
+        auto media = std::make_shared<media::MediaManager>();
+        QVERIFY(media->importFile(source).isSuccess());
+        auto child = std::make_shared<composition::Composition>();
+        child->setName("Child"); child->setSize(32, 32); child->setDurationSeconds(0.5);
+        child->setAudioSampleRate(48000);
+        composition::Clip leaf; leaf.mediaId = media->assetByFilePath(source).id(); leaf.durationSeconds = 0.5;
+        child->addLayer("Tone").clips.append(leaf);
+
+        // Which composite clips process their mix.
+        const core::Identifier echo("test.native.audio.echo");
+        plugin::registerNativeAudioEffectModule(echo, dir.filePath("missing.hfpl"), dir.path(), true);
+        auto cleanup = qScopeGuard([] { plugin::clearNativeEffectModules(); });
+        composition::Layer layer;
+        composition::Clip nested; nested.nestedComposition = child; nested.nestedCompositionId = child->id();
+        nested.durationSeconds = 0.5;
+        layer.clips << nested;
+        QVERIFY(!render::nestedClipProcessesItsMix(layer, 0, 30.0));
+        composition::Effect effect; effect.pluginId = echo; effect.name = "Echo";
+        layer.clips[0].effects << effect;
+        QVERIFY(render::nestedClipProcessesItsMix(layer, 0, 30.0));
+        layer.clips[0].effects[0].enabled = false;
+        QVERIFY(!render::nestedClipProcessesItsMix(layer, 0, 30.0));
+        composition::Layer footage; footage.clips << leaf; footage.clips[0].effects << effect;
+        QVERIFY(!render::nestedClipProcessesItsMix(footage, 0, 30.0));
+
+        render::NestedAudioMixCache mixes;
+        mixes.setDirectory(dir.filePath("Mixes"));
+        QSignalSpy ready(&mixes, &render::NestedAudioMixCache::mixReady);
+        QVERIFY(mixes.mixFor(child, media).isEmpty());
+        QVERIFY(ready.wait(60000));
+        const QString mix = mixes.mixFor(child, media);
+        QVERIFY(!mix.isEmpty());
+        QCOMPARE(mix, mixes.pathFor(*child, media.get()));
+        // Half a second of 48 kHz 16-bit stereo, at the tone's level.
+        QFile file(mix); QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray bytes = file.readAll();
+        QVERIFY2(std::abs(bytes.size() - 24000 * 4) < 2000, qPrintable(QString::number(bytes.size())));
+        const int data = bytes.indexOf("data");
+        QVERIFY(data > 0);
+        qint16 sample = 0;
+        std::memcpy(&sample, bytes.constData() + data + 8 + 4 * 1000, sizeof(sample));
+        QVERIFY2(std::abs(sample - 2000) < 20, qPrintable(QString::number(sample)));
+        // Edited: another mix.
+        child->layerRef(0).clips[0].audioLevel = -6.0;
+        QVERIFY(mixes.pathFor(*child, media.get()) != mix);
+        QVERIFY(mixes.mixFor(child, media).isEmpty());
+        QVERIFY(ready.wait(60000));
+        QVERIFY(!mixes.mixFor(child, media).isEmpty());
     }
     void preRenderCarriesTheShotsAudio() {
         const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");

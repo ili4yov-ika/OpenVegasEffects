@@ -70,6 +70,8 @@
 #include "ui/ExportQueueView.h"
 #include "media/ProxyMedia.h"
 #include "media/ConformedAudio.h"
+#include "render/AudioExport.h"
+#include "render/NestedAudioMix.h"
 #include "ui/EffectPlacement.h"
 #include "ui/PromptMessage.h"
 #include "media/VideoProbe.h"
@@ -826,6 +828,8 @@ void MainWindow::buildUi()
     // that point. Its undoRequested / redoRequested signals used to reach
     // nobody at all.
     m_conformedAudio = new media::ConformedAudioCache(this);
+    m_nestedMixes = new render::NestedAudioMixCache(this);
+    m_nestedMixes->setDirectory(QDir(app::Settings().mediaCacheFilesPath()).filePath(QStringLiteral("Mixes")));
     m_preRenders = new render::PreRenderManager(this);
     // PreRenderProgressLabel's words, with the frames so far.
     connect(m_preRenders, &render::PreRenderManager::stateChanged, this, [this](const QString& id) {
@@ -5502,8 +5506,23 @@ double MainWindow::prepareAudioSource()
             for (int clipIndex = 0; clipIndex < layer.clips.size(); ++clipIndex) {
                 const auto& clip = layer.clips.at(clipIndex);
                 const double speed = clip.speed > 0 ? clip.speed : 1;
+                // A nested shot pre-rendered as it is now plays its
+                // pre-render's audio, as footage would; one whose composite
+                // clip processes what it plays (native audio effects, an
+                // audio transition) plays the shot's mix, the processing put
+                // on that - after the child mix, as the reference and export
+                // have it. Until the mix is there, the shot is expanded.
+                QString childAudio = clip.nestedComposition
+                    ? render::preRenderedAudio(preRenderRoot(), *clip.nestedComposition, m_mediaManager.get())
+                    : QString();
+                if (clip.nestedComposition && childAudio.isEmpty() && m_nestedMixes
+                    && render::nestedClipProcessesItsMix(layer, clipIndex, shotFps)) {
+                    m_nestedMixes->setPreRenderDirectory(preRenderRoot());
+                    childAudio = m_nestedMixes->mixFor(clip.nestedComposition, m_mediaManager);
+                }
+                const QString& preRendered = childAudio;
                 double clipStart = clip.startSeconds, clipEnd = clip.endSeconds();
-                if (!clip.nestedComposition) {
+                if (!clip.nestedComposition || !childAudio.isEmpty()) {
                     for (const auto& window : windows) {
                         if (window.toClip == clipIndex) clipStart = qMin(clipStart, window.start);
                         if (window.fromClip == clipIndex) clipEnd = qMax(clipEnd, window.end);
@@ -5523,11 +5542,6 @@ double MainWindow::prepareAudioSource()
                         staticDb, curve, (t - origin) * rate, shotFps);
                     return outerAt(t) * qPow(10.0, (layerDb + clipDb) / 20.0);
                 };
-                // A nested shot pre-rendered as it is now plays its
-                // pre-render's audio, as footage would.
-                const QString preRendered = clip.nestedComposition
-                    ? render::preRenderedAudio(preRenderRoot(), *clip.nestedComposition, m_mediaManager.get())
-                    : QString();
                 if (clip.nestedComposition && preRendered.isEmpty()) {
                     const double childOrigin = origin + clip.startSeconds / rate
                         - clip.sourceStartSeconds / (rate * speed);

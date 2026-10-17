@@ -473,3 +473,6 @@ Options > Render and finds them in a new project's render settings.
 keeping the key) and rate-stretches its end, which trims it. `multiClipLayersGoOutAsSlices` saves a plane
 with two clips as two layers - the second marked OpenVegasSliceOf, its range its clip's - reads it back as
 one layer with both clips, and without the mark as two layers, as the reference would.
+`nestedShotsAreMixedBeforeTheirClipsProcessThem` finds which composite clips process their mix (an
+enabled native audio effect on them), mixes their shot once in the background at the tone's level,
+reads it back, and mixes an edited shot again.

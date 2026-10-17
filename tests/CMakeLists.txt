@@ -69,6 +69,7 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/app/Settings.cpp ../src/app/Settings.h
     ../src/render/RenderManager.cpp ../src/render/AudioExport.cpp ../src/model3d/Renderer3D.cpp
     ../src/render/PreRenderManager.cpp ../src/render/PreRenderManager.h
+    ../src/render/NestedAudioMix.cpp ../src/render/NestedAudioMix.h
     ../src/render/TextGeometry.cpp ../src/render/TextGeometry.h
     ../src/render/LayerGeometry.cpp ../src/render/LayerGeometry.h
     ../src/render/FrameDiskCache.cpp ../src/render/FrameDiskCache.h

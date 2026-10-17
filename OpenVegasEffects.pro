@@ -100,6 +100,7 @@ HEADERS += \
     src/model3d/LwoReader.h \
     src/model3d/ThreeDsReader.h \
     src/render/PreRenderManager.h \
+    src/render/NestedAudioMix.h \
     src/model3d/Renderer3D.h \
     src/render/AudioExport.h \
     src/render/FrameDiskCache.h \
@@ -208,6 +209,7 @@ SOURCES += \
     src/model3d/LwoReader.cpp \
     src/model3d/ThreeDsReader.cpp \
     src/render/PreRenderManager.cpp \
+    src/render/NestedAudioMix.cpp \
     src/model3d/Mesh.cpp \
     src/model3d/ModelImportSettings.cpp \
     src/model3d/ModelLoader.cpp \

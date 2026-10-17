@@ -10,8 +10,11 @@
 #include <QDir>
 #include <QFile>
 #include <QHash>
+#include <QFileInfo>
 #include <QProcess>
 #include <QScopeGuard>
+#include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QSet>
 #include <QUuid>
 #include <QtMath>
@@ -370,6 +373,77 @@ bool renderNestedPcmClip(const ExportAudioRequest& request, AudioExportContext& 
     return applyPcmEffectsAndGain(request, context.rate, owner, clip, spanStart, effects,
                                   instancePrefix, result, error);
 }
+
+bool collectExportAudioInputs(const ExportAudioRequest& request, AudioExportContext& context,
+                              QVector<ExportAudioInput>& inputs, QString* error);
+
+} // namespace
+
+bool nestedClipProcessesItsMix(const composition::Layer& layer, int clipIndex, double frameRate)
+{
+    if (clipIndex < 0 || clipIndex >= layer.clips.size()) return false;
+    const composition::Clip& clip = layer.clips.at(clipIndex);
+    if (!clip.nestedComposition && !clip.nestedCompositionId.isValid()) return false;
+    for (const composition::Effect& effect : clip.effects)
+        if (effect.enabled && plugin::nativeAudioEffectRenderingVerified(effect.pluginId)) return true;
+    const auto windows = composition::transitionWindows(
+        layer, 0.5 / qMax(1.0, frameRate),
+        [](const composition::Effect& effect) { return plugin::isAudioTransition(effect.pluginId); });
+    for (const auto& window : windows)
+        if (window.fromClip == clipIndex || window.toClip == clipIndex) return true;
+    return false;
+}
+
+bool writeCompositionAudio(const composition::Composition& shot, const media::MediaManager* media,
+                           const QString& preRenderDirectory, const QString& path, QString* error)
+{
+    const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    if (ffmpeg.isEmpty()) {
+        if (error) *error = QStringLiteral("FFmpeg was not found");
+        return false;
+    }
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QTemporaryDir temporary(QDir(QFileInfo(path).absolutePath()).filePath(QStringLiteral("audio-XXXXXX")));
+    if (!temporary.isValid()) {
+        if (error) *error = QStringLiteral("No room for the mix");
+        return false;
+    }
+    const double fps = shot.fpsDenominator() > 0 ? double(shot.fpsNumerator()) / shot.fpsDenominator() : 30.0;
+    ExportAudioRequest request;
+    request.composition = &shot;
+    request.media = media;
+    request.ffmpeg = ffmpeg;
+    request.ffprobe = QStandardPaths::findExecutable(QStringLiteral("ffprobe"));
+    request.temporaryDirectory = temporary.path();
+    request.frameRate = fps;
+    request.exportStart = 0.0;
+    request.exportEnd = shot.durationSeconds();
+    request.preRenderDirectory = preRenderDirectory;
+    QVector<ExportAudioInput> inputs;
+    if (!buildExportAudioInputs(request, inputs, error)) return false;
+    if (inputs.isEmpty()) return true;
+    const int rate = media::normalizedAudioSampleRate(shot.audioSampleRate());
+    QStringList arguments {QStringLiteral("-y")};
+    arguments += exportAudioInputArguments(inputs);
+    arguments << QStringLiteral("-filter_complex") << exportAudioMixFilter(inputs, rate, 0)
+              << QStringLiteral("-map") << QStringLiteral("[aout]")
+              << QStringLiteral("-t") << QString::number(shot.durationSeconds(), 'f', 6)
+              << QStringLiteral("-c:a") << QStringLiteral("pcm_s16le")
+              << QStringLiteral("-ar") << QString::number(rate) << QStringLiteral("-ac") << QStringLiteral("2");
+    const QString partial = path + QStringLiteral(".part.wav");
+    arguments << partial;
+    QProcess process;
+    process.start(ffmpeg, arguments);
+    if (!process.waitForFinished(-1) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        QFile::remove(partial);
+        if (error) *error = QString::fromLocal8Bit(process.readAllStandardError()).right(400);
+        return false;
+    }
+    QFile::remove(path);
+    return QFile::rename(partial, path);
+}
+
+namespace {
 
 bool collectExportAudioInputs(const ExportAudioRequest& request, AudioExportContext& context,
                               QVector<ExportAudioInput>& inputs, QString* error)

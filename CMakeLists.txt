@@ -301,6 +301,8 @@ add_executable(OpenVegasEffects WIN32
     src/model3d/ThreeDsReader.h
     src/render/PreRenderManager.h
     src/render/PreRenderManager.cpp
+    src/render/NestedAudioMix.h
+    src/render/NestedAudioMix.cpp
     src/model3d/FbxReader.cpp
     src/model3d/GltfReader.cpp
     src/model3d/LwoReader.cpp
