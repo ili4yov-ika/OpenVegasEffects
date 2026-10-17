@@ -168,6 +168,63 @@ keys saved - a colour's as whole `<cl>`s under `Type="0"` - and read back.
 `billboardedLightsAndHiddenCasters` lights a sheet from a grazing light with and without Billboarded
 Lights (dim, then the whole diffuse and specular) and checks that a hidden card casts its shadow only
 with Cast Shadows If Visibility Is Off and is still not drawn (`shadow-hidden-caster.png`).
+`ambientOcclusionDarkensWhereSurfacesMeet` checks Flux's SSAO over a G-buffer (a flat surface open, a
+floor beside a raised block darkened along it and open further off, the block's top open, nothing with
+Intensity 0 or too little weight), the G-buffer `renderMesh` notes (the nearer of two meshes, its
+normal turned to the eye), a shot where a floor that receives occlusion darkens round a card in front
+of it only while the card casts it and the floor receives it (`ambient-occlusion-card.png`), the
+Material rows (Receives/Casts Ambient Occlusion, the Ambient Occlusion group with Include Semi
+Transparent Triangles on a model only, an edit and its undo) and the save/load round trip (static
+props, `<i>` counts, `<fl>` values).
+`reflectionsMirrorTheSceneInSheets` checks the lat-long lookup (`ConvertVec2LatLong`, its quirk for a
+direction with x or z 0), the environment colour at the poles and the irradiance of a white and a
+half-red environment, a black mirror sheet showing a green card's mirror image where it falls - at
+full strength, at a quarter with Specular Reflectivity 50, not without Receives or Casts Reflections,
+from a hidden card only with Cast Reflections If Visibility Is Off, never from a card behind the
+mirror (`planar-reflection.png`) - a 3D text taking the colour of its Environment Map's layer
+(`environment-map-layer.png`) or of the shot beneath with Use Composite Shot, the Material rows per
+kind (Environment Map's Layer row once Use Layer is chosen) and the save/load round trip.
+`childrenFollowTheirParents` checks a 2D plane under a hidden, turned and halved 2D parent - its
+position in the scene, the canvas transform, the Layout box and the render (`parented-2d.png`) - a
+plane parent's anchor taken off, a loop of parents, a camera standing where its parent point puts it,
+and a 2D layer under a 3D parent following only where that parent shows.
+`towardsLayerTakesTheOtherLayersUp` checks Towards Layer's second turn: a camera looking at a point
+turned a quarter about Z takes that point's up (half a turn when the point is upside down), a sheet and
+a light above it the same, and a light whose way lies along the point's Y takes the point's -Z.
+`orbitTurnsAboutTheClickedPoint` checks the point of the scene under a ray (the nearest visible 3D sheet
+where its content is, a model's triangle, a hidden layer passed through, nothing beside them, the
+middle of a perspective view meeting the shot's plane where the view stands 100 up) and the Orbit
+button's list - Orbit Around Clicked Point chosen picks the Orbit tool, a press over a perspective
+view reports that mode and the press's place, Alt with the left button the selected layers.
+`modelsReflectTheirSurroundings` checks a reflection map's mip levels, a grey cube with a white
+specular turning red with an Environment Map of a red layer, and green from a hidden card behind the
+camera once it receives reflections and the card casts them (`model-reflection-cube.png`), a flat
+model whose material is Planar showing a card mirrored in its plane (`model-reflection-planar.png`)
+and not when Spherical, and Reflection Mode saved as `<ReflectionType>` and read back.
+`layersTurnByTheirAlignment` aims a light and a camera Towards Target Position (straight down keeps
+(-1, 0, 0) as up; the light's own orientation turns it further after the aim), a point layer's +Z at
+its target, a light Towards Layer, a 3D plane Towards Active Camera turned as the camera is and drawn
+whole where it would be edge-on, checks the Transform rows (Target after Position, the reference's
+Alignment choices per kind, Alignment Axis and Alignment Layer as asked for, one undo step;
+`timeline-alignment.png`) and the save/load round trip of `<AutoOrient>`, `<AutoOrientLayer>` and
+`target`.
+`layersFollowTheirMotionAndOtherLayers` checks Along Motion Path on a 2D bar (its angle from the
+diagonal motion for the X and Y axis, its own Rotation once it stops, the Layout frame and the render
+along the diagonal; `align-motion-2d.png`), on a 3D sheet and a spot, Towards Layer on a sheet (front
+to the layer, turned about its centre) and a camera, and the Viewer's Target handle: a line and a
+handle of its own, dragged parallel to the view while the light stays.
+`textGeometryFillsGlyphsAndRunsGeometryModules` (OpenGL) also turns an extruded "O" edge-on to a
+light in front of a red floor and checks its walls throw a shadow there (`geometry-shadow.png`), none
+once it does not cast.
+`viewerViewsSeeTheScene` also checks the view navigation of the reference's tool modes: the orbit
+about the origin and about another pivot (distance and view kept, upright, never over the top), the
+Dolly, Rotate and Zoom Camera drags (the perspective field of view narrowing with its scale), which
+button and keys pick which (`ui::viewDragFor`) and, in a Viewer, a middle drag turning a perspective
+view's camera, a right drag panning it and nothing moving over the shot's own view.
+`lightWaveProjectedTexturesGetUvs` writes an LWO2 with a planar map along Z and a cylindrical one
+round Y wrapped twice on a hexagonal tube, and an LWOB "Planar Image Map" about Y, and checks the UVs
+are Assimp's GenUVCoords ones - including the two faces across the cylinder's seam with their sides
+swapped as RemoveUVSeams does.
 `modelMaterialsTakeLayers` sets a model material's Diffuse Map Source to Use Layer with a hidden
 magenta plane from the timeline rows, checks the renderer draws the plane's picture on the model
 (`model-material-layer.png`), that None leaves the material's colour, the save/load round trip
@@ -268,6 +325,50 @@ edge and leaves it in place. `motionTrackInstanceMovesItsLayer` (needs SAMPLES' 
 OpenGL) checks the view `NativeInstanceHost` gives the module (footage pixels placed like the
 footage layer), the conversion of the module's motion to the canvas, that the renderer turns a
 baked quarter turn clockwise, and `<InstanceBytes>` through save and load.
+`textFrameFollowsItsParent` turns a text layer's parent a quarter clockwise: the text frame turns with it
+and a canvas move becomes a move in the parent's units.
+`clearCoatBrightensGrazingReflections` renders a rough Metallic-Roughness quad in a white environment
+seen at 80 degrees and square on: a smooth clear coat brightens the grazing view and hardly changes the
+square one. `textGeometryReflectsItsEnvironment` gives 3D text with a (registered-only) Geometry effect a
+red asset as its Environment Map (type 1003): the letters turn red. `modelsReflectTheirSurroundings` also
+checks the asset environment on a model.
+`parentedLayersFitAndPlaceTheirFootage` fits a plane under a point layer turned 90 degrees and scaled
+200% to a box (the box lands where asked) and checks that an instance's footage is placed under its
+parent (30 px right, 20 up).
+`layerBoxFollowsItsBehaviors` gives a plane MotionTrack matrices (50 right, 20 up on frame 1): its
+layout box moves with them, and not once the Behavior is off.
+`layoutFieldsScrubLikeTheReference` checks the reference's `DoubleScrubberSpinBox`: a drag adds one
+step a pixel, Shift snaps to multiples of 10 every five pixels, the range's ends hold, the button going
+up is one edit, a click edits the text and Escape reverts; the Layout panel's fields are such scrubbers.
+`keyTimesAreRelativeToTheLayer` saves a plane starting at 2 s with keys at 2 s and 3 s: the file holds
+0 and 1000 ms (`OpenVegasKeyTimes="layer"`), reading puts them back at frames 60 and 90, a save without
+the attribute (older saves of the port) is read as shot times, and `shiftLayerKeys` keeps key
+identities. `movedLayerTakesItsKeys` drags a clip body a second later: the layer's keys and its effect's
+keys move by as many frames, in one undo step. `sheetBoxFollowsItsBehaviors` gives a turned, half-size 3D plane MotionTrack matrices: its sheet matrix
+becomes the shift times the still one (parent x Behaviors x own), and its box matches the red pixels the
+renderer draws. `behaviorsActInsideTheParent` turns a plane's parent a quarter clockwise: MotionTrack's
+shift to the right moves the plane down, its box and its pixels alike.
+`simulatedBehaviorsMoveInTheWorld` (GL, the reference Gravity.hfpl) parents a falling plane under a point
+turned a quarter: it falls down the frame, not sideways, its box and pixels alike; a child of the falling
+plane falls with it, and a plane keyed across the frame with Drag lags behind its keys.
+`behaviorsMultiplyInTheReferencesOrder` gives a plane a quarter turn and then a shift to the right: the
+plane goes up (the last Behavior acts first), and a parent's shift carries its child as far; boxes and
+pixels agree. `trimmedLayerKeepsItsKeys` drags a clip's head a quarter
+of the clip on: the end stays, the source in-point follows, the layer's and its effect's keys stay on
+their frames (one now before the layer's start) and still do after a save and a load.
+`layersWithoutClipsKeepTheirSpan` saves a camera spanning 1-2 s (StartFrame 30, EndFrame 60) and a light
+over the whole shot (EndFrame = FrameCount, read back open); an older save's empty span reads as the whole
+shot. `camerasAndLightsTakePartWithinTheirSpan` switches the active camera at the second camera's start
+and lights a light only within its span. `cameraBarMovesAndTrimsItsSpan` drags a camera's timeline bar:
+the body moves the span and its keys, the tail trims it and leaves them, each one undo step.
+`stabilizersSteadyTheirOwnLayer` runs AutomaticStabilizer and MotionLock on a 30-frame image sequence
+shaking up to 6 px: the host tells each it was put on its layer (`Effect_Parent_Layer`), the footage is
+analysed in the background, the renderer's frames - drawn by the effect's own render instance from its
+saved data - must keep under a third of the footage's frame-to-frame jitter; then AutomaticStabilizer's
+"Create Point Layer" (a keyed point layer on top, "Apply To" pointed at it) and "Apply Transform", and
+MotionLock's "Apply Transform" (its own layer keyed with its motion), each one `layersEdited` step
+(OpenGL, `QT_QPA_PLATFORM=windows`). `layerTransformsBecomeKeys` checks how transforms become keys or
+static values.
 `motionTrackHostTracksFootage` runs the whole MotionTrack cycle on a 30-frame image sequence -
 analysis, the lasso, background calls on the timer, matrices, and the same matrices from the
 saved data alone; it needs the OpenGL 4.1 context and skips offscreen (run it alone with

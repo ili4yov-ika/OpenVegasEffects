@@ -13,6 +13,7 @@
 #include <QVector3D>
 
 #include <cmath>
+#include <functional>
 #include <memory>
 
 namespace openvegas {
@@ -136,6 +137,11 @@ public:
 
     int fpsNumerator() const { return m_fpsNumerator; }
     int fpsDenominator() const { return m_fpsDenominator; }
+    // The frame rate as one number.
+    double framesPerSecond() const
+    {
+        return m_fpsDenominator > 0 ? double(m_fpsNumerator) / m_fpsDenominator : 30.0;
+    }
     void setFrameRate(int numerator, int denominator)
     {
         m_fpsNumerator = numerator;
@@ -292,6 +298,15 @@ private:
     QStringList m_openShotIds;
     QString m_activeShotId;
 };
+
+// Every curve of a layer: its transform, light, camera and surface, its
+// motion tracks, model nodes and model animations, and its clips' effects.
+void forEachLayerCurve(Layer& layer, const std::function<void(KeyFrameList&)>& visit);
+// The layer's keys `frames` later. The reference keeps key times relative to
+// the layer's start (AbstractLayer::GlobalFrameToRelativeTime /
+// RelativeTimeToGlobalFrame: frame - StartFrame +0x198), so a layer moved in
+// time takes its animation along; here keys are on the shot's timeline.
+void shiftLayerKeys(Layer& layer, int frames);
 
 } // namespace composition
 } // namespace openvegas

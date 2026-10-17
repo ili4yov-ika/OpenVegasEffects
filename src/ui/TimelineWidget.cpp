@@ -174,6 +174,7 @@ QString transformValueText(const composition::Layer& layer, composition::Transfo
     case composition::TransformProperty::Position:
     case composition::TransformProperty::Scale:
     case composition::TransformProperty::Orientation:
+    case composition::TransformProperty::Target:
         break;
     }
 
@@ -569,6 +570,15 @@ void TimelineCanvas::paintEvent(QPaintEvent* event)
                 drawClipWaveform(painter, clip, QRect(cx, y + 1, cw, lane.height - 2), pps);
 
                 painter.setPen(QColor(34, 34, 34));
+            }
+            // A layer without clips shows its span, as every layer of the
+            // reference has a bar from its StartFrame to its EndFrame.
+            if (composition::layerHasSpan(layer)) {
+                const double end = composition::layerSpanEnd(layer, m_comp->durationSeconds());
+                const int sx = static_cast<int>(layer.spanStartSeconds * pps);
+                const int sw = qMax(1, static_cast<int>((end - layer.spanStartSeconds) * pps));
+                painter.fillRect(sx, y + 1, sw, lane.height - 2,
+                                 lane.layerIndex == m_selLayer ? QColor(96, 115, 125) : QColor(80, 80, 80));
             }
             // Transitions span the cut (or the faded clip edge); drawn over the
             // clips as the usual NLE diagonal so their extent is visible.
@@ -1058,6 +1068,27 @@ void TimelineCanvas::mousePressEvent(QMouseEvent* event)
             event->accept();
             return;
         }
+        if (spanAt(event->pos(), &layerIndex, &edge)) {
+            const composition::Layer& layer = m_comp->layers()[layerIndex];
+            if (layer.locked) return;
+            m_selLayer = layerIndex;
+            m_selClip = -1;
+            emit clipSelected(layerIndex, -1);
+            // Select moves and trims it; the other tools work on material,
+            // which a span has none of.
+            if (m_tool == EditorTool::Select) {
+                m_dragSpanLayer = layerIndex;
+                m_dragSpanEdge = edge;
+                m_dragStartTime = timeAtX(event->pos().x());
+                m_dragSpanStart = layer.spanStartSeconds;
+                m_dragSpanEnd = composition::layerSpanEnd(layer, m_comp->durationSeconds());
+                m_dragSpanOpen = layer.spanEndSeconds < 0.0;
+                m_dragKeyShift = 0;
+            }
+            update();
+            event->accept();
+            return;
+        }
 
         // Empty space: scrub, as before.
         m_playhead = timeAtX(event->pos().x());
@@ -1089,6 +1120,13 @@ void TimelineCanvas::mouseMoveEvent(QMouseEvent* event)
 
     if (m_dragClipLayer >= 0) {
         if (applyToolDrag(timeAtX(event->pos().x()) - m_dragStartTime)) {
+            update();
+        }
+        event->accept();
+        return;
+    }
+    if (m_dragSpanLayer >= 0) {
+        if (applySpanDrag(timeAtX(event->pos().x()) - m_dragStartTime)) {
             update();
         }
         event->accept();
@@ -1137,6 +1175,13 @@ void TimelineCanvas::mouseReleaseEvent(QMouseEvent* event)
         m_dragFollowStarts.clear();
         // Committed once, at the end: the rows and the project's dirty flag
         // follow the finished edit, not every intermediate mouse-move.
+        emit clipsEdited();
+        event->accept();
+        return;
+    }
+    if (m_dragSpanLayer >= 0) {
+        m_dragSpanLayer = -1;
+        m_dragSpanEdge = ClipEdge::None;
         emit clipsEdited();
         event->accept();
         return;
@@ -1386,8 +1431,73 @@ double TimelineCanvas::snapTime(double seconds, int ignoreLayer, int ignoreClip)
             consider(layer.clips.at(ci).startSeconds);
             consider(layer.clips.at(ci).endSeconds());
         }
+        if (composition::layerHasSpan(layer) && li != m_dragSpanLayer) {
+            consider(layer.spanStartSeconds);
+            consider(composition::layerSpanEnd(layer, m_comp->durationSeconds()));
+        }
     }
     return best;
+}
+
+bool TimelineCanvas::spanAt(const QPoint& pos, int* layerIndex, ClipEdge* edge) const
+{
+    if (edge) *edge = ClipEdge::None;
+    if (!m_comp) return false;
+    const int kEdgeGrab = 6;
+    for (const TimelineLane& lane : m_lanes) {
+        if (lane.isParameterRow() || lane.isTransformRow() || lane.isAnimationRow()) continue;
+        if (lane.layerIndex < 0 || lane.layerIndex >= m_comp->layers().size()) continue;
+        if (pos.y() < lane.y || pos.y() >= lane.y + lane.height) continue;
+        const composition::Layer& layer = m_comp->layers().at(lane.layerIndex);
+        if (!composition::layerHasSpan(layer)) continue;
+        const int left = xForTime(layer.spanStartSeconds);
+        const int right = xForTime(composition::layerSpanEnd(layer, m_comp->durationSeconds()));
+        if (pos.x() < left || pos.x() >= right) continue;
+        if (layerIndex) *layerIndex = lane.layerIndex;
+        if (edge) {
+            const int grab = qMin(kEdgeGrab, qMax(1, (right - left) / 3));
+            if (pos.x() < left + grab) *edge = ClipEdge::Left;
+            else if (pos.x() >= right - grab) *edge = ClipEdge::Right;
+        }
+        return true;
+    }
+    return false;
+}
+
+// As the reference's layer bar: the body moves the span and the layer's keys
+// with it (they are relative to its start there), an end trims it and the
+// keys stay where they are on the shot's timeline (the head trim moves its
+// relative keys back by as much, FUN_1405ca860). A span never becomes
+// shorter than a frame; an end left on the shot's end stays open.
+bool TimelineCanvas::applySpanDrag(double deltaSeconds)
+{
+    if (!m_comp || m_dragSpanLayer < 0 || m_dragSpanLayer >= m_comp->layers().size()) return false;
+    composition::Layer& layer = m_comp->layerRef(m_dragSpanLayer);
+    const double kMinimum = 1.0 / qMax(1.0, frameRate());
+    const double shotEnd = m_comp->durationSeconds();
+    const auto endFor = [&](double end) {
+        return m_dragSpanOpen && std::abs(end - shotEnd) < 1e-9 ? -1.0 : end;
+    };
+    if (m_dragSpanEdge == ClipEdge::Left) {
+        double start = snapTime(m_dragSpanStart + deltaSeconds, -1, -1);
+        start = qBound(0.0, start, m_dragSpanEnd - kMinimum);
+        layer.spanStartSeconds = start;
+    } else if (m_dragSpanEdge == ClipEdge::Right) {
+        double end = snapTime(m_dragSpanEnd + deltaSeconds, -1, -1);
+        end = qMax(m_dragSpanStart + kMinimum, end);
+        layer.spanEndSeconds = endFor(end);
+    } else {
+        double start = snapTime(m_dragSpanStart + deltaSeconds, -1, -1);
+        start = qMax(0.0, start);
+        layer.spanStartSeconds = start;
+        layer.spanEndSeconds = endFor(m_dragSpanEnd + (start - m_dragSpanStart));
+        const int frames = int(std::lround((start - m_dragSpanStart) * frameRate()));
+        if (frames != m_dragKeyShift) {
+            composition::shiftLayerKeys(layer, frames - m_dragKeyShift);
+            m_dragKeyShift = frames;
+        }
+    }
+    return true;
 }
 
 void TimelineCanvas::beginClipDrag(int layerIndex, int clipIndex, ClipEdge edge, double pressTime)
@@ -1401,6 +1511,7 @@ void TimelineCanvas::beginClipDrag(int layerIndex, int clipIndex, ClipEdge edge,
     const composition::Layer& layer = m_comp->layers().at(layerIndex);
     const composition::Clip& clip = layer.clips.at(clipIndex);
     m_dragOriginalStart = clip.startSeconds;
+    m_dragKeyShift = 0;
     m_dragOriginalDuration = clip.durationSeconds;
     m_dragOriginalSource = clip.sourceStartSeconds;
     m_dragOriginalSpeed = clip.speed;
@@ -1464,6 +1575,17 @@ bool TimelineCanvas::applyToolDrag(double deltaSeconds)
             const double start = snapTime(m_dragOriginalStart + deltaSeconds, m_dragClipLayer,
                                           m_dragClipIndex);
             clip.startSeconds = qMax(0.0, start);
+            // A layer moved in time takes its keys along: the reference keeps
+            // them relative to its start. Only a one-clip layer is the
+            // reference's layer; the frames moved so far are undone first, so
+            // a long drag cannot accumulate rounding.
+            if (layer.clips.size() == 1) {
+                const int frames = int(std::lround((clip.startSeconds - m_dragOriginalStart) * frameRate()));
+                if (frames != m_dragKeyShift) {
+                    composition::shiftLayerKeys(layer, frames - m_dragKeyShift);
+                    m_dragKeyShift = frames;
+                }
+            }
         }
         return true;
     }

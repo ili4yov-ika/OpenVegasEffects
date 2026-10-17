@@ -115,6 +115,7 @@ HEADERS += \
     src/ui/HistoryPanel.h \
     src/ui/LayerPanel.h \
     src/ui/LayoutPanel.h \
+    src/ui/ScrubberSpinBox.h \
     src/ui/LayoutTransformCommand.h \
     src/ui/LearnSidebar.h \
     src/ui/StartPanel.h \
@@ -223,6 +224,7 @@ SOURCES += \
     src/ui/HistoryPanel.cpp \
     src/ui/LayerPanel.cpp \
     src/ui/LayoutPanel.cpp \
+    src/ui/ScrubberSpinBox.cpp \
     src/ui/LearnSidebar.cpp \
     src/ui/StartPanel.cpp \
     src/ui/LibraryPanel.cpp \

@@ -193,5 +193,52 @@ void Composition::clear()
     m_activeShotId.clear();
 }
 
+void forEachLayerCurve(Layer& layer, const std::function<void(KeyFrameList&)>& visit)
+{
+    const auto transformCurves = [&visit](LayerTransform& t) {
+        for (KeyFrameList* curve : {&t.positionXCurve, &t.positionYCurve, &t.positionZCurve, &t.scaleXCurve,
+                                    &t.scaleYCurve, &t.scaleZCurve, &t.rotationCurve, &t.rotationXCurve,
+                                    &t.rotationYCurve, &t.orientationXCurve, &t.orientationYCurve,
+                                    &t.orientationZCurve, &t.opacityCurve, &t.audioLevelCurve, &t.targetXCurve,
+                                    &t.targetYCurve, &t.targetZCurve})
+            visit(*curve);
+    };
+    transformCurves(layer.transform);
+    LightSettings& light = layer.light;
+    for (KeyFrameList* curve : {&light.intensityCurve, &light.colorCurve, &light.reachCurve, &light.coneAngleCurve,
+                                &light.featherCurve, &light.shadowOpacityCurve, &light.shadowDiffusionCurve,
+                                &light.shadowColorCurve})
+        visit(*curve);
+    CameraSettings& camera = layer.camera;
+    for (KeyFrameList* curve : {&camera.zoomCurve, &camera.focusDistanceCurve, &camera.apertureCurve,
+                                &camera.blurCurve})
+        visit(*curve);
+    SurfaceShading& surface = layer.surface;
+    for (KeyFrameList* curve : {&surface.ambientCurve, &surface.diffuseCurve, &surface.specularCurve,
+                                &surface.shininessCurve, &surface.emissiveCurve, &surface.specularReflectivityCurve,
+                                &surface.diffuseReflectivityCurve})
+        visit(*curve);
+    for (MotionTrack& track : layer.motionTracks) {
+        visit(track.xCurve);
+        visit(track.yCurve);
+    }
+    for (ModelNodeTransform& node : layer.modelNodes) transformCurves(node.transform);
+    for (ModelAnimationInstance& animation : layer.modelAnimations) {
+        visit(animation.strengthCurve);
+        visit(animation.playbackCurve);
+    }
+    for (Clip& clip : layer.clips) {
+        for (Effect& effect : clip.effects) {
+            for (auto it = effect.animation.begin(); it != effect.animation.end(); ++it) visit(it.value());
+        }
+    }
+}
+
+void shiftLayerKeys(Layer& layer, int frames)
+{
+    if (frames == 0) return;
+    forEachLayerCurve(layer, [frames](KeyFrameList& curve) { curve.shift(frames); });
+}
+
 } // namespace composition
 } // namespace openvegas

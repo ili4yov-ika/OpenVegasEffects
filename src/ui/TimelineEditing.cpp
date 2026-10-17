@@ -238,8 +238,17 @@ void TimelineWidget::buildParameterEditor(QTreeWidgetItem* row, int layerIndex, 
 
 void TimelineWidget::buildTransformRows(QTreeWidgetItem* parent, int index)
 {
-    for (auto prop : composition::transformPropertiesFor(m_comp->layers()[index].dimension))
+    // A camera, a light and a point layer have a Target after Position
+    // (LightLayer's and CameraLayer's transform: position, target,
+    // orientation, rotations).
+    const composition::Layer& layer = m_comp->layers()[index];
+    const bool aims = layer.kind == composition::LayerKind::Camera || layer.kind == composition::LayerKind::Light
+                      || layer.kind == composition::LayerKind::Point;
+    for (auto prop : composition::transformPropertiesFor(layer.dimension)) {
         buildTransformRow(parent, index, prop);
+        if (aims && prop == composition::TransformProperty::Position)
+            buildTransformRow(parent, index, composition::TransformProperty::Target);
+    }
 }
 
 void TimelineWidget::buildTransformRow(QTreeWidgetItem* parent, int index,

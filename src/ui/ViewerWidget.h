@@ -43,6 +43,24 @@ class ViewScaleButton;
 // "active" view (reference: SetActiveViewInLayout) and is highlighted. The
 // background can be a checkerboard (reference: PaintCheckerboard /
 // checkBoxShowCheckerboard2D, setting "ShowCheckerboard2D").
+
+// How a press over a view of its own camera moves that camera, as the
+// reference's OpenGLView picks a tool mode for the buttons and keys held
+// (VegasEffects.exe 0x1408f52c0): the right button pans (the Hand tool), the
+// middle one turns the camera where it stands (Rotate Camera); with Ctrl the
+// left one pans (Pan Camera) and the right one zooms (Zoom Camera); with Alt
+// the left one orbits (Orbit Around Selected Layers), the middle one pans
+// and the right one dollies (Dolly Camera). Shift changes nothing.
+enum class ViewDrag { None, Pan, Orbit, Dolly, Rotate, Zoom };
+ViewDrag viewDragFor(Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
+
+// What the Orbit tool turns a view's camera about - the reference's two
+// orbit tool modes, picked from the Orbit button's list (VegasEffects.exe
+// 0x1408d5580; OrbitToolMode's pivot 0x140955170): the selected layers
+// (0x3f3, also Alt with the left button) or the point of the scene under the
+// press (0x3f4).
+enum class OrbitPivot { SelectedLayers = 0x3f3, ClickedPoint = 0x3f4 };
+
 class ViewerWidget : public QWidget
 {
     Q_OBJECT
@@ -153,6 +171,8 @@ public:
     void setProjectSize(const QSize& size);
 
     ViewerTool tool() const { return m_tool; }
+    OrbitPivot orbitPivot() const { return m_orbitPivot; }
+    void setOrbitPivot(OrbitPivot pivot);
 
     // True for the entries of the shape flyout, which share one strip button.
     static bool isShapeTool(ViewerTool tool);
@@ -289,6 +309,12 @@ signals:
     void viewZoomRequested(int view, double steps, QPointF anchor);
     void viewPanned(int view, QPointF canvasDelta);
     void viewOrbited(int view, QPointF delta);
+    // An orbit of a view's camera begins: what it turns about, and where the
+    // press was in the view's picture (0..1 across and down).
+    void viewOrbitStarted(int view, QPointF where, OrbitPivot pivot);
+    // A Dolly, Rotate or Zoom Camera drag over a view of its own camera
+    // (ViewDrag), in widget pixels.
+    void viewCameraDragged(int view, int drag, QPointF delta);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -350,6 +376,11 @@ private:
     std::array<QToolButton*, 4> m_cameraButtons{};
     bool m_checkerboard3D = true;
     bool m_viewOrbiting = false;   // an Orbit drag turning a view's camera
+    // A drag with a mouse button and keys moving a view's own camera.
+    ViewDrag m_viewDrag = ViewDrag::None;
+    Qt::MouseButton m_viewDragButton = Qt::NoButton;
+    bool m_viewDragMoved = false;
+    bool m_skipContextMenu = false;   // a right-button drag just ended
 
     ViewerLayout m_layout = ViewerLayout::Single;
     int m_activeView = 0;
@@ -407,6 +438,8 @@ private:
     // shapes, remembering the last one so a click reuses it.
     QToolButton* m_shapeButton = nullptr;
     ViewerTool m_shapeTool = ViewerTool::Rectangle;
+    QToolButton* m_orbitButton = nullptr;
+    OrbitPivot m_orbitPivot = OrbitPivot::SelectedLayers;
 
     QVector<ViewerOverlay*> m_overlays;
     ViewerOverlay* m_overlayGrab = nullptr;

@@ -22,6 +22,7 @@ void copyMaterialSettings(const Material& from, Material& to)
     to.opacity = from.opacity;
     to.indexOfRefraction = from.indexOfRefraction;
     to.refractionAmount = from.refractionAmount;
+    to.reflectionMode = from.reflectionMode;
     to.illuminationModel = from.illuminationModel;
     to.metallic = from.metallic;
     to.roughness = from.roughness;
@@ -46,6 +47,7 @@ bool sameMaterialSettings(const Material& a, const Material& b)
         && copy.diffuseReflectivity == b.diffuseReflectivity && copy.specularReflectivity == b.specularReflectivity
         && copy.shininess == b.shininess && copy.opacity == b.opacity
         && copy.indexOfRefraction == b.indexOfRefraction && copy.refractionAmount == b.refractionAmount
+        && copy.reflectionMode == b.reflectionMode
         && copy.illuminationModel == b.illuminationModel && copy.metallic == b.metallic
         && copy.roughness == b.roughness && copy.cookTorranceRoughness == b.cookTorranceRoughness
         && copy.cookTorranceSpecularReflectance == b.cookTorranceSpecularReflectance

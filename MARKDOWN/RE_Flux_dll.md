@@ -277,7 +277,83 @@ C:\Gitlab-Runner\builds\BjqbSWcs\0\FXhome\hitfilm\hitfilm\HitFilm\Modules\Flux\
 - Материал слоя (`FUN_180474d80`, `FUN_1804744f0`, `FUN_180474730` — по типам слоёв): ADSS =
   `matAmbient`, `matDiffuse`, `matSpecular`, `matShininess` / 100; `matEmissiveColor`;
   `illuminated`, `receiveShadows`, `castShadows`, `billboardedLights/Shadows`, self shadow bias
-  0.0001, `castReflections`, `receiveReflections`, AO-параметры.
+  0.0001, `castReflections`, `receiveReflections`, AO-параметры: +0x4c `castAmbientOcclusion`,
+  +0x4d `receiveAmbientOcclusion`, +0x50 `aoSamples`, +0x54 `aoSampleRadius`, +0x58
+  `aoIntensity` / 100, +0x5c `aoDepthScale` / 100, +0x60 `aoBias`, +0x64 `aoBlurRadius`, +0x68
+  `aoDepthFallOff` / 100, +0x6c `includeSemiTransparentTriangles` (только у модели, у прочих 0;
+  у части типов — только `castAmbientOcclusion`, `receive` = 0). Умолчания `FUN_180474a80`:
+  4, 15, 0.5, 0.1, 0.01.
+- Ambient Occlusion (`AmbientOcclusionRenderer`, создаётся `FUN_180478030` — шейдеры SSAO и
+  размытия; держит его `FUN_1802cf360` в +0x270 рендерера). Проход `FUN_1804668f0`: для каждого
+  слоя, у которого +0x4d (receive), Flux-тип из маски 0x742 и +0x110 = 1, — карта AO в кэше по
+  имени слоя; G-буфер (`FUN_180468340`: текстуры RGBA32F позиции и RGBA16F нормали, рисует
+  `FUN_180468ef0`) — слои с +0x4c (cast) и сам приёмник (сравнение имени); затем
+  `FUN_180478960(renderer, …, материал + 0x4c, …)`: SSAO в RGBA8 (`FUN_180478cc0`) и размытие
+  (`FUN_1804793a0`).
+  - SSAO: `p` — позиция в глазных координатах (`posTexture`), `w < 0.9` или `p = 0` — discard;
+    `rad = sampleRadius / p.z`; направления (1, 0), (−1, 0), (0, 1), (0, −1), (1, 1), (−1, 1),
+    (−1, −1), (1, −1), (0.7, 0.7), (−0.7, −0.65) — первые `sampleCount`, каждое `reflect(d, rand)`,
+    `rand` — нормированный `fract(sin(dot(uv, (12.9898, 78.233))·k)·43758.5453)`; на направление
+    4 отсчёта: c·0.25, c45°·0.5, c·0.75, c45°; отсчёт: при `w ≥ 0.8` и `s ≠ 0`
+    `max(0, dot(n, normalize(s − p)) − bias) · 1/(1 + |s − p|·depthScale) · intensity · 10`;
+    `ao /= sampleCount²`, выход `1 − ao`.
+  - Размытие: если центр без позиции или `w < 0.8` — 1; иначе (2r + 1)² отсчётов, σ = (2r + 1)/3,
+    вес гаусса × 1/(depthFallOff + |z − zᵢ|) (1000 при нуле).
+  - Применение (шейдер модели и `AmbientOcclusionFragColor` листов): `outputColor.rgb *=`
+    карта в `gl_FragCoord` при `receiveAmbientOcclusion` (у модели ещё при
+    `modelDiffuseColor.a ≥ 1`).
+- Отражения. `MaterialProperties`: +0x20 `specularReflectivity` / 100, +0x24
+  `diffuseReflectivity` / 100 (только текст, `FUN_180474d80`), +0x34 `castReflections`, +0x35
+  `receiveReflections`, +0x38 `environmentMapType`, +0x3c FXID слоя окружения.
+  - Проход карт (`FUN_18043e4d0`): для каждого слоя с +0x35 — у Flux-типа 0xC кубическая карта
+    (`DynamicReflectionsCubeMap`, `FUN_1804b0370`, рисует `FUN_18043d630`) и планарные карты
+    материалов с `ReflectionMode` 0; у остальных — планарная карта размером с цель рендера
+    (`DynamicReflectionsPlanarMap`, `FUN_1804b0790`; кэш по имени слоя), рисует `FUN_18043e030`:
+    камера из `FUN_1803c3160` — позиция, направление (0, 0, −1) и верх (0, 1, 0) камеры,
+    отражённые матрицей плоскости (`FUN_1803c5cd0`), туман выключен
+    (`CompositionRenderSettings::SetFogEnabled(false)`), режим прохода 1. Отбор слоёв
+    (`FUN_18048b7b0` и соседние): скрытые слои попадают в список при
+    `castShadowsIfLayerDisabled` или `castReflectionsIfLayerDisabled`. Тот же цикл берёт слой,
+    только если `StartFrame ≤ кадр < EndFrame`; в нём же собирается свет (тип 3, видимый:
+    `FUN_18048cb70` → `LightData` из `FUN_180483820`), так что свет вне своего диапазона не светит.
+  - Данные шейдеров (`FUN_1803a00e0`): `PlanarReflectionFragmentShaderData` — +0x58
+    приём (последний проход и карта есть), +0x5c блок текстуры, +0x60 карта, +0x70
+    `planarReflectionAmount` = материал +0x20, +0x74 индекс `downsampleValue`; загрузка
+    (`PlanarReflectionFragmentShaderFunc`, vtable 0x18079f180, слот 6 `FUN_18056adb0`):
+    `oneOverPlanarReflectionMapDim` = 1/(w, h). Шейдер: `texture(map, (downsample − x/w, y/h)) ×
+    amount`, затем `rgb *= a`, `outputColor.rgb += rgb` — итог rgb·a·amount².
+    `EnvironmentMapFragmentShaderData` (vtable `EnvironmentMapFragmentShaderFunc` 0x18079fba0):
+    включена в последнем проходе при наличии текстуры окружения, `specularReflectivityAmount` =
+    +0x20, `diffuseReflectivityAmount` = +0x24, `eyeRotationMatrix`, `envMapTopRight`.
+  - `ConvertVec2LatLong`: θ = atan(x, z) (0, если x или z равны 0), φ = acos(y/r);
+    u = θ/π·0.5 + 0.5, v = 1 − φ/π. Зеркальная часть — `texture(envMap, reflect(ecPos, n))` ×
+    a × specular; диффузная — (n, 1)ᵀ·M_c·(n, 1) × цвет × a × diffuse.
+  - Модель (последний проход шейдера, `FUN_1804c1ce0`, MaxReflectionLOD = 4): униформы
+    (`FUN_180370e10`) `diffuseMapAmount` = DiffuseReflectivity / 100, `reflectionMapAmount` =
+    SpecularReflectivity / 100, `refractionAmount` = RefractionAmount / 100 (нули, если у пакета
+    нет карты), `refractionIndex`; карта — блок 11 (0x84cb), GL_REPEAT по S и T, с мипмапами
+    (LINEAR_MIPMAP_LINEAR, MAX_LEVEL 5), если они есть. Шейдер: `diffuseIBLContrib` = max(SH(n),
+    0) × modelDiffuse.rgb × a × diffuseMapAmount; не planar — `IBLSpecularColor` (illuminationType
+    0/1: карта × specular; иначе карта на LOD roughness·4 × (specular·brdf.x + brdf.y)) × a ×
+    amount; planar — `texture(map, (w − x/W, y/H))`.rgb·a × a × amount × specular;
+    преломление — `refract(normalize(−ecPos), n, 1/IOR)` → `IBLRefractionColor` × a ×
+    refractionAmount; затем AO и `OcclusionTerm`. В `Illuminant` у PBR modelSpecular =
+    FresnelSchlickRoughness(N·V, F0, roughness), .a = roughness, modelDiffuse × kD; при
+    `useEnvMap` (есть diffuse- или reflection-сумма) неосвещённый цвет PBR обнуляется.
+  - Карты модели (`FUN_180372950`): материал с `ReflectionMode` 0 (Planar) ищет свою планарную
+    карту по ID материала, иначе берёт данные окружения слоя. Кубическая карта
+    (`FUN_18043d630`): середина — среднее вершин модели (`FUN_1803e09d0`), шесть граней
+    (`FUN_18043cf40`), размер грани — кэш +0x20 (Reflection Map Size), туман выключен, режим
+    прохода 1.
+  - Источник окружения (`EnvironmentMapRenderData`, `FUN_1804b9dc0`; создаётся, если тип
+    ≠ 1000): 1001 — холст композиции на момент слоя (параметр прохода сцены `FUN_180353640`),
+    1002 — картинка слоя по FXID (`FUN_1802c66f0`), 1003 — элемент по FXID, который Flux рисует
+    отдельно (`FUN_1802ca540` → `FUN_1802cebd0`: запрос рендера типа 5 в холст; без него — холст
+    100×100), — картинка ассета проекта; в списке строк Material этого типа нет. Порт с 17 октября
+    2026: `EnvironmentMap::Asset`.
+    Сферические гармоники: выборки по сфере → коэффициенты (`FUN_180435e50`, байты / 255),
+    × 4π / N (`FUN_180436790`), матрицы (`FUN_180437360`) с константами 0.429043, 0.511664,
+    0.743125, 0.886227, 0.247708.
 - Тени: `ComputeShadowValue` — проверка `dot(shadowDirection, ecPos − lightPosition) > 0`,
   координаты карты 0..1, `shadowAmount = PCF(…, clamp(20·shadowDiffusion, 1, max(20·shadowDiffusion,
   1)))`, `shadowValue = shadowAmount × shadowOpacity`; для точечного или прожектора с
@@ -293,6 +369,11 @@ C:\Gitlab-Runner\builds\BjqbSWcs\0\FXhome\hitfilm\hitfilm\HitFilm\Modules\Flux\
   Cook-Torrance — `roughnessValue` = CK_Roughness / 100, `fresnelTerm` = CK_Fresnel,
   `specularReflectance` = CK_SpecularReflectance / 100; Metallic-Roughness —
   `mrRoughnessFactor`, `mrMetallicFactor`, лак / 100; Specular-Glossiness — `sgGlossinessFactor` / 100.
+  Лак в шейдере MR: `clearCoatRoughness = mrClearCoatRoughnessFactor × (карта IntensityRoughness).g`,
+  `clearCoatBlendFactor = mrClearCoatFactor × .r`, нормаль — `mrClearCoatNormalTexture` или нормаль
+  поверхности; `matColorSpecular.rgb = matColorSpecular.rgb × (1 − blend × FresnelSchlickRoughness(N·V,
+  0, 0)) + FresnelSchlickRoughness(N·V, 0, clearCoatRoughness) × blend` — только для отражений
+  (`matColorSpecularPerLight` для света не меняется).
   В шейдере MR: `roughness = clamp(G карты × фактор)`, `metallic = clamp(B карты × фактор)`,
   `kD = (1 − 0.04)(1 − metallic)`, specular = mix(0.04, base, metallic); SG: `roughness = 1 −
   clamp(A карты × глянец)`, `kD = 1 − max(specular)`; на свет — `GetPointShade` (Schlick, Smith-GGX
@@ -327,6 +408,15 @@ C:\Gitlab-Runner\builds\BjqbSWcs\0\FXhome\hitfilm\hitfilm\HitFilm\Modules\Flux\
   `FUN_1804de0b0`): для слоя-билборда (тип 0) камерой поворота берётся камера света, а не сцены.
   `castShadowsIfLayerDisabled` читается вместе с `IsVisible` при сборе отбрасывающих тени
   (`FUN_18048dfd0` и соседние).
+
+- Alignment в отрисовке: `FUN_18048cd70` (и соседние `FUN_18048fb70`, `FUN_180493820`) берёт
+  `AutoOrientation() == 2` (Towards Active Camera) флагом объекта слоя; поворот к камере —
+  `FluxCamera::OrientateToCamera` (0x180285a30): мировая матрица камеры даёт её −Z, Y и X, матрица
+  слоя — его нормаль (0, 0, 1) и верх; поворот, переводящий нормаль в −(−Z камеры), затем верх слоя в
+  верх камеры (`FUN_1803c7f50` дважды), — лист в плоскости камеры, прямо к ней. Для теней
+  (`FUN_1803e8ea0`, `FUN_1804de0b0`) камерой поворота служит камера сцены, а с billboardedShadows —
+  камера источника. `FluxCamera::AutoOrientMatrix` (0x1802858a0) — тот же look-at, что в Project.dll,
+  между двумя точками; внутри Flux не вызывается (только Вьювер VegasEffects.exe).
 
 ## Перенос подтверждённых контрактов в код
 

@@ -768,7 +768,7 @@ QDomElement modelMaterialElement(QDomDocument& doc, const model3d::Material& mat
         element.appendChild(f);
     }
     number("CK_Roughness", material.cookTorranceRoughness * 100.0);
-    number("ReflectionType", 1);
+    number("ReflectionType", int(material.reflectionMode));
     number("OverrideMaterial", 0);
     text("EmissiveTextureFilename", material.emissiveMap);
     text("OcclusionTextureFilename", material.occlusionMap);
@@ -822,6 +822,8 @@ void readModelMaterial(const QDomElement& element, model3d::Material* material)
     material->opacity = qBound(0.0, number("Opacity", material->opacity * 100.0) / 100.0, 1.0);
     material->indexOfRefraction = number("RefractionIndex", material->indexOfRefraction);
     material->refractionAmount = number("RefractionAmount", material->refractionAmount * 100.0) / 100.0;
+    material->reflectionMode = int(number("ReflectionType", int(material->reflectionMode))) == 0
+        ? model3d::ReflectionMode::Planar : model3d::ReflectionMode::Spherical;
     material->cookTorranceSpecularReflectance =
         number("CK_SpecularReflectance", material->cookTorranceSpecularReflectance * 100.0) / 100.0;
     const QDomElement fresnel = element.firstChildElement(QStringLiteral("CK_Fresnel"));
@@ -870,6 +872,14 @@ composition::LayerTransform readTransform(const QDomElement& propertyManager, do
     // scalars rotationX/rotationY. A 2D layer simply carries zeros there.
     const QString Z = QStringLiteral("Z");
     t.positionZ = propAxis(propertyManager, QStringLiteral("position"), Z, 0.0);
+    // A camera's, a light's or a point layer's "target".
+    t.targetX = propAxis(propertyManager, QStringLiteral("target"), X, 0.0);
+    t.targetY = propAxis(propertyManager, QStringLiteral("target"), Y, 0.0);
+    t.targetZ = propAxis(propertyManager, QStringLiteral("target"), Z, 0.0);
+    const QDomElement target = propElement(propertyManager, QStringLiteral("target"));
+    t.targetXCurve = propAnimation(target, fps, X);
+    t.targetYCurve = propAnimation(target, fps, Y);
+    t.targetZCurve = propAnimation(target, fps, Z);
     t.positionZCurve = propAnimation(pos, fps, Z);
     t.anchorPointZ = propAxis(propertyManager, QStringLiteral("anchorPoint"), Z, 0.0);
     t.scaleZPercent = propAxis(propertyManager, QStringLiteral("scale"), Z, 100.0);
@@ -2116,6 +2126,19 @@ void readCompositionAsset(const QDomElement& compositionAsset,
             layer.opacity = opacityPct / 100.0;
         }
         layer.transform = readTransform(pm, fps);
+        // <AutoOrient>, <AutoOrientPathAxis> and <AutoOrientLayer>, as
+        // AssetLayer, CameraLayer, LightLayer and PointLayer keep them.
+        {
+            bool modeOk = false;
+            const int mode = elemText(lw, QStringLiteral("AutoOrient")).toInt(&modeOk);
+            if (modeOk && (mode == 0 || mode == 1 || mode == 2 || mode == 4 || mode == 5))
+                layer.autoOrient = composition::AutoOrient(mode);
+            bool axisOk = false;
+            const int axis = elemText(lw, QStringLiteral("AutoOrientPathAxis")).toInt(&axisOk);
+            if (axisOk && axis >= 1 && axis <= 3) layer.autoOrientAxis = axis;
+            const QUuid towards(elemText(lw, QStringLiteral("AutoOrientLayer")));
+            if (!towards.isNull()) layer.autoOrientLayer = core::Identifier(towards.toString(QUuid::WithoutBraces));
+        }
         if (layerKind == composition::LayerKind::Camera) {
             // CameraLayer: its lens properties and the elements beside them.
             composition::CameraSettings& camera = layer.camera;
@@ -2183,6 +2206,32 @@ void readCompositionAsset(const QDomElement& compositionAsset,
             surface.billboardedShadows = propBool(pm, QStringLiteral("billboardedShadows"), surface.billboardedShadows);
             surface.selfShadowBias = qBound(1.0, propScalar(pm, QStringLiteral("selfShadowBias"), surface.selfShadowBias),
                                             1000.0);
+            surface.castAmbientOcclusion =
+                propBool(pm, QStringLiteral("castAmbientOcclusion"), surface.castAmbientOcclusion);
+            surface.receiveAmbientOcclusion =
+                propBool(pm, QStringLiteral("receiveAmbientOcclusion"), surface.receiveAmbientOcclusion);
+            surface.aoSamples = qBound(4, propInt(pm, QStringLiteral("aoSamples"), surface.aoSamples), 10);
+            surface.aoSampleRadius = qBound(0, propInt(pm, QStringLiteral("aoSampleRadius"), surface.aoSampleRadius), 20);
+            surface.aoIntensity = qBound(0.0, propScalar(pm, QStringLiteral("aoIntensity"), surface.aoIntensity), 100.0);
+            surface.aoDepthScale = qBound(0.0, propScalar(pm, QStringLiteral("aoDepthScale"), surface.aoDepthScale), 100.0);
+            surface.aoBias = qBound(0.0, propScalar(pm, QStringLiteral("aoBias"), surface.aoBias), 10.0);
+            surface.aoBlurRadius = qBound(1, propInt(pm, QStringLiteral("aoBlurRadius"), surface.aoBlurRadius), 20);
+            surface.aoDepthFalloff =
+                qBound(0.0, propScalar(pm, QStringLiteral("aoDepthFallOff"), surface.aoDepthFalloff), 100.0);
+            surface.includeSemiTransparentTriangles = propBool(pm, QStringLiteral("includeSemiTransparentTriangles"),
+                                                               surface.includeSemiTransparentTriangles);
+            surface.castReflections = propBool(pm, QStringLiteral("castReflections"), surface.castReflections);
+            surface.castReflectionsIfInvisible =
+                propBool(pm, QStringLiteral("castReflectionsIfLayerDisabled"), surface.castReflectionsIfInvisible);
+            surface.receiveReflections = propBool(pm, QStringLiteral("receiveReflections"), surface.receiveReflections);
+            surface.specularReflectivity =
+                propScalar(pm, QStringLiteral("specularReflectivity"), surface.specularReflectivity);
+            surface.diffuseReflectivity = propScalar(pm, QStringLiteral("diffuseReflectivity"), surface.diffuseReflectivity);
+            const int environment = propInt(pm, QStringLiteral("environmentMapType"), int(surface.environmentMap));
+            if (environment >= 1000 && environment <= 1003)
+                surface.environmentMap = composition::SurfaceShading::EnvironmentMap(environment);
+            surface.environmentMapLayer = core::Identifier(
+                propValueHolder(propElement(pm, QStringLiteral("environmentMapLayerID"))).firstChildElement(QStringLiteral("id")).text());
             const auto keys = [&](const char* name) {
                 return propAnimation(propElement(pm, QString::fromLatin1(name)), fps, QString());
             };
@@ -2191,6 +2240,8 @@ void readCompositionAsset(const QDomElement& compositionAsset,
             surface.specularCurve = keys("matSpecular");
             surface.shininessCurve = keys("matShininess");
             surface.emissiveCurve = propColorAnimation(propElement(pm, QStringLiteral("matEmissiveColor")), fps);
+            surface.specularReflectivityCurve = keys("specularReflectivity");
+            surface.diffuseReflectivityCurve = keys("diffuseReflectivity");
         }
         // Audio > Level. Its keys are composition milliseconds like every
         // other layer property - project_1's music layer fades out over
@@ -2340,6 +2391,16 @@ void readCompositionAsset(const QDomElement& compositionAsset,
         const long long start = elemText(named, QStringLiteral("StartFrame")).toLongLong();
         const long long end = elemText(named, QStringLiteral("EndFrame")).toLongLong();
         const long long len = (end > start) ? (end - start) : 0;
+        // A layer without clips keeps its span. One from the start to the
+        // shot's end stays open, following the shot's length; older saves of
+        // this port wrote an empty one (EndFrame = StartFrame), the whole
+        // shot.
+        if (composition::layerHasSpan(layer.kind)) {
+            layer.spanStartSeconds = frameToSeconds(qMax(0LL, start), fps);
+            const bool toShotEnd = statedDuration > 0.0 && start <= 0
+                                   && end >= qRound64(statedDuration * fps);
+            layer.spanEndSeconds = end > start && !toShotEnd ? frameToSeconds(end, fps) : -1.0;
+        }
 
         if (kind == QStringLiteral("AssetLayer")) {
             const QString assetGuid = elemText(lw, QStringLiteral("AssetID"));
@@ -2443,6 +2504,13 @@ void readCompositionAsset(const QDomElement& compositionAsset,
             if (ok) first.audioLevel = audioLevel;
         }
         readClipsExtension(lw, &layer);
+        // Key times are relative to the layer's start in the reference (Flux
+        // evaluates a layer at AbstractLayer::GlobalFrameToRelativeTime: frame
+        // - StartFrame); here they are on the shot's timeline. Saves of this
+        // port without OpenVegasKeyTimes wrote them there already.
+        const bool shotTimes = lw.hasAttribute(QStringLiteral("OpenVegasKind"))
+                               && lw.attribute(QStringLiteral("OpenVegasKeyTimes")) != QLatin1String("layer");
+        if (!shotTimes) composition::shiftLayerKeys(layer, int(start));
     }
     if (statedDuration > 0.0) composition->setDurationSeconds(statedDuration);
 }
@@ -2964,7 +3032,22 @@ static QDomDocument projectDocument(const QString& filePath,
             return qMax(0LL, qRound64(seconds * shotFps));
         };
 
-        for (const composition::Layer& layer : shot.layers()) {
+        for (const composition::Layer& shotLayer : shot.layers()) {
+            // Keys go out relative to the layer's start (its StartFrame below),
+            // as the reference keeps them.
+            composition::Layer layer = shotLayer;
+            // A layer without clips lies by its span, open to the shot's end
+            // when it has none of its own; one with clips by its first.
+            const bool spanned = composition::layerHasSpan(layer);
+            const long long layerStartFrame = spanned
+                ? frameRound(layer.spanStartSeconds)
+                : frameRound(layer.clips.isEmpty() ? 0.0 : layer.clips.first().startSeconds);
+            const long long layerEndFrame = spanned
+                ? qMax(layerStartFrame + 1,
+                       layer.spanEndSeconds < 0.0 ? shotFrameCount : frameRound(layer.spanEndSeconds))
+                : frameRound(layer.clips.isEmpty()
+                                 ? 0.0 : layer.clips.first().startSeconds + layer.clips.first().durationSeconds);
+            composition::shiftLayerKeys(layer, -int(layerStartFrame));
             // Point, Light and Camera carry no clips at all, so an empty-clip test
             // would drop them from the file entirely.
             const bool clipless = layer.kind == composition::LayerKind::Point
@@ -2993,6 +3076,7 @@ static QDomDocument projectDocument(const QString& filePath,
             // Distinguishes Plane from Media, which share AssetLayer.
             wrapper.setAttribute(QStringLiteral("OpenVegasKind"),
                                  composition::layerKindToken(layer.kind));
+            wrapper.setAttribute(QStringLiteral("OpenVegasKeyTimes"), QStringLiteral("layer"));
             wrapper.setAttribute(QStringLiteral("OpenVegasMuted"), layer.muted ? 1 : 0);
             if (layer.kind == composition::LayerKind::Camera) {
                 // CameraLayer's own elements: depth of field, clipping, film.
@@ -3004,6 +3088,17 @@ static QDomDocument projectDocument(const QString& filePath,
             }
             if (layer.kind == composition::LayerKind::Light)
                 addText(doc, wrapper, QStringLiteral("LightType"), QString::number(int(layer.light.type)));
+            if (layer.kind == composition::LayerKind::Media || layer.kind == composition::LayerKind::Plane || text
+                || layer.kind == composition::LayerKind::Camera || layer.kind == composition::LayerKind::Light
+                || layer.kind == composition::LayerKind::Point) {
+                // The layer's Alignment, as its own element keeps it.
+                addText(doc, wrapper, QStringLiteral("AutoOrient"), QString::number(int(layer.autoOrient)));
+                if (layer.kind != composition::LayerKind::Point)
+                    addText(doc, wrapper, QStringLiteral("AutoOrientPathAxis"), QString::number(layer.autoOrientAxis));
+                addText(doc, wrapper, QStringLiteral("AutoOrientLayer"),
+                        layer.autoOrientLayer.isValid() ? layer.autoOrientLayer.value()
+                                                        : QStringLiteral("00000000-0000-0000-0000-000000000000"));
+            }
             if (layer.kind == composition::LayerKind::Plane)
                 wrapper.setAttribute(QStringLiteral("OpenVegasPlaneColor"), layer.planeColor.name(QColor::HexArgb));
 
@@ -3241,11 +3336,8 @@ static QDomDocument projectDocument(const QString& filePath,
             addText(doc, named, QStringLiteral("ParentLayerID"),
                     layer.parentLayerId.isValid() ? layer.parentLayerId.value()
                                                   : QStringLiteral("00000000-0000-0000-0000-000000000000"));
-            addText(doc, named, QStringLiteral("StartFrame"),
-                    QStringLiteral("%1").arg(frameRound(clip.startSeconds)));
-            addText(doc, named, QStringLiteral("EndFrame"),
-                    QStringLiteral("%1")
-                        .arg(frameRound(clip.startSeconds + clip.durationSeconds)));
+            addText(doc, named, QStringLiteral("StartFrame"), QStringLiteral("%1").arg(layerStartFrame));
+            addText(doc, named, QStringLiteral("EndFrame"), QStringLiteral("%1").arg(layerEndFrame));
             // Mirrors the read above: the default goes back out as 0.
             addText(doc, named, QStringLiteral("BlendMode"),
                     layer.blendMode == QStringLiteral("None") ? QStringLiteral("0")
@@ -3283,6 +3375,11 @@ static QDomDocument projectDocument(const QString& filePath,
                             shotFps, t.anchorPointZ);
             appendPointProp(doc, pmEl, QStringLiteral("position"), QStringLiteral("p3"), t.position,
                             t.positionXCurve, t.positionYCurve, shotFps, t.positionZ, t.positionZCurve);
+            if (layer.kind == composition::LayerKind::Camera || layer.kind == composition::LayerKind::Light
+                || layer.kind == composition::LayerKind::Point) {
+                appendPointProp(doc, pmEl, QStringLiteral("target"), QStringLiteral("p3"), QPointF(t.targetX, t.targetY),
+                                t.targetXCurve, t.targetYCurve, shotFps, t.targetZ, t.targetZCurve);
+            }
             appendPointProp(doc, pmEl, QStringLiteral("scale"), QStringLiteral("sc"), t.scalePercent,
                             t.scaleXCurve, t.scaleYCurve, shotFps, t.scaleZPercent, t.scaleZCurve);
             // The 3D side in the reference's own properties; a 2D layer carries
@@ -3332,10 +3429,39 @@ static QDomDocument projectDocument(const QString& filePath,
                 appendBoolProp(doc, pmEl, QStringLiteral("receiveShadows"), surface.receiveShadows);
                 appendBoolProp(doc, pmEl, QStringLiteral("billboardedLights"), surface.billboardedLights);
                 appendBoolProp(doc, pmEl, QStringLiteral("billboardedShadows"), surface.billboardedShadows);
-                if (layer.kind == composition::LayerKind::Model3D) {
-                    // A static <fl> (Type 1), as Model3DLayer keeps it.
-                    appendStaticProp(doc, pmEl, QStringLiteral("selfShadowBias"), [&](QDomElement& holder) {
-                        addText(doc, holder, QStringLiteral("fl"), QString::number(surface.selfShadowBias, 'g', 9));
+                // Static <fl>s (Type 1), as the reference keeps them.
+                const auto staticReal = [&](const char* name, double value) {
+                    appendStaticProp(doc, pmEl, QString::fromLatin1(name), [&](QDomElement& holder) {
+                        addText(doc, holder, QStringLiteral("fl"), QString::number(value, 'g', 9));
+                    });
+                };
+                if (layer.kind == composition::LayerKind::Model3D) staticReal("selfShadowBias", surface.selfShadowBias);
+                appendBoolProp(doc, pmEl, QStringLiteral("castAmbientOcclusion"), surface.castAmbientOcclusion);
+                appendBoolProp(doc, pmEl, QStringLiteral("receiveAmbientOcclusion"), surface.receiveAmbientOcclusion);
+                appendIntProp(doc, pmEl, QStringLiteral("aoSamples"), surface.aoSamples);
+                appendIntProp(doc, pmEl, QStringLiteral("aoSampleRadius"), surface.aoSampleRadius);
+                staticReal("aoIntensity", surface.aoIntensity);
+                staticReal("aoDepthScale", surface.aoDepthScale);
+                staticReal("aoBias", surface.aoBias);
+                appendIntProp(doc, pmEl, QStringLiteral("aoBlurRadius"), surface.aoBlurRadius);
+                staticReal("aoDepthFallOff", surface.aoDepthFalloff);
+                if (layer.kind == composition::LayerKind::Model3D)
+                    appendBoolProp(doc, pmEl, QStringLiteral("includeSemiTransparentTriangles"),
+                                   surface.includeSemiTransparentTriangles);
+                appendBoolProp(doc, pmEl, QStringLiteral("castReflections"), surface.castReflections);
+                appendBoolProp(doc, pmEl, QStringLiteral("castReflectionsIfLayerDisabled"),
+                               surface.castReflectionsIfInvisible);
+                appendBoolProp(doc, pmEl, QStringLiteral("receiveReflections"), surface.receiveReflections);
+                if (layer.kind != composition::LayerKind::Model3D)
+                    appendScalarProp(doc, pmEl, QStringLiteral("specularReflectivity"), surface.specularReflectivity,
+                                     surface.specularReflectivityCurve, shotFps);
+                if (layer.kind == composition::LayerKind::Text)
+                    appendScalarProp(doc, pmEl, QStringLiteral("diffuseReflectivity"), surface.diffuseReflectivity,
+                                     surface.diffuseReflectivityCurve, shotFps);
+                if (layer.kind == composition::LayerKind::Text || layer.kind == composition::LayerKind::Model3D) {
+                    appendIntProp(doc, pmEl, QStringLiteral("environmentMapType"), int(surface.environmentMap));
+                    appendStaticProp(doc, pmEl, QStringLiteral("environmentMapLayerID"), [&](QDomElement& holder) {
+                        addText(doc, holder, QStringLiteral("id"), surface.environmentMapLayer.value());
                     });
                 }
                 appendColorProp(doc, pmEl, QStringLiteral("shadowColor"), surface.shadowColor);

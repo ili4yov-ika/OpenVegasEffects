@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 
+#include "composition/Layer.h"
 #include "core/Identifier.h"
 #include "plugin/NativeEffectRender.h"
 
@@ -30,8 +31,8 @@ class VideoDecoder;
 namespace ui {
 
 // The application side of the native modules that live on an instance of
-// their own (MotionTrack): what PluginFile and the project do for them in the
-// reference.
+// their own (MotionTrack, AutomaticStabilizer, MotionLock): what PluginFile
+// and the project do for them in the reference.
 //
 //  - It answers the module's questions about layers and footage
 //    (GetLayerInfoV2, GetAssetInfo, GetAssetTexture) from the shot and the
@@ -41,8 +42,14 @@ namespace ui {
 //  - Values the module sets (its status, feature IDs) go straight into the
 //    effect, as plugin-made changes do in the reference: no undo step.
 //  - When the module settles it keeps the instance's data in the effect
-//    (Notify 5, saved as <InstanceBytes>) and works out its matrix for every
-//    frame of the clip (Notify 102), which the renderer then reads.
+//    (Notify 5, saved as <InstanceBytes>) and, for MotionTrack, works out its
+//    matrix for every frame of the clip (Notify 102), which the renderer then
+//    reads; the 2D effects draw from that data themselves.
+//  - AutomaticStabilizer and MotionLock analyse their own layer: each is told
+//    it was put on its layer once (Notify 7, "Effect_Parent_Layer",
+//    Plugin2DEffect::NotifySetParent), and what they ask of the project from
+//    their buttons - a new point layer, keys on a layer
+//    (plugin::NativeLayerRequest) - is made here as one undo step.
 //
 // An instance is named "<layer ID>/<clip>/<effect>", as the viewer's custom
 // UI names it.
@@ -97,9 +104,21 @@ public:
 
     bool isBusy() const { return !m_pending.isEmpty(); }
 
+    // The keys and static values a module's transforms give a layer
+    // (CreatePointLayer / ApplyTransformToLayer): "position", "rotationZ"
+    // and "scale" - keys at `firstFrame` plus each transform's time for more
+    // than one, the values themselves for one (a key at that time where the
+    // property is animated).
+    static void applyLayerTransforms(composition::Layer& layer,
+                                     const QVector<plugin::NativeLayerTransform>& transforms,
+                                     int firstFrame, double frameRate);
+
 signals:
     // Values, the module's data or the layer's motion changed.
     void effectChanged();
+    // A module changed the shot's layers (`before` them) as one step named
+    // `text`: the owner records it for undo.
+    void layersEdited(const QVector<composition::Layer>& before, const QString& text);
 
 private:
     composition::Effect* effectFor(const Ref& ref) const;
@@ -110,6 +129,11 @@ private:
     void runBackground();
     void finish(const Ref& ref);
     void bake(const Ref& ref);
+    // The edits a module asked for; true when the shot changed.
+    bool applyLayerRequests(const Ref& ref, const QVector<plugin::NativeLayerRequest>& requests);
+    // Where a layer starts on the shot, in frames: the clip that matters now
+    // (layerById); a layer without clips starts with the shot.
+    int layerStartFrame(const QString& layerId) const;
 
     // The source host's answers.
     plugin::NativeLayerInfo layerInfo(const QString& layerId) const;
@@ -131,6 +155,8 @@ private:
     // clip of its own layer is meant.
     mutable Ref m_context;
     QSet<QString> m_restored;
+    // The 2D instances already told they were put on their layer.
+    QSet<QString> m_parented;
     // The data each instance was last restored from or saved, by key.
     QHash<QString, size_t> m_baked;
     std::map<QString, std::unique_ptr<media::VideoDecoder>> m_decoders;

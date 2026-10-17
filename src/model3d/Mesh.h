@@ -15,6 +15,17 @@ namespace openvegas {
 namespace model3d {
 
 // How a material answers light: the reference's IlluminationType, which is
+// How a model's material is reflected in (Model3DMaterial's ReflectionType,
+// the material dialog's "Reflection Mode": Spherical 1, the default, or
+// Planar 0, VegasEffects.exe 0x1404fad30): Spherical takes the lat-long
+// reflection map round the model, Planar a map of the scene mirrored in the
+// material's own plane.
+enum class ReflectionMode
+{
+    Planar = 0,
+    Spherical = 1,
+};
+
 // Flux's illuminationType - Phong, Cook-Torrance (a Beckmann distribution
 // with a Fresnel term), and the two physically based models of glTF.
 enum class IlluminationModel
@@ -70,8 +81,8 @@ struct Material
     // Specular-Glossiness: SG_GlossinessFactor, times the map's alpha.
     double glossiness = 1.0;
     // Metallic-Roughness clear coat (MR_ClearCoatFactor,
-    // MR_ClearCoatRoughnessFactor); it only changes reflections, which are
-    // not drawn here.
+    // MR_ClearCoatRoughnessFactor); it only changes what the reflection
+    // maps give (reflectionTerms), not the lights' shading.
     double clearCoat = 0.0;
     double clearCoatRoughness = 0.0;
     AlphaMode alphaMode = AlphaMode::Guess;
@@ -79,6 +90,7 @@ struct Material
     // How much of the occlusion map shows (Occlusion Strength).
     double occlusionStrength = 1.0;
     double refractionAmount = 0.0;
+    ReflectionMode reflectionMode = ReflectionMode::Spherical;
     double shininess = 32.0;      // Phong exponent, reference "Shininess"
     double opacity = 1.0;
     double indexOfRefraction = 1.0;

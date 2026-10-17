@@ -132,6 +132,10 @@ enum class TransformProperty
     // timeline lists it alone under the layer's Audio group, but it animates
     // through the same curve plumbing as the properties above.
     AudioLevel,
+    // Reference property "target": the point a camera, a light or a point
+    // layer turns to with Alignment "Towards Target Position". Only those
+    // layers show it, after Position.
+    Target,
 };
 
 // Properties every layer shows, in reference order.
@@ -157,6 +161,7 @@ inline int axisCount(TransformProperty prop, LayerDimension dimension = LayerDim
     case TransformProperty::Scale:
         return dimension == LayerDimension::ThreeD ? 3 : 2;
     case TransformProperty::Orientation:
+    case TransformProperty::Target:
         return 3;
     case TransformProperty::Opacity:
     case TransformProperty::RotationX:
@@ -192,6 +197,7 @@ inline const char* transformPropertyName(TransformProperty prop,
             : QT_TRANSLATE_NOOP("Transform", "Rotation");
     // AssetLayerGroupFactory's label for audioLevel, under "Audio".
     case TransformProperty::AudioLevel:  return QT_TRANSLATE_NOOP("Transform", "Level");
+    case TransformProperty::Target:      return QT_TRANSLATE_NOOP("Transform", "Target");
     }
     return "";
 }
@@ -246,6 +252,15 @@ struct LayerTransform
     double audioLevel = 0.0;
     KeyFrameList audioLevelCurve;
 
+    // "target" (TransformProperty::Target), a camera's, a light's or a point
+    // layer's: (0, 0, 0) as the reference creates it.
+    double targetX = 0.0;
+    double targetY = 0.0;
+    double targetZ = 0.0;
+    KeyFrameList targetXCurve;
+    KeyFrameList targetYCurve;
+    KeyFrameList targetZCurve;
+
     // Curve backing one axis of a property, or nullptr when the model carries
     // none: Anchor Point has no curve and the serializer writes none, so it is
     // editable but not animatable.
@@ -264,6 +279,8 @@ struct LayerTransform
             return axis == 0 ? &orientationXCurve
                              : (axis == 1 ? &orientationYCurve : &orientationZCurve);
         case TransformProperty::AudioLevel: return &audioLevelCurve;
+        case TransformProperty::Target:
+            return axis == 0 ? &targetXCurve : (axis == 1 ? &targetYCurve : &targetZCurve);
         case TransformProperty::AnchorPoint: break;
         }
         return nullptr;
@@ -360,8 +377,15 @@ struct LayerTransform
             return axis == 0 ? anchorPoint.x() : (axis == 1 ? anchorPoint.y() : anchorPointZ);
         case TransformProperty::AudioLevel:
             return curveValue(audioLevelCurve, frame, audioLevel);
+        case TransformProperty::Target:
+            return targetAt(frame, axis);
         }
         return 0.0;
+    }
+    double targetAt(int frame, int axis) const
+    {
+        return axis == 0 ? curveValue(targetXCurve, frame, targetX)
+                         : (axis == 1 ? curveValue(targetYCurve, frame, targetY) : curveValue(targetZCurve, frame, targetZ));
     }
     // `fallback` is the layer's static opacity, already normalised to 0..1.
     double opacityAt(int frame, double fallback) const
@@ -546,8 +570,28 @@ struct CameraSettings
 // Flux divides them by 100) and matEmissiveColor, which animate - shown in
 // the timeline's Material group (AssetLayerGroupFactory), with the defaults
 // the reference creates them with (Project.dll 0x1802e52c0, 0x1802a5fc0).
+// Its ambient occlusion, all static (Project.dll 0x180312a80, a model's
+// 0x1802a5fc0; ranges from the static initialisers 0x180002a60...
+// 0x180002d70): castAmbientOcclusion and receiveAmbientOcclusion (off), and
+// the receiver's aoSamples (4, 4..10), aoSampleRadius (15, 0..20),
+// aoIntensity (50, 0..100), aoDepthScale (10, 0..100), aoBias (0.01,
+// 0..10), aoBlurRadius (5, 1..20), aoDepthFallOff (10, 0..100) and a
+// model's includeSemiTransparentTriangles (on).
+// Its reflections (Project.dll 0x1802e52c0, TextLayer 0x180312cf0, a
+// model's 0x1802a5fc0): castReflections, castReflectionsIfLayerDisabled and
+// receiveReflections (off, static); a media, plane or text layer's
+// specularReflectivity (100) and a text layer's diffuseReflectivity (0),
+// percent, 0..100, which animate; a text or model layer's
+// environmentMapType (None 1000, Use Composite Shot 1001, Use Layer 1002)
+// and environmentMapLayerID, static.
 struct SurfaceShading
 {
+    // 1003, not offered by the Material rows: a project asset by its ID
+    // (environmentMapLayerID), which Flux draws on its own as a render item
+    // (FUN_1804bb850 -> FUN_1802ca540 / FUN_1802cebd0) - an environment
+    // picture that is no layer of the shot.
+    enum class EnvironmentMap { None = 1000, CompositeShot = 1001, Layer = 1002, Asset = 1003 };
+
     bool illuminated = true;
     bool castShadows = false;
     bool castShadowsIfInvisible = false;
@@ -555,6 +599,25 @@ struct SurfaceShading
     bool billboardedLights = false;
     bool billboardedShadows = false;
     double selfShadowBias = 1.0;
+    bool castAmbientOcclusion = false;
+    bool receiveAmbientOcclusion = false;
+    int aoSamples = 4;
+    int aoSampleRadius = 15;
+    double aoIntensity = 50.0;
+    double aoDepthScale = 10.0;
+    double aoBias = 0.01;
+    int aoBlurRadius = 5;
+    double aoDepthFalloff = 10.0;
+    bool includeSemiTransparentTriangles = true;
+    bool castReflections = false;
+    bool castReflectionsIfInvisible = false;
+    bool receiveReflections = false;
+    double specularReflectivity = 100.0;
+    double diffuseReflectivity = 0.0;
+    KeyFrameList specularReflectivityCurve;
+    KeyFrameList diffuseReflectivityCurve;
+    EnvironmentMap environmentMap = EnvironmentMap::None;
+    core::Identifier environmentMapLayer;
     QColor shadowColor = QColor(0, 0, 0);
     double ambient = 100.0;
     double diffuse = 50.0;
@@ -572,6 +635,14 @@ struct SurfaceShading
     double specularAt(int frame) const { return LayerTransform::curveValue(specularCurve, frame, specular); }
     double shininessAt(int frame) const { return LayerTransform::curveValue(shininessCurve, frame, shininess); }
     QColor emissiveAt(int frame) const { return LayerTransform::curveColor(emissiveCurve, frame, emissive); }
+    double specularReflectivityAt(int frame) const
+    {
+        return LayerTransform::curveValue(specularReflectivityCurve, frame, specularReflectivity);
+    }
+    double diffuseReflectivityAt(int frame) const
+    {
+        return LayerTransform::curveValue(diffuseReflectivityCurve, frame, diffuseReflectivity);
+    }
 };
 
 // An animation playing on a model layer - the reference's
@@ -718,6 +789,19 @@ inline LayerKind layerKindFromToken(const QString& token, LayerKind fallback = L
     return fallback;
 }
 
+// A layer's Alignment (the reference's AutoOrient, saved as <AutoOrient>
+// beside <AutoOrientPathAxis> and <AutoOrientLayer>): how it turns by itself.
+// The numbers are the reference's (the Transform group's lists,
+// VegasEffects.exe 0x14050fec0).
+enum class AutoOrient
+{
+    None = 0,
+    AlongMotionPath = 1,
+    TowardsActiveCamera = 2,     // a 3D media, plane or text layer
+    TowardsTargetPosition = 4,   // a camera, a light or a point layer
+    TowardsLayer = 5,
+};
+
 struct Layer
 {
     // LayerBase/ID is the persistent identity used by the reference.  It must
@@ -745,6 +829,11 @@ struct Layer
     LightSettings light;
     // Lights and shadows on a layer in the 3D scene.
     SurfaceShading surface;
+    // Alignment, the axis Along Motion Path turns (X 1, Y 2, Z 3) and the
+    // layer Towards Layer turns to.
+    AutoOrient autoOrient = AutoOrient::None;
+    int autoOrientAxis = 1;
+    core::Identifier autoOrientLayer;
     int zIndex = 0;
     // Reference default for a newly created layer (see SAMPLES/screenshots).
     QString blendMode = QStringLiteral("None");
@@ -761,6 +850,15 @@ struct Layer
     // frames too - see audioLevelAtSeconds below.
     double audioLevelAtSeconds(double seconds, double fps) const;
     QVector<Clip> clips;
+    // Where a layer without clips - Point, Light, Camera, 3D model - lies on
+    // the shot's timeline: the reference's StartFrame and EndFrame, which
+    // every one of its layers has. Outside it the layer takes no part: a
+    // camera is not the active one (CompositionAsset::ActiveCameraLayer), a
+    // light lights nothing and a model is not drawn (Flux's layer loop). An
+    // end below zero runs to the shot's end, as a new layer does (StartFrame
+    // 0, EndFrame the shot's FrameCount).
+    double spanStartSeconds = 0.0;
+    double spanEndSeconds = -1.0;
     QVector<LayerMask> masks;
     QVector<MotionTrack> motionTracks;
     // Model3D: the nodes of its model given a transform of their own.
@@ -794,6 +892,37 @@ struct Layer
         return nullptr;
     }
 };
+
+// Whether a layer of this kind lies on the timeline by its span
+// (Layer::spanStartSeconds) rather than by clips.
+inline bool layerHasSpan(LayerKind kind)
+{
+    return kind == LayerKind::Point || kind == LayerKind::Light || kind == LayerKind::Camera
+           || kind == LayerKind::Model3D;
+}
+
+inline bool layerHasSpan(const Layer& layer)
+{
+    return layer.clips.isEmpty() && layerHasSpan(layer.kind);
+}
+
+// Where a layer's span ends, in a shot `shotSeconds` long.
+inline double layerSpanEnd(const Layer& layer, double shotSeconds)
+{
+    return layer.spanEndSeconds < 0.0 ? qMax(layer.spanStartSeconds, shotSeconds) : layer.spanEndSeconds;
+}
+
+// Whether a layer takes part at `frame` of a shot running at `fps`: one
+// with a span by it, from its first frame up to the one its end falls on
+// (StartFrame <= frame < EndFrame, as the reference tests it); one with
+// clips always, its clips deciding what it shows.
+inline bool layerSpanCovers(const Layer& layer, int frame, double fps)
+{
+    if (!layerHasSpan(layer)) return true;
+    const double rate = qMax(1.0, fps);
+    if (frame < qRound64(layer.spanStartSeconds * rate)) return false;
+    return layer.spanEndSeconds < 0.0 || frame < qRound64(layer.spanEndSeconds * rate);
+}
 
 // A keyable property of a light, a camera's lens or a layer's Material, by
 // the name the reference saves it under ("color", "spotlightAngle",
@@ -837,6 +966,10 @@ inline KeyedLayerProperty keyedLayerProperty(Layer& layer, const QString& name)
     if (name == QLatin1String("matSpecular")) return number(surface.specularCurve, surface.specular);
     if (name == QLatin1String("matShininess")) return number(surface.shininessCurve, surface.shininess);
     if (name == QLatin1String("matEmissiveColor")) return colour(surface.emissiveCurve, surface.emissive);
+    if (name == QLatin1String("specularReflectivity"))
+        return number(surface.specularReflectivityCurve, surface.specularReflectivity);
+    if (name == QLatin1String("diffuseReflectivity"))
+        return number(surface.diffuseReflectivityCurve, surface.diffuseReflectivity);
     return {};
 }
 

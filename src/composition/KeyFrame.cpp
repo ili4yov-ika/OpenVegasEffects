@@ -334,6 +334,18 @@ QVariant KeyFrameList::valueAt(int frame) const
     return QVariant(a + (b - a) * t);
 }
 
+void KeyFrameList::shift(int frames)
+{
+    if (frames == 0 || m_frames.isEmpty()) return;
+    QMap<int, KeyFrame> moved;
+    for (auto it = m_frames.cbegin(); it != m_frames.cend(); ++it) {
+        KeyFrame key = it.value();
+        key.frame = it.key() + frames;
+        moved.insert(key.frame, key);
+    }
+    m_frames = moved;
+}
+
 void KeyFrameList::clear()
 {
     m_frames.clear();

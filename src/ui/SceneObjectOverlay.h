@@ -30,12 +30,15 @@ namespace ui {
 //    circle of its Reach (PointLightReachControl, a 100-sided ring); a spot,
 //    its cone (SpotLightControl: the whole cone and its unfeathered part,
 //    250 units long); a directional light, the way it shines;
-//  - a point: its Position handle (the reference's crosshairs).
+//  - a point: its Position handle (the reference's crosshairs);
+//  - a camera, a light or a point Towards Target Position: a line to its
+//    Target and the Target's own handle there (SpotLightTargetControl,
+//    "Target"; drawn with the crosshairs).
 // The overlay draws in every view of the scene - the Viewer's Top, Front,
 // Perspective and the others with a camera of their own - through that
 // view's camera. With the Select tool a press on a handle selects the layer
-// and dragging it moves the layer parallel to the view at its depth, one
-// step of History.
+// and dragging it moves the layer - or, the Target's handle, its Target -
+// parallel to the view at its depth, one step of History.
 class SceneObjectOverlay : public ViewerOverlay
 {
 public:
@@ -77,6 +80,7 @@ public:
         int layer = -1;
         QPointF position;
         bool light = false;
+        bool target = false;   // the layer's Target, not the layer
     };
     struct Drawing
     {
@@ -87,6 +91,9 @@ public:
     // The layer whose handle is at a canvas point of a view (within the
     // handle's eight pixels at `pixelsPerCanvas`), or -1.
     int layerAt(int view, const QPointF& canvasPos, double pixelsPerCanvas = 1.0) const;
+    std::optional<Handle> handleAt(int view, const QPointF& canvasPos, double pixelsPerCanvas = 1.0) const;
+    // Whether the drag being finished moved a Target rather than a layer.
+    bool dragsTarget() const { return m_dragTarget; }
 
 private:
     SceneProvider m_scene;
@@ -100,8 +107,12 @@ private:
     bool m_dragging = false;
     bool m_moved = false;
     int m_dragLayer = -1;
+    bool m_dragTarget = false;
     QPointF m_pressCanvas;
     composition::LayerTransform m_before;
+    // What the dragged layer's parent puts it under: drags happen in the
+    // scene and are written back under it.
+    QMatrix4x4 m_dragParent;
     QMatrix4x4 m_viewProjection;
     double m_depth = 0.0;
     QSizeF m_canvas;

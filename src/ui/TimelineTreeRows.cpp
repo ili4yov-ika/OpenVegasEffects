@@ -403,6 +403,7 @@ void TimelineWidget::rebuildTree()
         auto* effects = group(tr("Effects"), "timelineAddEffect_", true);
         auto* transform = group(tr("Transform"), QString(), false);
         buildTransformRows(transform, i);
+        addAlignmentRows(i, transform);
         bool hasTransformKeys = false;
         for (const auto property : composition::transformPropertiesFor(layer.dimension)) {
             if (layer.transform.isAnimated(property, layer.dimension)) {
@@ -503,6 +504,7 @@ struct TimelinePropertyRow
     std::function<void(composition::Layer&, const QVariant&, int frame)> set;
     QString title;   // the undo text; "Set <label>" when empty
     QString keyed = QString();
+    bool rebuild = false;   // an edit that changes which rows there are
 };
 
 namespace {
@@ -515,6 +517,13 @@ plugin::EffectParameterSpec numberSpec(double minimum, double maximum, const QSt
     spec.maximum = maximum;
     spec.unit = unit;
     spec.decimals = decimals;
+    return spec;
+}
+
+plugin::EffectParameterSpec intSpec(int minimum, int maximum)
+{
+    plugin::EffectParameterSpec spec = numberSpec(minimum, maximum, QString(), 0);
+    spec.type = QStringLiteral("int");
     return spec;
 }
 
@@ -651,10 +660,15 @@ void TimelineWidget::addSurfaceRows(int l, QTreeWidgetItem* parent)
     // The part of the reference's Material group (AssetLayerGroupFactory,
     // VegasEffects.exe 0x1405e0130) the renderer takes, in its order:
     // whether lights and shadows reach the layer, whether it casts them
-    // while hidden, a model's Self Shadow Bias, a media or plane layer's
-    // Billboarded Lights and Shadows, and - but for a model, whose
-    // materials bring their own - its Ambient, Diffuse, Specular,
-    // Shininess and Emissive, which animate.
+    // while hidden, a model's Self Shadow Bias, whether it receives and
+    // casts reflections (and casts them while hidden), a text or model
+    // layer's Environment Map (and its Layer), whether it receives and
+    // casts ambient occlusion and the Ambient Occlusion group (a model's
+    // with Include Semi Transparent Triangles), a media or plane layer's
+    // Billboarded Lights and Shadows, but for a model, whose materials
+    // bring their own, its Ambient, Diffuse, Specular, Shininess and
+    // Emissive, and a media, plane or text layer's Specular Reflectivity (a
+    // text layer's Diffuse Reflectivity too), which animate.
     using Surface = composition::SurfaceShading;
     const composition::LayerKind kind = m_comp->layers()[l].kind;
     const bool model = kind == composition::LayerKind::Model3D;
@@ -677,6 +691,94 @@ void TimelineWidget::addSurfaceRows(int l, QTreeWidgetItem* parent)
                      },
                      QString()});
     }
+    rows.append(flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Receives Reflections"), "receiveReflections",
+                        &Surface::receiveReflections));
+    rows.append(flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Casts Reflections"), "castReflections",
+                        &Surface::castReflections));
+    rows.append(flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Cast Reflections If Visibility Is Off"),
+                        "castReflectionsIfInvisible", &Surface::castReflectionsIfInvisible));
+    if (kind == composition::LayerKind::Text || model) {
+        using Environment = Surface::EnvironmentMap;
+        rows.append({group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Environment Map"), "environmentMap",
+                     choiceSpec(group, {{QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "None"), int(Environment::None)},
+                                        {QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Use Composite Shot"),
+                                         int(Environment::CompositeShot)},
+                                        {QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Use Layer"), int(Environment::Layer)}}),
+                     [](const composition::Layer& layer, int) {
+                         return QVariant(QString::number(int(layer.surface.environmentMap)));
+                     },
+                     [](composition::Layer& layer, const QVariant& value, int) {
+                         const int chosen = value.toInt();
+                         if (chosen >= int(Environment::None) && chosen <= int(Environment::Layer))
+                             layer.surface.environmentMap = Environment(chosen);
+                     },
+                     QString(), QString(), true});
+        if (m_comp->layers()[l].surface.environmentMap == Environment::Layer) {
+            // The other layers of the shot, by name.
+            plugin::EffectParameterSpec layerSpec;
+            layerSpec.type = QStringLiteral("choice");
+            layerSpec.choices << QCoreApplication::translate("AssetLayerGroupFactory", "None");
+            layerSpec.choiceValues << QString();
+            const composition::Layer& own = m_comp->layers()[l];
+            for (const composition::Layer& other : m_comp->layers()) {
+                if (other.id == own.id) continue;
+                layerSpec.choices << other.name;
+                layerSpec.choiceValues << other.id.value();
+            }
+            rows.append({group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Layer"), "environmentMapLayer", layerSpec,
+                         [](const composition::Layer& layer, int) { return QVariant(layer.surface.environmentMapLayer.value()); },
+                         [](composition::Layer& layer, const QVariant& value, int) {
+                             layer.surface.environmentMapLayer = core::Identifier(value.toString());
+                         },
+                         QString()});
+        }
+    }
+    rows.append(flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Receives Ambient Occlusion"),
+                        "receiveAmbientOcclusion", &Surface::receiveAmbientOcclusion));
+    rows.append(flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Casts Ambient Occlusion"), "castAmbientOcclusion",
+                        &Surface::castAmbientOcclusion));
+    addPropertyRows(l, parent, rows, QStringLiteral("timelineSurface_"));
+    rows.clear();
+
+    // Ambient Occlusion: how the occlusion it receives is drawn, all static.
+    const auto whole = [group](const char* label, const char* key, int Surface::*member, int low, int high) {
+        return TimelinePropertyRow{group, label, QString::fromLatin1(key), intSpec(low, high),
+                                   [member](const composition::Layer& layer, int) { return QVariant(layer.surface.*member); },
+                                   [member, low, high](composition::Layer& layer, const QVariant& value, int) {
+                                       layer.surface.*member = qBound(low, value.toInt(), high);
+                                   },
+                                   QString()};
+    };
+    const auto real = [group](const char* label, const char* key, double Surface::*member, double high,
+                              const QString& unit, int decimals) {
+        return TimelinePropertyRow{group, label, QString::fromLatin1(key), numberSpec(0.0, high, unit, decimals),
+                                   [member](const composition::Layer& layer, int) { return QVariant(layer.surface.*member); },
+                                   [member, high](composition::Layer& layer, const QVariant& value, int) {
+                                       layer.surface.*member = qBound(0.0, value.toDouble(), high);
+                                   },
+                                   QString()};
+    };
+    QVector<TimelinePropertyRow> occlusion = {
+        whole(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Samples"), "aoSamples", &Surface::aoSamples, 4, 10),
+        whole(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Sample Radius"), "aoSampleRadius", &Surface::aoSampleRadius,
+              0, 20),
+        real(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Intensity"), "aoIntensity", &Surface::aoIntensity, 100.0,
+             percent, 1),
+        real(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Depth Scale"), "aoDepthScale", &Surface::aoDepthScale, 100.0,
+             percent, 1),
+        real(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Bias"), "aoBias", &Surface::aoBias, 10.0, QString(), 3),
+        whole(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Blur Radius"), "aoBlurRadius", &Surface::aoBlurRadius, 1, 20),
+        real(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Depth Falloff"), "aoDepthFalloff", &Surface::aoDepthFalloff,
+             100.0, percent, 1),
+    };
+    if (model)
+        occlusion.append(flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Include Semi Transparent Triangles"),
+                                 "includeSemiTransparentTriangles", &Surface::includeSemiTransparentTriangles));
+    auto* occlusionGroup =
+        new QTreeWidgetItem(parent, {QCoreApplication::translate("AssetLayerGroupFactory", "Ambient Occlusion")});
+    occlusionGroup->setData(0, Qt::UserRole, l);
+    addPropertyRows(l, occlusionGroup, occlusion, QStringLiteral("timelineSurface_"));
+
     if (kind == composition::LayerKind::Media || kind == composition::LayerKind::Plane) {
         rows.append(flagRow(QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Billboarded Lights"), "billboardedLights",
                             &Surface::billboardedLights));
@@ -694,8 +796,89 @@ void TimelineWidget::addSurfaceRows(int l, QTreeWidgetItem* parent)
                              "matShininess", numberSpec(0.0, 10000.0, QString())));
         rows.append(keyedRow(group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Emissive"), "emissive",
                              "matEmissiveColor", kindSpec("color")));
+        rows.append(keyedRow(group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Specular Reflectivity"),
+                             "specularReflectivity", "specularReflectivity", numberSpec(0.0, 100.0, percent)));
     }
+    if (kind == composition::LayerKind::Text)
+        rows.append(keyedRow(group, QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Diffuse Reflectivity"),
+                             "diffuseReflectivity", "diffuseReflectivity", numberSpec(0.0, 100.0, percent)));
     addPropertyRows(l, parent, rows, QStringLiteral("timelineSurface_"));
+}
+
+void TimelineWidget::addAlignmentRows(int l, QTreeWidgetItem* parent)
+{
+    // The reference's lists (VegasEffects.exe 0x14050fec0, CompositionModel):
+    // a 2D picture layer None or Along Motion Path, turning its X or Y; a 3D
+    // one also Towards Active Camera and Towards Layer, turning X, Y or Z; a
+    // camera or a light None, Along Motion Path, Towards Target Position or
+    // Towards Layer; a point layer None, Towards Target Position or Towards
+    // Layer.
+    using composition::AutoOrient;
+    using composition::LayerKind;
+    const composition::Layer& layer = m_comp->layers()[l];
+    const bool picture = layer.kind == LayerKind::Media || layer.kind == LayerKind::Plane
+                         || layer.kind == LayerKind::Text;
+    const bool aims = layer.kind == LayerKind::Camera || layer.kind == LayerKind::Light;
+    if (!picture && !aims && layer.kind != LayerKind::Point) return;
+    const bool threeD = layer.dimension == composition::LayerDimension::ThreeD || aims;
+    QVector<std::pair<const char*, int>> modes = {{QT_TRANSLATE_NOOP("CompositionModel", "None"), 0}};
+    if (layer.kind != LayerKind::Point)
+        modes.append({QT_TRANSLATE_NOOP("CompositionModel", "Along Motion Path"), int(AutoOrient::AlongMotionPath)});
+    if (picture && threeD)
+        modes.append({QT_TRANSLATE_NOOP("CompositionModel", "Towards Active Camera"),
+                      int(AutoOrient::TowardsActiveCamera)});
+    if (!picture)
+        modes.append({QT_TRANSLATE_NOOP("CompositionModel", "Towards Target Position"),
+                      int(AutoOrient::TowardsTargetPosition)});
+    if (threeD)
+        modes.append({QT_TRANSLATE_NOOP("CompositionModel", "Towards Layer"), int(AutoOrient::TowardsLayer)});
+    plugin::EffectParameterSpec modeSpec;
+    modeSpec.type = QStringLiteral("choice");
+    for (const auto& mode : modes) {
+        modeSpec.choices << QCoreApplication::translate("CompositionModel", mode.first);
+        modeSpec.choiceValues << QString::number(mode.second);
+    }
+    QVector<TimelinePropertyRow> rows = {
+        {"AssetLayerGroupFactory", QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Alignment"), "alignment", modeSpec,
+         [](const composition::Layer& target, int) { return QVariant(QString::number(int(target.autoOrient))); },
+         [](composition::Layer& target, const QVariant& value, int) { target.autoOrient = AutoOrient(value.toInt()); },
+         QCoreApplication::translate("DataUtilities", "Set Layer Alignment"), QString(), true},
+    };
+    if (layer.autoOrient == AutoOrient::AlongMotionPath) {
+        plugin::EffectParameterSpec axisSpec;
+        axisSpec.type = QStringLiteral("choice");
+        for (int axis = 1; axis <= (threeD ? 3 : 2); ++axis) {
+            axisSpec.choices << QCoreApplication::translate("CompositionModel", axis == 1 ? "X" : axis == 2 ? "Y" : "Z");
+            axisSpec.choiceValues << QString::number(axis);
+        }
+        rows.append({"AssetLayerGroupFactory", QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Alignment Axis"),
+                     "alignmentAxis", axisSpec,
+                     [](const composition::Layer& target, int) { return QVariant(QString::number(target.autoOrientAxis)); },
+                     [](composition::Layer& target, const QVariant& value, int) {
+                         target.autoOrientAxis = qBound(1, value.toInt(), 3);
+                     },
+                     QCoreApplication::translate("DataUtilities", "Set Layer Alignment Axis")});
+    }
+    if (layer.autoOrient == AutoOrient::TowardsLayer) {
+        // The other layers of the shot, by name.
+        plugin::EffectParameterSpec layerSpec;
+        layerSpec.type = QStringLiteral("choice");
+        layerSpec.choices << QCoreApplication::translate("CompositionModel", "None");
+        layerSpec.choiceValues << QString();
+        for (const composition::Layer& other : m_comp->layers()) {
+            if (other.id == layer.id) continue;
+            layerSpec.choices << other.name;
+            layerSpec.choiceValues << other.id.value();
+        }
+        rows.append({"AssetLayerGroupFactory", QT_TRANSLATE_NOOP("AssetLayerGroupFactory", "Alignment Layer"),
+                     "alignmentLayer", layerSpec,
+                     [](const composition::Layer& target, int) { return QVariant(target.autoOrientLayer.value()); },
+                     [](composition::Layer& target, const QVariant& value, int) {
+                         target.autoOrientLayer = core::Identifier(value.toString());
+                     },
+                     QCoreApplication::translate("DataUtilities", "Set Layer Alignment Layer")});
+    }
+    addPropertyRows(l, parent, rows, QStringLiteral("timelineAlignment_"));
 }
 
 void TimelineWidget::addPropertyRows(int l, QTreeWidgetItem* parent, const QVector<TimelinePropertyRow>& rows,
@@ -724,11 +907,13 @@ void TimelineWidget::addPropertyRows(int l, QTreeWidgetItem* parent, const QVect
             return get(m_comp->layers()[l], currentFrame());
         };
         const QString title = property.title.isEmpty() ? tr("Set %1").arg(item->text(0)) : property.title;
-        const auto write = [this, l, read, set, generation, title](QVariant value) {
+        const bool rebuild = property.rebuild;
+        const auto write = [this, l, read, set, generation, title, rebuild](QVariant value) {
             if (m_rebuilding || generation != m_treeGeneration || !m_comp || l >= m_comp->layers().size()) return;
             if (read().toString() == value.toString() || m_comp->layers()[l].locked) return;
             const int frame = currentFrame();
-            editLayer(l, title, [set, value, frame](composition::Layer& target) { set(target, value, frame); });
+            editLayer(l, title, [set, value, frame](composition::Layer& target) { set(target, value, frame); },
+                      rebuild);
         };
         QWidget* editor = timelineParameterEditor(m_tree, spec, prefix + QStringLiteral("%1_%2").arg(l).arg(property.key),
                                                   read, write, m_valueReaders);

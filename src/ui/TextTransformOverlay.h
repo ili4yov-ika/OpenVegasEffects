@@ -42,6 +42,11 @@ public:
         // False when other layers are selected with it: a drag inside the
         // frame is then left to the viewer, which moves them all.
         bool movesAlone = true;
+        // What moves the layer's picture after its own placement, on the
+        // canvas: its parent, then its Behaviors (render::layerCanvasParentAt
+        // x render::layerBehaviorTransformAt). A move on the canvas is a move
+        // in the parent's units: its linear part undone.
+        QTransform after;
     };
     enum class Handle
     {

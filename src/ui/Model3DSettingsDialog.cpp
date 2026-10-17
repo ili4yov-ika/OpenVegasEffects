@@ -300,6 +300,16 @@ void Model3DSettingsDialog::rebuildMaterialRows()
                    QStringLiteral("diffuseReflectivity"), &model3d::Material::diffuseReflectivity);
         percentRow(QT_TRANSLATE_NOOP("biff::ui::common::Model3DMaterialDataDelegate", "Specular Reflectivity"),
                    QStringLiteral("specularReflectivity"), &model3d::Material::specularReflectivity);
+        plugin::EffectParameterSpec reflectionModes;
+        reflectionModes.type = QStringLiteral("choice");
+        reflectionModes.choices = {QCoreApplication::translate("biff::ui::common::Model3DMaterialDataDelegate", "Spherical"), QCoreApplication::translate("biff::ui::common::Model3DMaterialDataDelegate", "Planar")};
+        reflectionModes.choiceValues = {QStringLiteral("1"), QStringLiteral("0")};
+        row(QT_TRANSLATE_NOOP("biff::ui::common::Model3DMaterialDataDelegate", "Reflection Mode"),
+            QStringLiteral("reflectionMode"), reflectionModes,
+            [](const model3d::Material& x) { return QVariant(QString::number(int(x.reflectionMode))); },
+            [](model3d::Material& x, const QVariant& v) {
+                x.reflectionMode = v.toInt() == 0 ? model3d::ReflectionMode::Planar : model3d::ReflectionMode::Spherical;
+            });
         numberRow(QT_TRANSLATE_NOOP("biff::ui::common::Model3DMaterialDataDelegate", "Index of Refraction"),
                   QStringLiteral("refractionIndex"), &model3d::Material::indexOfRefraction, 0.0, 10.0, 3);
         percentRow(QT_TRANSLATE_NOOP("biff::ui::common::Model3DMaterialDataDelegate", "Refraction Amount"),

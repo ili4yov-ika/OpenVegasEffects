@@ -711,8 +711,64 @@ BendGeometry проходит ту же последовательность. Т
   `nativeControlShown`) и скрывает в инспекторе строку выключенного контрола
   (`EffectInspector::applyControlStates`); состояния, пришедшие из `Notify(6)`, тоже учитываются.
 
-Не сделано: footage — вложенный шот, мировые матрицы слоёв, `CreatePointLayer/ApplyTransformToLayer`,
-скорость клипа footage.
+Не сделано: footage — вложенный шот, мировые матрицы слоёв, скорость клипа footage.
+
+**AutomaticStabilizer и MotionLock (17 октября 2026).** Это 2D-эффекты на собственном экземпляре: анализ
+видео своего слоя (KLT в модуле, `SaveTrackingData`, общие с MotionTrack признаки ассета), фоновая
+обработка `Notify(18)`, custom UI (лассо), кнопки, данные экземпляра `Notify(5/6)` (AutomaticStabilizer —
+магия «BATS», 0x04; MotionLock — «KLTM»).
+
+- Запуск: `Plugin2DEffect::NotifySetParent` (Tannen 0x1803398b0) → `PluginFile::NotifyPropertyChanged`
+  с ключом `Effect_Parent_Layer`, причиной 0 и render context поведения (0xc8: `+0x00` рендерер,
+  `+0x08` ID слоя). Модуль берёт `GetLayerInfoV2`/`GetAssetInfo` своего слоя и, если данные не
+  покрывают слой, ставит «Pending» и `RequestBackgroundProcessing(0)`.
+- `GetEffectIndex +0x3d8` (Tannen 0x18038bbe0): индекс эффекта в списке слоя; AutomaticStabilizer
+  читает footage сам только при индексе 0 (`+100` экземпляра), иначе модуль не анализирует кадры.
+- Сглаживание (AutomaticStabilizer `FUN_18001fa10` → `FUN_18002d870`, асинхронная задача): по
+  покадровым аффинным `+0x80` строит сдвиги `+0x138`, повороты `+0x150`, масштабы `+0x168`, по
+  готовности они меняются местами с `+0xb0/+0xc8/+0xe0`, состояние `+0x110` = 7, `analysisStatus`
+  скрывается (`SetPropertyState`, текст «Stabilizing» остаётся), `stabilizeID` = `rand()`
+  (`SetIntValue +0x190`), `cropWindow` подстраивается `SetAngleValue +0x198`. Если все покадровые
+  сдвиги почти одинаковы (`|t_i − t_0|² ≤ 5`, `DAT_1801b7870`), вместо решателя берётся «панорама»:
+  сдвиг X = −Σ(tx + ty), Y = −0 — ошибка модуля, видна только на равномерном синтетическом движении.
+- Render (Notify 10, `FUN_18002d240` / MotionLock `FUN_180023040`) рисует исходную текстуру
+  четырёхугольником, углы которого переведены обратным сглаженным преобразованием кадра
+  (`FUN_180027720`: сдвиг·s, поворот·s, масштаб·s + (1 − s), s = smoothness/100) относительно центра.
+  `Notify(19)` (`Plugin2DEffect::GetPixelDataTransform`, Tannen 0x1803340f0) отдаёт ту же матрицу в
+  `+0xb0` контекста. MotionLock до Render ждёт `GetRenderGrowth` (Notify 9, `FUN_18001f560`): запоминает
+  размер кадра (`+0x198/+0x19c` экземпляра) и рост (`+0x1a0` слева, `+0x1a4` справа, `+0x1a8`, `+0x1ac`
+  по вертикали), отдаёт их по указателям `+0x78/+0x80/+0x88/+0x90` контекста и рисует в проекции
+  `[−left, w + right] × [−[+0x1ac], h + [+0x1a8]]`.
+- Кнопки (AutomaticStabilizer `FUN_18002a100` / MotionLock `FUN_180021860`, Notify 7): массив
+  `tagBiffLayerTransform` (20 байт: время в мс `round(i·1000/fps)`, x, y, поворот в градусах,
+  масштаб в %) по кадрам; «Create Point Layer» — `BeginTransaction("Create Point Layer")`,
+  `CreatePointLayer(host, свой слой, "Point Layer", n, массив, ID[0x28])`, при непустом ID
+  `SetLayerID("applyToLayer", 0, ID)`, `EndTransaction`; «Apply Transform» — ID из `applyToLayer`
+  (`LayerID +0xe8`), `BeginTransaction("Transform Layer")`, `ApplyTransformToLayer(host, свой слой,
+  цель, n, массив)`, `EndTransaction`. MotionLock передаёт целью свой слой (сдвиги — его движение,
+  поворот со знаком минус, масштаб — 100, если «Scale» выключен).
+- Tannen: `CreatePointLayer` (0x180388b30) — `PointLayer::Create(имя)`, `SetStartFrame/SetEndFrame`
+  исходного слоя, при n = 1 `SetStaticValue` для `position` (тип 9, x, y, 0), `rotationZ` (тип 2),
+  `scale` (тип 5, s, s, s), иначе `KeyFrameList::Set` в момент каждого элемента без сдвига; слой
+  добавляется через хост (`+0x88`, команда отмены VegasEffects 0x140376f40 вставляет его индексом 0 —
+  вверх стека), ID пишется `strcpy_s(…, 0x28)`. `ApplyTransformToLayer` (0x180389210) — слой
+  композиции (или визуальный объект редактора: `position` — тип 8, x, y) по ID, сдвиг
+  `StartTime(цель) − StartTime(источник)` (миллисекунды, `AbstractLayer::StartTime`), значения через
+  `+0x40` хоста (сигнал Qt) с флагом «ключ» при n > 1.
+
+Порт: `nativeEffectUsesInstance`/`nativeEffectAnalysesOwnLayer`, сервисы в `NativeEffectRender`
+(`setScalarParameter`, `effectIndexService`, `setLayerIdParameter`, `beginTransaction`,
+`instanceNumberOfLayers`/`instanceLayerId`, `createPointLayer`, `applyTransformToLayer`; запросы —
+`NativeCustomUiResult::layerRequests`, имя шага — `transaction`). `NativeInstanceHost`: собственный
+слой как footage (`footagePlacement`, `assetInfo` через `render::nativeFootageInfo`), `effectIndex`
+вида, `Effect_Parent_Layer` один раз на экземпляр, `applyLayerRequests`/`applyLayerTransforms`
+(ключи в кадрах шота: начало слоя + время; точка без клипа), сигнал `layersEdited` → шаг отмены в
+`MainWindow`. Рендер (`RenderWorker::applyClipEffects`): `NativeFrameTime::instanceKey/instanceData/
+layerId/layerAsset`; `ThreadRenderer::render` даёт такому эффекту отдельный экземпляр
+(`id:render:<ключ>`), `Notify(6)` при смене данных, `Notify(9)` с полями роста, выходной холст
+расширяется на рост и кадр слоя вырезается; `GetTimelineInfo` теперь отдаёт частоту шота
+(раньше 30). Зонд `stabilize` и тест `stabilizersSteadyTheirOwnLayer`: на тряске до 6 px
+AutomaticStabilizer оставляет 29 px суммарной покадровой дрожи из 228, MotionLock — 0.
 
 **Видимость контролов (5 октября 2026).** Флаги `Create*` (`int` после ключа; у слайдеров после
 единицы) хранятся как `AbstractPluginUITreeNode::Options()`. Построитель панели Controls

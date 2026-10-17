@@ -38,6 +38,11 @@ inline QByteArray layerState(const QVector<Layer>& layers)
           << t.rotationXDegrees << t.rotationYDegrees << t.orientationX << t.orientationY << t.orientationZ
           << layer.planeColor << layer.modelAssetId.value() << t.audioLevel;
         writeCurve(s, t.audioLevelCurve);
+        s << int(layer.autoOrient) << layer.autoOrientAxis << layer.autoOrientLayer.value()
+          << t.targetX << t.targetY << t.targetZ;
+        writeCurve(s, t.targetXCurve);
+        writeCurve(s, t.targetYCurve);
+        writeCurve(s, t.targetZCurve);
         const LightSettings& light = layer.light;
         s << int(light.type) << light.color << light.intensity << light.castShadows << int(light.falloff)
           << light.reach << light.coneAngle << light.feather << light.shadowOpacity << light.shadowDiffusion
@@ -51,9 +56,16 @@ inline QByteArray layerState(const QVector<Layer>& layers)
         s << surface.illuminated << surface.castShadows << surface.receiveShadows
           << surface.shadowColor << surface.ambient << surface.diffuse
           << surface.specular << surface.shininess << surface.emissive << surface.castShadowsIfInvisible
-          << surface.billboardedLights << surface.billboardedShadows << surface.selfShadowBias;
+          << surface.billboardedLights << surface.billboardedShadows << surface.selfShadowBias
+          << surface.castAmbientOcclusion << surface.receiveAmbientOcclusion << surface.aoSamples
+          << surface.aoSampleRadius << surface.aoIntensity << surface.aoDepthScale << surface.aoBias
+          << surface.aoBlurRadius << surface.aoDepthFalloff << surface.includeSemiTransparentTriangles
+          << surface.castReflections << surface.castReflectionsIfInvisible << surface.receiveReflections
+          << surface.specularReflectivity << surface.diffuseReflectivity << int(surface.environmentMap)
+          << surface.environmentMapLayer.value();
         for (const KeyFrameList* curve : {&surface.ambientCurve, &surface.diffuseCurve, &surface.specularCurve,
-                                          &surface.shininessCurve, &surface.emissiveCurve})
+                                          &surface.shininessCurve, &surface.emissiveCurve,
+                                          &surface.specularReflectivityCurve, &surface.diffuseReflectivityCurve})
             writeCurve(s, *curve);
         s << layer.masks.size();
         for (const auto& mask : layer.masks)
@@ -98,6 +110,7 @@ inline QByteArray layerState(const QVector<Layer>& layers)
                 writeCurve(s, animation.playbackCurve);
             }
         }
+        s << layer.spanStartSeconds << layer.spanEndSeconds;
         s << layer.clips.size();
         for (const auto& clip : layer.clips) {
             s << clip.mediaId.value() << clip.startSeconds << clip.durationSeconds << clip.sourceStartSeconds
@@ -133,6 +146,8 @@ inline void setTransformValue(LayerTransform& t, TransformProperty prop, int axi
     case TransformProperty::RotationY: t.rotationYDegrees = value; break;
     case TransformProperty::Rotation: t.rotationDegrees = value; break;
     case TransformProperty::AudioLevel: t.audioLevel = value; break;
+    case TransformProperty::Target:
+        if (axis == 0) t.targetX = value; else if (axis == 1) t.targetY = value; else t.targetZ = value; break;
     }
 }
 // What a model node's transform shows: a node's own properties, without the
@@ -160,6 +175,8 @@ inline void setLayerTransformValue(Layer& layer, TransformProperty prop, int axi
     case TransformProperty::RotationY: t.rotationYDegrees = value; break;
     case TransformProperty::Rotation: t.rotationDegrees = value; break;
     case TransformProperty::AudioLevel: t.audioLevel = value; break;
+    case TransformProperty::Target:
+        if (axis == 0) t.targetX = value; else if (axis == 1) t.targetY = value; else t.targetZ = value; break;
     }
 }
 }

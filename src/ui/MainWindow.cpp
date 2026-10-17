@@ -323,6 +323,8 @@ TextTransformOverlay::Target textTargetAt(composition::Composition& comp, int la
         target.layer = &layer;
         target.frame = frame;
         target.canvasSize = QSizeF(comp.displaySize());
+        target.after = render::layerCanvasParentAt(&comp, layer, frame, target.canvasSize)
+                       * render::layerBehaviorTransformAt(comp, nullptr, layer, frame);
         if (clipIndex) *clipIndex = shown;
         break;
     }
@@ -360,6 +362,8 @@ TextTransformOverlay::Target layerTargetAt(composition::Composition& comp, int l
     target.frame = frame;
     target.canvasSize = QSizeF(comp.displaySize());
     target.geometry = geometry;
+    target.after = render::layerCanvasParentAt(&comp, layer, frame, target.canvasSize)
+                   * render::layerBehaviorTransformAt(comp, media, layer, frame);
     target.text = false;
     if (clipIndex) *clipIndex = shown;
     return target;
@@ -2072,6 +2076,22 @@ void MainWindow::wireSignals()
         if (m_viewer) m_viewer->update();
         requestRenderFrame();
     });
+    connect(m_instanceHost.get(), &NativeInstanceHost::layersEdited, this,
+            [this](const QVector<composition::Layer>& before, const QString& text) {
+        // A module's button made a point layer or keyed one (one step,
+        // named as the module named it); the selection follows its layer,
+        // which a new layer on top moves down.
+        if (!m_composition) return;
+        const core::Identifier selected = m_selectedLayer >= 0 && m_selectedLayer < before.size()
+            ? before.at(m_selectedLayer).id : core::Identifier();
+        m_undoStack->push(new LayerStackCommand(m_composition, before, m_composition->layers(), text,
+                                                [this] { refreshAfterModelChange(); }, true));
+        for (int i = 0; selected.isValid() && i < m_composition->layers().size(); ++i) {
+            if (m_composition->layers().at(i).id == selected) m_selectedLayer = i;
+        }
+        m_projectModified = true;
+        refreshAfterModelChange();
+    });
     // The selected clip's first effect with viewer custom UI (MotionTrack's
     // feature picker, BendGeometry's handles), on top of the text frame.
     m_customUiOverlay = std::make_unique<NativeCustomUiOverlay>([this] {
@@ -2157,7 +2177,9 @@ void MainWindow::wireSignals()
         [this] {
             if (!m_composition) return;
             const QString title = QCoreApplication::translate("openvegas::ui::TimelineWidget", "Set %1")
-                                      .arg(QCoreApplication::translate("Transform", "Position"));
+                                      .arg(m_sceneObjectOverlay && m_sceneObjectOverlay->dragsTarget()
+                                               ? QCoreApplication::translate("Transform", "Target")
+                                               : QCoreApplication::translate("Transform", "Position"));
             m_undoStack->push(new LayerStackCommand(
                 m_composition, m_sceneObjectDragBefore, m_composition->layers(), title, [this] {
                     m_projectModified = true;
@@ -2250,9 +2272,54 @@ void MainWindow::wireSignals()
             return render::pannedView(type, state, delta);
         });
     });
-    connect(m_viewer, &ViewerWidget::viewOrbited, this, [moveView](int view, QPointF delta) {
-        moveView(view, [delta](render::ViewType type, render::ViewCameraState state) {
-            return render::orbitedView(type, state, delta);
+    connect(m_viewer, &ViewerWidget::viewOrbitStarted, this, [this](int view, QPointF where, OrbitPivot pivot) {
+        // OrbitToolMode's pivot (FUN_140955170): Orbit Around Selected
+        // Layers (FUN_140953ce0) - where the selected layers stand, on
+        // average; Orbit Around Clicked Point (FUN_140953ad0) - the point of
+        // the scene under the press (FluxSelect::ClickIntersect); the origin
+        // without either.
+        m_orbitPivot = QVector3D();
+        if (!m_composition || view < 0 || view >= int(m_viewStates.size())) return;
+        const int frame = compositionFrameAt(*m_composition, m_playbackTime);
+        if (pivot == OrbitPivot::ClickedPoint) {
+            const QSize canvas = m_composition->displaySize();
+            const model3d::Camera camera = render::viewCamera(render::ViewType(m_viewer->viewType(view)),
+                                                              m_viewStates[view], m_composition.get(), canvas, frame);
+            bool invertible = false;
+            const QMatrix4x4 unproject = camera.viewProjection(canvas).inverted(&invertible);
+            if (!invertible) return;
+            const float ndcX = float(where.x() * 2.0 - 1.0), ndcY = float(1.0 - where.y() * 2.0);
+            const QVector3D start = unproject.map(QVector3D(ndcX, ndcY, -1.0f));
+            const QVector3D end = unproject.map(QVector3D(ndcX, ndcY, 1.0f));
+            if (const std::optional<QVector3D> hit = render::sceneRayHit(*m_composition, m_mediaManager.get(), frame,
+                                                                          start, end - start))
+                m_orbitPivot = *hit;
+            return;
+        }
+        int counted = 0;
+        for (int index : m_selectedLayers) {
+            if (index < 0 || index >= m_composition->layers().size()) continue;
+            const composition::LayerTransform& t = m_composition->layers().at(index).transform;
+            const QPointF position = t.positionAt(frame);
+            m_orbitPivot += QVector3D(float(position.x()), float(position.y()), float(t.positionZAt(frame)));
+            ++counted;
+        }
+        if (counted > 0) m_orbitPivot /= float(counted);
+    });
+    connect(m_viewer, &ViewerWidget::viewOrbited, this, [this, moveView](int view, QPointF delta) {
+        const QVector3D pivot = m_orbitPivot;
+        moveView(view, [delta, pivot](render::ViewType type, render::ViewCameraState state) {
+            return render::orbitedView(type, state, delta, pivot);
+        });
+    });
+    connect(m_viewer, &ViewerWidget::viewCameraDragged, this, [moveView](int view, int drag, QPointF delta) {
+        moveView(view, [drag, delta](render::ViewType type, render::ViewCameraState state) {
+            switch (ViewDrag(drag)) {
+            case ViewDrag::Dolly: return render::dolliedView(type, state, delta);
+            case ViewDrag::Rotate: return render::turnedView(type, state, delta);
+            case ViewDrag::Zoom: return render::dragZoomedView(type, state, delta);
+            default: return state;
+            }
         });
     });
     for (int view = 0; view < int(m_viewStates.size()); ++view)
@@ -2730,6 +2797,23 @@ void MainWindow::onLayerOrbited(const QPointF& delta)
     requestRenderFrame();
 }
 
+namespace {
+
+// A move in the shot (Y up) made the layer's own under its parent.
+QPointF underParent(const composition::Composition* composition, const composition::Layer& layer, int frame,
+                    const QPointF& delta)
+{
+    const QMatrix4x4 parent = render::layerParentMatrixAt(composition, layer, frame);
+    if (parent.isIdentity()) return delta;
+    bool invertible = false;
+    const QMatrix4x4 back = parent.inverted(&invertible);
+    if (!invertible) return delta;
+    const QVector3D local = back.mapVector(QVector3D(float(delta.x()), float(delta.y()), 0.0f));
+    return QPointF(local.x(), local.y());
+}
+
+} // namespace
+
 void MainWindow::onLayerMoved(const QPointF& delta)
 {
     if (!m_composition || m_selectedLayer < 0
@@ -2746,7 +2830,7 @@ void MainWindow::onLayerMoved(const QPointF& delta)
     for (int index : layers) {
         if (index < 0 || index >= m_composition->layers().size()) continue;
         composition::Layer& layer = m_composition->layerRef(index);
-        if (!layer.locked) moveLayerAtFrame(layer, modelDelta, frame);
+        if (!layer.locked) moveLayerAtFrame(layer, underParent(m_composition.get(), layer, frame, modelDelta), frame);
     }
     m_projectModified = true;
     updateWindowTitle();
@@ -2772,7 +2856,7 @@ void MainWindow::onLayerNudged(const QPointF& delta)
     for (int index : layers) {
         if (index < 0 || index >= m_composition->layers().size()) continue;
         composition::Layer& layer = m_composition->layerRef(index);
-        if (!layer.locked) moveLayerAtFrame(layer, delta, frame);
+        if (!layer.locked) moveLayerAtFrame(layer, underParent(m_composition.get(), layer, frame, delta), frame);
     }
     m_projectModified = true;
     updateWindowTitle();
@@ -2830,8 +2914,12 @@ void MainWindow::updateMotionPathOverlay()
     // that same canvas space so the viewer only has to scale it to the view.
     const double halfWidth = m_composition->displaySize().width() / 2.0;
     const double halfHeight = m_composition->displaySize().height() / 2.0;
-    const auto toCanvas = [&](const QPointF& position) {
-        return QPointF(halfWidth + position.x(), halfHeight - position.y());
+    // Under its parent, at each frame.
+    const auto toCanvas = [&](int frame) {
+        const QPointF position = transform.positionAt(frame);
+        const QVector3D placed = render::layerParentMatrixAt(m_composition.get(), layer, frame)
+                                     .map(QVector3D(float(position.x()), float(position.y()), 0.0f));
+        return QPointF(halfWidth + placed.x(), halfHeight - placed.y());
     };
 
     // Only as many keys as the reference's own MotionPathKeyFrames allows, so a
@@ -2855,7 +2943,7 @@ void MainWindow::updateMotionPathOverlay()
     QVector<QPointF> keys;
     keys.reserve(keyFrames.size());
     for (int frame : keyFrames) {
-        keys.append(toCanvas(transform.positionAt(frame)));
+        keys.append(toCanvas(frame));
     }
 
     // Sampled between the first and last key so curved interpolation shows as a
@@ -2867,7 +2955,7 @@ void MainWindow::updateMotionPathOverlay()
     path.reserve(steps);
     for (int i = 0; i < steps; ++i) {
         const int frame = first + (last - first) * i / (steps - 1);
-        path.append(toCanvas(transform.positionAt(frame)));
+        path.append(toCanvas(frame));
     }
 
     m_viewer->setMotionPath(path, keys);
@@ -3423,10 +3511,24 @@ void MainWindow::makeCompositeShotFromSelection()
             firstTime = qMin(firstTime, clip.startSeconds);
             lastTime = qMax(lastTime, clip.endSeconds());
         }
+        // A layer without clips by its span.
+        if (composition::layerHasSpan(copy)) {
+            firstTime = qMin(firstTime, copy.spanStartSeconds);
+            lastTime = qMax(lastTime, composition::layerSpanEnd(copy, m_composition->durationSeconds()));
+        }
     }
     if (firstTime == std::numeric_limits<double>::max()) firstTime = 0.0;
-    for (composition::Layer& layer : childLayers)
+    // The layers start that much earlier in the new shot, their keys too.
+    const int firstFrame = int(std::lround(firstTime * double(child->fpsNumerator())
+                                           / qMax(1, child->fpsDenominator())));
+    for (composition::Layer& layer : childLayers) {
         for (composition::Clip& clip : layer.clips) clip.startSeconds -= firstTime;
+        if (composition::layerHasSpan(layer)) {
+            layer.spanStartSeconds = qMax(0.0, layer.spanStartSeconds - firstTime);
+            if (layer.spanEndSeconds >= 0.0) layer.spanEndSeconds -= firstTime;
+        }
+        composition::shiftLayerKeys(layer, -firstFrame);
+    }
     const double frameDuration = double(qMax(1, child->fpsDenominator()))
         / qMax(1, child->fpsNumerator());
     const double childDuration = qMax(frameDuration, lastTime - firstTime);

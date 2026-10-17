@@ -347,6 +347,9 @@ protected:
     render::RenderManager* m_renderManager = nullptr;
     std::array<render::RenderManager*, 4> m_viewRenderers{};
     std::array<render::ViewCameraState, 4> m_viewStates;
+    // What the orbit under way turns its view's camera about (chosen as it
+    // began: ViewerWidget::viewOrbitStarted).
+    QVector3D m_orbitPivot;
 
     EffectsPanel* m_effectsPanel = nullptr;
     MediaPanel* m_mediaPanel = nullptr;

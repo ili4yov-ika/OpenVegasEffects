@@ -20,10 +20,20 @@
 #include <optional>
 
 #include "model3d/Renderer3D.h"
+#include "plugin/NativeEffectRender.h"
 #include "render/FrameDiskCache.h"
 
 namespace openvegas {
 namespace render {
+
+// GetAssetInfo (tagBiffAssetInfo) of a clip's footage, as the native modules
+// that analyse footage ask for it: a video's frames at the shot's rate, by
+// time in the source, or a sequence's own frames and rate; the source frame
+// the clip starts on; type 0. Invalid for a nested shot or anything else.
+plugin::NativeAssetInfo nativeFootageInfo(const composition::Clip& clip,
+                                          const media::MediaManager* media, double shotRate);
+// The instance a native effect lives on: "<layer ID>/<clip>/<effect>".
+QString nativeInstanceKey(const core::Identifier& layerId, int clip, int effect);
 
 enum class RenderState
 {
@@ -138,6 +148,13 @@ private:
     // model is not. Null when the layer has no geometry to draw.
     // A layer's own picture at `frame` - its content and effects without its
     // transform, at its own size - as a material's map takes it (Use Layer).
+    // A media asset's picture at the shot's `frame`, at its own size
+    // (environment type 1003).
+    QImage assetTexture(const core::Identifier& assetId, int frame) const;
+    // The environment a surface reflects (environmentMapType): the shot
+    // beneath (`composite`), a layer's picture or an asset's.
+    QImage environmentOf(const composition::SurfaceShading& surface, const QImage& composite,
+                         const core::Identifier& forLayer, int frame) const;
     QImage layerTexture(const core::Identifier& layerId, const core::Identifier& forLayer,
                         int frame) const;
     QImage renderModelLayer(const composition::Layer& layer, const QSize& canvasSize,
@@ -149,6 +166,19 @@ private:
                               const composition::TextStyle& style,
                               const QVector<const composition::Effect*>& effects,
                               const QSize& canvasSize, int frame) const;
+    // That mesh, in the text's own space, and where a 3D text layer puts it
+    // in the scene (its transform with its Alignment).
+    model3d::Mesh textGeometryMesh(const composition::Layer& layer, const composition::Clip& clip,
+                                   const composition::TextStyle& style,
+                                   const QVector<const composition::Effect*>& effects,
+                                   const QSize& canvasSize, int frame) const;
+    QMatrix4x4 textGeometryPlacement(const composition::Layer& layer, int frame) const;
+    // The style a text clip draws at `frame` and its enabled Geometry
+    // modules; false for a clip that is not text or runs none.
+    // Whether `layer` is drawn at `frame` as text with Geometry effects.
+    bool layerHasTextGeometry(const composition::Layer& layer, int frame) const;
+    static bool textGeometryOf(const composition::Clip& clip, int frame, composition::TextStyle* style,
+                               QVector<const composition::Effect*>* effects);
     // Camera the 3D layers are seen through: the composition's first visible
     // camera layer, or the default one the reference gives a composite shot
     // that has none.
@@ -167,8 +197,6 @@ private:
     // with for it (model3d::antialiasingSamples).
     int antialiasingMode() const;
     int sceneSamples() const;
-    // A 3D picture layer's sheet in the scene (layer transform, Y up).
-    static QMatrix4x4 layerPlaneMatrix(const composition::LayerTransform& transform, int frame);
     // Whether the layer is part of the 3D scene: a 3D media, plane or text
     // layer, or a model.
     static bool inScene(const composition::Layer& layer);
@@ -176,6 +204,56 @@ private:
     // it is clear): where the pixel's ray meets the layer's sheet, or for a
     // model or Geometry text, where the layer stands.
     QVector<float> sceneDistances(const composition::Layer& layer, const QImage& image, int frame) const;
+    // What `image` of a scene layer shows at each pixel (the G-buffer of
+    // its ambient occlusion): for a sheet, where the pixel's ray meets it,
+    // its normal turned to the eye; for a model or Geometry text, what its
+    // mesh was drawn with (m_meshSurfaces). Only where the picture covers
+    // half the pixel or more: the reference's G-buffer has no smoothed
+    // edges, and what an edge pixel mostly shows is what lies behind it.
+    model3d::SurfaceBuffer sceneSurfaces(const composition::Layer& layer, const QImage& image, int frame,
+                                         int leastAlpha = 128) const;
+    // The scene reflected in a sheet's plane (through `origin`, `normal`
+    // to the camera's side), as Flux draws a receiving sheet's planar
+    // reflection map (DynamicReflectionsPlanarMap; its render 0x18043e030):
+    // the `images` of the layers casting reflections, drawn through the
+    // camera mirrored in the plane (m_reflectionCamera), without fog, what lies
+    // behind the plane cut away (PlanarClippingFragColor), near over far;
+    // then turned left to right - Flux reads the map at (1 - x / width,
+    // y / height) - so it lines up with the shot. Straight RGBA.
+    QImage mirroredScene(const QVector<const composition::Layer*>& casters, const QVector<QImage>& images,
+                         const QVector3D& origin, const QVector3D& normal, int frame) const;
+    // The `images` of scene layers drawn through the reflection camera,
+    // near over far by where each pixel meets them, those on the far side
+    // of the plane through `origin` facing `normal` cut away when `clipped`.
+    // Straight RGBA, as seen.
+    QImage reflectionComposite(const QVector<const composition::Layer*>& layers, const QVector<QImage>& images,
+                               int frame, bool clipped, const QVector3D& origin, const QVector3D& normal) const;
+    // A model's surroundings as a lat-long picture `height` texels high and
+    // twice as wide (model3d::latLongOf), from the six `faces` of a cube
+    // round `centre`, each seen through its camera (`cameras`): each
+    // direction read off the face it looks through most squarely.
+    static QImage latLongFromCube(const QVector<QImage>& faces, const QVector<model3d::Camera>& cameras,
+                                  const QVector3D& centre, int height);
+    // The layer's model posed at `frame` (its animations, then its nodes'
+    // transforms), its materials as the asset has them.
+    model3d::Mesh posedModel(const composition::Layer& layer, int frame) const;
+    // PlanarReflectionFragColor on a sheet's picture: the mirror's colour
+    // times its alpha and `amount` (Specular Reflectivity / 100) - twice, as
+    // the shader scales the whole texel and then its colour by its alpha -
+    // added where the sheet is.
+    static void addPlanarReflection(QImage& image, const QImage& mirror, double amount);
+    // EnvironmentMapFragColor on a 3D text sheet's picture: the lat-long
+    // `environment` along each pixel's view reflected in the sheet, times
+    // its alpha and Specular Reflectivity, and the environment's irradiance
+    // on the sheet's normal (model3d::irradianceOf) times its colour, alpha
+    // and Diffuse Reflectivity, added.
+    void addEnvironment(QImage& image, const composition::Layer& layer, const QImage& environment, int frame) const;
+    // The scene's ambient occlusion, as Flux draws it (Flux.dll
+    // 0x1804668f0): each layer that receives it darkened by the occlusion
+    // (model3d::ambientOcclusionMap, with its own settings) of what the
+    // pixels show of it and of the layers that cast it, the nearest at each
+    // pixel - a sheet wholly, a model where its surface is opaque.
+    void occludeScene(const QVector<const composition::Layer*>& layers, QVector<QImage>& images, int frame) const;
     // A 3D layer that is a picture on a plane (media, plane, nested shot,
     // text): its content rendered flat and unmoved, then carried into the
     // scene by the layer transform and seen through the shot's camera, with
@@ -224,6 +302,16 @@ private:
     mutable bool m_frameComplete = true;
     // The shadow maps of the frame being drawn (sceneShadowMaps).
     mutable QVector<std::shared_ptr<const model3d::ShadowMap>> m_shadowMaps;
+    // While a scene layer is drawn for a frame with ambient occlusion: what
+    // its meshes show at each pixel, by layer.
+    mutable bool m_collectSurfaces = false;
+    mutable QHash<QString, model3d::SurfaceBuffer> m_meshSurfaces;
+    // While a reflection map is drawn: the camera mirrored in the
+    // receiving sheet's plane, or a face of a model's cube, which the scene
+    // is seen through, fogless.
+    mutable std::optional<model3d::Camera> m_reflectionCamera;
+    // What the models drawn this frame reflect (renderModelLayer), by layer.
+    mutable QHash<QString, std::shared_ptr<const model3d::Reflections>> m_modelReflections;
     // The scale the frame being drawn is at (1 at full size): layers are
     // placed in the shot's full square units and drawn through it.
     mutable double m_renderScale = 1.0;

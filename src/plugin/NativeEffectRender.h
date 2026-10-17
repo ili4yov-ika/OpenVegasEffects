@@ -146,12 +146,30 @@ bool evaluateNativeSubObjectBehavior(
     int layerDurationFrames, int canvasWidth, int canvasHeight,
     double frameRate, const core::Identifier& id,
     const QStringList& parameterValues, const core::Identifier& sourceLayerId);
-bool simulateNativeBehaviorStack(NativeBehaviorResult& result, int timelineFrame,
-                                 int localFrame, int layerDurationFrames,
-                                 int canvasWidth, int canvasHeight, double frameRate,
-                                 const QVector<NativeBehaviorRequest>& behaviors,
-                                 const composition::Composition* composition = nullptr,
-                                 const core::Identifier& sourceLayerId = {});
+// What CompositionAsset::SimulateLayers runs over: the shot's layers by
+// index, each one's world without any simulation at a frame (from the
+// frame's centre, Y up, in the shot's units: PreAlignToMotion(..., false,
+// false)), the simulated Behaviors it has there (none: not a body), whether
+// it is within its range then, and where its range starts and ends.
+struct NativeSimulationScene
+{
+    int layerCount = 0;
+    std::function<QMatrix4x4(int layer, int frame)> worldAt;
+    std::function<QVector<NativeBehaviorRequest>(int layer, int frame)> behaviorsAt;
+    std::function<bool(int layer, int frame)> activeAt;
+    std::function<int(int layer)> startFrame;
+    std::function<int(int layer)> endFrame;
+};
+
+// Where the simulated body of layer `source` is at `timelineFrame`, as an
+// offset from where its world without the simulation puts it (the body's
+// matrix is that world moved by it: T(body - P) x W). Every body of the
+// shot is simulated together, from the first one's start, frame by frame:
+// the animation's velocity carried in, the modules' forces (Notify 103)
+// added, damping on the whole velocity. False when the layer is no body.
+bool simulateNativeBehaviorScene(QVector3D* offset, int timelineFrame, int canvasWidth, int canvasHeight,
+                                 double frameRate, const NativeSimulationScene& scene,
+                                 const composition::Composition* composition, int source);
 
 // Host geometry of the Geometry ABI (PluginGeometryEffect::ProcessGeometry,
 // Notify 101). Flux hands text to these modules as batches of 0x80-byte
@@ -244,6 +262,10 @@ struct NativeCustomUiView
     // the render context's millisecond fields.
     QString instanceKey;
     double frameRate = 30.0;
+    // GetEffectIndex (+0x3d8): where the effect sits among its layer's
+    // effects. AutomaticStabilizer analyses the footage itself only as the
+    // first one.
+    int effectIndex = 0;
     // The overlay drawn and the pointer positions given are in `target`
     // pixels (the canvas; empty = the area itself), and `matrix` takes the
     // layer's pixels there - so it is identity when the layer fills the
@@ -271,6 +293,42 @@ struct NativeCustomUiPointer
     int clicks = 0;
 };
 
+// tagBiffLayerTransform (20 bytes), what AutomaticStabilizer and MotionLock
+// hand CreatePointLayer and ApplyTransformToLayer: the time in milliseconds
+// from the start of the layer they work on, a position, a turn about Z in
+// degrees and a scale in percent - written as they are into "position",
+// "rotationZ" and "scale".
+struct NativeLayerTransform
+{
+    qint32 timeMs = 0;            // +0x00
+    float x = 0.0f;               // +0x04
+    float y = 0.0f;               // +0x08
+    float rotation = 0.0f;        // +0x0c
+    float scale = 100.0f;         // +0x10
+};
+
+// What a module asked of the project from its instance (Tannen
+// PluginHostAPI::CreatePointLayer +0x3a0, 0x180388b30, and
+// ApplyTransformToLayer +0x3a8, 0x180389210):
+//  - CreatePointLayer: a point layer called `name` over the source layer's
+//    frames, its "position"/"rotationZ"/"scale" static for one transform and
+//    keyed at each one's time otherwise (no shift: the layers start
+//    together); the new layer's ID goes back to the module at once
+//    (`targetLayerId`, strcpy_s into its 0x28 bytes).
+//  - ApplyTransformToLayer: the same properties of `targetLayerId`, keyed for
+//    more than one transform, each at its time plus StartTime(target) -
+//    StartTime(source) - the opposite of RelativeTimeToLayerRelativeTime's
+//    shift, as the reference has it.
+struct NativeLayerRequest
+{
+    enum class Kind { CreatePointLayer, ApplyTransform };
+    Kind kind = Kind::ApplyTransform;
+    QString sourceLayerId;
+    QString targetLayerId;
+    QString name;
+    QVector<NativeLayerTransform> transforms;
+};
+
 struct NativeCustomUiResult
 {
     bool handled = false;         // Notify returned 1
@@ -283,6 +341,11 @@ struct NativeCustomUiResult
     // (SetPropertyState +0xa8, byte 0), by key.
     QHash<int, QString> values;
     QHash<QString, bool> enabled;
+    // The project edits asked for, in order, and the name of the step the
+    // module made of them (BeginTransaction +0x1d8 ... EndTransaction +0x1e0:
+    // "Create Point Layer", "Transform Layer").
+    QVector<NativeLayerRequest> layerRequests;
+    QString transaction;
 };
 
 // Modules known to draw viewer custom UI (MotionTrack, BendGeometry).
@@ -365,17 +428,29 @@ struct NativeAssetInfo
     bool valid = false;
     int frameCount = -1;          // +0x00
     double frameRate = 0.0;       // +0x08
-    // +0x10: the footage frame the layer starts on (MotionTrack subtracts it
-    // from the layer offset); +0x14 is left zero.
+    // +0x10/+0x14: AssetLayer::AssetInstanceStart/AssetInstanceEnd - the
+    // footage frame the layer starts on (MotionTrack subtracts it from the
+    // layer offset) and the one its last frame shows, EndFrame - 1 +
+    // (AssetInstanceStart - StartFrame). Tannen's GetAssetInfo (0x18038ab80)
+    // gives no clip speed: the modules take footage frames one to one.
     int startFrame = 0;
+    int endFrame = 0;
     int type = 5;                 // +0x18: 0 video, 3 composite shot, 5 none
     QString key;                  // what the tracked features are stored under
+};
+// A layer of the shot as GetNumberOfLayers/GetLayerID (+0x360/+0x368) list
+// them for a call on an instance.
+struct NativeLayerEntry
+{
+    QString id;
+    QString name;
 };
 struct NativeSourceHost
 {
     std::function<NativeLayerInfo(const QString& layerId)> layerInfo;
     std::function<NativeAssetInfo(const QString& layerId)> assetInfo;
     std::function<QImage(const QString& layerId, int assetFrame)> assetFrame;
+    std::function<QVector<NativeLayerEntry>()> layers;
 };
 void setNativeSourceHost(NativeSourceHost host);
 
@@ -383,6 +458,20 @@ void setNativeSourceHost(NativeSourceHost host);
 // the renderer cannot run them, so the instance's matrices are computed on
 // the GUI thread for every frame of the layer and kept here by instance key.
 bool nativeBehaviorUsesInstance(const core::Identifier& id);
+// Modules that live on an instance of their own, analysing footage in the
+// background and taking the viewer's custom UI there: MotionTrack, and the
+// 2D effects AutomaticStabilizer and MotionLock.
+bool nativeEffectUsesInstance(const core::Identifier& id);
+// Of those, the 2D effects that analyse their own layer's footage. Their
+// analysis starts when the effect is put on a layer: Plugin2DEffect::
+// NotifySetParent (Tannen 0x1803398b0) sends Notify(7) for the key
+// "Effect_Parent_Layer" with the behaviour render context, and the module
+// works out whether its data still covers the layer. They draw the
+// stabilised frame themselves (Notify 10) from the instance's data, so the
+// renderer hands that data to its own instance first (NativeFrameTime).
+bool nativeEffectAnalysesOwnLayer(const core::Identifier& id);
+// The key NotifySetParent sends.
+inline constexpr char kNativeParentLayerKey[] = "Effect_Parent_Layer";
 // The registered module's parameters, in the order of its values.
 QVector<EffectParameterSpec> nativeParameters(const core::Identifier& id);
 void setNativeInstanceTransforms(const QString& instanceKey, int firstFrame,
@@ -466,6 +555,15 @@ struct NativeFrameTime
     // NativeReducedValues flags for this render; -1 takes the module's own
     // (nativeEffectReducedValues).
     int reducedValues = -1;
+    // An effect that keeps its state on an instance (nativeEffectAnalyses-
+    // OwnLayer): the instance it is, its saved data - given to the render
+    // instance with Notify(6) whenever that instance last had other data -,
+    // the layer it is on (RenderContext +0x08) and that layer's footage as
+    // GetAssetInfo describes it.
+    QString instanceKey;
+    QByteArray instanceData;
+    QString layerId;
+    NativeAssetInfo layerAsset;
 };
 
 // Executes the 2D BIFF GPU path (Notify 8 once per render thread, Notify 10 per

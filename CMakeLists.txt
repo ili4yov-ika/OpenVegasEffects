@@ -395,6 +395,8 @@ src/ui/OptionsDialog.cpp
     src/ui/LayoutPanel.h
     src/ui/LayoutTransformCommand.h
     src/ui/LayoutPanel.cpp
+    src/ui/ScrubberSpinBox.h
+    src/ui/ScrubberSpinBox.cpp
     src/ui/LearnSidebar.h
     src/ui/LearnSidebar.cpp
     resources/icons.qrc

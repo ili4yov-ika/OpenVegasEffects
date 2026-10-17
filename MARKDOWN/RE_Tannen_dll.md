@@ -135,7 +135,9 @@ OFX-машинерия: `GetOFXHost`, `LoadOFXPlugins`, `TryLoadOFXPlugin`,
 `CustomUIRender`, `GetScratchRenderBuffer`, `ClearReservedRenderBuffer`,
 `GetRenderGrowth`.
 
-Применение к слоям: `ApplyTransformToLayer`, `CreatePointLayer`,
+Применение к слоям (разбор — RE_HFPL_Plugins.md, «AutomaticStabilizer и MotionLock»):
+`ApplyTransformToLayer` (0x180389210, сдвиг ключей `StartTime(цель) − StartTime(источник)` в мс),
+`CreatePointLayer` (0x180388b30, PointLayer на кадрах источника, ID через `strcpy_s` 0x28),
 `AttacheCustomViewerControlToLayerPicker`, `CreateLayerPicker`, `GetAssetInfo`,
 `GetAssetTexture`, `Get3DModelBatchesInstances`.
 

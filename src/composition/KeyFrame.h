@@ -96,6 +96,8 @@ public:
     bool removeById(int id);
     // Reference: Move(FXID, newTime) - identity is preserved.
     bool moveById(int id, int newFrame);
+    // Every key `frames` later (earlier when negative), identities kept.
+    void shift(int frames);
 
     bool contains(int frame) const { return m_frames.contains(frame); }
     const KeyFrame* at(int frame) const;

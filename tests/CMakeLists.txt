@@ -65,6 +65,7 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/ui/ViewerTransportBar.cpp ../src/ui/ViewerTransportBar.h
     ../src/ui/DockTitleBar.cpp ../src/ui/DockTitleBar.h
     ../src/ui/LayoutPanel.cpp ../src/ui/LayoutPanel.h
+    ../src/ui/ScrubberSpinBox.cpp ../src/ui/ScrubberSpinBox.h
     ../src/app/Settings.cpp ../src/app/Settings.h
     ../src/render/RenderManager.cpp ../src/render/AudioExport.cpp ../src/model3d/Renderer3D.cpp
     ../src/render/PreRenderManager.cpp ../src/render/PreRenderManager.h

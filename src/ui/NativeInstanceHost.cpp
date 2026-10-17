@@ -5,13 +5,23 @@
 
 #include <cmath>
 
+#include <QCoreApplication>
+
 #include "composition/Composition.h"
 #include "media/MediaManager.h"
 #include "media/VideoProbe.h"
+#include "render/LayerGeometry.h"
+#include "render/RenderManager.h"
 
 namespace openvegas::ui {
 
 namespace {
+
+// The steps AutomaticStabilizer and MotionLock name (BeginTransaction).
+[[maybe_unused]] constexpr const char* kModuleSteps[] = {
+    QT_TRANSLATE_NOOP("openvegas::ui::NativeInstanceHost", "Create Point Layer"),
+    QT_TRANSLATE_NOOP("openvegas::ui::NativeInstanceHost", "Transform Layer"),
+};
 
 // Decoders kept open for footage analysis: one per file, a couple at most.
 constexpr std::size_t kMaxDecoders = 2;
@@ -64,8 +74,8 @@ QSize contentSize(const composition::Composition& comp, const composition::Clip&
 // Content pixels (Y down, from the top-left corner) to the render canvas
 // (display pixels, Y down), as RenderWorker::renderClip places media - a
 // non-square pixel `aspect` times as wide.
-QTransform contentPlacement(const composition::Layer& layer, const QSize& content,
-                            const QSize& canvas, int frame, double aspect = 1.0)
+QTransform contentPlacement(const composition::Composition& comp, const composition::Layer& layer,
+                            const QSize& content, const QSize& canvas, int frame, double aspect = 1.0)
 {
     const composition::LayerTransform& t = layer.transform;
     const QPointF scale = t.scaleAt(frame);
@@ -80,7 +90,8 @@ QTransform contentPlacement(const composition::Layer& layer, const QSize& conten
     }
     placement.scale(scale.x() / 100.0 * aspect, scale.y() / 100.0);
     placement.translate(-content.width() / 2.0, -content.height() / 2.0);
-    return placement;
+    // Then where its parent puts it, as renderClip draws it.
+    return placement * render::layerCanvasParentAt(&comp, layer, frame, QSizeF(canvas.width(), canvas.height()));
 }
 
 std::array<float, 16> columnMajor(const QTransform& t)
@@ -124,6 +135,13 @@ NativeInstanceHost::NativeInstanceHost(CompositionProvider composition, MediaPro
     host.assetFrame = [this](const QString& id, int frame) {
         return QThread::currentThread() == thread() ? assetFrame(id, frame) : QImage();
     };
+    host.layers = [this] {
+        QVector<plugin::NativeLayerEntry> layers;
+        const auto comp = m_composition ? m_composition() : nullptr;
+        if (!comp || QThread::currentThread() != thread()) return layers;
+        for (const composition::Layer& layer : comp->layers()) layers.append({layer.id.value(), layer.name});
+        return layers;
+    };
     plugin::setNativeSourceHost(host);
 }
 
@@ -134,7 +152,7 @@ NativeInstanceHost::~NativeInstanceHost()
 
 QString NativeInstanceHost::instanceKey(const Ref& ref)
 {
-    return QStringLiteral("%1/%2/%3").arg(ref.layerId.value()).arg(ref.clip).arg(ref.effect);
+    return render::nativeInstanceKey(ref.layerId, ref.clip, ref.effect);
 }
 
 std::array<float, 16> NativeInstanceHost::canvasMotion(const std::array<float, 16>& footageMotion,
@@ -206,6 +224,16 @@ bool NativeInstanceHost::describe(const Ref& ref, double seconds, core::Identifi
     // shot's display pixels, as the renderer's.
     v.target = comp->displaySize();
     v.area = v.target;
+    // GetEffectIndex: among the clip's effects that draw (not its
+    // transitions or Behaviors).
+    v.effectIndex = 0;
+    for (int e = 0; e < ref.effect; ++e) {
+        const composition::Effect& before = clip.effects.at(e);
+        if (before.isTransition() || plugin::nativeBehaviorRenderingVerified(before.pluginId)
+            || plugin::nativeBehaviorUsesInstance(before.pluginId))
+            continue;
+        ++v.effectIndex;
+    }
 
     // Points and drawing live in the tracked footage's pixels, placed on the
     // canvas as the renderer places that layer.
@@ -227,21 +255,30 @@ void NativeInstanceHost::prepare(const Ref& ref)
     const QString key = instanceKey(ref);
     if (m_restored.contains(key)) return;
     const composition::Effect* fx = effectFor(ref);
-    if (!fx || !plugin::nativeBehaviorUsesInstance(fx->pluginId)) return;
+    if (!fx || !plugin::nativeEffectUsesInstance(fx->pluginId)) return;
     m_restored.insert(key);
-    if (fx->instanceData.isEmpty()) return;
     core::Identifier id;
     QStringList values;
     plugin::NativeCustomUiView view;
     if (!describe(ref, -1.0, &id, &values, &view)) return;
-    const auto restored = plugin::nativeRestoreInstanceData(id, values, view, fx->instanceData);
-    if (!restored.enabled.isEmpty()) plugin::setNativeControlStates(key, restored.enabled);
+    if (!fx->instanceData.isEmpty()) {
+        const auto restored = plugin::nativeRestoreInstanceData(id, values, view, fx->instanceData);
+        if (!restored.enabled.isEmpty()) plugin::setNativeControlStates(key, restored.enabled);
+    }
+    // Put on its layer: the module checks whether its data still covers the
+    // layer and starts analysing it when not.
+    if (plugin::nativeEffectAnalysesOwnLayer(id) && !m_parented.contains(key)) {
+        m_parented.insert(key);
+        apply(ref, plugin::nativePropertyChanged(id, values, view,
+                                                 QString::fromLatin1(plugin::kNativeParentLayerKey)),
+              true);
+    }
 }
 
 void NativeInstanceHost::propertyChanged(const Ref& ref, int parameter, double seconds)
 {
     const composition::Effect* fx = effectFor(ref);
-    if (!fx || !plugin::nativeBehaviorUsesInstance(fx->pluginId)) return;
+    if (!fx || !plugin::nativeEffectUsesInstance(fx->pluginId)) return;
     const auto parameters = plugin::nativeParameters(fx->pluginId);
     if (parameter < 0 || parameter >= parameters.size()) return;
     const plugin::EffectParameterSpec& spec = parameters.at(parameter);
@@ -274,6 +311,9 @@ void NativeInstanceHost::apply(const Ref& ref, const plugin::NativeCustomUiResul
         m_pending.remove(key);
         return;
     }
+    const auto comp = m_composition ? m_composition() : nullptr;
+    QVector<composition::Layer> before;
+    if (!result.layerRequests.isEmpty() && comp) before = comp->layers();
     bool changed = false;
     if (!result.enabled.isEmpty()) {
         plugin::setNativeControlStates(key, result.enabled);
@@ -286,6 +326,18 @@ void NativeInstanceHost::apply(const Ref& ref, const plugin::NativeCustomUiResul
             fx->parameterValues[it.key()] = it.value();
             changed = true;
         }
+    }
+    if (!before.isEmpty() && applyLayerRequests(ref, result.layerRequests)) {
+        // The step the module named (BeginTransaction): "Create Point Layer",
+        // "Transform Layer".
+        const QByteArray name = result.transaction.toUtf8();
+        const QString text = name.isEmpty() ? tr("Transform Layer")
+                                            : QCoreApplication::translate("openvegas::ui::NativeInstanceHost",
+                                                                          name.constData());
+        emit layersEdited(before, text);
+        fx = effectFor(ref);
+        changed = true;
+        if (!fx) return;
     }
     if (result.backgroundRequested) {
         m_pending.insert(key, ref);
@@ -328,7 +380,7 @@ void NativeInstanceHost::finish(const Ref& ref)
         fx->instanceData = data;
         m_baked.insert(instanceKey(ref), qHash(data));
     }
-    bake(ref);
+    if (plugin::nativeBehaviorUsesInstance(id)) bake(ref);
     emit effectChanged();
 }
 
@@ -375,7 +427,8 @@ void NativeInstanceHost::bake(const Ref& ref)
 
 namespace {
 
-// Every instance-backed effect of the shot that has data, by instance key.
+// Every instance-backed effect of the shot that has data - or, for the 2D
+// effects analysing their own layer, any - by instance key.
 QHash<QString, NativeInstanceHost::Ref> instanceEffects(const composition::Composition& comp)
 {
     QHash<QString, NativeInstanceHost::Ref> found;
@@ -383,7 +436,8 @@ QHash<QString, NativeInstanceHost::Ref> instanceEffects(const composition::Compo
         for (int c = 0; c < layer.clips.size(); ++c) {
             for (int e = 0; e < layer.clips.at(c).effects.size(); ++e) {
                 const composition::Effect& fx = layer.clips.at(c).effects.at(e);
-                if (fx.instanceData.isEmpty() || !plugin::nativeBehaviorUsesInstance(fx.pluginId))
+                const bool own = plugin::nativeEffectAnalysesOwnLayer(fx.pluginId);
+                if (!own && (fx.instanceData.isEmpty() || !plugin::nativeBehaviorUsesInstance(fx.pluginId)))
                     continue;
                 const NativeInstanceHost::Ref ref {layer.id, c, e};
                 found.insert(NativeInstanceHost::instanceKey(ref), ref);
@@ -411,7 +465,7 @@ void NativeInstanceHost::restoreAll()
         if (!fx) continue;
         m_baked.insert(it.key(), qHash(fx->instanceData));
         prepare(it.value());
-        bake(it.value());
+        if (plugin::nativeBehaviorUsesInstance(fx->pluginId)) bake(it.value());
     }
 }
 
@@ -464,6 +518,8 @@ bool NativeInstanceHost::footagePlacement(const Ref& ref, int frame, QSize* cont
         if (parameters.at(p).name == QLatin1String("motionFromLayer"))
             source = fx.parameterAt(p, frame).toString();
     }
+    // AutomaticStabilizer and MotionLock work on their own layer.
+    if (source.isEmpty() && plugin::nativeEffectAnalysesOwnLayer(fx.pluginId)) source = layer->id.value();
     const composition::Layer* footage = source.isEmpty() ? nullptr : findLayer(*comp, source);
     const int sourceClip = footage ? overlappingClip(*footage, clip.startSeconds, clip.endSeconds()) : -1;
     if (sourceClip < 0) return false;
@@ -473,7 +529,7 @@ bool NativeInstanceHost::footagePlacement(const Ref& ref, int frame, QSize* cont
     const double aspect = !footageClip.nestedComposition && media && footageClip.mediaId.isValid()
         ? media->assetById(footageClip.mediaId).pixelAspectValue() : 1.0;
     if (content) *content = size;
-    if (placement) *placement = contentPlacement(*footage, size, comp->displaySize(), frame, aspect);
+    if (placement) *placement = contentPlacement(*comp, *footage, size, comp->displaySize(), frame, aspect);
     return true;
 }
 
@@ -497,31 +553,103 @@ plugin::NativeLayerInfo NativeInstanceHost::layerInfo(const QString& layerId) co
 
 plugin::NativeAssetInfo NativeInstanceHost::assetInfo(const QString& layerId) const
 {
-    plugin::NativeAssetInfo info;
     int clipIndex = -1;
     const composition::Layer* layer = layerById(layerId, &clipIndex);
     const auto media = m_media ? m_media() : nullptr;
-    if (!layer || !media) return info;
-    const composition::Clip& clip = layer->clips.at(clipIndex);
+    if (!layer || !media) return plugin::NativeAssetInfo();
     // Nested shots would need their own render per frame: not footage yet.
-    if (clip.nestedComposition || !clip.mediaId.isValid()) return info;
-    const media::MediaAsset asset = media->assetById(clip.mediaId);
-    if (!asset.isValid()) return info;
-    if (asset.isImageSequence()) {
-        info.frameCount = int(asset.sequenceFiles().size());
-        info.frameRate = asset.sequenceFrameRate() > 0.0 ? asset.sequenceFrameRate() : frameRate();
-    } else if (asset.kind() == media::MediaKind::Video) {
-        // Frames as the shot reads them: at its rate, by time in the source.
-        info.frameRate = frameRate();
-        info.frameCount = qMax(1, int(std::floor(asset.durationSeconds() * info.frameRate)));
-    } else {
-        return info;
+    // Video frames as the shot reads them: at its rate, by time in the source.
+    return render::nativeFootageInfo(layer->clips.at(clipIndex), media.get(), frameRate());
+}
+
+int NativeInstanceHost::layerStartFrame(const QString& layerId) const
+{
+    int clipIndex = -1;
+    const composition::Layer* layer = layerById(layerId, &clipIndex);
+    if (layer && composition::layerHasSpan(*layer)) return frameAt(layer->spanStartSeconds, frameRate());
+    if (!layer || clipIndex < 0) return 0;
+    return frameAt(layer->clips.at(clipIndex).startSeconds, frameRate());
+}
+
+void NativeInstanceHost::applyLayerTransforms(composition::Layer& layer,
+                                              const QVector<plugin::NativeLayerTransform>& transforms,
+                                              int firstFrame, double frameRate)
+{
+    if (transforms.isEmpty()) return;
+    composition::LayerTransform& t = layer.transform;
+    const bool depth = layer.dimension == composition::LayerDimension::ThreeD;
+    const bool keyed = transforms.size() > 1;
+    for (const plugin::NativeLayerTransform& at : transforms) {
+        const int frame = firstFrame + int(std::lround(double(at.timeMs) * frameRate / 1000.0));
+        const auto put = [&](composition::KeyFrameList& curve, double& value, double v) {
+            if (keyed || !curve.isEmpty()) curve.set(frame, v);
+            else value = v;
+        };
+        double x = t.position.x(), y = t.position.y();
+        put(t.positionXCurve, x, at.x);
+        put(t.positionYCurve, y, at.y);
+        t.position = QPointF(x, y);
+        // "position" is a 3D point (x, y, 0) and "scale" a Scale3D (s, s, s).
+        if (depth) put(t.positionZCurve, t.positionZ, 0.0);
+        put(t.rotationCurve, t.rotationDegrees, at.rotation);
+        double sx = t.scalePercent.x(), sy = t.scalePercent.y();
+        put(t.scaleXCurve, sx, at.scale);
+        put(t.scaleYCurve, sy, at.scale);
+        t.scalePercent = QPointF(sx, sy);
+        if (depth) put(t.scaleZCurve, t.scaleZPercent, at.scale);
     }
-    info.valid = true;
-    info.type = 0;
-    info.startFrame = frameAt(clip.sourceStartSeconds, info.frameRate);
-    info.key = asset.id().value();
-    return info;
+}
+
+bool NativeInstanceHost::applyLayerRequests(const Ref& ref,
+                                            const QVector<plugin::NativeLayerRequest>& requests)
+{
+    const auto comp = m_composition ? m_composition() : nullptr;
+    if (!comp) return false;
+    // The clip of the module's own layer is the one being worked on.
+    m_context = ref;
+    const double rate = frameRate();
+    bool changed = false;
+    for (const plugin::NativeLayerRequest& request : requests) {
+        const composition::Layer* source = findLayer(*comp, request.sourceLayerId);
+        if (!source) continue;
+        const int sourceStart = layerStartFrame(request.sourceLayerId);
+        if (request.kind == plugin::NativeLayerRequest::Kind::CreatePointLayer) {
+            // PointLayer::Create, over the source layer's frames, at the top of
+            // the stack: its span is the source's, its keys at the source's
+            // start plus each time.
+            composition::Layer point;
+            point.id = core::Identifier(request.targetLayerId);
+            point.name = request.name;
+            point.kind = composition::LayerKind::Point;
+            point.visible = true;
+            point.blendMode = QStringLiteral("None");
+            point.opacity = 1.0;
+            int sourceClip = -1;
+            layerById(request.sourceLayerId, &sourceClip);
+            if (composition::layerHasSpan(*source)) {
+                point.spanStartSeconds = source->spanStartSeconds;
+                point.spanEndSeconds = source->spanEndSeconds;
+            } else if (sourceClip >= 0 && sourceClip < source->clips.size()) {
+                point.spanStartSeconds = source->clips.at(sourceClip).startSeconds;
+                point.spanEndSeconds = source->clips.at(sourceClip).endSeconds();
+            }
+            applyLayerTransforms(point, request.transforms, sourceStart, rate);
+            comp->insertLayer(0, point);
+            changed = true;
+            continue;
+        }
+        composition::Layer* target = nullptr;
+        for (int i = 0; i < comp->layers().size(); ++i) {
+            if (comp->layers().at(i).id.value() == request.targetLayerId) target = &comp->layerRef(i);
+        }
+        if (!target) continue;
+        // Keys at each time plus StartTime(target) - StartTime(source), on
+        // the target's own timeline.
+        const int targetStart = layerStartFrame(request.targetLayerId);
+        applyLayerTransforms(*target, request.transforms, targetStart + (targetStart - sourceStart), rate);
+        changed = true;
+    }
+    return changed;
 }
 
 QImage NativeInstanceHost::assetFrame(const QString& layerId, int frame)

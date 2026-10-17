@@ -191,7 +191,7 @@ TextTransformOverlay::Geometry TextTransformOverlay::geometryOf(const Target& ta
     toCanvas.rotate(transform.rotationAt(target.frame));
     toCanvas.scale(scale.x() / 100.0, scale.y() / 100.0);
     geometry.local = bounds;
-    geometry.toCanvas = toCanvas;
+    geometry.toCanvas = toCanvas * target.after;
     geometry.valid = true;
     return geometry;
 }
@@ -380,9 +380,9 @@ QPointF TextTransformOverlay::pivotOf(const Target& target, const Geometry& geom
 {
     if (!target.layer) return geometry.toCanvas.map(QPointF(0.0, 0.0));
     const QPointF position = target.layer->transform.positionAt(target.frame);
-    return QPointF(target.canvasSize.width() / 2.0 + position.x(),
-                   target.canvasSize.height() / 2.0 - position.y())
-           + geometry.pivotOffset;
+    return target.after.map(QPointF(target.canvasSize.width() / 2.0 + position.x(),
+                                    target.canvasSize.height() / 2.0 - position.y())
+                            + geometry.pivotOffset);
 }
 
 void TextTransformOverlay::applyDrag(const QPointF& canvasPos, Qt::KeyboardModifiers modifiers)
@@ -402,7 +402,11 @@ void TextTransformOverlay::applyDrag(const QPointF& canvasPos, Qt::KeyboardModif
     const double angle0 = m_before.rotationAt(frame);
 
     if (m_drag == Handle::Move) {
-        const QPointF delta = canvasPos - m_pressCanvas;
+        const QTransform linear(m_start.after.m11(), m_start.after.m12(), m_start.after.m21(),
+                                m_start.after.m22(), 0.0, 0.0);
+        bool invertible = true;
+        const QTransform intoParent = linear.inverted(&invertible);
+        const QPointF delta = (invertible ? intoParent : QTransform()).map(canvasPos - m_pressCanvas);
         writePairAtFrame(transform.positionXCurve, transform.positionYCurve, transform.position,
                          frame, position0 + QPointF(delta.x(), -delta.y()));
         return;
