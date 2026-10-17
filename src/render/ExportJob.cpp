@@ -221,6 +221,7 @@ void ExportJob::encode()
     audioRequest.frameRate = fps;
     audioRequest.exportStart = exportStart;
     audioRequest.exportEnd = exportStart + exportDuration;
+    audioRequest.preRenderDirectory = m_request.preRenderDirectory;
     QString audioError;
     if (withAudio && !buildExportAudioInputs(audioRequest, audioInputs, &audioError)) {
         finish(false, audioError);

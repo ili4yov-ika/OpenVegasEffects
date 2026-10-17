@@ -46,6 +46,7 @@
 #include "render/AudioExport.h"
 #include "render/ExportJob.h"
 #include "media/AudioWaveform.h"
+#include "media/ConformedAudio.h"
 #include "ui/EffectPlacement.h"
 #include "ui/TextureWarning.h"
 #include "ui/CameraRule.h"
@@ -11947,6 +11948,131 @@ private slots:
     // PreRenderProgressLabel's state; a pre-rendered shot edited since is
     // made again once the edits settle; Remove takes the files, cancelling
     // stops everything.
+    // A shot's pre-render has its audio too (the reference's pre-render
+    // writes video and audio): the shot's mix as a WAV in its folder, which
+    // export (and playback) take for the nested shot instead of mixing it
+    // again - until the shot is edited, when its old audio no longer matches.
+    // The media cache's conformed audio (the reference's ConformedAudioFile):
+    // a file's audio decoded once to 16-bit stereo PCM at the shot's rate in
+    // MediaCacheFiles, recorded when written, touched when read again; a
+    // replaced file is conformed again.
+    void mediaAudioIsConformedOnce() {
+        const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
+        if (ffmpeg.isEmpty()) QSKIP("FFmpeg is required");
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString source = dir.filePath("mono44.wav");
+        const auto writeTone = [&](qint16 value) {
+            QFile wave(source); QVERIFY(wave.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QDataStream stream(&wave); stream.setByteOrder(QDataStream::LittleEndian);
+            const quint32 frames = 22050;
+            stream.writeRawData("RIFF", 4); stream << quint32(36 + frames * 2);
+            stream.writeRawData("WAVEfmt ", 8);
+            stream << quint32(16) << quint16(1) << quint16(1) << quint32(44100)
+                   << quint32(88200) << quint16(2) << quint16(16);
+            stream.writeRawData("data", 4); stream << quint32(frames * 2);
+            for (quint32 frame = 0; frame < frames; ++frame) stream << value;
+        };
+        writeTone(4000);
+        QStringList stored, used;
+        media::ConformedAudioStore store;
+        store.directory = dir.filePath("Conformed");
+        store.stored = [&](const QString& key, const QString&) { stored << key; };
+        store.used = [&](const QString& key) { used << key; };
+        media::ConformedAudioCache cache;
+        cache.setStore(store);
+        QSignalSpy ready(&cache, &media::ConformedAudioCache::conformedReady);
+        QVERIFY(cache.conformed(source, -1, 48000).isEmpty());
+        QVERIFY(ready.wait(30000));
+        QCOMPARE(stored.size(), 1);
+        const QString conformed = cache.conformed(source, -1, 48000);
+        QVERIFY(!conformed.isEmpty());
+        QVERIFY(conformed.startsWith(store.directory));
+        QCOMPARE(used, stored);
+        // Its header: PCM, two channels, 48 kHz, 16-bit; half a second.
+        QFile file(conformed); QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray header = file.read(44);
+        QCOMPARE(header.mid(0, 4), QByteArray("RIFF"));
+        QDataStream fields(header.mid(22, 14)); fields.setByteOrder(QDataStream::LittleEndian);
+        quint16 channels = 0, bits = 0; quint32 rate = 0, byteRate = 0; quint16 align = 0;
+        fields >> channels >> rate >> byteRate >> align >> bits;
+        QCOMPARE(int(channels), 2); QCOMPARE(int(rate), 48000); QCOMPARE(int(bits), 16);
+        QVERIFY2(std::abs(file.size() - 24000 * 4) < 2000, qPrintable(QString::number(file.size())));
+        file.close();
+        // Another rate is another file; a replaced file is conformed again.
+        QVERIFY(cache.conformed(source, -1, 44100).isEmpty());
+        QVERIFY(ready.wait(30000));
+        QTest::qWait(1100);   // a modification time of its own
+        writeTone(2000);
+        QVERIFY(cache.conformed(source, -1, 48000).isEmpty());
+        QVERIFY(ready.wait(30000));
+        QCOMPARE(stored.size(), 3);
+    }
+    void preRenderCarriesTheShotsAudio() {
+        const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
+        const QString ffprobe = QStandardPaths::findExecutable("ffprobe");
+        if (ffmpeg.isEmpty() || ffprobe.isEmpty()) QSKIP("FFmpeg is required");
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString source = dir.filePath("tone.wav");
+        {
+            QFile wave(source); QVERIFY(wave.open(QIODevice::WriteOnly));
+            QDataStream stream(&wave); stream.setByteOrder(QDataStream::LittleEndian);
+            const quint32 frames = 48000;
+            stream.writeRawData("RIFF", 4); stream << quint32(36 + frames * 4);
+            stream.writeRawData("WAVEfmt ", 8);
+            stream << quint32(16) << quint16(1) << quint16(2) << quint32(48000)
+                   << quint32(192000) << quint16(4) << quint16(16);
+            stream.writeRawData("data", 4); stream << quint32(frames * 4);
+            for (quint32 frame = 0; frame < frames; ++frame) stream << qint16(3000) << qint16(3000);
+        }
+        auto media = std::make_shared<media::MediaManager>();
+        QVERIFY(media->importFile(source).isSuccess());
+        auto child = std::make_shared<composition::Composition>();
+        child->setName("Child"); child->setSize(32, 32); child->setDurationSeconds(1.0);
+        child->setAudioSampleRate(48000);
+        composition::Clip leaf; leaf.mediaId = media->assetByFilePath(source).id(); leaf.durationSeconds = 1.0;
+        child->addLayer("Tone").clips.append(leaf);
+        auto parent = std::make_shared<composition::Composition>();
+        parent->setName("Parent"); parent->setSize(32, 32); parent->setDurationSeconds(1.0);
+        parent->setAudioSampleRate(48000);
+        composition::Clip nested; nested.nestedComposition = child; nested.nestedCompositionId = child->id();
+        nested.mediaId = core::Identifier(QStringLiteral("composition:") + child->id().value());
+        nested.durationSeconds = 1.0;
+        parent->addLayer("Nested").clips.append(nested);
+
+        const QString root = dir.filePath("prerenders");
+        QVERIFY(QDir().mkpath(root));
+        QVERIFY(render::preRenderedAudio(root, *child, media.get()).isEmpty());
+        render::PreRenderManager manager;
+        manager.setPreRenderRoot(root);
+        manager.setMediaManager(media);
+        manager.request(child);
+        QTRY_COMPARE_WITH_TIMEOUT(manager.state(child->id().value()), render::PreRenderManager::State::Done, 60000);
+        const QString audio = render::preRenderedAudio(root, *child, media.get());
+        QVERIFY2(!audio.isEmpty(), "no pre-rendered audio");
+        QVERIFY(audio.startsWith(render::preRenderFolder(root, *child)));
+        // A second of 48 kHz 16-bit stereo, about.
+        QVERIFY2(QFileInfo(audio).size() > 190000 && QFileInfo(audio).size() < 200000,
+                 qPrintable(QString::number(QFileInfo(audio).size())));
+        const auto inputsOf = [&](const QString& preRenders) {
+            QTemporaryDir temp;
+            render::ExportAudioRequest request;
+            request.composition = parent.get(); request.media = media.get();
+            request.ffmpeg = ffmpeg; request.ffprobe = ffprobe; request.temporaryDirectory = temp.path();
+            request.frameRate = 30.0; request.exportStart = 0.0; request.exportEnd = 1.0;
+            request.preRenderDirectory = preRenders;
+            QVector<render::ExportAudioInput> inputs; QString error;
+            if (!render::buildExportAudioInputs(request, inputs, &error)) return QStringList {error};
+            QStringList paths;
+            for (const auto& input : inputs) paths << input.path;
+            return paths;
+        };
+        QCOMPARE(inputsOf(root), (QStringList {audio}));
+        // Edited: the old audio no longer matches, the shot is mixed again.
+        child->layerRef(0).clips[0].audioLevel = -6.0;
+        QVERIFY(render::preRenderedAudio(root, *child, media.get()).isEmpty());
+        const QStringList live = inputsOf(root);
+        QVERIFY2(!live.contains(audio), qPrintable(live.join(", ")));
+    }
     void preRendersWaitTheirTurn() {
         QTemporaryDir dir; QVERIFY(dir.isValid());
         const auto makeShot = [](const QString& name, const QColor& color) {

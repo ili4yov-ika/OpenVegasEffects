@@ -4,6 +4,7 @@
 
 #include "media/AudioWaveform.h"
 #include "media/DecodedFrameCache.h"
+#include "media/ConformedAudio.h"
 #include "app/ProjectDefaults.h"
 
 #include <QFileInfo>
@@ -242,6 +243,11 @@ void AppMain::initializeCache()
     media::DecodedFrameStore frames;
     frames.directory = QDir(cacheFilesDir).filePath(QStringLiteral("Frames"));
     media::DecodedFrameCache::setDefaultStore(frames);
+    // Conformed audio - the media's audio decoded once at the project's rate,
+    // which playback reads (the reference's ConformedAudioFile).
+    media::ConformedAudioStore conformed;
+    conformed.directory = QDir(cacheFilesDir).filePath(QStringLiteral("Conformed"));
+    media::ConformedAudioCache::setDefaultStore(conformed);
 
     const core::Result r = m_cacheDB->open(cachePath);
     if (r.isFailure()) {
@@ -271,6 +277,15 @@ void AppMain::initializeCache()
                         QDateTime::currentDateTimeUtc().toMSecsSinceEpoch());
     };
     media::DecodedFrameCache::setDefaultStore(frames);
+    conformed.stored = [database](const QString& key, const QString& file) {
+        recordMediaCacheFile(database, QStringLiteral("conformed:") + key, file, QFileInfo(file).size());
+        database->pruneToBytes(kMediaCacheMaxBytes);
+    };
+    conformed.used = [database](const QString& key) {
+        database->touch(QStringLiteral("conformed:") + key,
+                        QDateTime::currentDateTimeUtc().toMSecsSinceEpoch());
+    };
+    media::ConformedAudioCache::setDefaultStore(conformed);
     OV_LOG_INFO(QStringLiteral("Cache DB opened at %1 (%2 entries), files in %3")
                     .arg(cachePath)
                     .arg(m_cacheDB->entryCount())

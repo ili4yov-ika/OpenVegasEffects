@@ -397,6 +397,24 @@ private slots:
     // Effects installation under Program Files (when used), the folders
     // chosen on the Plugins page - another FXhome program's among them -
     // each once; Options opens there by itself once, when none has any.
+    // Options > Render's 3D map sizes are what a new project's shadow and
+    // reflection maps are made at (ProjectRenderSettings, which the renderer
+    // and the .vegfx read).
+    void renderMapSizesReachNewProjects()
+    {
+        ui::OptionsDialog dialog;
+        auto* shadows = dialog.findChild<QSpinBox*>(QStringLiteral("spinBoxShadowMapSize"));
+        auto* reflections = dialog.findChild<QSpinBox*>(QStringLiteral("spinBoxReflectionMapSize"));
+        QVERIFY(shadows && reflections);
+        shadows->setValue(1024);
+        reflections->setValue(256);
+        dialog.findChild<QPushButton*>(QStringLiteral("btnOK"))->click();
+        const composition::ProjectRenderSettings settings = app::defaultProjectRenderSettings();
+        QCOMPARE(settings.shadowMapSize, shadows->value());
+        QCOMPARE(settings.reflectionMapSize, reflections->value());
+        QVERIFY(settings.shadowMapSize != 2048 || settings.reflectionMapSize != 512);
+    }
+
     void pluginsPageChoosesFolders()
     {
         QTemporaryDir programFiles;

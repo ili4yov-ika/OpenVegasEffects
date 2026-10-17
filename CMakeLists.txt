@@ -247,6 +247,7 @@ add_executable(OpenVegasEffects WIN32
     src/media/AudioPlayer.h
     src/media/AudioFormat.h
     src/media/AudioWaveform.h
+    src/media/ConformedAudio.h
     src/media/DecodedFrameCache.h
     src/media/ProxyMedia.h
     src/media/MediaManager.h
@@ -255,6 +256,7 @@ add_executable(OpenVegasEffects WIN32
     src/media/AudioCapture.cpp
     src/media/AudioPlayer.cpp
     src/media/AudioWaveform.cpp
+    src/media/ConformedAudio.cpp
     src/media/DecodedFrameCache.cpp
     src/media/ProxyMedia.cpp
     src/media/ExrImage.cpp

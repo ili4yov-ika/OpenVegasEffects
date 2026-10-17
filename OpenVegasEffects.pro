@@ -74,6 +74,7 @@ HEADERS += \
     src/media/AudioPlayer.h \
     src/media/AudioFormat.h \
     src/media/AudioWaveform.h \
+    src/media/ConformedAudio.h \
     src/media/DecodedFrameCache.h \
     src/media/ProxyMedia.h \
     src/media/PcmWave.h \
@@ -187,6 +188,7 @@ SOURCES += \
     src/media/AudioCapture.cpp \
     src/media/AudioPlayer.cpp \
     src/media/AudioWaveform.cpp \
+    src/media/ConformedAudio.cpp \
     src/media/DecodedFrameCache.cpp \
     src/media/ProxyMedia.cpp \
     src/media/ExrImage.cpp \

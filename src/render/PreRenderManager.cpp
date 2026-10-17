@@ -4,8 +4,16 @@
 #include <QDir>
 
 #include "composition/Composition.h"
+#include "core/Log.h"
+#include "media/AudioFormat.h"
 #include "media/MediaManager.h"
+#include "render/AudioExport.h"
 #include "render/RenderManager.h"
+
+#include <QFile>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QTemporaryDir>
 
 namespace openvegas {
 namespace render {
@@ -29,6 +37,95 @@ PreRenderManager::PreRenderManager(QObject* parent)
 PreRenderManager::~PreRenderManager()
 {
     cancelAll();
+    if (m_audioThread) m_audioThread->wait();
+}
+
+namespace {
+
+// The shot's mix - its layers, nested shots and audio effects, as export
+// mixes them - written to `path` as 16-bit stereo PCM. True with no file
+// when the shot has no audio.
+bool writePreRenderAudio(const composition::Composition& shot, const media::MediaManager* media,
+                         const QString& root, const QString& path, QString* error)
+{
+    const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    if (ffmpeg.isEmpty()) {
+        if (error) *error = QStringLiteral("FFmpeg was not found");
+        return false;
+    }
+    QTemporaryDir temporary(QDir(QFileInfo(path).absolutePath()).filePath(QStringLiteral("audio-XXXXXX")));
+    if (!temporary.isValid()) {
+        if (error) *error = QStringLiteral("No room for the pre-render's audio");
+        return false;
+    }
+    const double fps = shot.fpsDenominator() > 0 ? double(shot.fpsNumerator()) / shot.fpsDenominator() : 30.0;
+    ExportAudioRequest request;
+    request.composition = &shot;
+    request.media = media;
+    request.ffmpeg = ffmpeg;
+    request.ffprobe = QStandardPaths::findExecutable(QStringLiteral("ffprobe"));
+    request.temporaryDirectory = temporary.path();
+    request.frameRate = fps;
+    request.exportStart = 0.0;
+    request.exportEnd = shot.durationSeconds();
+    // Nested shots of its own that are pre-rendered play theirs.
+    request.preRenderDirectory = root;
+    QVector<ExportAudioInput> inputs;
+    if (!buildExportAudioInputs(request, inputs, error)) return false;
+    if (inputs.isEmpty()) return true;
+    const int rate = media::normalizedAudioSampleRate(shot.audioSampleRate());
+    QStringList arguments {QStringLiteral("-y")};
+    arguments += exportAudioInputArguments(inputs);
+    arguments << QStringLiteral("-filter_complex") << exportAudioMixFilter(inputs, rate, 0)
+              << QStringLiteral("-map") << QStringLiteral("[aout]")
+              << QStringLiteral("-t") << QString::number(shot.durationSeconds(), 'f', 6)
+              << QStringLiteral("-c:a") << QStringLiteral("pcm_s16le")
+              << QStringLiteral("-ar") << QString::number(rate) << QStringLiteral("-ac") << QStringLiteral("2");
+    // Written beside, then put in place: a reader never sees half a file.
+    const QString partial = path + QStringLiteral(".part.wav");
+    arguments << partial;
+    QProcess process;
+    process.start(ffmpeg, arguments);
+    if (!process.waitForFinished(-1) || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        QFile::remove(partial);
+        if (error) *error = QString::fromLocal8Bit(process.readAllStandardError()).right(400);
+        return false;
+    }
+    QFile::remove(path);
+    return QFile::rename(partial, path);
+}
+
+} // namespace
+
+void PreRenderManager::mixAudio(const QString& id)
+{
+    const auto shot = m_entries.value(id).shot.lock();
+    if (!shot) {
+        finishRunning(true);
+        return;
+    }
+    // A copy of the shot as it was rendered, mixed away from the interface.
+    auto snapshot = std::make_shared<composition::Composition>(*shot);
+    const QString path = preRenderAudioPath(m_root, *shot, m_media.get());
+    const QString root = m_root;
+    const std::shared_ptr<media::MediaManager> media = m_media;
+    const quint64 generation = m_generation;
+    QPointer<PreRenderManager> self(this);
+    QThread* thread = QThread::create([snapshot, path, root, media, generation, id, self] {
+        QString error;
+        const bool ok = writePreRenderAudio(*snapshot, media.get(), root, path, &error);
+        if (!ok) OV_LOG_WARN(QStringLiteral("Pre-render audio of %1: %2").arg(id, error));
+        if (PreRenderManager* manager = self.data()) {
+            QMetaObject::invokeMethod(manager, [self, generation, id] {
+                if (!self || self->m_generation != generation || self->m_runningId != id) return;
+                // Without audio (none, or no FFmpeg) the frames still stand.
+                self->finishRunning(true);
+            }, Qt::QueuedConnection);
+        }
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    m_audioThread = thread;
+    thread->start();
 }
 
 void PreRenderManager::setPreRenderRoot(const QString& root)
@@ -129,7 +226,7 @@ void PreRenderManager::checkForChanges()
 
 void PreRenderManager::startNext()
 {
-    if (m_running || m_queue.isEmpty()) return;
+    if (m_running || !m_runningId.isEmpty() || m_queue.isEmpty()) return;
     const QString id = m_queue.takeFirst();
     Entry& entry = m_entries[id];
     const auto shot = entry.shot.lock();
@@ -177,7 +274,13 @@ void PreRenderManager::startNext()
         const Entry& running = m_entries.value(id);
         // A cache run that gives up emits Finished before Failed.
         if (running.done < running.total) return;
-        finishRunning(true);
+        // The frames are there: now the audio.
+        if (RenderManager* frames = m_running.data()) {
+            frames->disconnect(this);
+            m_running = nullptr;
+            QTimer::singleShot(0, frames, [frames] { frames->cancelAll(); frames->deleteLater(); });
+        }
+        mixAudio(id);
     });
     task->startPlaybackCache(0.0, QSize(qMax(1, shot->width()), qMax(1, shot->height())), true, true);
 }
@@ -186,6 +289,8 @@ void PreRenderManager::finishRunning(bool completed, const QString& reason)
 {
     const QString id = m_runningId;
     m_runningId.clear();
+    // A mix still going belongs to this run: its result is dropped.
+    ++m_generation;
     if (RenderManager* task = m_running.data()) {
         task->disconnect(this);
         m_running = nullptr;

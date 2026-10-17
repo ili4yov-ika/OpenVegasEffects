@@ -74,6 +74,7 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/render/FrameDiskCache.cpp ../src/render/FrameDiskCache.h
     ../src/render/VideoEncoder.cpp ../src/render/VideoEncoder.h
     ../src/media/AudioWaveform.cpp ../src/media/AudioWaveform.h
+    ../src/media/ConformedAudio.cpp ../src/media/ConformedAudio.h
     ../src/media/DecodedFrameCache.cpp ../src/media/DecodedFrameCache.h
     ../src/media/ProxyMedia.cpp ../src/media/ProxyMedia.h
     ../src/ui/PromptMessage.cpp ../src/ui/PromptMessage.h

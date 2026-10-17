@@ -4,6 +4,7 @@
 #include "composition/Transition.h"
 #include "media/MediaManager.h"
 #include "plugin/NativeEffectRender.h"
+#include "render/RenderManager.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -399,7 +400,14 @@ bool collectExportAudioInputs(const ExportAudioRequest& request, AudioExportCont
                 if (!child) child = context.root->compositeShot(clip.nestedCompositionId);
             }
             const media::MediaAsset asset = request.media->assetById(clip.mediaId);
-            if (!child) {
+            // A nested shot pre-rendered as it is now: its pre-render's audio,
+            // read as footage would be.
+            const QString preRendered = child
+                ? preRenderedAudio(request.preRenderDirectory, *child, request.media) : QString();
+            if (!preRendered.isEmpty()) child = nullptr;
+            const QString sourcePath = preRendered.isEmpty() ? asset.filePath() : preRendered;
+            const int sourceStream = preRendered.isEmpty() ? asset.audioStreamIndex() : -1;
+            if (!child && preRendered.isEmpty()) {
                 if (clip.nestedCompositionId.isValid() || !asset.isValid()) continue;
                 const QString path = asset.filePath();
                 if (!context.audioStreams.contains(path))
@@ -433,10 +441,10 @@ bool collectExportAudioInputs(const ExportAudioRequest& request, AudioExportCont
                 const double first = qMax(request.exportStart, clip.startSeconds);
                 const double last = qMin(exportEnd, clip.endSeconds());
                 if (last <= first) continue;
-                inputs.append({asset.filePath(),
+                inputs.append({sourcePath,
                                clip.sourceStartSeconds + (first - clip.startSeconds) * speed,
                                (last - first) * speed, first - request.exportStart, speed,
-                               qPow(10.0, (layer.transform.audioLevel + clip.audioLevel) / 20.0), false, asset.audioStreamIndex()});
+                               qPow(10.0, (layer.transform.audioLevel + clip.audioLevel) / 20.0), false, sourceStream});
                 continue;
             }
             // Native positions are layer-local and modules such as
@@ -450,7 +458,7 @@ bool collectExportAudioInputs(const ExportAudioRequest& request, AudioExportCont
             const bool ok = child
                 ? renderNestedPcmClip(request, context, *child, layer, clip, spanStart, spanEnd,
                                       nativeEffects, instancePrefix, pcm, error)
-                : renderPcmClip(request, rate, layer, clip, asset.filePath(), asset.audioStreamIndex(),
+                : renderPcmClip(request, rate, layer, clip, sourcePath, sourceStream,
                                 spanStart, spanEnd, nativeEffects, instancePrefix, pcm, error);
             if (!ok) return false;
             if (!pcm.samples.isEmpty()) pcmClips.insert(clipIndex, std::move(pcm));

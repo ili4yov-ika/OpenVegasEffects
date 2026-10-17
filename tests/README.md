@@ -463,3 +463,9 @@ has any plugin.
 `nativeGlyphBehaviorsDrawReducedPreviews` also checks the Layout box of the DropInByChar text: while its
 letters drop in, it is the box of the same text without the glyph Behavior, as the reference frames a
 layer by its world transform only.
+`mediaAudioIsConformedOnce` conforms a 44.1 kHz mono WAV to 48 kHz stereo PCM in the media cache: made
+once in the background and recorded, read again from the cache, another rate or a replaced file made
+again. `preRenderCarriesTheShotsAudio` pre-renders a shot with a tone: its pre-render has the shot's mix
+as a WAV, export takes it for the nested shot, and an edited shot no longer matches it.
+`options_regression::renderMapSizesReachNewProjects` sets the shadow and reflection map sizes in
+Options > Render and finds them in a new project's render settings.

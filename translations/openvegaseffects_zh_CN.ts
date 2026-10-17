@@ -641,8 +641,8 @@
     </message>
     <message>
         <location filename="../src/media/MediaManager.cpp" line="117"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2759"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4852"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2761"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4854"/>
         <location filename="../src/ui/ModelAnimationDialog.cpp" line="142"/>
         <location filename="../src/ui/TimelineTreeRows.cpp" line="1077"/>
         <source>The animation could not be imported.</source>
@@ -1333,8 +1333,8 @@ Do you want to continue?</source>
         <translation>设置图层尺寸</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3591"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3599"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3593"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3601"/>
         <source>Remove Layer(s)</source>
         <translation>删除图层</translation>
     </message>
@@ -3052,22 +3052,22 @@ Do you want to add a camera?</source>
 <context>
     <name>PreRenderProgressLabel</name>
     <message>
-        <location filename="../src/render/PreRenderManager.cpp" line="224"/>
+        <location filename="../src/render/PreRenderManager.cpp" line="329"/>
         <source>The pre-render is in the queue.</source>
         <translation>预渲染在队列中。</translation>
     </message>
     <message>
-        <location filename="../src/render/PreRenderManager.cpp" line="226"/>
+        <location filename="../src/render/PreRenderManager.cpp" line="331"/>
         <source>The pre-render is being prepared.</source>
         <translation>正在准备预渲染。</translation>
     </message>
     <message>
-        <location filename="../src/render/PreRenderManager.cpp" line="228"/>
+        <location filename="../src/render/PreRenderManager.cpp" line="333"/>
         <source>Pre-rendering is in progress.</source>
         <translation>预渲染正在进行中。</translation>
     </message>
     <message>
-        <location filename="../src/render/PreRenderManager.cpp" line="230"/>
+        <location filename="../src/render/PreRenderManager.cpp" line="335"/>
         <source>The media has been pre-rendered.</source>
         <translation>媒体已预先渲染。</translation>
     </message>
@@ -3075,7 +3075,7 @@ Do you want to add a camera?</source>
 <context>
     <name>PreRenderTask</name>
     <message>
-        <location filename="../src/render/PreRenderManager.cpp" line="145"/>
+        <location filename="../src/render/PreRenderManager.cpp" line="242"/>
         <source>Could not create the pre-render directory.</source>
         <translation>无法创建预渲染目录。</translation>
     </message>
@@ -3376,7 +3376,7 @@ Do you want to add a camera?</source>
         <translation>音频电平表</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3476"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3478"/>
         <source>Insert Layer</source>
         <translation>插入图层</translation>
     </message>
@@ -3456,8 +3456,8 @@ Do you want to add a camera?</source>
     </message>
     <message>
         <location filename="../src/composition/Layer.h" line="189"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2056"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2182"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2058"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2184"/>
         <source>Position</source>
         <translation>位置</translation>
     </message>
@@ -3498,7 +3498,7 @@ Do you want to add a camera?</source>
     </message>
     <message>
         <location filename="../src/composition/Layer.h" line="200"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2181"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2183"/>
         <source>Target</source>
         <translation>目标</translation>
     </message>
@@ -3549,7 +3549,7 @@ Do you want to add a camera?</source>
 <context>
     <name>WindowHeaderWidget</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1067"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1069"/>
         <source>Recover Projects...</source>
         <translation>恢复项目...</translation>
     </message>
@@ -3557,18 +3557,18 @@ Do you want to add a camera?</source>
 <context>
     <name>biff::ui::BiffFileFilter</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4351"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4353"/>
         <location filename="../src/ui/RecoveredProjectsDialog.cpp" line="108"/>
         <source>VEGAS Effects Projects (*.vegfx)</source>
         <translation>VEGAS Effects 项目 (*.vegfx)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4740"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4742"/>
         <source>Composite Shots (*.vegfxcs *.vegfx);;VEGAS Effects Composite Shots (*.vegfxcs);;VEGAS Effects Projects (*.vegfx)</source>
         <translation>组合镜头 (*.vegfxcs *.vegfx);;VEGAS Effects 组合镜头 (*.vegfxcs);;VEGAS Effects项目(*.vegfx)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4814"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4816"/>
         <source>VEGAS Effects Composite Shots (*.vegfxcs)</source>
         <translation>VEGAS Effects 组合镜头 (*.vegfxcs)</translation>
     </message>
@@ -3576,18 +3576,18 @@ Do you want to add a camera?</source>
 <context>
     <name>biff::ui::MainAppWindow</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3964"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3966"/>
         <source>The recovered project cannot be opened.</source>
         <translation>恢复的项目无法打开。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5190"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5192"/>
         <location filename="../src/ui/RecoveredProjectsDialog.cpp" line="83"/>
         <source>Recovered Untitled Project</source>
         <translation>恢复的无标题项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5191"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5193"/>
         <source> - Recovered</source>
         <translation> -恢复</translation>
     </message>
@@ -3682,7 +3682,7 @@ Do you want to add a camera?</source>
 <context>
     <name>biff::ui::common::AutoSaveRecoveryDialog</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1072"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1074"/>
         <location filename="../src/ui/RecoveredProjectsDialog.cpp" line="29"/>
         <source>Recovered Projects</source>
         <translation>恢复的项目</translation>
@@ -3875,12 +3875,12 @@ Do you want to add a camera?</source>
         <translation>开始导出</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2438"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2440"/>
         <source>Starting...</source>
         <translation>正在开始...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2439"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2441"/>
         <source>Inactive</source>
         <translation>停用</translation>
     </message>
@@ -3999,7 +3999,7 @@ Do you want to add a camera?</source>
         <translation>无法加载导出项目快照。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4198"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4200"/>
         <source>The project snapshot could not be created.</source>
         <translation>无法创建项目快照。</translation>
     </message>
@@ -4126,7 +4126,7 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>3D模型动画...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2742"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2744"/>
         <location filename="../src/ui/TimelineTreeRows.cpp" line="1070"/>
         <location filename="../src/ui/TimelineTreeRows.cpp" line="1075"/>
         <source>Import 3D Model Animation</source>
@@ -4222,57 +4222,57 @@ You can queue exports from multiple projects by opening each one in turn and add
 <context>
     <name>openvegas::app::AppMain</name>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="112"/>
+        <location filename="../src/app/AppMain.cpp" line="113"/>
         <source>Preparing folders...</source>
         <translation>正在准备文件夹…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="114"/>
+        <location filename="../src/app/AppMain.cpp" line="115"/>
         <source>Loading settings...</source>
         <translation>正在加载设置…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="116"/>
+        <location filename="../src/app/AppMain.cpp" line="117"/>
         <source>Opening media cache...</source>
         <translation>正在打开媒体缓存…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="118"/>
+        <location filename="../src/app/AppMain.cpp" line="119"/>
         <source>Checking license...</source>
         <translation>正在检查许可证…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="120"/>
+        <location filename="../src/app/AppMain.cpp" line="121"/>
         <source>Loading plug-ins...</source>
         <translation>正在加载插件…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="122"/>
+        <location filename="../src/app/AppMain.cpp" line="123"/>
         <source>Creating project...</source>
         <translation>正在创建项目…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="127"/>
+        <location filename="../src/app/AppMain.cpp" line="128"/>
         <source>Building workspace...</source>
         <translation>正在准备工作区…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="147"/>
+        <location filename="../src/app/AppMain.cpp" line="148"/>
         <source>%1 : Unsupported GPU</source>
         <translation>%1：不支持的GPU</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="148"/>
+        <location filename="../src/app/AppMain.cpp" line="149"/>
         <source>Your computer does not appear to support OpenGL 4.1, which %1 needs to run its native GPU effects and transitions.&lt;br&gt;&lt;br&gt;If you choose to continue, those effects will not render.&lt;br&gt;&lt;br&gt;If you think this is incorrect, please ensure that you have the latest GPU drivers installed and try again.&lt;br&gt;</source>
         <translation>您的计算机似乎不支持 %1 运行原生 GPU 效果和转场所需的 OpenGL 4.1。&lt;br&gt;&lt;br&gt;如果继续，这些效果将无法渲染。&lt;br&gt;&lt;br&gt;如果您认为有误，请确认已安装最新的 GPU 驱动程序后重试。&lt;br&gt;</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="156"/>
+        <location filename="../src/app/AppMain.cpp" line="157"/>
         <source>Continue</source>
         <translation>继续</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="157"/>
+        <location filename="../src/app/AppMain.cpp" line="158"/>
         <source>Exit</source>
         <translation>退出</translation>
     </message>
@@ -4329,32 +4329,32 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>找不到FFmpeg；请选择图像序列预设</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="230"/>
+        <location filename="../src/render/ExportJob.cpp" line="231"/>
         <source>The shot has no audio to export</source>
         <translation>组合镜头中没有可导出的音频</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="287"/>
+        <location filename="../src/render/ExportJob.cpp" line="288"/>
         <source>Exported video to %1</source>
         <translation>已将视频导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="288"/>
+        <location filename="../src/render/ExportJob.cpp" line="289"/>
         <source>FFmpeg export failed</source>
         <translation>FFmpeg导出失败</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="293"/>
+        <location filename="../src/render/ExportJob.cpp" line="294"/>
         <source>Could not start FFmpeg: %1</source>
         <translation>无法启动FFmpeg：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="322"/>
+        <location filename="../src/render/ExportJob.cpp" line="323"/>
         <source>Image sequence export failed: %1</source>
         <translation>图像序列导出失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="326"/>
+        <location filename="../src/render/ExportJob.cpp" line="327"/>
         <source>Exported image sequence to %1</source>
         <translation>已将图像序列导出到 %1</translation>
     </message>
@@ -4362,7 +4362,7 @@ You can queue exports from multiple projects by opening each one in turn and add
 <context>
     <name>openvegas::render::RenderManager</name>
     <message>
-        <location filename="../src/render/RenderManager.cpp" line="3211"/>
+        <location filename="../src/render/RenderManager.cpp" line="3232"/>
         <source>Video decoding did not deliver the requested cache frame.</source>
         <translation>视频解码器未提供所请求的缓存帧。</translation>
     </message>
@@ -5406,13 +5406,13 @@ You can queue exports from multiple projects by opening each one in turn and add
 <context>
     <name>openvegas::ui::MainWindow</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="822"/>
-        <location filename="../src/ui/MainWindow.cpp" line="873"/>
+        <location filename="../src/ui/MainWindow.cpp" line="823"/>
+        <location filename="../src/ui/MainWindow.cpp" line="875"/>
         <source>New Project</source>
         <translation>新建项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="964"/>
+        <location filename="../src/ui/MainWindow.cpp" line="966"/>
         <source>Ready</source>
         <translation>就绪</translation>
     </message>
@@ -5692,296 +5692,296 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>浏览效果库(&amp;B)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1307"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1309"/>
         <source>&amp;Window</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>窗口(&amp;W)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1313"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1315"/>
         <source>1-View Layout</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>单视图布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1318"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1320"/>
         <source>Row (2-View) Layout</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>并排（双视图）布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1322"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1324"/>
         <source>2+1 Layout</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>2+1 布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1326"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1328"/>
         <source>Four-View Layout</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>四视图布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1330"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1332"/>
         <source>Four-In-A-Row Layout</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>四视图并排</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1354"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1356"/>
         <source>Zoom to Fit</source>
         <translation>缩放到合适大小</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1357"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1359"/>
         <source>Zoom In</source>
         <translation>放大</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1360"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1362"/>
         <source>Zoom Out</source>
         <translation>缩小</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1364"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1366"/>
         <source>Checkerboard Background</source>
         <translation>查看版背景</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="881"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1382"/>
+        <location filename="../src/ui/MainWindow.cpp" line="883"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1384"/>
         <source>Trimmer</source>
         <translation>剪辑器</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="275"/>
+        <location filename="../src/ui/MainWindow.cpp" line="276"/>
         <source>All Supported Files (%1 %2)</source>
         <translation>所有支持的文件 (%1 %2)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="278"/>
+        <location filename="../src/ui/MainWindow.cpp" line="279"/>
         <source>Media Files (%1)</source>
         <translation>媒体文件 (%1)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="284"/>
+        <location filename="../src/ui/MainWindow.cpp" line="285"/>
         <source>All Files (*)</source>
         <translation>所有文件 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="580"/>
-        <location filename="../src/ui/MainWindow.cpp" line="587"/>
-        <location filename="../src/ui/MainWindow.cpp" line="616"/>
-        <location filename="../src/ui/MainWindow.cpp" line="638"/>
-        <location filename="../src/ui/MainWindow.cpp" line="654"/>
-        <location filename="../src/ui/MainWindow.cpp" line="661"/>
-        <location filename="../src/ui/MainWindow.cpp" line="670"/>
+        <location filename="../src/ui/MainWindow.cpp" line="581"/>
+        <location filename="../src/ui/MainWindow.cpp" line="588"/>
+        <location filename="../src/ui/MainWindow.cpp" line="617"/>
+        <location filename="../src/ui/MainWindow.cpp" line="639"/>
+        <location filename="../src/ui/MainWindow.cpp" line="655"/>
+        <location filename="../src/ui/MainWindow.cpp" line="662"/>
+        <location filename="../src/ui/MainWindow.cpp" line="671"/>
         <source>My Workspace</source>
         <translation>我的工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="598"/>
+        <location filename="../src/ui/MainWindow.cpp" line="599"/>
         <source>Save Workspace...</source>
         <translation>保存工作区...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="600"/>
+        <location filename="../src/ui/MainWindow.cpp" line="601"/>
         <source>Delete Workspace...</source>
         <translation>删除工作区...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="602"/>
+        <location filename="../src/ui/MainWindow.cpp" line="603"/>
         <source>Reset Workspace</source>
         <translation>重置工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="610"/>
+        <location filename="../src/ui/MainWindow.cpp" line="611"/>
         <source>Save Workspace</source>
         <translation>保存工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="611"/>
+        <location filename="../src/ui/MainWindow.cpp" line="612"/>
         <source>Workspace name:</source>
         <translation>工作区名称：</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="620"/>
+        <location filename="../src/ui/MainWindow.cpp" line="621"/>
         <source>You cannot replace the default workspaces. Please choose another name.</source>
         <translation>您不能替换默认工作空间。请选择其他名称。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="632"/>
+        <location filename="../src/ui/MainWindow.cpp" line="633"/>
         <source>Workspace saved: %1</source>
         <translation>已保存工作区：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="640"/>
+        <location filename="../src/ui/MainWindow.cpp" line="641"/>
         <source>My Workspace cannot be deleted; choose a saved workspace first</source>
         <translation>无法删除“我的工作区”；请先选择已保存的工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="644"/>
+        <location filename="../src/ui/MainWindow.cpp" line="645"/>
         <source>Delete Workspace</source>
         <translation>删除工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="645"/>
+        <location filename="../src/ui/MainWindow.cpp" line="646"/>
         <source>Are you sure you want to permanently remove this workspace?</source>
         <translation>确定要永久删除此工作区吗？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="656"/>
+        <location filename="../src/ui/MainWindow.cpp" line="657"/>
         <source>Workspace deleted: %1</source>
         <translation>已删除工作区：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="685"/>
+        <location filename="../src/ui/MainWindow.cpp" line="686"/>
         <source>Workspace: %1</source>
         <translation>工作区：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1060"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1062"/>
         <source>No recent projects</source>
         <translation>没有最近的项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1091"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1093"/>
         <source>Undo %1</source>
         <translation>撤销 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1094"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1096"/>
         <source>Redo %1</source>
         <translation>重做 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1164"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1166"/>
         <source>Favorites</source>
         <translation>收藏夹</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1166"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1168"/>
         <source>Recents</source>
         <translation>最近的</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1180"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1182"/>
         <source>None</source>
         <translation>无</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1221"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1223"/>
         <source>Render timings enabled</source>
         <translation>已启用渲染耗时显示</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1221"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1223"/>
         <source>Render timings disabled</source>
         <translation>已禁用渲染耗时显示</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1226"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1228"/>
         <source>Hardware decoding indicator enabled</source>
         <translation>已启用硬件解码指示器</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1227"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1229"/>
         <source>Hardware decoding indicator disabled</source>
         <translation>已禁用硬件解码指示器</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1239"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1243"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1241"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1245"/>
         <source>Export Font List</source>
         <translation>导出字体列表</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1239"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1241"/>
         <source>Text files (*.txt)</source>
         <translation>文本文件 (*.txt)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1248"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1250"/>
         <source>Exported font list to %1</source>
         <translation>已将字体列表导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1350"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1352"/>
         <source>Workspaces</source>
         <translation>工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1385"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1387"/>
         <source>Export Panel</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>导出面板</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1400"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1402"/>
         <source>Toggle Learn Sidebar</source>
         <translation>切换学习侧边栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1408"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1410"/>
         <source>Open in Trimmer</source>
         <translation>在微调器中打开</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1442"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1444"/>
         <source>Loop playback: on</source>
         <translation>循环播放：开</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1442"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1444"/>
         <source>Loop playback: off</source>
         <translation>循环播放：关</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1392"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1683"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1394"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1685"/>
         <source>Start</source>
         <translation>开始</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2767"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3031"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3074"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2769"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3033"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3076"/>
         <source>Import</source>
         <translation>导入</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2782"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2784"/>
         <source>Orbit works on a 3D layer</source>
         <translation>环绕工具适用于3D图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2976"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2981"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2978"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2983"/>
         <source>Import 3D Model</source>
         <translation>导入3D模型</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2982"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2984"/>
         <source>The 3D model could not be imported.</source>
         <translation>无法导入3D模型。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2997"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2999"/>
         <source>Import 3D model &apos;%1&apos;</source>
         <translation>导入3D模型“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3006"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3008"/>
         <source>Imported %1</source>
         <translation>已导入 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3075"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3077"/>
         <source>The 3D model could not be imported: %1</source>
         <translation>无法导入3D模型：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3108"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3110"/>
         <source>Imported %1 media file(s) and %2 3D model(s)</source>
         <translation>已导入 %1 个媒体文件和 %2 个3D模型</translation>
     </message>
@@ -6032,118 +6032,118 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>关于(&amp;A)...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1747"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1749"/>
         <source>Unknown command: %1</source>
         <translation>未知命令：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="664"/>
+        <location filename="../src/ui/MainWindow.cpp" line="665"/>
         <source>Workspace reset</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>工作区已重置</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="721"/>
+        <location filename="../src/ui/MainWindow.cpp" line="722"/>
         <source>The Viewer is open in the 360 Viewer.</source>
         <translation>查看器已在 360°查看器中打开。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="724"/>
+        <location filename="../src/ui/MainWindow.cpp" line="725"/>
         <source>Show the Viewer Here</source>
         <translation>在此显示查看器</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1006"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1031"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1042"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1008"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1033"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1044"/>
         <source>Record Voiceover</source>
         <translation>录制旁白</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1009"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1011"/>
         <source>WAV audio (*.wav)</source>
         <translation>WAV音频 (*.wav)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1070"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1072"/>
         <source>No recoverable auto-saves were found.</source>
         <translation>未找到可恢复的自动保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1119"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1121"/>
         <source>Rename</source>
         <translation>重命名</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1127"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1129"/>
         <source>Rename Layer</source>
         <translation>重命名图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1127"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1129"/>
         <source>Name:</source>
         <translation>名称：</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1137"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1139"/>
         <source>Close Active Panel</source>
         <translation>关闭当前面板</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1877"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1879"/>
         <source>Value Graph shown</source>
         <translation>已显示数值图</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1877"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1879"/>
         <source>Value Graph hidden</source>
         <translation>已隐藏数值图</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2233"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2235"/>
         <source>Text Properties</source>
         <translation>文字属性</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2235"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3316"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2237"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3318"/>
         <source>Convert to Paragraph Text</source>
         <translation>转换为段落文字</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2235"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3316"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2237"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3318"/>
         <source>Convert to Point Text</source>
         <translation>转换为点文字</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2456"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2458"/>
         <source>Playback cache: %1 / %2 frames (256 MiB budget)</source>
         <translation>播放缓存：%1 / %2 帧（上限256 MiB）</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2459"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2461"/>
         <source>Playback cache ready: %1 frames</source>
         <translation>播放缓存已就绪：%1 帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2592"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2594"/>
         <source>Selected effect: %1 (%2)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已选效果：%1 (%2)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2603"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2605"/>
         <source>Select a clip on the timeline first</source>
         <translation>请先在时间线上选择剪辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2613"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2615"/>
         <source>Add %1?</source>
         <translation>添加 %1？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2614"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2616"/>
         <source>%1
 
 It can still be added to the clip and saved with the project, and it will come back when this build can run it. Add it now?</source>
@@ -6152,28 +6152,28 @@ It can still be added to the clip and saved with the project, and it will come b
 仍可将其添加到片段并随项目保存。当此版本支持运行它时即可生效。现在添加吗？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2619"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2621"/>
         <source>%1 was not added</source>
         <translation>未添加 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2630"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2632"/>
         <source>The layer is locked</source>
         <translation>图层已锁定</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2650"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2652"/>
         <source>Applied %1</source>
         <translation>已应用 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2728"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2730"/>
         <source>Render requested</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已请求渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3032"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3034"/>
         <source>It looks like some of the files to import are from image sequences.
 
 Do you want to import sequences as videos, or import individual images?</source>
@@ -6182,230 +6182,230 @@ Do you want to import sequences as videos, or import individual images?</source>
 您想将序列作为视频导入，还是导入单个图像？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3035"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3037"/>
         <source>Import Sequence Videos</source>
         <translation>导入序列视频</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3036"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3038"/>
         <source>Import Images</source>
         <translation>导入图像</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3109"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3111"/>
         <source>Imported %1 media file(s)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已导入 %1 个媒体文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3153"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3185"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3155"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3187"/>
         <source>Add text layer &apos;%1&apos;</source>
         <translation>添加文本图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3154"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3186"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3156"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3188"/>
         <source>Added text layer &apos;%1&apos;</source>
         <translation>已添加文本图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3306"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3308"/>
         <source>Edit Text</source>
         <translation>编辑文字</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3417"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3419"/>
         <source>Layer %1</source>
         <translation>图层 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3418"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3420"/>
         <source>New %1 %2</source>
         <translation>新建 %1 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3441"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3458"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4875"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4907"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3443"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3460"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4877"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4909"/>
         <source>Add layer &apos;%1&apos;</source>
         <translation>添加图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3460"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4877"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4909"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3462"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4879"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4911"/>
         <source>Added layer &apos;%1&apos;</source>
         <translation>已添加图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3494"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3496"/>
         <source>Select one or more layers first</source>
         <translation>请先选择一个或多个图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3499"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4636"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4637"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3501"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4638"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4639"/>
         <source>Composite Shot %1</source>
         <translation>组合镜头%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3558"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3560"/>
         <source>Created %1 from %2 layer(s)</source>
         <translation>已从 %2 个图层创建 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3566"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3617"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3568"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3619"/>
         <source>Select a layer on the timeline first</source>
         <translation>请先在时间线上选择图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3572"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3574"/>
         <source>Unlock the layer before deleting it</source>
         <translation>请先解锁图层再删除</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3583"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3585"/>
         <source>Deleted selected clip</source>
         <translation>已删除所选片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3593"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3595"/>
         <source>Delete layer &apos;%1&apos;</source>
         <translation>删除图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3610"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3612"/>
         <source>Deleted layer &apos;%1&apos;</source>
         <translation>已删除图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3631"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3633"/>
         <source>Duplicated selected clip</source>
         <translation>已复制所选片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3636"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3691"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3638"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3693"/>
         <source>%1 copy</source>
         <translation>%1 副本</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3637"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3639"/>
         <source>Duplicate layer &apos;%1&apos;</source>
         <translation>复制图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3641"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3643"/>
         <source>Duplicated layer &apos;%1&apos;</source>
         <translation>已复制图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3648"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3650"/>
         <source>Select a layer or clip first</source>
         <translation>请先选择图层或片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3656"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3658"/>
         <source>Copied selected clip</source>
         <translation>已复制所选片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3661"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3663"/>
         <source>Copied layer &apos;%1&apos;</source>
         <translation>已复制图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3684"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3686"/>
         <source>Pasted clip at playhead</source>
         <translation>已在播放头位置粘贴片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3692"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3694"/>
         <source>Paste layer &apos;%1&apos;</source>
         <translation>粘贴图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3696"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3698"/>
         <source>Pasted layer &apos;%1&apos;</source>
         <translation>已粘贴图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3699"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3701"/>
         <source>Clipboard is empty</source>
         <translation>剪贴板为空</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3729"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3731"/>
         <source>No compatible attributes in the clipboard</source>
         <translation>剪贴板中没有兼容的属性</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3738"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3740"/>
         <source>Pasted attributes</source>
         <translation>已粘贴属性</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3759"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3761"/>
         <source>Removed attributes</source>
         <translation>已移除属性</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3775"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3777"/>
         <source>Removed effects</source>
         <translation>已移除效果</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3783"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3785"/>
         <source>Place the playhead inside the selected clip</source>
         <translation>请将播放头移到所选片段内</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3799"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3801"/>
         <source>Sliced selected clip</source>
         <translation>已分割所选片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3808"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3810"/>
         <source>Select a clip to ripple delete</source>
         <translation>请选择要波纹删除的片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3822"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3824"/>
         <source>Ripple deleted selected clip</source>
         <translation>已波纹删除所选片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3832"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3834"/>
         <source>Select a media asset first</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>请先选择媒体资源</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3852"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3854"/>
         <source>Plugins looked for again</source>
         <translation>已重新查找插件</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3948"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3950"/>
         <source>Auto-saved %1</source>
         <translation>已自动保存 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3949"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3951"/>
         <source>Auto-save failed: %1</source>
         <translation>自动保存失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4042"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4044"/>
         <source>Composite Shot Settings</source>
         <translation>组合镜头设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4043"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4045"/>
         <source>The composite shot settings differ to this clip you are adding (%1 x %2).
 
 Do you want to change the composite shot&apos;s settings to match the clip?</source>
@@ -6414,153 +6414,153 @@ Do you want to change the composite shot&apos;s settings to match the clip?</sou
 是否更改组合镜头设置以匹配该剪辑?</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4050"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4052"/>
         <source>Composite shot resized to %1 x %2</source>
         <translation>组合镜头尺寸已改为 %1 x %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4064"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4835"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5036"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4066"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4837"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5038"/>
         <source>Could not open %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>无法打开 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4107"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4109"/>
         <source>Insert clip from %1</source>
         <translation>从 %1 插入剪辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4108"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4110"/>
         <source>Overlay clip from %1</source>
         <translation>叠加来自 %1 的片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4110"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4112"/>
         <source>Inserted clip from %1</source>
         <translation>已从 %1 插入剪辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4111"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4113"/>
         <source>Overlaid clip from %1</source>
         <translation>已叠加来自 %1 的片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4122"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4124"/>
         <source>No frame available to export</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>没有可导出的帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4131"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4133"/>
         <source>EXR export failed: %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>EXR 导出失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4136"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4138"/>
         <source>Export failed: %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>导出失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4139"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4141"/>
         <source>Exported frame to %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已将帧导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4141"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4143"/>
         <source>Export frame to %1</source>
         <translation>将帧导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4196"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4198"/>
         <source>Added %1 to the export queue</source>
         <translation>已将 %1 添加到导出队列</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4223"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4225"/>
         <source>Exporting frame %1 of %2</source>
         <translation>正在导出第 %1 帧，共 %2 帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4230"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4232"/>
         <source>Export contents to %1</source>
         <translation>将内容导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/render/AudioExport.cpp" line="151"/>
-        <location filename="../src/render/AudioExport.cpp" line="354"/>
+        <location filename="../src/render/AudioExport.cpp" line="152"/>
+        <location filename="../src/render/AudioExport.cpp" line="355"/>
         <source>Native audio decode failed: %1</source>
         <translation>原生插件音频解码失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/AudioExport.cpp" line="160"/>
-        <location filename="../src/render/AudioExport.cpp" line="360"/>
+        <location filename="../src/render/AudioExport.cpp" line="161"/>
+        <location filename="../src/render/AudioExport.cpp" line="361"/>
         <source>Could not read decoded audio: %1</source>
         <translation>无法读取解码后的音频：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/AudioExport.cpp" line="78"/>
+        <location filename="../src/render/AudioExport.cpp" line="79"/>
         <source>Native audio effect failed: %1</source>
         <translation>原生音频效果处理失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/AudioExport.cpp" line="479"/>
+        <location filename="../src/render/AudioExport.cpp" line="487"/>
         <source>Could not write processed audio: %1</source>
         <translation>无法写入处理后的音频：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4226"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4228"/>
         <source>Encoding video...</source>
         <translation>正在编码视频…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4246"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4248"/>
         <source>Cannot create the snapshot folder: %1</source>
         <translation>无法创建快照文件夹：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4266"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4268"/>
         <source>Snapshot folder is full: %1</source>
         <translation>快照文件夹已满：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4277"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4279"/>
         <source>Applied %1 preset &apos;%2&apos;</source>
         <translation>已应用 %1 预设“%2”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4279"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4281"/>
         <source>Apply %1: %2</source>
         <translation>应用 %1：%2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4406"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4408"/>
         <source>Saved %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已保存 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4669"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4671"/>
         <source>%1 is the project&apos;s only composite shot and cannot be deleted</source>
         <translation>%1 是项目唯一的组合镜头，无法删除</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5083"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5085"/>
         <source>Opened %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已打开 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5095"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5097"/>
         <source>Missing Media</source>
         <translation>媒体文件缺失</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5096"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5098"/>
         <source>These project files could not be found:
 %1
 
@@ -6571,81 +6571,81 @@ In the Media panel, right-click each missing file and choose Relink Media... to 
 请在“媒体”面板中右键单击每个缺失的文件，选择“重新链接媒体…”并指定位置。缺失文件中的音频无法播放。</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/MainWindow.cpp" line="5146"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5148"/>
         <source>%n plugin(s) used by this project are missing</source>
         <translation>
             <numerusform>此项目使用的 %n 个插件缺失</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3963"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5025"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5053"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5147"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5159"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3965"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5027"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5055"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5149"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5161"/>
         <source>Open Project</source>
         <translation>打开项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5148"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5150"/>
         <source>These plugins could not be found:</source>
         <translation>找不到以下插件：</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5150"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5152"/>
         <source>Effects that use them will have no result.</source>
         <translation>使用这些插件的效果将无法生效。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5206"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5208"/>
         <source>%1[*] - %2</source>
         <translation>%1[*] - %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5423"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5425"/>
         <source>Mirror Horizontal</source>
         <translation>水平镜像</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5423"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5425"/>
         <source>Mirror Vertical</source>
         <translation>垂直镜像</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5436"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5438"/>
         <source>Rotate 90 Degrees Clockwise</source>
         <translation>顺时针旋转90度</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5437"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5439"/>
         <source>Rotate 90 Degrees Counter Clockwise</source>
         <translation>逆时针旋转90度</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4364"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4384"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5198"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4366"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4386"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5200"/>
         <source>Save Project</source>
         <translation>保存项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4643"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4654"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4645"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4656"/>
         <source>New Composite Shot</source>
         <translation>新组合镜头</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4658"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4660"/>
         <source>Created %1</source>
         <translation>已创建 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4681"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4683"/>
         <source>Delete Composite Shot</source>
         <translation>删除组合镜头</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/MainWindow.cpp" line="4682"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4684"/>
         <source>%1 is used by %n layer(s) in other composite shots. Deleting it removes those layers too.
 
 Continue?</source>
@@ -6656,222 +6656,222 @@ Continue?</source>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4705"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4707"/>
         <source>Remove Asset</source>
         <translation>移除配置</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4708"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4710"/>
         <source>Deleted %1</source>
         <translation>已删除 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4724"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4726"/>
         <source>Set Primary Composite Shot</source>
         <translation>设定主要组合镜头</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4739"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4754"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4758"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4776"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4787"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4741"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4756"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4760"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4778"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4789"/>
         <source>Import Composite Shot</source>
         <translation>导入合成镜头</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4759"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4761"/>
         <source>No composite shots can be imported from this file.</source>
         <translation>无法从该文件导入组合照片。</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/MainWindow.cpp" line="4791"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4793"/>
         <source>Imported %n composite shot(s) from %1</source>
         <translation>
             <numerusform>已从 %1 导入 %n 个组合镜头</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4804"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4812"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4822"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4806"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4814"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4824"/>
         <source>Save Composite Shot</source>
         <translation>保存组合镜头</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4805"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4807"/>
         <source>This composite shot cannot be saved because it contains one or more embedded composite shots.</source>
         <translation>无法保存此组合镜头，因为它包含一个或多个嵌入式组合镜头。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4823"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4825"/>
         <source>The composite shot could not be saved to %1</source>
         <translation>组合镜头无法保存到%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4827"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4829"/>
         <source>Saved %1 to %2</source>
         <translation>已将 %1 保存到 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4840"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4842"/>
         <source>Use Import to place a 3D model</source>
         <translation>请使用导入来放置 3D 模型</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4848"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4850"/>
         <source>Drop a 3D model animation onto a 3D model layer</source>
         <translation>请将 3D 模型动画拖放到 3D 模型图层上</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4894"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4896"/>
         <source>%1 cannot be placed inside itself</source>
         <translation>%1 不能放入其自身之中</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5160"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5162"/>
         <source>The project file no longer exists:
 %1</source>
         <translation>项目文件已不存在:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5199"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5201"/>
         <source>Save Project (%1)</source>
         <translation>保存项目 (%1)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5631"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5650"/>
         <source>Playing</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>正在播放</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5645"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5664"/>
         <source>Stopped</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已停止</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5657"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5676"/>
         <source>Paused</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已暂停</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5772"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5791"/>
         <source>Proxy ready: %1</source>
         <translation>代理已就绪: %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5773"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5792"/>
         <source>Proxy failed for %1: %2</source>
         <translation>无法为 %1 创建代理: %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5790"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5809"/>
         <source>The proxy is being prepared.</source>
         <translation>正在准备代理。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5824"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5843"/>
         <source>Removed the pre-render of %1</source>
         <translation>已删除 %1 的预渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5963"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5982"/>
         <source>In point: %1s</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>入点：%1 秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5969"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5988"/>
         <source>Out point: %1s</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>出点：%1 秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="6015"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6034"/>
         <source>Shuttle: paused</source>
         <translation>穿梭：已暂停</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="6020"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6039"/>
         <source>Shuttle: x%1</source>
         <translation>穿梭：x%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="250"/>
+        <location filename="../src/ui/MainWindow.cpp" line="251"/>
         <source>Untitled Project</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>未命名项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="706"/>
+        <location filename="../src/ui/MainWindow.cpp" line="707"/>
         <source>Viewer</source>
         <translation>查看器</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="888"/>
+        <location filename="../src/ui/MainWindow.cpp" line="890"/>
         <source>Export</source>
         <translation>导出</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1091"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1712"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1093"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1714"/>
         <source>Undo</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>撤销</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1094"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1715"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1096"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1717"/>
         <source>Redo</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>重做</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3207"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3209"/>
         <source>Motion tracking needs a video clip</source>
         <translation>运动跟踪需要视频剪辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3212"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3214"/>
         <source>Could not open the video for motion tracking</source>
         <translation>无法打开用于运动跟踪的视频</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3231"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3233"/>
         <source>Analyzing motion…</source>
         <translation>正在分析运动…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3231"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3233"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3238"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3240"/>
         <source>Could not decode the first tracking frame</source>
         <translation>无法解码第一个跟踪帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3243"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3245"/>
         <source>Motion tracking cancelled</source>
         <translation>已取消运动跟踪</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3249"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3251"/>
         <source>Motion tracking stopped at frame %1</source>
         <translation>运动跟踪在第 %1 帧停止</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3268"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3270"/>
         <source>Motion track analyzed: %1 frames</source>
         <translation>运动跟踪分析完成：%1 帧</translation>
     </message>
     <message>
-        <location filename="../src/render/AudioExport.cpp" line="378"/>
+        <location filename="../src/render/AudioExport.cpp" line="379"/>
         <source>Cannot export audio: nested compositions contain a cycle.</source>
         <translation>无法导出音频：嵌套合成中存在循环引用。</translation>
     </message>
@@ -8081,7 +8081,7 @@ Continue?</source>
     <message>
         <location filename="../src/ui/OptionsDialog.cpp" line="429"/>
         <source>Plugins are looked for again when Options is closed with OK.</source>
-        <translation>使用"确定"关闭选项后将重新查找插件。</translation>
+        <translation>使用&quot;确定&quot;关闭选项后将重新查找插件。</translation>
     </message>
     <message>
         <location filename="../src/ui/OptionsDialog.cpp" line="436"/>
@@ -9287,8 +9287,8 @@ Double-click to rename</source>
         <translation>添加或删除播放头位置的关键帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2055"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2179"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2057"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2181"/>
         <location filename="../src/ui/TimelineEditing.cpp" line="218"/>
         <location filename="../src/ui/TimelineEditing.cpp" line="289"/>
         <location filename="../src/ui/TimelineEditing.cpp" line="328"/>

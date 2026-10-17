@@ -81,6 +81,15 @@ QString renderStateKey(const composition::Composition& composition,
 // Pre-render folder of one composite shot below the project's pre-render root.
 QString preRenderFolder(const QString& projectPreRenderDirectory,
                         const composition::Composition& composition);
+// The audio of a shot's pre-render (the reference's pre-render has video and
+// audio: "Could not delete asset pre-render audio", "The pre-render has no
+// audio"): the shot's mix as a WAV in its folder, named by the state it was
+// made for, so an edited shot stops matching it as its frames do.
+QString preRenderAudioPath(const QString& projectPreRenderDirectory,
+                           const composition::Composition& composition, const media::MediaManager* media);
+// That file when it is there for the shot as it is now; empty otherwise.
+QString preRenderedAudio(const QString& projectPreRenderDirectory,
+                         const composition::Composition& composition, const media::MediaManager* media);
 
 class RenderWorker : public QObject
 {

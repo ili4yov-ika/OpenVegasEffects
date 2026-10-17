@@ -3156,6 +3156,27 @@ QString preRenderFolder(const QString& projectPreRenderDirectory,
     return QDir(projectPreRenderDirectory).filePath(name);
 }
 
+QString preRenderAudioPath(const QString& projectPreRenderDirectory,
+                           const composition::Composition& composition, const media::MediaManager* media)
+{
+    const QString folder = preRenderFolder(projectPreRenderDirectory, composition);
+    if (folder.isEmpty()) return {};
+    const QString state = renderStateKey(composition, media, 0.0,
+                                         QSize(qMax(1, composition.width()), qMax(1, composition.height())), true,
+                                         true);
+    const QString key = QString::fromLatin1(
+        QCryptographicHash::hash(state.toUtf8(), QCryptographicHash::Sha1).toHex().left(16));
+    return QDir(folder).filePath(QStringLiteral("audio-%1.wav").arg(key));
+}
+
+QString preRenderedAudio(const QString& projectPreRenderDirectory,
+                         const composition::Composition& composition, const media::MediaManager* media)
+{
+    if (projectPreRenderDirectory.isEmpty()) return {};
+    const QString path = preRenderAudioPath(projectPreRenderDirectory, composition, media);
+    return !path.isEmpty() && QFileInfo(path).isFile() && QFileInfo(path).size() > 44 ? path : QString();
+}
+
 QImage RenderWorker::loadPreRenderedFrame(const composition::Composition& shot,
                                           double localSeconds, const QSize& size) const
 {

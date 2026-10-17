@@ -52,6 +52,7 @@ class QTemporaryDir;
 namespace openvegas {
 namespace media {
 class ProxyGenerator;
+class ConformedAudioCache;
 }
 namespace app {
 class AppMain;
@@ -399,6 +400,8 @@ protected:
     TimelineWidget* m_timeline = nullptr;
     OptionsDialog* m_optionsDialog = nullptr;
     std::function<void()> m_pluginRescan;
+    // The media's audio conformed to the shot's rate, read by playback.
+    media::ConformedAudioCache* m_conformedAudio = nullptr;
 
     double m_inPoint = -1.0;
     double m_outPoint = -1.0;

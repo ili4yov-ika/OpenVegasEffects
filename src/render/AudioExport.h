@@ -37,6 +37,9 @@ struct ExportAudioRequest
     double frameRate = 30.0;
     double exportStart = 0.0;
     double exportEnd = 0.0;
+    // The project's pre-render root: a nested shot pre-rendered as it is now
+    // plays its pre-render's audio instead of being mixed again.
+    QString preRenderDirectory;
 };
 
 bool fileHasAudioStream(const QString& ffprobe, const QString& path);

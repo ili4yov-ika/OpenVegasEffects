@@ -69,6 +69,7 @@
 #include "ui/ExportPresets.h"
 #include "ui/ExportQueueView.h"
 #include "media/ProxyMedia.h"
+#include "media/ConformedAudio.h"
 #include "ui/EffectPlacement.h"
 #include "ui/PromptMessage.h"
 #include "media/VideoProbe.h"
@@ -824,6 +825,7 @@ void MainWindow::buildUi()
     // every pushed command adds its row, and clicking a row walks the stack to
     // that point. Its undoRequested / redoRequested signals used to reach
     // nobody at all.
+    m_conformedAudio = new media::ConformedAudioCache(this);
     m_preRenders = new render::PreRenderManager(this);
     // PreRenderProgressLabel's words, with the frames so far.
     connect(m_preRenders, &render::PreRenderManager::stateChanged, this, [this](const QString& id) {
@@ -5521,15 +5523,31 @@ double MainWindow::prepareAudioSource()
                         staticDb, curve, (t - origin) * rate, shotFps);
                     return outerAt(t) * qPow(10.0, (layerDb + clipDb) / 20.0);
                 };
-                if (clip.nestedComposition) {
+                // A nested shot pre-rendered as it is now plays its
+                // pre-render's audio, as footage would.
+                const QString preRendered = clip.nestedComposition
+                    ? render::preRenderedAudio(preRenderRoot(), *clip.nestedComposition, m_mediaManager.get())
+                    : QString();
+                if (clip.nestedComposition && preRendered.isEmpty()) {
                     const double childOrigin = origin + clip.startSeconds / rate
                         - clip.sourceStartSeconds / (rate * speed);
                     collect(*clip.nestedComposition, childOrigin, rate * speed, first, last, gain);
                     continue;
                 }
                 const auto asset = m_mediaManager->assetById(clip.mediaId);
-                if (asset.kind() != media::MediaKind::Audio && asset.kind() != media::MediaKind::Video) continue;
-                if (asset.filePath().isEmpty() || asset.isImageSequence()) continue; // stills are silent
+                if (preRendered.isEmpty()) {
+                    if (asset.kind() != media::MediaKind::Audio && asset.kind() != media::MediaKind::Video) continue;
+                    if (asset.filePath().isEmpty() || asset.isImageSequence()) continue; // stills are silent
+                }
+                // The media's audio conformed to the shot's rate when it has
+                // been (MediaCacheFiles/Conformed); the first playback asks
+                // for it and reads the media meanwhile.
+                const QString conformedAudio = preRendered.isEmpty() && m_conformedAudio
+                    ? m_conformedAudio->conformed(asset.filePath(), asset.audioStreamIndex(),
+                                                  media::normalizedAudioSampleRate(m_composition->audioSampleRate()))
+                    : QString();
+                const QString sourcePath = !preRendered.isEmpty() ? preRendered
+                    : !conformedAudio.isEmpty() ? conformedAudio : asset.filePath();
                 double source = clip.sourceStartSeconds
                     + (first - origin - clip.startSeconds / rate) * rate * speed;
                 if (source < 0.0) {
@@ -5538,10 +5556,11 @@ double MainWindow::prepareAudioSource()
                     source = 0.0;
                     if (last <= first) continue;
                 }
-                media::AudioClip audioClip {asset.filePath(), first, last,
+                media::AudioClip audioClip {sourcePath, first, last,
                                             source, speed * rate,
                                             gain.animated ? 1.0 : gain.at(first)};
-                audioClip.audioStreamIndex = asset.audioStreamIndex();
+                audioClip.audioStreamIndex = preRendered.isEmpty() && conformedAudio.isEmpty()
+                    ? asset.audioStreamIndex() : -1;
                 if (gain.animated) {
                     // 10 ms samples; the mixer interpolates between them.
                     constexpr double step = 0.01;
