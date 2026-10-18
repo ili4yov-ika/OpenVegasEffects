@@ -3,9 +3,11 @@
 #include "composition/Composition.h"
 #include "composition/Transition.h"
 #include "media/MediaManager.h"
+#include "media/PcmWave.h"
 #include "plugin/NativeEffectRender.h"
 #include "render/RenderManager.h"
 
+#include <QBuffer>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -57,7 +59,8 @@ struct PcmClip
 bool applyPcmEffectsAndGain(const ExportAudioRequest& request, int rate,
                             const composition::Layer& owner, const composition::Clip& clip,
                             double spanStart, const QVector<const composition::Effect*>& effects,
-                            const QString& instancePrefix, PcmClip& result, QString* error)
+                            const QString& instancePrefix, PcmClip& result, QString* error,
+                            bool withGain = true)
 {
     const double fps = request.frameRate;
     const qint64 firstSample = qRound64((spanStart - clip.startSeconds) * rate);
@@ -86,6 +89,7 @@ bool applyPcmEffectsAndGain(const ExportAudioRequest& request, int rate,
             return false;
         }
     }
+    if (!withGain) return true;
     // The layer's Audio > Level plus the clip's own. An animated level is
     // evaluated every 10 ms and interpolated in between, as during playback.
     const auto gainAt = [&](double seconds) {
@@ -120,7 +124,8 @@ bool renderPcmClip(const ExportAudioRequest& request, int rate, const compositio
                    const composition::Clip& clip,
                    const QString& mediaPath, int audioStreamIndex, double spanStart, double spanEnd,
                    const QVector<const composition::Effect*>& effects,
-                   const QString& instancePrefix, PcmClip& result, QString* error)
+                   const QString& instancePrefix, PcmClip& result, QString* error,
+                   bool withGain = true)
 {
     const double speed = std::isfinite(clip.speed) && clip.speed > 0.0 ? clip.speed : 1.0;
     const double spanDuration = spanEnd - spanStart;
@@ -178,7 +183,7 @@ bool renderPcmClip(const ExportAudioRequest& request, int rate, const compositio
     result.start = spanStart;
 
     return applyPcmEffectsAndGain(request, rate, owner, clip, spanStart, effects,
-                                  instancePrefix, result, error);
+                                  instancePrefix, result, error, withGain);
 }
 
 // Replaces the plain sum of a transition's two clips over its window: the
@@ -392,6 +397,66 @@ bool nestedClipProcessesItsMix(const composition::Layer& layer, int clipIndex, d
     for (const auto& window : windows)
         if (window.fromClip == clipIndex || window.toClip == clipIndex) return true;
     return false;
+}
+
+bool writeProcessedClipAudio(const composition::Layer& layer, int clipIndex, double frameRate, int sampleRate,
+                             double spanStart, double spanEnd, const QString& source, int audioStreamIndex,
+                             const QString& path, QString* error)
+{
+    if (clipIndex < 0 || clipIndex >= layer.clips.size() || spanEnd <= spanStart) {
+        if (error) *error = QStringLiteral("No clip to process");
+        return false;
+    }
+    const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    if (ffmpeg.isEmpty()) {
+        if (error) *error = QStringLiteral("FFmpeg was not found");
+        return false;
+    }
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QTemporaryDir temporary(QDir(QFileInfo(path).absolutePath()).filePath(QStringLiteral("clip-XXXXXX")));
+    if (!temporary.isValid()) {
+        if (error) *error = QStringLiteral("No room for the clip");
+        return false;
+    }
+    const auto release = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); });
+    ExportAudioRequest request;
+    request.ffmpeg = ffmpeg;
+    request.temporaryDirectory = temporary.path();
+    request.frameRate = frameRate;
+    const composition::Clip& clip = layer.clips.at(clipIndex);
+    QVector<const composition::Effect*> effects;
+    for (const composition::Effect& effect : clip.effects) {
+        if (effect.enabled && plugin::nativeAudioEffectRenderingVerified(effect.pluginId)) effects.append(&effect);
+    }
+    const int rate = media::normalizedAudioSampleRate(sampleRate);
+    PcmClip pcm;
+    if (!renderPcmClip(request, rate, layer, clip, source, audioStreamIndex, spanStart, spanEnd, effects,
+                       QStringLiteral("clip"), pcm, error, false)) {
+        return false;
+    }
+    QByteArray bytes(reinterpret_cast<const char*>(pcm.samples.constData()),
+                     qsizetype(pcm.samples.size()) * qsizetype(sizeof(qint16)));
+    QBuffer raw(&bytes);
+    raw.open(QIODevice::ReadOnly);
+    media::PcmFormat format;
+    format.setChannelCount(2);
+    format.setSampleRate(rate);
+    format.setSampleFormat(media::PcmFormat::Int16);
+    const QString partial = path + QStringLiteral(".part.wav");
+    QFile output(partial);
+    if (!output.open(QIODevice::WriteOnly | QIODevice::Truncate) || !media::writePcmWave(raw, output, format)) {
+        output.remove();
+        if (error) *error = QStringLiteral("Could not write %1").arg(partial);
+        return false;
+    }
+    output.close();
+    QFile::remove(path);
+    if (!QFile::rename(partial, path)) {
+        QFile::remove(partial);
+        if (error) *error = QStringLiteral("Could not write %1").arg(path);
+        return false;
+    }
+    return true;
 }
 
 bool writeCompositionAudio(const composition::Composition& shot, const media::MediaManager* media,

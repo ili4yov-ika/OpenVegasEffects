@@ -268,6 +268,9 @@ struct RenderInvocation
 };
 
 thread_local RenderInvocation* g_renderInvocation = nullptr;
+// Set by an audio render whose module asked for dry frames of its layer
+// after those it was given (nativeAudioWantedLaterSamples).
+thread_local bool g_audioWantedLater = false;
 
 // Modules that read the render scale in their context and reduce their own
 // pixel values with it (the SDK's blur helpers): the host reduces only their
@@ -1810,6 +1813,7 @@ public:
             || samples.size() % channels != 0) {
             return false;
         }
+        g_audioWantedLater = false;
         NativePluginRuntime* runtime = runtimeFor(id, record);
         if (!runtime) return false;
 
@@ -1885,6 +1889,15 @@ public:
         if (rangesResult != 1 || inputFrames <= 0) {
             ranges = {{startSample, startSample + frameCount}};
             inputFrames = frameCount;
+        }
+        {
+            // Frames of the layer after the source given: silence here.
+            const qint64 sourceEnd = sourceStartSample + invocation.audioFrameCount;
+            const qint64 layerEnd = layer.durationSamples > 0 ? layer.durationSamples
+                                                              : std::numeric_limits<qint64>::max();
+            for (const auto& range : std::as_const(ranges)) {
+                if (qMin(range.second, layerEnd) > qMax(range.first, sourceEnd)) g_audioWantedLater = true;
+            }
         }
         // A corrupt request must not turn into an unbounded allocation.
         constexpr qint64 maximumInputFrames = qint64(1) << 25;
@@ -4852,6 +4865,11 @@ bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,
         interleavedSamples, channels, sampleRate, startSample,
         instanceKey.isEmpty() ? id.value() : id.value() + QLatin1Char(':') + instanceKey,
         record, parameterValues, sourceSamples, sourceStartSample, layer);
+}
+
+bool nativeAudioWantedLaterSamples()
+{
+    return g_audioWantedLater;
 }
 
 bool applyNativeAudioEffectBlocks(

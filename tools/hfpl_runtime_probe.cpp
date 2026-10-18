@@ -2865,6 +2865,10 @@ int main(int argc, char** argv)
             transitionTo.fill(QColor(210, 80, 40, 255));
             err << "[hfpl] renderer API " << QFileInfo(file).fileName() << "...\n";
             err.flush();
+            // With OPENVEGAS_HFPL_RENDER_DIAGNOSTIC_STUBS the services the
+            // host leaves empty are stubs that record their calls: listed in
+            // the result as stubs=offset,... .
+            openvegas::plugin::resetNativePluginDiagnosticServiceOffset();
             bool rendered = transitionApi
                                 ? openvegas::plugin::applyNativeVideoTransition(
                                       image, sourceImage, transitionTo, 0.5f, id,
@@ -2879,6 +2883,15 @@ int main(int argc, char** argv)
                                       .arg(pixel.blue()).arg(pixel.alpha());
             pixelResult += QStringLiteral(";changed=%1")
                                .arg(changedPixelCount(sourceImage, image));
+            {
+                QStringList stubs;
+                for (const QString& call : openvegas::plugin::nativePluginDiagnosticTrace()
+                                               .split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
+                    const QString offset = call.section(QLatin1Char('('), 0, 0);
+                    if (!stubs.contains(offset)) stubs.append(offset);
+                }
+                if (!stubs.isEmpty()) pixelResult += QStringLiteral(";stubs=") + stubs.join(QLatin1Char(','));
+            }
             // A second frame on the same persistent runtime proves that the
             // key-based values are read per frame rather than captured during
             // Notify(8). With Lightness, the source pixel crosses 5% but not

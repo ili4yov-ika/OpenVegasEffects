@@ -145,6 +145,7 @@ struct AudioPlayer::Engine {
     QVector<AudioClip> clips;
     QVector<AudioTransition> transitions;
     QSet<QString> failedNativeEffects;
+    QSet<QString> wholeClipReported;
     QHash<QString, NativeDryHistory> nativeHistory;
     std::vector<std::unique_ptr<Decoder>> decoders;
     libvlc_media_player_t* output = nullptr;
@@ -359,7 +360,8 @@ struct AudioPlayer::Engine {
                         // effect also sees 0.25 seconds of the dry
                         // future (NoiseReduction's window); later effects and
                         // whole-layer requests such as AudioReverse read
-                        // silence there. Export is exact.
+                        // silence there - reported once, so the owner can
+                        // play the clip processed whole, as export does.
                         const qint64 layerSample = qRound64((first - effect.layerStart) * self.rate);
                         NativeDryHistory& history = self.nativeHistory[effect.instanceKey];
                         history.append(nativeSamples, layerSample);
@@ -375,6 +377,14 @@ struct AudioPlayer::Engine {
                             effect.pluginId, values, effect.instanceKey,
                             &history.samples, history.first, layer);
                         history.samples.resize(historySize);
+                        if (applied && plugin::nativeAudioWantedLaterSamples() && !clip.processKey.isEmpty()
+                            && !self.wholeClipReported.contains(clip.processKey)) {
+                            self.wholeClipReported.insert(clip.processKey);
+                            QMetaObject::invokeMethod(self.owner, [owner = self.owner, serial = self.generation,
+                                                                   key = clip.processKey] {
+                                if (owner->m_generation == serial) emit owner->nativeEffectsNeedWholeClip(key);
+                            }, Qt::QueuedConnection);
+                        }
                         if (!applied) {
                             nativeSamples = before;
                             self.failedNativeEffects.insert(effect.instanceKey);

@@ -442,6 +442,14 @@ MainWindow::MainWindow(app::AppMain* owner, QWidget* parent)
     connect(m_audio, &media::AudioPlayer::playbackError, this, [this](const QString& error) {
         statusBar()->showMessage(error, 10000);
     }, Qt::QueuedConnection);
+    // A clip's effects wanted dry samples playback lacked: from now on it is
+    // played processed whole, once that is done.
+    connect(m_audio, &media::AudioPlayer::nativeEffectsNeedWholeClip, this, [this](const QString& key) {
+        m_wholeClipAudio.insert(key);
+        const auto request = m_clipProcessRequests.constFind(key);
+        if (request == m_clipProcessRequests.cend() || !m_processedAudio) return;
+        if (!m_processedAudio->processedFor(*request).isEmpty()) restartPlaybackAudio();
+    });
     m_audioScrubTimer.setSingleShot(true);
     connect(&m_audioScrubTimer, &QTimer::timeout, this, [this] {
         if (!m_playing && m_audio) m_audio->stop();
@@ -830,6 +838,11 @@ void MainWindow::buildUi()
     m_conformedAudio = new media::ConformedAudioCache(this);
     m_nestedMixes = new render::NestedAudioMixCache(this);
     m_nestedMixes->setDirectory(QDir(app::Settings().mediaCacheFilesPath()).filePath(QStringLiteral("Mixes")));
+    m_processedAudio = new render::ProcessedClipAudioCache(this);
+    m_processedAudio->setDirectory(
+        QDir(app::Settings().mediaCacheFilesPath()).filePath(QStringLiteral("Processed")));
+    connect(m_processedAudio, &render::ProcessedClipAudioCache::processedReady, this,
+            [this](const QString&) { restartPlaybackAudio(); });
     m_preRenders = new render::PreRenderManager(this);
     // PreRenderProgressLabel's words, with the frames so far.
     connect(m_preRenders, &render::PreRenderManager::stateChanged, this, [this](const QString& id) {
@@ -5483,6 +5496,7 @@ double MainWindow::prepareAudioSource()
     QVector<media::AudioClip> sources;
     QVector<media::AudioTransition> transitions;
     QSet<const composition::Composition*> visited;
+    m_clipProcessRequests.clear();
     // Linear gain by timeline second of everything a shot plays: the levels
     // of the layers and clips it is nested through. `animated` stays false
     // while all of them are constant, so plain clips keep one gain value.
@@ -5618,6 +5632,36 @@ double MainWindow::prepareAudioSource()
                         audioClip.nativeEffects.append(std::move(module));
                     }
                 }
+                if (!audioClip.nativeEffects.isEmpty() && m_processedAudio) {
+                    // What the clip would be processed whole from, as export
+                    // processes it; one whose effects asked for more than
+                    // realtime has plays that once it is made.
+                    render::ProcessedClipAudioCache::Request request;
+                    request.layer = std::make_shared<composition::Layer>(layer);
+                    request.clipIndex = clipIndex;
+                    request.frameRate = shotFps;
+                    request.sampleRate = media::normalizedAudioSampleRate(m_composition->audioSampleRate());
+                    request.spanStart = qMax(clipStart, clip.startSeconds - clip.sourceStartSeconds / speed);
+                    request.spanEnd = clipEnd;
+                    request.source = sourcePath;
+                    request.audioStreamIndex = audioClip.audioStreamIndex;
+                    const QString key = shot.id().value() + QLatin1Char('/') + layer.id.value()
+                                        + QLatin1Char('/') + QString::number(clipIndex);
+                    audioClip.processKey = key;
+                    m_clipProcessRequests.insert(key, request);
+                    const QString processed = m_wholeClipAudio.contains(key)
+                        ? m_processedAudio->processedFor(request) : QString();
+                    // The file holds the span from spanStart, in the shot's seconds.
+                    const double fileStart = (audioClip.start - origin) * rate - request.spanStart;
+                    if (!processed.isEmpty() && fileStart >= 0.0) {
+                        audioClip.path = processed;
+                        audioClip.sourceStart = fileStart;
+                        audioClip.speed = rate;
+                        audioClip.audioStreamIndex = -1;
+                        audioClip.nativeEffects.clear();
+                        audioClip.processKey.clear();
+                    }
+                }
                 sourceOfClip.insert(clipIndex, sources.size());
                 sources.append(std::move(audioClip));
             }
@@ -5648,6 +5692,13 @@ double MainWindow::prepareAudioSource()
                       m_composition->audioSampleRate());
     m_audioClipStart = sources.isEmpty() ? -1 : 0;
     return m_audioClipStart;
+}
+
+void MainWindow::restartPlaybackAudio()
+{
+    if (!m_playing || !m_audio) return;
+    const double clipStart = prepareAudioSource();
+    if (clipStart >= 0.0) m_audio->play(m_playbackTime - clipStart);
 }
 
 void MainWindow::beginPlayback()

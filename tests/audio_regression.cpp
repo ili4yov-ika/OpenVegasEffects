@@ -363,6 +363,59 @@ private slots:
         openvegas::plugin::releaseNativeEffectThreadRenderer();
         openvegas::plugin::clearNativeEffectModules();
     }
+    // A clip whose effects ask playback for dry samples it does not have
+    // yet - AudioReverse over more than the look-ahead, an effect after
+    // another - is reported once, by its key; one the look-ahead covers is
+    // not.
+    void nativeEffectsNeedingTheWholeClipAreReported()
+    {
+        const QString balancePath = qEnvironmentVariable("OPENVEGAS_HFPL_BALANCE");
+        if (balancePath.isEmpty() || !QFileInfo::exists(balancePath)) {
+            QSKIP("Set OPENVEGAS_HFPL_BALANCE to the reference Balance.hfpl for this integration test");
+        }
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString path = constantWave(dir, QStringLiteral("long.wav"), 1000);
+        const QDir moduleDir = QFileInfo(balancePath).absoluteDir();
+        const QString dependencyDir = moduleDir.absoluteFilePath("../../..");
+        const openvegas::core::Identifier reverse(QStringLiteral("test.audio.reverse.whole"));
+        const openvegas::core::Identifier balance(QStringLiteral("test.audio.balance.whole"));
+        for (const auto& [id, file] : QVector<QPair<openvegas::core::Identifier, QString>> {
+                 {reverse, moduleDir.absoluteFilePath("AudioReverse.hfpl")}, {balance, balancePath}}) {
+            const auto metadata = openvegas::plugin::loadNativePluginMetadata(file, dependencyDir);
+            openvegas::plugin::registerNativeAudioEffectModule(id, file, dependencyDir, true, metadata.parameters);
+        }
+        const auto module = [](const openvegas::core::Identifier& id, const QString& key, double duration) {
+            openvegas::media::NativeAudioModule m;
+            m.pluginId = id; m.instanceKey = key; m.sourceEffect.pluginId = id;
+            m.layerStart = 0; m.layerDuration = duration; m.shotFps = 30;
+            return m;
+        };
+        const auto reported = [&](const QVector<openvegas::media::NativeAudioModule>& effects, double duration) {
+            openvegas::media::AudioClip clip {path, 0, duration, 0, 1, 1};
+            clip.nativeEffects = effects;
+            clip.processKey = QStringLiteral("shot/layer/0");
+            openvegas::media::AudioPlayer audio;
+            QSignalSpy wanted(&audio, &openvegas::media::AudioPlayer::nativeEffectsNeedWholeClip);
+            QSignalSpy pcm(&audio, &openvegas::media::AudioPlayer::pcmMixed);
+            audio.setClips({clip}, duration);
+            audio.play(0);
+            if (!QTest::qWaitFor([&] { return pcm.size() > 3; }, 5000)) return QStringLiteral("no playback");
+            QTest::qWait(300);
+            audio.stop();
+            QCoreApplication::processEvents();
+            if (wanted.size() > 1) return QStringLiteral("reported %1 times").arg(wanted.size());
+            return wanted.isEmpty() ? QString() : wanted.first().at(0).toString();
+        };
+        // Reverse over 1.5 s wants the clip's end at its start.
+        QCOMPARE(reported({module(reverse, "r1", 1.5)}, 1.5), QStringLiteral("shot/layer/0"));
+        // Over 0.2 s the look-ahead has it all.
+        QCOMPARE(reported({module(reverse, "r2", 0.2)}, 0.2), QString());
+        // After Balance the Reverse sees no future at all.
+        QCOMPARE(reported({module(balance, "b3", 0.2), module(reverse, "r3", 0.2)}, 0.2),
+                 QStringLiteral("shot/layer/0"));
+        openvegas::plugin::releaseNativeEffectThreadRenderer();
+        openvegas::plugin::clearNativeEffectModules();
+    }
     void transitionsCombineClipsInRealtime()
     {
         QTemporaryDir dir; QVERIFY(dir.isValid());

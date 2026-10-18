@@ -33,6 +33,9 @@ struct AudioClip {
     QVector<float> envelope;
     double envelopeStart = 0, envelopeStep = 0;
     int audioStreamIndex = -1;
+    // Names the clip to the owner when its native effects need the whole
+    // clip (nativeEffectsNeedWholeClip); empty: not reported.
+    QString processKey;
     double gainAt(double timelineSeconds) const {
         if (envelope.isEmpty() || envelopeStep <= 0) return gain;
         const double position = (timelineSeconds - envelopeStart) / envelopeStep;
@@ -77,6 +80,11 @@ signals:
     // Diagnostic/analysis tap of the PCM16 LE master, before the native device.
     void pcmMixed(const QByteArray& samples, double timelineSeconds);
     void playbackError(const QString& message);
+    // A clip's native effects asked for dry samples playback does not have
+    // yet - the future past the read-ahead, a whole-layer request such as
+    // AudioReverse's, a later effect's look-ahead (those were silence). Once
+    // per clip and playback; the owner can have the clip processed whole.
+    void nativeEffectsNeedWholeClip(const QString& processKey);
 private:
     struct Engine;
     std::unique_ptr<Engine> m_engine;

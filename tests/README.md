@@ -379,6 +379,11 @@ saved data alone, then the same motion with the footage layer moved and turned (
 answers in the world `GetLayerInfoV2` gives it, the host takes it back off), and from a host
 whose open shot only nests the tracked one; it needs the OpenGL 4.1 context and skips offscreen
 (run it alone with `QT_QPA_PLATFORM=windows`, it shows no window).
+`clipsAreProcessedWholeForPlayback` (FFmpeg and `OPENVEGAS_HFPL_BALANCE`) processes a 2 s clip
+through AudioReverse as export does - the clip's end comes first, the gain is left to playback - and
+checks that `ProcessedClipAudioCache` makes it once per state of the clip; audio_regression's
+`nativeEffectsNeedingTheWholeClipAreReported` checks which clips playback reports for that (Reverse
+past the look-ahead, an effect after another) and that one the look-ahead covers is not.
 `motionTrackReadsNestedShotsAndWorlds` (offscreen) checks a nested shot as footage of type 3, its
 rendered frame, a layer's world and taking that world off a module's answer. `threeDLayersShareOneScene` checks depth order inside a 3D scene and that a 2D layer
 splits it (`scene-depth.png`). `exportQueueRunsTasksFromSnapshots` covers the Time Format

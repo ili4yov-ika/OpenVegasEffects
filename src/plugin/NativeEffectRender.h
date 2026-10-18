@@ -634,6 +634,11 @@ bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,
                             const QVector<qint16>* sourceSamples = nullptr,
                             qint64 sourceStartSample = 0,
                             const NativeAudioLayer& layer = {});
+// Whether the last applyNativeAudioEffect on this thread was asked (by
+// GetSampleRanges) for dry frames of its layer after the ones it was given:
+// the future of a block in playback, a whole-layer request such as
+// AudioReverse's. Those frames were silence; the offline path has them all.
+bool nativeAudioWantedLaterSamples();
 // Offline variant: splits a long buffer into blockFrames-sized renders on one
 // persistent instance, asks parameterValuesAt for the values at each block's
 // first frame offset and keeps the whole unprocessed buffer visible as the

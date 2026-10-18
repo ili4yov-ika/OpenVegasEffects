@@ -67,6 +67,18 @@ bool buildExportAudioInputs(const ExportAudioRequest& request,
 bool writeCompositionAudio(const composition::Composition& shot, const media::MediaManager* media,
                            const QString& preRenderDirectory, const QString& path, QString* error);
 
+// One clip of `layer` with its native Audio effects, processed whole as
+// export processes it (every effect sees the whole dry clip it gets, past
+// and future), without its gain: `spanStart`..`spanEnd` in its shot's
+// seconds - the clip and the handles its transitions play into - read from
+// `source` (the media, or the mix of a nested shot), written to `path` as
+// 16-bit stereo PCM WAV at `sampleRate` through a part file. What playback
+// plays for a clip whose effects ask for more than it has in realtime. Runs
+// on the calling thread and releases its native modules when done.
+bool writeProcessedClipAudio(const composition::Layer& layer, int clipIndex, double frameRate, int sampleRate,
+                             double spanStart, double spanEnd, const QString& source, int audioStreamIndex,
+                             const QString& path, QString* error);
+
 // Whether a nested shot's clip has audio processing of its own - native
 // audio effects, an audio transition on it - which the reference applies
 // after the shot's own mix (its composite clip's DSP after the child mix).

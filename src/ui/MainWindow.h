@@ -405,6 +405,15 @@ protected:
     media::ConformedAudioCache* m_conformedAudio = nullptr;
     // Mixes of nested shots whose composite clips process them.
     render::NestedAudioMixCache* m_nestedMixes = nullptr;
+    // Clips whose native audio effects asked playback for more than it had
+    // (AudioPlayer::nativeEffectsNeedWholeClip), processed whole; and what
+    // each clip of the last prepareAudioSource would be processed from.
+    render::ProcessedClipAudioCache* m_processedAudio = nullptr;
+    QSet<QString> m_wholeClipAudio;
+    QHash<QString, render::ProcessedClipAudioCache::Request> m_clipProcessRequests;
+    // Plays the audio again from the playhead when playing (a processed
+    // clip has arrived).
+    void restartPlaybackAudio();
 
     double m_inPoint = -1.0;
     double m_outPoint = -1.0;

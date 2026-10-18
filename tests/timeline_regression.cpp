@@ -10579,6 +10579,81 @@ private slots:
         }
     }
 
+    // A clip processed whole for playback, as export processes it: Reverse
+    // over 2 s plays the clip's end first, without the clip's gain, and the
+    // cache makes it once per state of the clip.
+    void clipsAreProcessedWholeForPlayback() {
+        const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
+        const QString balancePath = qEnvironmentVariable("OPENVEGAS_HFPL_BALANCE");
+        if (ffmpeg.isEmpty() || !QFileInfo::exists(balancePath))
+            QSKIP("FFmpeg and OPENVEGAS_HFPL_BALANCE are required");
+        const QDir modules = QFileInfo(balancePath).absoluteDir();
+        const QString dependency = modules.absoluteFilePath("../..");
+        const QString reversePath = modules.filePath("AudioReverse.hfpl");
+        const core::Identifier reverse("test.whole.reverse");
+        const auto clear = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        const auto metadata = plugin::loadNativePluginMetadata(reversePath, dependency);
+        QVERIFY(metadata.lifecycleCompatible);
+        plugin::registerNativeAudioEffectModule(reverse, reversePath, dependency, true, metadata.parameters);
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString source = dir.filePath("steps.wav");
+        {
+            QFile wave(source); QVERIFY(wave.open(QIODevice::WriteOnly));
+            QDataStream stream(&wave); stream.setByteOrder(QDataStream::LittleEndian);
+            stream.writeRawData("RIFF", 4); stream << quint32(36 + 96000 * 4);
+            stream.writeRawData("WAVEfmt ", 8);
+            stream << quint32(16) << quint16(1) << quint16(2) << quint32(48000)
+                   << quint32(192000) << quint16(4) << quint16(16);
+            stream.writeRawData("data", 4); stream << quint32(96000 * 4);
+            for (int frame = 0; frame < 96000; ++frame) {
+                const qint16 value = frame < 48000 ? 1000 : 3000; stream << value << value;
+            }
+        }
+        composition::Layer layer;
+        layer.name = "Reversed";
+        layer.transform.audioLevel = -6.020599913; // not in the file: playback applies it
+        composition::Clip clip; clip.durationSeconds = 2;
+        composition::Effect effect; effect.pluginId = reverse; effect.name = "Reverse";
+        clip.effects.append(effect);
+        layer.clips.append(clip);
+
+        const auto valueAt = [](const QString& wav, double seconds) {
+            QFile file(wav);
+            if (!file.open(QIODevice::ReadOnly)) return INT_MIN;
+            const QByteArray bytes = file.readAll();
+            const qsizetype at = 44 + qsizetype(std::llround(seconds * 48000)) * 4;
+            return at + 2 <= bytes.size() ? int(qFromLittleEndian<qint16>(bytes.constData() + at)) : INT_MIN;
+        };
+        const QString direct = dir.filePath("direct.wav");
+        QString error;
+        QVERIFY2(render::writeProcessedClipAudio(layer, 0, 30.0, 48000, 0.0, 2.0, source, -1, direct, &error),
+                 qPrintable(error));
+        QVERIFY(QFileInfo(direct).size() >= 44 + 96000 * 4 - 8);
+        QCOMPARE(valueAt(direct, 0.2), 3000);
+        QCOMPARE(valueAt(direct, 1.8), 1000);
+
+        render::ProcessedClipAudioCache cache;
+        cache.setDirectory(dir.filePath("Processed"));
+        render::ProcessedClipAudioCache::Request request;
+        request.layer = std::make_shared<composition::Layer>(layer);
+        request.clipIndex = 0; request.frameRate = 30.0; request.sampleRate = 48000;
+        request.spanStart = 0.0; request.spanEnd = 2.0; request.source = source;
+        QSignalSpy ready(&cache, &render::ProcessedClipAudioCache::processedReady);
+        QVERIFY(cache.readyFor(request).isEmpty());
+        QVERIFY(cache.processedFor(request).isEmpty());
+        QVERIFY(cache.isBusy());
+        QVERIFY(cache.processedFor(request).isEmpty()); // made once
+        QTRY_COMPARE_WITH_TIMEOUT(ready.size(), 1, 60000);
+        const QString made = cache.readyFor(request);
+        QCOMPARE(made, ready.first().at(0).toString());
+        QCOMPARE(cache.processedFor(request), made);
+        QCOMPARE(valueAt(made, 0.2), 3000);
+        // Another state of the clip is another file.
+        request.layer->clips[0].durationSeconds = 1.5;
+        QVERIFY(cache.pathFor(request) != made);
+        QVERIFY(cache.readyFor(request).isEmpty());
+    }
+
     void nestedAudioNativeDspAndTransitions() {
         const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
         const QString ffprobe = QStandardPaths::findExecutable("ffprobe");
