@@ -11709,6 +11709,54 @@ private slots:
     // BT.709 matrix in limited range and the stream says so, where FFmpeg's
     // default (BT.601, untagged) made players that take HD video as BT.709
     // show reds brighter than the Viewer.
+    // The value graph as the reference draws it (ValueGraphGridGraphicsItem,
+    // TimebarRulerItem, ValueGraphCurveGraphicsItem, the GraphEditors): the
+    // ruler's time steps and their parts, the value steps of at least 40 px,
+    // white for one value and red/green/blue for X/Y/Z, and Auto Zoom over
+    // every channel of the property with a tenth of its range either side
+    // (0..100 shown as -10..110 when there is nothing to fit).
+    void valueGraphFollowsTheReference() {
+        using View = ui::TimelineValueGraphView;
+        QCOMPARE(View::timeGridSteps(30.0), (QVector<int> {5, 30, 150, 450, 1800, 9000, 27000, 108000}));
+        int step = 0, parts = 0;
+        View::timeGridStep(30.0, 20.0, &step, &parts);     // 5 frames are 100 px
+        QCOMPARE(step, 5); QCOMPARE(parts, 5);
+        View::timeGridStep(30.0, 2.0, &step, &parts);      // a second is 60 px: 5 s
+        QCOMPARE(step, 150); QCOMPARE(parts, 5);
+        View::timeGridStep(24.0, 4.0, &step, &parts);      // 24 = 4 past 20: six parts
+        QCOMPARE(step, 24); QCOMPARE(parts, 6);
+        View::timeGridStep(12.0, 8.0, &step, &parts);      // 12 = 2 past 10: four parts
+        QCOMPARE(step, 12); QCOMPARE(parts, 4);
+        QCOMPARE(View::valueGridStep(4.0), 10.0);          // 10 units are 40 px
+        QCOMPARE(View::valueGridStep(1.0), 50.0);
+        QCOMPARE(View::valueGridStep(500.0), 0.1);
+        QCOMPARE(View::channelColor(0, 1), QColor(Qt::white));
+        QCOMPARE(View::channelColor(0, 3), QColor(Qt::red));
+        QCOMPARE(View::channelColor(1, 3), QColor(Qt::green));
+        QCOMPARE(View::channelColor(2, 3), QColor(Qt::blue));
+
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(4);
+        {
+            auto& plane = shot->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            composition::Clip clip; clip.durationSeconds = 4; plane.clips << clip;
+        }
+        View view; view.resize(600, 300);
+        view.setComposition(shot);
+        QCOMPARE(view.valueRange(), (QPair<double, double>(-10.0, 110.0)));
+        // Position keyed on both axes: X 0..200, Y 50..100 - the range fits both.
+        auto& t = shot->layerRef(0).transform;
+        t.positionXCurve.set(0, 0.0); t.positionXCurve.set(60, 200.0);
+        t.positionYCurve.set(0, 50.0); t.positionYCurve.set(60, 100.0);
+        ui::TimelineLane position;
+        position.layerIndex = 0;
+        position.transformProp = int(composition::TransformProperty::Position);
+        view.setLanes({position});
+        view.setSelectedLane(0);
+        QCOMPARE(view.valueRange(), (QPair<double, double>(-20.0, 220.0)));
+    }
+
     void exportedMoviesKeepTheShotsColours() {
         // Arguments: a YUV output gets the conversion and the tags, after
         // the filter it already has; an RGB one is left alone.

@@ -53,6 +53,17 @@ public:
     // With it off the range is kept and Ctrl+wheel zooms it by hand.
     void setAutoZoom(bool on);
     bool autoZoom() const { return m_autoZoom; }
+    // The value axis on show (Auto Zoom: the property's keys with a tenth
+    // of their range either side).
+    QPair<double, double> valueRange() const { return {m_valueLow, m_valueHigh}; }
+
+    // The reference's grid and colours (see the .cpp): the ruler's steps in
+    // frames, the one chosen at a zoom with its parts, the value step at a
+    // number of pixels per unit, a channel's curve colour.
+    static QVector<int> timeGridSteps(double fps);
+    static void timeGridStep(double fps, double pixelsPerFrame, int* step, int* parts);
+    static double valueGridStep(double pixelsPerUnit);
+    static QColor channelColor(int channel, int channels);
 
 signals:
     void timeScrubbed(double timeSeconds);
