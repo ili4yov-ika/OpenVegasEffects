@@ -226,6 +226,15 @@ NSIS требует подготовленный `bin` с приложением
 список файлов, включая вложенные ресурсы Qt и добавленные в префикс плагины.
 Удаление использует этот список и удаляет только опустевшие каталоги.
 
+Файлы проекта `.vegfx` показываются иконкой `resources/icons/iconfile.svg`: она
+встроена в EXE второй иконкой (индекс 1, `resources/icons/iconfile.ico`, пересобирается
+`python tools/make_file_icon.py`). Установщик указывает её в `DefaultIcon` ProgID
+`OpenVegasEffects.Project`, а программа при запуске регистрирует тот же ProgID,
+`OpenWithProgids` и `Applications\OpenVegasEffects.exe` для текущего пользователя
+(`app/FileAssociation`) — так иконка появляется и у переносной сборки, когда её
+выбирают программой по умолчанию («Открыть с помощью → Всегда»). Программой по
+умолчанию для `.vegfx` она сама себя не назначает.
+
 - **VS Code** — [`.vscode/`](.vscode/): `launch.json` (отладчик `cppvsdbg`, читает MSVC-PDB;
   конфигурации Debug / RelWithDebInfo / attach), `tasks.json` (configure / build / clean / run),
   `qt6.natvis` (человекочитаемые `QString`, `QList`, `QRect`… в отладчике). Расширения —

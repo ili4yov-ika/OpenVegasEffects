@@ -1,4 +1,5 @@
 #include "app/AppMain.h"
+#include "app/FileAssociation.h"
 #include "app/GpuDriver.h"
 #include "app/PluginFolders.h"
 
@@ -114,6 +115,8 @@ int AppMain::run(QApplication* application, const QString& projectToOpen)
     initializeFolders();
     splash.setStatus(tr("Loading settings..."));
     initializeSettings();
+    // Project files show their own icon once the program opens them.
+    FileAssociation::registerForCurrentUser();
     splash.setStatus(tr("Opening media cache..."));
     initializeCache();
     splash.setStatus(tr("Checking license..."));

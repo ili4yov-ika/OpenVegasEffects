@@ -1722,6 +1722,7 @@ void MainWindow::buildTransportToolbar()
     });
     main->addWidget(logo);
 
+    m_ui->actionNew->setIcon(QIcon(QStringLiteral(":/icons/project-file.svg")));
     m_ui->actionOpen->setIcon(QIcon(QStringLiteral(":/icons/open.svg")));
     m_ui->actionSave->setIcon(QIcon(QStringLiteral(":/icons/save.svg")));
     m_ui->actionOptions->setIcon(QIcon(QStringLiteral(":/icons/settings.svg")));

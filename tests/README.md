@@ -379,6 +379,9 @@ saved data alone, then the same motion with the footage layer moved and turned (
 answers in the world `GetLayerInfoV2` gives it, the host takes it back off), and from a host
 whose open shot only nests the tracked one; it needs the OpenGL 4.1 context and skips offscreen
 (run it alone with `QT_QPA_PLATFORM=windows`, it shows no window).
+`projectFilesGetTheirIcon` registers the .vegfx ProgID into an ini stand-in for Software\Classes and
+checks its DefaultIcon (the executable's icon 1), open command, OpenWithProgids and the Applications
+entry, that the extension's own default is left alone and that an unchanged registration writes nothing.
 `viewer360DrawsThroughEnvironmentMapViewer` (OpenGL) has the 360 viewer draw through the reference's
 EnvironmentMapViewer module and checks its CPU projection against it for both lenses, combined turns,
 Scale and Scale Ratio, the lens mapping both ways, and that Top and Left look where the reference's do.

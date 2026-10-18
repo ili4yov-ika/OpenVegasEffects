@@ -47,6 +47,7 @@ HEADERS += \
     src/app/GpuDriver.h \
     src/app/Settings.h \
     src/app/PluginFolders.h \
+    src/app/FileAssociation.h \
     src/app/OptionValues.h \
     src/app/ProjectDefaults.h \
     src/app/Translations.h \
@@ -179,6 +180,7 @@ SOURCES += \
     src/app/GpuDriver.cpp \
     src/app/Settings.cpp \
     src/app/PluginFolders.cpp \
+    src/app/FileAssociation.cpp \
     src/app/Translations.cpp \
     src/app/UserDataPaths.cpp \
     src/cache/CacheDB.cpp \
@@ -315,7 +317,8 @@ EXTRA_TRANSLATIONS += \
     translations/openvegaseffects_plugins_zh_CN.ts
 QM_FILES_RESOURCE_PREFIX = /i18n
 
-win32:RC_ICONS = resources/icons/logo.ico
+# The second icon (index 1) is the .vegfx project files' (FileAssociation).
+win32:RC_ICONS = resources/icons/logo.ico resources/icons/iconfile.ico
 
 # Warning levels. For MSVC do not append /W4 on top of Qt mkspec /W3 (D9025).
 win32-msvc {

@@ -39,6 +39,7 @@
 #include "render/TextRender.h"
 #include "project/VegfxSerializer.h"
 #include "app/ProjectDefaults.h"
+#include "app/FileAssociation.h"
 #include "composition/MotionTracker.h"
 #include "composition/CompositionState.h"
 #include "composition/Transition.h"
@@ -4995,6 +4996,40 @@ private slots:
         QSignalSpy openSpy(&start, &ui::StartPanel::openProjectRequested);
         importFile->click(); newProject->click(); openProject->click();
         QCOMPARE(importSpy.count(), 1); QCOMPARE(newSpy.count(), 1); QCOMPARE(openSpy.count(), 1);
+        // Create New shows the project file's icon beside its label.
+        QVERIFY(!newProject->icon().pixmap(QSize(16, 16)).isNull());
+        QCOMPARE(newProject->toolButtonStyle(), Qt::ToolButtonTextBesideIcon);
+        const QImage icon = newProject->icon().pixmap(QSize(32, 32)).toImage();
+        QCOMPARE(icon.pixelColor(icon.width() / 4, icon.height() * 3 / 4).rgb(), QColor(0x01, 0xC5, 0x5B).rgb());
+        start.resize(900, 520); start.show(); QTest::qWait(20);
+        QVERIFY(start.grab().save(testArtifactPath(QStringLiteral("start-panel.png"))));
+    }
+    // .vegfx files get the project icon - the executable's icon 1 - through
+    // the ProgID, and through Applications\<exe> when the user picked the
+    // program by its file; the extension's own default is left alone.
+    void projectFilesGetTheirIcon() {
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        QSettings classes(dir.filePath(QStringLiteral("classes.ini")), QSettings::IniFormat);
+        const QString exe = dir.filePath(QStringLiteral("OpenVegasEffects.exe"));
+        const QString native = QDir::toNativeSeparators(exe);
+        QVERIFY(app::FileAssociation::registerProjectFileType(classes, exe));
+        QCOMPARE(classes.value("OpenVegasEffects.Project/DefaultIcon/Default").toString(),
+                 QStringLiteral("\"%1\",1").arg(native));
+        QCOMPARE(classes.value("OpenVegasEffects.Project/shell/open/command/Default").toString(),
+                 QStringLiteral("\"%1\" \"%2\"").arg(native, QStringLiteral("%1")));
+        QCOMPARE(classes.value("OpenVegasEffects.Project/Default").toString(), QString("OpenVegas Effects Project"));
+        QVERIFY(classes.contains(".vegfx/OpenWithProgids/OpenVegasEffects.Project"));
+        QVERIFY(!classes.contains(".vegfx/Default"));
+        QCOMPARE(classes.value("Applications/OpenVegasEffects.exe/DefaultIcon/Default").toString(),
+                 QStringLiteral("\"%1\",1").arg(native));
+        QVERIFY(!app::FileAssociation::registerProjectFileType(classes, exe));
+        QVERIFY(app::FileAssociation::registerProjectFileType(classes, dir.filePath("moved/OpenVegasEffects.exe")));
+        // The icon resource exists with the sizes Explorer asks for.
+        const QIcon file(QStringLiteral(":/icons/project-file.svg"));
+        QVERIFY(!file.pixmap(QSize(256, 256)).isNull());
+        const QString ico = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/resources/icons/iconfile.ico";
+        QVERIFY(QFileInfo::exists(ico));
+        QImage big(ico); QVERIFY(!big.isNull());
     }
     void libraryLoadsConfiguredFolders() {
         QTemporaryDir temp;
