@@ -184,18 +184,7 @@ plugin::NativeBehaviorLayer behaviorLayerAt(const composition::Composition* comp
 {
     plugin::NativeBehaviorLayer info;
     info.composition = canvas;
-    const composition::LayerTransform& t = layer.transform;
-    const QPointF position = t.positionAt(frame);
-    const QPointF scale = t.scaleAt(frame);
-    // Under its parent (WorldTransformationAtTime: the parent's
-    // ParentingWorldTransformationAtTime first).
-    QMatrix4x4 world = layerParentMatrixAt(composition, layer, frame);
-    world.translate(float(position.x()), float(position.y()), float(t.positionZAt(frame)));
-    world.translate(float(t.anchorPoint.x()), float(t.anchorPoint.y()));
-    world.rotate(float(-t.rotationAt(frame)), 0.0f, 0.0f, 1.0f);
-    world.translate(float(-t.anchorPoint.x()), float(-t.anchorPoint.y()));
-    world.scale(float(scale.x() / 100.0), float(scale.y() / 100.0), 1.0f);
-    std::copy(world.constData(), world.constData() + 16, info.world.begin());
+    info.world = nativeLayerWorld(composition, layer, frame);
 
     if (text) {
         // A text layer (type 6): a paragraph its box; point text the frame's
@@ -1002,11 +991,43 @@ QMatrix4x4 layerBehaviorMatrixAt(const composition::Composition& composition,
     return total;
 }
 
+std::array<float, 16> nativeLayerWorld(const composition::Composition* composition,
+                                       const composition::Layer& layer, int frame)
+{
+    const composition::LayerTransform& t = layer.transform;
+    const QPointF position = t.positionAt(frame);
+    const QPointF scale = t.scaleAt(frame);
+    // Under its parent (WorldTransformationAtTime: the parent's
+    // ParentingWorldTransformationAtTime first).
+    QMatrix4x4 world = layerParentMatrixAt(composition, layer, frame);
+    world.translate(float(position.x()), float(position.y()), float(t.positionZAt(frame)));
+    world.translate(float(t.anchorPoint.x()), float(t.anchorPoint.y()));
+    world.rotate(float(-t.rotationAt(frame)), 0.0f, 0.0f, 1.0f);
+    world.translate(float(-t.anchorPoint.x()), float(-t.anchorPoint.y()));
+    world.scale(float(scale.x() / 100.0), float(scale.y() / 100.0), 1.0f);
+    std::array<float, 16> result {};
+    std::copy(world.constData(), world.constData() + 16, result.begin());
+    return result;
+}
+
 plugin::NativeAssetInfo nativeFootageInfo(const composition::Clip& clip,
                                           const media::MediaManager* media, double shotRate)
 {
     plugin::NativeAssetInfo info;
-    if (!media || clip.nestedComposition || !clip.mediaId.isValid()) return info;
+    if (clip.nestedComposition) {
+        // A composite shot (tagBiffAssetInfo type 3): its frames at the
+        // shot's rate, from where the clip starts in it.
+        const double rate = shotRate > 0.0 ? shotRate : 30.0;
+        info.valid = true;
+        info.type = 3;
+        info.frameRate = rate;
+        info.frameCount = qMax(1, int(std::floor(clip.nestedComposition->durationSeconds() * rate)));
+        info.startFrame = qMax(0, int(std::lround(clip.sourceStartSeconds * rate)));
+        info.endFrame = info.startFrame + qMax(1, int(std::lround(clip.durationSeconds * rate))) - 1;
+        info.key = QStringLiteral("composition:") + clip.nestedComposition->id().value();
+        return info;
+    }
+    if (!media || !clip.mediaId.isValid()) return info;
     const media::MediaAsset asset = media->assetById(clip.mediaId);
     if (!asset.isValid()) return info;
     const double rate = shotRate > 0.0 ? shotRate : 30.0;
@@ -1025,6 +1046,14 @@ plugin::NativeAssetInfo nativeFootageInfo(const composition::Clip& clip,
     info.endFrame = info.startFrame + qMax(1, int(std::lround(clip.durationSeconds * info.frameRate))) - 1;
     info.key = asset.id().value();
     return info;
+}
+
+QImage renderCompositionFrame(const std::shared_ptr<composition::Composition>& shot,
+                              const std::shared_ptr<media::MediaManager>& media, double seconds,
+                              const QString& preRenderDirectory)
+{
+    if (!shot) return QImage();
+    return RenderWorker::renderComposition(shot, media, seconds, preRenderDirectory);
 }
 
 QString nativeInstanceKey(const core::Identifier& layerId, int clip, int effect)
@@ -3154,6 +3183,24 @@ QString preRenderFolder(const QString& projectPreRenderDirectory,
     QString name = composition.id().value();
     name.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_.-]")), QStringLiteral("_"));
     return QDir(projectPreRenderDirectory).filePath(name);
+}
+
+QImage RenderWorker::renderComposition(const std::shared_ptr<composition::Composition>& shot,
+                                       const std::shared_ptr<media::MediaManager>& media, double seconds,
+                                       const QString& preRenderDirectory)
+{
+    const QSize size(qMax(1, shot->width()), qMax(1, shot->height()));
+    RenderWorker worker;
+    worker.setComposition(shot);
+    worker.setMediaManager(media);
+    worker.m_preRenderDirectory = preRenderDirectory;
+    QImage picture = worker.loadPreRenderedFrame(*shot, seconds, size);
+    if (picture.isNull()) picture = worker.renderShotImage(seconds, 1.0, true, true);
+    if (!picture.isNull() && picture.size() != shot->displaySize() && !shot->displaySize().isEmpty())
+        picture = picture.convertToFormat(QImage::Format_RGBA8888_Premultiplied)
+                      .scaled(shot->displaySize(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                      .convertToFormat(QImage::Format_RGBA8888);
+    return picture;
 }
 
 QString preRenderAudioPath(const QString& projectPreRenderDirectory,

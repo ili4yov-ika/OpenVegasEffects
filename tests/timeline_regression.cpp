@@ -2916,6 +2916,109 @@ private slots:
         QVERIFY(plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
         QVERIFY2(qAbs(matrix[12] - 58.0f) < 1.5f && qAbs(matrix[13] + 29.0f) < 1.5f,
                  qPrintable(QStringLiteral("%1, %2").arg(matrix[12]).arg(matrix[13])));
+
+        // The footage layer moved in the shot: GetLayerInfoV2 tells the
+        // module its world, the module answers in it, the host takes it
+        // back off - the footage's motion as before.
+        shot->layerRef(0).transform.position = QPointF(30, -10);
+        plugin::clearNativeInstanceTransforms();
+        host.restoreAll();
+        QVERIFY(plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
+        QVERIFY2(qAbs(matrix[12] - 58.0f) < 1.5f && qAbs(matrix[13] + 29.0f) < 1.5f,
+                 qPrintable(QStringLiteral("%1, %2").arg(matrix[12]).arg(matrix[13])));
+        // Turned too: the same motion seen through the turned footage, 30
+        // degrees clockwise - 35.7 right, 54.1 down.
+        shot->layerRef(0).transform.rotationDegrees = 30.0;
+        plugin::clearNativeInstanceTransforms();
+        host.restoreAll();
+        QVERIFY(plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
+        QVERIFY2(qAbs(matrix[12] - 35.7f) < 1.5f && qAbs(matrix[13] + 54.1f) < 1.5f,
+                 qPrintable(QStringLiteral("%1, %2").arg(matrix[12]).arg(matrix[13])));
+        shot->layerRef(0).transform.position = QPointF();
+        shot->layerRef(0).transform.rotationDegrees = 0.0;
+
+        // The shot nested in another, never opened: its instance moves its
+        // layer all the same (the open shot's host restores the whole tree).
+        auto outer = std::make_shared<composition::Composition>();
+        outer->setSize(size.width(), size.height()); outer->setDurationSeconds(1);
+        {
+            auto& nested = outer->addLayer("Nested");
+            composition::Clip clip; clip.nestedComposition = shot; clip.durationSeconds = 1;
+            nested.clips.append(clip);
+        }
+        plugin::clearNativeInstanceTransforms();
+        QVERIFY(!plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
+        ui::NativeInstanceHost outerHost([outer] { return outer; }, [media] { return media; });
+        outerHost.restoreAll();
+        QVERIFY(plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
+        QVERIFY2(qAbs(matrix[12] - 58.0f) < 1.5f && qAbs(matrix[13] + 29.0f) < 1.5f,
+                 qPrintable(QStringLiteral("%1, %2").arg(matrix[12]).arg(matrix[13])));
+        // sync() sees the nested instance as restored: nothing to redo.
+        plugin::clearNativeInstanceTransforms();
+        outerHost.sync();
+        QVERIFY(!plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
+    }
+    // What MotionTrack is told about a composite shot it tracks and how its
+    // answer is taken: the nested shot as footage of type 3 at the shot's
+    // rate (tagBiffAssetInfo), and the result - the footage layer's world
+    // times the footage's motion - with that world taken back off.
+    void motionTrackReadsNestedShotsAndWorlds() {
+        auto inner = std::make_shared<composition::Composition>();
+        inner->setSize(64, 32); inner->setDurationSeconds(4);
+        composition::Clip clip;
+        clip.nestedComposition = inner;
+        clip.sourceStartSeconds = 1.0;
+        clip.durationSeconds = 2.0;
+        const plugin::NativeAssetInfo info = render::nativeFootageInfo(clip, nullptr, 25.0);
+        QVERIFY(info.valid);
+        QCOMPARE(info.type, 3);
+        QCOMPARE(info.frameRate, 25.0);
+        QCOMPARE(info.frameCount, 100);
+        QCOMPARE(info.startFrame, 25);
+        QCOMPARE(info.endFrame, 74);
+        QCOMPARE(info.key, QStringLiteral("composition:") + inner->id().value());
+        // Nothing for a clip with neither footage nor a shot.
+        QVERIFY(!render::nativeFootageInfo(composition::Clip(), nullptr, 25.0).valid);
+
+        // The nested shot's frame as the module reads it: the shot drawn
+        // at its display size.
+        {
+            auto& plane = inner->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane; plane.planeColor = Qt::blue;
+            composition::Clip still; still.durationSeconds = 4; plane.clips.append(still);
+        }
+        const QImage frame = render::renderCompositionFrame(inner, nullptr, 1.5);
+        QCOMPARE(frame.size(), QSize(64, 32));
+        QVERIFY(frame.pixelColor(32, 16).blue() > 200);
+
+        // A layer's world (Y up from the frame's centre): its position, then
+        // its turn and scale.
+        composition::Layer layer;
+        layer.transform.position = QPointF(100, 40);
+        layer.transform.rotationDegrees = 30.0;
+        layer.transform.scalePercent = QPointF(200, 200);
+        const std::array<float, 16> world = render::nativeLayerWorld(inner.get(), layer, 0);
+        QVERIFY(qAbs(world[12] - 100.0f) < 1e-4f && qAbs(world[13] - 40.0f) < 1e-4f);
+        QVERIFY(qAbs(std::hypot(world[0], world[1]) - 2.0f) < 1e-4f);
+
+        // What the module gives for a world W and the footage's motion R
+        // (measured with the reference module: F*W*F*R, F the Y flip); the
+        // host gets R back.
+        QMatrix4x4 w(world.data());
+        w = w.transposed();
+        QMatrix4x4 motion;
+        motion.translate(58.0f, -29.0f);
+        motion.rotate(5.0f, 0.0f, 0.0f, 1.0f);
+        QMatrix4x4 flip;
+        flip.scale(1.0f, -1.0f, 1.0f);
+        const QMatrix4x4 given = flip * w * flip * motion;
+        std::array<float, 16> answer {};
+        std::copy(given.constData(), given.constData() + 16, answer.begin());
+        const std::array<float, 16> alone = ui::NativeInstanceHost::withoutWorld(answer, world);
+        for (int i = 0; i < 16; ++i) QVERIFY(qAbs(alone[i] - motion.constData()[i]) < 1e-3f);
+        // A world that cannot be undone leaves the answer as it is.
+        std::array<float, 16> flat {};
+        QCOMPARE(ui::NativeInstanceHost::withoutWorld(answer, flat), answer);
     }
     // AutomaticStabilizer and MotionLock on their own footage, as the
     // application drives them: told they were put on the layer, the footage

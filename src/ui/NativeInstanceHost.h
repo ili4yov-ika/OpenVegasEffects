@@ -137,6 +137,12 @@ private:
 
     // The source host's answers.
     plugin::NativeLayerInfo layerInfo(const QString& layerId) const;
+public:
+    // A MotionTrack result with the footage layer's world taken back off
+    // (the module gives that world times the footage's motion).
+    static std::array<float, 16> withoutWorld(const std::array<float, 16>& motion,
+                                              const std::array<float, 16>& world);
+private:
     plugin::NativeAssetInfo assetInfo(const QString& layerId) const;
     QImage assetFrame(const QString& layerId, int frame);
     // The layer with that ID and the clip of it that matters now: the one
@@ -145,9 +151,35 @@ private:
     // Where the footage the instance tracks sits at `frame`: its pixels (Y
     // down) to the render canvas (display pixels, Y down). False without one.
     bool footagePlacement(const Ref& ref, int frame, QSize* content, QTransform* placement) const;
+    // The layer whose footage the instance reads at `frame` (its "Motion
+    // from layer", or its own for the stabilizers); empty without one.
+    QString footageLayerId(const Ref& ref, int frame) const;
     double frameRate() const;
+    // The shot being worked on: the open one, or a shot nested in it while
+    // its instances are restored (scopedTo).
+    std::shared_ptr<composition::Composition> scope() const;
+    // Every shot the open one plays - itself and those nested in it, at any
+    // depth - with their instance-backed effects.
+    QVector<std::pair<std::shared_ptr<composition::Composition>, QHash<QString, Ref>>> instancesInTree() const;
 
     CompositionProvider m_composition;
+    mutable std::shared_ptr<composition::Composition> m_scope;
+    // Frames of nested shots handed to modules as footage, by shot, state
+    // and frame (a few, they are rendered on demand).
+    // While an instance's motion is asked for at a frame, the layers'
+    // worlds at it go with their GetLayerInfoV2 answers, and are kept to
+    // take back off the module's result.
+    mutable int m_worldFrame = -1;
+    mutable QHash<QString, std::array<float, 16>> m_givenWorlds;
+    QHash<QString, QImage> m_nestedFrames;
+    QStringList m_nestedFrameOrder;
+    QString m_preRenders;
+
+public:
+    // The project's pre-render root, for nested shots read as footage.
+    void setPreRenderDirectory(const QString& directory) { m_preRenders = directory; }
+
+private:
     MediaProvider m_media;
     QTimer m_background;
     QHash<QString, Ref> m_pending;

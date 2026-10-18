@@ -1,5 +1,6 @@
 #include "ui/NativeInstanceHost.h"
 
+#include <QMatrix4x4>
 #include <QThread>
 #include <QTransform>
 
@@ -137,7 +138,7 @@ NativeInstanceHost::NativeInstanceHost(CompositionProvider composition, MediaPro
     };
     host.layers = [this] {
         QVector<plugin::NativeLayerEntry> layers;
-        const auto comp = m_composition ? m_composition() : nullptr;
+        const auto comp = scope();
         if (!comp || QThread::currentThread() != thread()) return layers;
         for (const composition::Layer& layer : comp->layers()) layers.append({layer.id.value(), layer.name});
         return layers;
@@ -171,16 +172,22 @@ std::array<float, 16> NativeInstanceHost::canvasMotion(const std::array<float, 1
     return columnMajor(yUp.inverted() * onCanvas * yUp);
 }
 
+std::shared_ptr<composition::Composition> NativeInstanceHost::scope() const
+{
+    if (m_scope) return m_scope;
+    return m_composition ? m_composition() : nullptr;
+}
+
 double NativeInstanceHost::frameRate() const
 {
-    const auto comp = m_composition ? m_composition() : nullptr;
+    const auto comp = scope();
     return comp && comp->fpsDenominator() > 0
         ? double(comp->fpsNumerator()) / comp->fpsDenominator() : 30.0;
 }
 
 composition::Effect* NativeInstanceHost::effectFor(const Ref& ref) const
 {
-    const auto comp = m_composition ? m_composition() : nullptr;
+    const auto comp = scope();
     if (!comp || !ref.isValid()) return nullptr;
     for (int i = 0; i < comp->layers().size(); ++i) {
         if (comp->layers().at(i).id != ref.layerId) continue;
@@ -195,7 +202,7 @@ composition::Effect* NativeInstanceHost::effectFor(const Ref& ref) const
 bool NativeInstanceHost::describe(const Ref& ref, double seconds, core::Identifier* pluginId,
                                   QStringList* values, plugin::NativeCustomUiView* view) const
 {
-    const auto comp = m_composition ? m_composition() : nullptr;
+    const auto comp = scope();
     if (!comp || !ref.isValid()) return false;
     const composition::Layer* layer = findLayer(*comp, ref.layerId.value());
     if (!layer || ref.clip >= layer->clips.size()) return false;
@@ -311,7 +318,7 @@ void NativeInstanceHost::apply(const Ref& ref, const plugin::NativeCustomUiResul
         m_pending.remove(key);
         return;
     }
-    const auto comp = m_composition ? m_composition() : nullptr;
+    const auto comp = scope();
     QVector<composition::Layer> before;
     if (!result.layerRequests.isEmpty() && comp) before = comp->layers();
     bool changed = false;
@@ -387,7 +394,7 @@ void NativeInstanceHost::finish(const Ref& ref)
 void NativeInstanceHost::bake(const Ref& ref)
 {
     const QString key = instanceKey(ref);
-    const auto comp = m_composition ? m_composition() : nullptr;
+    const auto comp = scope();
     core::Identifier id;
     QStringList values;
     plugin::NativeCustomUiView view;
@@ -411,11 +418,20 @@ void NativeInstanceHost::bake(const Ref& ref)
         plugin::NativeCustomUiView at = view;
         at.parameterFrame = frame;
         std::array<float, 16> m {};
-        if (!plugin::nativeInstanceTransformation(id, valuesAt(fx, frame), at, frame, i, &m)) {
+        m_givenWorlds.clear();
+        m_worldFrame = frame;
+        const bool moved = plugin::nativeInstanceTransformation(id, valuesAt(fx, frame), at, frame, i, &m);
+        m_worldFrame = -1;
+        if (!moved) {
             matrices.append({1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1});
             continue;
         }
         any = true;
+        // The module answers in the world of the footage's layer, as
+        // GetLayerInfoV2 told it: that world times the footage's motion
+        // (its own layer's world does not enter). Back to the motion alone.
+        const auto given = m_givenWorlds.constFind(footageLayerId(ref, frame));
+        if (given != m_givenWorlds.cend()) m = withoutWorld(m, *given);
         QSize content;
         QTransform placement;
         if (!footagePlacement(ref, frame, &content, &placement)) placement = QTransform();
@@ -457,36 +473,60 @@ void NativeInstanceHost::restoreAll()
     for (auto it = busy.cbegin(); it != busy.cend(); ++it) m_restored.insert(it.key());
     m_baked.clear();
     plugin::clearNativeInstanceTransforms();
-    const auto comp = m_composition ? m_composition() : nullptr;
-    if (!comp) return;
-    const QHash<QString, Ref> found = instanceEffects(*comp);
-    for (auto it = found.cbegin(); it != found.cend(); ++it) {
-        const composition::Effect* fx = effectFor(it.value());
-        if (!fx) continue;
-        m_baked.insert(it.key(), qHash(fx->instanceData));
-        prepare(it.value());
-        if (plugin::nativeBehaviorUsesInstance(fx->pluginId)) bake(it.value());
+    // The open shot's instances, and those of every shot nested in it - the
+    // reference keeps its instances by project, so an effect in a shot that
+    // was never opened moves its layer too.
+    for (const auto& [shot, found] : instancesInTree()) {
+        m_scope = shot;
+        for (auto it = found.cbegin(); it != found.cend(); ++it) {
+            const composition::Effect* fx = effectFor(it.value());
+            if (!fx) continue;
+            m_baked.insert(it.key(), qHash(fx->instanceData));
+            prepare(it.value());
+            if (plugin::nativeBehaviorUsesInstance(fx->pluginId)) bake(it.value());
+        }
+        m_scope.reset();
     }
+}
+
+QVector<std::pair<std::shared_ptr<composition::Composition>, QHash<QString, NativeInstanceHost::Ref>>>
+NativeInstanceHost::instancesInTree() const
+{
+    QVector<std::pair<std::shared_ptr<composition::Composition>, QHash<QString, Ref>>> result;
+    const auto open = m_composition ? m_composition() : nullptr;
+    if (!open) return result;
+    QVector<std::shared_ptr<composition::Composition>> shots {open};
+    for (int i = 0; i < shots.size(); ++i) {
+        for (const composition::Layer& layer : shots.at(i)->layers())
+            for (const composition::Clip& clip : layer.clips)
+                if (clip.nestedComposition && !shots.contains(clip.nestedComposition))
+                    shots.append(clip.nestedComposition);
+    }
+    for (const auto& shot : shots) result.append({shot, instanceEffects(*shot)});
+    return result;
 }
 
 void NativeInstanceHost::sync()
 {
-    const auto comp = m_composition ? m_composition() : nullptr;
-    if (!comp) return;
-    const QHash<QString, Ref> found = instanceEffects(*comp);
-    bool same = found.size() == m_baked.size();
-    for (auto it = found.cbegin(); same && it != found.cend(); ++it) {
-        const composition::Effect* fx = effectFor(it.value());
-        const auto baked = m_baked.constFind(it.key());
-        same = fx && baked != m_baked.cend() && *baked == qHash(fx->instanceData);
+    int count = 0;
+    bool same = true;
+    for (const auto& [shot, found] : instancesInTree()) {
+        m_scope = shot;
+        count += found.size();
+        for (auto it = found.cbegin(); same && it != found.cend(); ++it) {
+            const composition::Effect* fx = effectFor(it.value());
+            const auto baked = m_baked.constFind(it.key());
+            same = fx && baked != m_baked.cend() && *baked == qHash(fx->instanceData);
+        }
+        m_scope.reset();
     }
-    if (!same) restoreAll();
+    if (!same || count != m_baked.size()) restoreAll();
 }
 
 const composition::Layer* NativeInstanceHost::layerById(const QString& layerId,
                                                         int* clipIndex) const
 {
-    const auto comp = m_composition ? m_composition() : nullptr;
+    const auto comp = scope();
     if (!comp) return nullptr;
     const composition::Layer* layer = findLayer(*comp, layerId);
     if (!layer || layer->clips.isEmpty()) return nullptr;
@@ -502,15 +542,14 @@ const composition::Layer* NativeInstanceHost::layerById(const QString& layerId,
     return layer;
 }
 
-bool NativeInstanceHost::footagePlacement(const Ref& ref, int frame, QSize* content,
-                                          QTransform* placement) const
+QString NativeInstanceHost::footageLayerId(const Ref& ref, int frame) const
 {
-    const auto comp = m_composition ? m_composition() : nullptr;
-    if (!comp || !ref.isValid()) return false;
+    const auto comp = scope();
+    if (!comp || !ref.isValid()) return QString();
     const composition::Layer* layer = findLayer(*comp, ref.layerId.value());
-    if (!layer || ref.clip >= layer->clips.size()) return false;
+    if (!layer || ref.clip >= layer->clips.size()) return QString();
     const composition::Clip& clip = layer->clips.at(ref.clip);
-    if (ref.effect >= clip.effects.size()) return false;
+    if (ref.effect >= clip.effects.size()) return QString();
     const composition::Effect& fx = clip.effects.at(ref.effect);
     const auto parameters = plugin::nativeParameters(fx.pluginId);
     QString source;
@@ -520,7 +559,18 @@ bool NativeInstanceHost::footagePlacement(const Ref& ref, int frame, QSize* cont
     }
     // AutomaticStabilizer and MotionLock work on their own layer.
     if (source.isEmpty() && plugin::nativeEffectAnalysesOwnLayer(fx.pluginId)) source = layer->id.value();
-    const composition::Layer* footage = source.isEmpty() ? nullptr : findLayer(*comp, source);
+    return source;
+}
+
+bool NativeInstanceHost::footagePlacement(const Ref& ref, int frame, QSize* content,
+                                          QTransform* placement) const
+{
+    const auto comp = scope();
+    const QString source = footageLayerId(ref, frame);
+    if (!comp || source.isEmpty()) return false;
+    const composition::Layer* layer = findLayer(*comp, ref.layerId.value());
+    const composition::Clip& clip = layer->clips.at(ref.clip);
+    const composition::Layer* footage = findLayer(*comp, source);
     const int sourceClip = footage ? overlappingClip(*footage, clip.startSeconds, clip.endSeconds()) : -1;
     if (sourceClip < 0) return false;
     const auto media = m_media ? m_media() : nullptr;
@@ -533,12 +583,32 @@ bool NativeInstanceHost::footagePlacement(const Ref& ref, int frame, QSize* cont
     return true;
 }
 
+std::array<float, 16> NativeInstanceHost::withoutWorld(const std::array<float, 16>& motion,
+                                                       const std::array<float, 16>& world)
+{
+    // nativeInstanceTransformation gives F*W*F*R (F the Y flip between the
+    // module's pixels and the port's layer space): R = F*W^-1*F*result.
+    QMatrix4x4 w;
+    QMatrix4x4 result;
+    std::copy(world.cbegin(), world.cend(), w.data());
+    std::copy(motion.cbegin(), motion.cend(), result.data());
+    bool invertible = false;
+    const QMatrix4x4 inverse = w.inverted(&invertible);
+    if (!invertible) return motion;
+    QMatrix4x4 flip;
+    flip.scale(1.0f, -1.0f, 1.0f);
+    const QMatrix4x4 alone = flip * inverse * flip * result;
+    std::array<float, 16> out {};
+    std::copy(alone.constData(), alone.constData() + 16, out.begin());
+    return out;
+}
+
 plugin::NativeLayerInfo NativeInstanceHost::layerInfo(const QString& layerId) const
 {
     plugin::NativeLayerInfo info;
     int clipIndex = -1;
     const composition::Layer* layer = layerById(layerId, &clipIndex);
-    const auto comp = m_composition ? m_composition() : nullptr;
+    const auto comp = scope();
     if (!layer || !comp) return info;
     const composition::Clip& clip = layer->clips.at(clipIndex);
     const double rate = frameRate();
@@ -548,6 +618,10 @@ plugin::NativeLayerInfo NativeInstanceHost::layerInfo(const QString& layerId) co
     info.startFrame = frameAt(clip.startSeconds, rate);
     info.durationFrames = qMax(1, frameAt(clip.durationSeconds, rate));
     info.size = contentSize(*comp, clip, media.get());
+    if (m_worldFrame >= 0) {
+        info.world = render::nativeLayerWorld(comp.get(), *layer, m_worldFrame);
+        m_givenWorlds.insert(layerId, info.world);
+    }
     return info;
 }
 
@@ -557,8 +631,8 @@ plugin::NativeAssetInfo NativeInstanceHost::assetInfo(const QString& layerId) co
     const composition::Layer* layer = layerById(layerId, &clipIndex);
     const auto media = m_media ? m_media() : nullptr;
     if (!layer || !media) return plugin::NativeAssetInfo();
-    // Nested shots would need their own render per frame: not footage yet.
-    // Video frames as the shot reads them: at its rate, by time in the source.
+    // Video frames as the shot reads them: at its rate, by time in the
+    // source; a nested shot (type 3) likewise, its frames rendered.
     return render::nativeFootageInfo(layer->clips.at(clipIndex), media.get(), frameRate());
 }
 
@@ -603,7 +677,7 @@ void NativeInstanceHost::applyLayerTransforms(composition::Layer& layer,
 bool NativeInstanceHost::applyLayerRequests(const Ref& ref,
                                             const QVector<plugin::NativeLayerRequest>& requests)
 {
-    const auto comp = m_composition ? m_composition() : nullptr;
+    const auto comp = scope();
     if (!comp) return false;
     // The clip of the module's own layer is the one being worked on.
     m_context = ref;
@@ -659,6 +733,21 @@ QImage NativeInstanceHost::assetFrame(const QString& layerId, int frame)
     const auto media = m_media ? m_media() : nullptr;
     if (!layer || !media || frame < 0) return QImage();
     const composition::Clip& clip = layer->clips.at(clipIndex);
+    if (clip.nestedComposition) {
+        // A nested shot as footage: its frame at that time of its own,
+        // rendered as the shot draws it (a pre-render when there is one).
+        const double seconds = frame / frameRate();
+        const QString key = render::renderStateKey(*clip.nestedComposition, media.get(), seconds,
+                                                   clip.nestedComposition->displaySize(), true, true,
+                                                   QStringLiteral("footage"));
+        const auto kept = m_nestedFrames.constFind(key);
+        if (kept != m_nestedFrames.cend()) return kept.value();
+        const QImage picture = render::renderCompositionFrame(clip.nestedComposition, media, seconds, m_preRenders);
+        m_nestedFrames.insert(key, picture);
+        m_nestedFrameOrder.append(key);
+        while (m_nestedFrameOrder.size() > 48) m_nestedFrames.remove(m_nestedFrameOrder.takeFirst());
+        return picture;
+    }
     const media::MediaAsset asset = media->assetById(clip.mediaId);
     if (!asset.isValid()) return QImage();
     if (asset.isImageSequence()) {

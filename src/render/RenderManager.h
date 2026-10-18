@@ -29,9 +29,16 @@ namespace render {
 // GetAssetInfo (tagBiffAssetInfo) of a clip's footage, as the native modules
 // that analyse footage ask for it: a video's frames at the shot's rate, by
 // time in the source, or a sequence's own frames and rate; the source frame
-// the clip starts on; type 0. Invalid for a nested shot or anything else.
+// the clip starts on; type 0. A nested shot is type 3: its frames at the
+// shot's rate. Invalid for anything else.
 plugin::NativeAssetInfo nativeFootageInfo(const composition::Clip& clip,
                                           const media::MediaManager* media, double shotRate);
+// AbstractLayer::WorldTransformationAtTime of a layer without its Behaviors,
+// as the native modules get it (tagBiffBehaviorMC, GetLayerInfoV2 +0x74):
+// column-major, composition units from the frame's centre, Y up - its
+// parent's, then its position, its turn about the anchor point and its scale.
+std::array<float, 16> nativeLayerWorld(const composition::Composition* composition,
+                                       const composition::Layer& layer, int frame);
 // The instance a native effect lives on: "<layer ID>/<clip>/<effect>".
 QString nativeInstanceKey(const core::Identifier& layerId, int clip, int effect);
 
@@ -85,6 +92,13 @@ QString preRenderFolder(const QString& projectPreRenderDirectory,
 // audio: "Could not delete asset pre-render audio", "The pre-render has no
 // audio"): the shot's mix as a WAV in its folder, named by the state it was
 // made for, so an edited shot stops matching it as its frames do.
+// A shot's frame at `seconds`, at its display size over transparency, as a
+// nested shot is drawn (its pre-render when it matches): what a module gets
+// as footage when it tracks a composite shot (tagBiffAssetInfo type 3).
+QImage renderCompositionFrame(const std::shared_ptr<composition::Composition>& shot,
+                              const std::shared_ptr<media::MediaManager>& media, double seconds,
+                              const QString& preRenderDirectory = QString());
+
 QString preRenderAudioPath(const QString& projectPreRenderDirectory,
                            const composition::Composition& composition, const media::MediaManager* media);
 // That file when it is there for the shot as it is now; empty otherwise.
@@ -102,6 +116,10 @@ public:
     // Must be called before the worker is moved to its thread.
     void setComposition(std::shared_ptr<composition::Composition> comp);
     void setMediaManager(std::shared_ptr<media::MediaManager> media);
+    // renderCompositionFrame, on the calling thread.
+    static QImage renderComposition(const std::shared_ptr<composition::Composition>& shot,
+                                    const std::shared_ptr<media::MediaManager>& media, double seconds,
+                                    const QString& preRenderDirectory);
 
 public slots:
     void renderFrame(const FrameRequest& request, QByteArray mediaBytes);

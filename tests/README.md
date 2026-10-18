@@ -375,8 +375,12 @@ MotionLock's "Apply Transform" (its own layer keyed with its motion), each one `
 static values.
 `motionTrackHostTracksFootage` runs the whole MotionTrack cycle on a 30-frame image sequence -
 analysis, the lasso, background calls on the timer, matrices, and the same matrices from the
-saved data alone; it needs the OpenGL 4.1 context and skips offscreen (run it alone with
-`QT_QPA_PLATFORM=windows`, it shows no window). `threeDLayersShareOneScene` checks depth order inside a 3D scene and that a 2D layer
+saved data alone, then the same motion with the footage layer moved and turned (the module
+answers in the world `GetLayerInfoV2` gives it, the host takes it back off), and from a host
+whose open shot only nests the tracked one; it needs the OpenGL 4.1 context and skips offscreen
+(run it alone with `QT_QPA_PLATFORM=windows`, it shows no window).
+`motionTrackReadsNestedShotsAndWorlds` (offscreen) checks a nested shot as footage of type 3, its
+rendered frame, a layer's world and taking that world off a module's answer. `threeDLayersShareOneScene` checks depth order inside a 3D scene and that a 2D layer
 splits it (`scene-depth.png`). `exportQueueRunsTasksFromSnapshots` covers the Time Format
 strings, queued snapshots, the tasks file, duplicate/remove, and runs two tasks to PNG
 sequences through `render::ExportJob`, checking that later edits do not reach a queued task.

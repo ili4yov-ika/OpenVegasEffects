@@ -2663,7 +2663,10 @@ void MainWindow::requestRenderFrame()
     }
     // Tracked layers whose effects moved or whose data an undo put back get
     // their matrices again before the frame is drawn.
-    if (m_instanceHost) m_instanceHost->sync();
+    if (m_instanceHost) {
+        m_instanceHost->setPreRenderDirectory(preRenderRoot());
+        m_instanceHost->sync();
+    }
     updateProxyPreview();
     m_renderManager->setPreRenderDirectory(preRenderRoot());
     m_viewer->setTimecode(m_playbackTime);

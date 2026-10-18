@@ -825,10 +825,39 @@ int main(int argc, char** argv)
                            || std::abs(matrix[13]) > 0.001f
                            || std::abs(matrix[14]) > 0.001f;
         const QVector<openvegas::plugin::NativeBehaviorRequest> requests {{id, values}};
+        // The shot's simulation (SimulateLayers) with the source as its one
+        // body, from frame 0: its offset at frame 30 as a translation.
+        const auto simulateStack = [&](openvegas::plugin::NativeBehaviorResult& result, int frame,
+                                       const openvegas::composition::Composition& shot,
+                                       const openvegas::core::Identifier& body) {
+            openvegas::plugin::NativeSimulationScene scene;
+            scene.layerCount = shot.layers().size();
+            scene.worldAt = [&shot](int layer, int) {
+                QMatrix4x4 world;
+                const QPointF position = shot.layers().at(layer).transform.position;
+                world.translate(float(position.x()), float(position.y()), 0.0f);
+                return world;
+            };
+            scene.behaviorsAt = [&shot, &body, &requests](int layer, int) {
+                return shot.layers().at(layer).id == body ? requests
+                                                          : QVector<openvegas::plugin::NativeBehaviorRequest>();
+            };
+            scene.endFrame = [](int) { return 120; };
+            openvegas::plugin::NativeSimulationTrack track;
+            if (!openvegas::plugin::simulateNativeBehaviorScene(track, frame, 1920, 1080, 30.0, scene, &shot))
+                return false;
+            int index = 0;
+            for (int i = 0; i < shot.layers().size(); ++i)
+                if (shot.layers().at(i).id == body) index = i;
+            const int b = int(track.bodies.indexOf(index));
+            if (b < 0) return false;
+            const QVector3D offset = track.positions.last().at(b) - track.points.last().at(b);
+            result.transformation.setToIdentity();
+            result.transformation.translate(offset);
+            return true;
+        };
         openvegas::plugin::NativeBehaviorResult stacked;
-        const bool stackedOk = openvegas::plugin::simulateNativeBehaviorStack(
-            stacked, 30, 30, 120, 1920, 1080, 30.0, requests,
-            &composition, sourceId);
+        const bool stackedOk = simulateStack(stacked, 30, composition, sourceId);
         const float* stackedMatrix = stacked.transformation.constData();
         bool same = rendered && stackedOk;
         for (int axis = 12; axis <= 14; ++axis) {
@@ -836,9 +865,7 @@ int main(int argc, char** argv)
         }
         composition.swapLayers(0, 1);
         openvegas::plugin::NativeBehaviorResult reordered;
-        const bool reorderedOk = openvegas::plugin::simulateNativeBehaviorStack(
-            reordered, 30, 30, 120, 1920, 1080, 30.0, requests,
-            &composition, sourceId);
+        const bool reorderedOk = simulateStack(reordered, 30, composition, sourceId);
         const float* reorderedMatrix = reordered.transformation.constData();
         for (int axis = 12; axis <= 14; ++axis) {
             same = same && std::abs(matrix[axis] - reorderedMatrix[axis]) < 0.001f;
@@ -847,9 +874,7 @@ int main(int argc, char** argv)
         openvegas::plugin::NativeBehaviorResult threaded;
         bool threadedOk = false;
         QThread* renderThread = QThread::create([&]() {
-            threadedOk = openvegas::plugin::simulateNativeBehaviorStack(
-                threaded, 30, 30, 120, 1920, 1080, 30.0, requests,
-                &composition, sourceId);
+            threadedOk = simulateStack(threaded, 30, composition, sourceId);
             openvegas::plugin::releaseNativeEffectThreadRenderer();
         });
         renderThread->start();
@@ -898,15 +923,26 @@ int main(int argc, char** argv)
             requests.push_back(request);
         }
 
+        // One still body with the three Behaviors, simulated from frame 0.
+        const auto simulateStack = [&requests](openvegas::plugin::NativeBehaviorResult& result, int frame) {
+            openvegas::plugin::NativeSimulationScene scene;
+            scene.layerCount = 1;
+            scene.worldAt = [](int, int) { return QMatrix4x4(); };
+            scene.behaviorsAt = [&requests](int, int) { return requests; };
+            scene.endFrame = [](int) { return 120; };
+            openvegas::plugin::NativeSimulationTrack track;
+            if (!openvegas::plugin::simulateNativeBehaviorScene(track, frame, 1920, 1080, 30.0, scene, nullptr))
+                return false;
+            result.transformation.setToIdentity();
+            result.transformation.translate(track.positions.last().at(0) - track.points.last().at(0));
+            return true;
+        };
         openvegas::plugin::NativeBehaviorResult mainResult;
-        bool ok = requests.size() == wanted.size()
-                  && openvegas::plugin::simulateNativeBehaviorStack(
-                      mainResult, 30, 30, 120, 1920, 1080, 30.0, requests);
+        bool ok = requests.size() == wanted.size() && simulateStack(mainResult, 30);
         openvegas::plugin::NativeBehaviorResult threadedResult;
         bool threadedOk = false;
         QThread* renderThread = QThread::create([&]() {
-            threadedOk = openvegas::plugin::simulateNativeBehaviorStack(
-                threadedResult, 30, 30, 120, 1920, 1080, 30.0, requests);
+            threadedOk = simulateStack(threadedResult, 30);
             openvegas::plugin::releaseNativeEffectThreadRenderer();
         });
         renderThread->start();
@@ -1907,12 +1943,36 @@ int main(int argc, char** argv)
             texture = reduced.scaled(texture.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
         }
         openvegas::plugin::NativeSourceHost host;
-        host.layerInfo = [](const QString& id) {
+        // OPENVEGAS_PROBE_WORLD=tx,ty,s: the world matrix GetLayerInfoV2
+        // gives both layers (translation and uniform scale), to see whether
+        // the module's answer depends on it.
+        // OPENVEGAS_PROBE_WORLD_OWN likewise for the instance's own layer only.
+        const auto worldFrom = [](const char* name) {
+            std::array<float, 16> world {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+            if (qEnvironmentVariableIsSet(name)) {
+                const QStringList parts = qEnvironmentVariable(name).split(QLatin1Char(','));
+                if (parts.size() >= 3) {
+                    // A fourth value turns it (degrees, about Z).
+                    const float scale = parts.at(2).toFloat();
+                    const float turn = parts.size() >= 4 ? qDegreesToRadians(parts.at(3).toFloat()) : 0.0f;
+                    world[0] = world[5] = scale * std::cos(turn);
+                    world[1] = scale * std::sin(turn);
+                    world[4] = -world[1];
+                    world[12] = parts.at(0).toFloat();
+                    world[13] = parts.at(1).toFloat();
+                }
+            }
+            return world;
+        };
+        const std::array<float, 16> world = worldFrom("OPENVEGAS_PROBE_WORLD");
+        const std::array<float, 16> ownWorld = qEnvironmentVariableIsSet("OPENVEGAS_PROBE_WORLD_OWN")
+            ? worldFrom("OPENVEGAS_PROBE_WORLD_OWN") : world;
+        host.layerInfo = [world, ownWorld](const QString& id) {
             openvegas::plugin::NativeLayerInfo info;
             if (id == sourceLayer || id == ownLayer) {
                 info.valid = true; info.type = 0; info.startFrame = 0; info.durationFrames = kFrames;
                 info.size = QSize(320, 180);
-
+                info.world = id == ownLayer ? ownWorld : world;
             }
             return info;
         };
@@ -2129,7 +2189,8 @@ int main(int argc, char** argv)
             const bool followed = transformed && std::abs(last[12] - wantX) < 1.0
                                   && std::abs(last[13] - wantY) < 1.0;
             out << QDir::toNativeSeparators(file) << "	result	"
-                << (followed ? "follows the footage" : "WRONG") << '\n';
+                << (followed ? "follows the footage" : "WRONG") << "	last " << last[0] << ' ' << last[1] << ' ' << last[4] << ' ' << last[5]
+                << ' ' << last[12] << ' ' << last[13] << '\n';
             if (!followed) ++failures;
             openvegas::plugin::nativeCustomUiShutdown(id, values, view);
             openvegas::plugin::releaseNativeEffectThreadRenderer();
