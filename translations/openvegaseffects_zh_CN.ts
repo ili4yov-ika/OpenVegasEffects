@@ -4477,27 +4477,27 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>组合镜头中没有可导出的音频</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="288"/>
+        <location filename="../src/render/ExportJob.cpp" line="289"/>
         <source>Exported video to %1</source>
         <translation>已将视频导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="289"/>
+        <location filename="../src/render/ExportJob.cpp" line="290"/>
         <source>FFmpeg export failed</source>
         <translation>FFmpeg导出失败</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="294"/>
+        <location filename="../src/render/ExportJob.cpp" line="295"/>
         <source>Could not start FFmpeg: %1</source>
         <translation>无法启动FFmpeg：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="323"/>
+        <location filename="../src/render/ExportJob.cpp" line="324"/>
         <source>Image sequence export failed: %1</source>
         <translation>图像序列导出失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="327"/>
+        <location filename="../src/render/ExportJob.cpp" line="328"/>
         <source>Exported image sequence to %1</source>
         <translation>已将图像序列导出到 %1</translation>
     </message>
@@ -8895,7 +8895,7 @@ From Footage</source>
 <context>
     <name>openvegas::ui::TimelineValueGraphView</name>
     <message>
-        <location filename="../src/ui/TimelineValueGraphView.cpp" line="498"/>
+        <location filename="../src/ui/TimelineValueGraphView.cpp" line="592"/>
         <source>Select an animated property to show its curve</source>
         <translation>请选择动画属性以显示其曲线</translation>
     </message>

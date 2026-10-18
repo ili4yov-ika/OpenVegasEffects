@@ -4477,27 +4477,27 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>コンポジットショットにエクスポートするオーディオがありません</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="288"/>
+        <location filename="../src/render/ExportJob.cpp" line="289"/>
         <source>Exported video to %1</source>
         <translation>動画を %1 にエクスポートしました</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="289"/>
+        <location filename="../src/render/ExportJob.cpp" line="290"/>
         <source>FFmpeg export failed</source>
         <translation>FFmpegのエクスポートに失敗しました</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="294"/>
+        <location filename="../src/render/ExportJob.cpp" line="295"/>
         <source>Could not start FFmpeg: %1</source>
         <translation>FFmpegを起動できませんでした: %1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="323"/>
+        <location filename="../src/render/ExportJob.cpp" line="324"/>
         <source>Image sequence export failed: %1</source>
         <translation>画像シーケンスのエクスポートに失敗しました: %1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="327"/>
+        <location filename="../src/render/ExportJob.cpp" line="328"/>
         <source>Exported image sequence to %1</source>
         <translation>画像シーケンスを %1 にエクスポートしました</translation>
     </message>
@@ -8896,7 +8896,7 @@ From Footage</source>
 <context>
     <name>openvegas::ui::TimelineValueGraphView</name>
     <message>
-        <location filename="../src/ui/TimelineValueGraphView.cpp" line="498"/>
+        <location filename="../src/ui/TimelineValueGraphView.cpp" line="592"/>
         <source>Select an animated property to show its curve</source>
         <translation>カーブを表示するアニメーションプロパティを選択してください</translation>
     </message>

@@ -4477,27 +4477,27 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>В композитном кадре нет звука для экспорта</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="288"/>
+        <location filename="../src/render/ExportJob.cpp" line="289"/>
         <source>Exported video to %1</source>
         <translation>Видео экспортировано в %1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="289"/>
+        <location filename="../src/render/ExportJob.cpp" line="290"/>
         <source>FFmpeg export failed</source>
         <translation>Ошибка экспорта FFmpeg</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="294"/>
+        <location filename="../src/render/ExportJob.cpp" line="295"/>
         <source>Could not start FFmpeg: %1</source>
         <translation>Не удалось запустить FFmpeg: %1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="323"/>
+        <location filename="../src/render/ExportJob.cpp" line="324"/>
         <source>Image sequence export failed: %1</source>
         <translation>Ошибка экспорта последовательности кадров: %1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="327"/>
+        <location filename="../src/render/ExportJob.cpp" line="328"/>
         <source>Exported image sequence to %1</source>
         <translation>Последовательность кадров экспортирована в %1</translation>
     </message>
@@ -8977,7 +8977,7 @@ From Footage</source>
 <context>
     <name>openvegas::ui::TimelineValueGraphView</name>
     <message>
-        <location filename="../src/ui/TimelineValueGraphView.cpp" line="498"/>
+        <location filename="../src/ui/TimelineValueGraphView.cpp" line="592"/>
         <source>Select an animated property to show its curve</source>
         <translation>Выберите анимируемое свойство, чтобы показать его кривую</translation>
     </message>
