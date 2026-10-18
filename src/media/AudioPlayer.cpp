@@ -90,8 +90,8 @@ struct AudioPlayer::Engine {
             auto* media = api.libvlc_media_new_path(vlcInstance(), path.constData());
             if (!media) { qWarning("VLC media creation failed: %s", api.libvlc_errmsg()); return false; }
             const double offset = std::max(0.0, clip.sourceStart + (timeline - clip.start) * clip.speed);
-            const QByteArray start = QStringLiteral(":start-time=%1").arg(offset, 0, 'f', 9).toUtf8();
-            api.libvlc_media_add_option(media, start.constData());
+            const QByteArray startTime = QStringLiteral(":start-time=%1").arg(offset, 0, 'f', 9).toUtf8();
+            api.libvlc_media_add_option(media, startTime.constData());
             api.libvlc_media_add_option(media, ":no-video");
             if (clip.audioStreamIndex >= 0) {
                 const QByteArray track = QByteArray(":audio-track=") + QByteArray::number(clip.audioStreamIndex);
@@ -395,7 +395,7 @@ struct AudioPlayer::Engine {
                     }
                 }
                 const auto kept = transitionInputs.find(i);
-                float* destination = kept != transitionInputs.end() ? kept->data() : samples.data();
+                float* mixInto = kept != transitionInputs.end() ? kept->data() : samples.data();
                 const bool enveloped = !clip.envelope.isEmpty();
                 double gain = clip.gain;
                 for (unsigned sample = 0; sample < count * Channels; ++sample) {
@@ -404,7 +404,7 @@ struct AudioPlayer::Engine {
                     const double value = nativeSamples.isEmpty()
                         ? double(contribution[sample])
                         : double(nativeSamples[int(sample)]) / 32768.0;
-                    destination[(offset * Channels) + sample] += float(value * gain);
+                    mixInto[(offset * Channels) + sample] += float(value * gain);
                 }
             }
             self.mixTransitions(samples.data(), frames, now, transitionInputs);

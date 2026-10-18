@@ -51,10 +51,10 @@ struct Node
     QVector<Property> props;
     QVector<Node> children;
 
-    const Node* child(const char* name) const
+    const Node* child(const char* key) const
     {
         for (const Node& c : children)
-            if (c.name == name) return &c;
+            if (c.name == key) return &c;
         return nullptr;
     }
     QByteArray text(int index) const
@@ -69,10 +69,10 @@ struct Node
     {
         return index < props.size() ? props.at(index).integer : 0;
     }
-    // The values of the child named `name`: its array, or its numbers.
-    QVector<double> values(const char* name) const
+    // The values of the child named `key`: its array, or its numbers.
+    QVector<double> values(const char* key) const
     {
-        const Node* c = child(name);
+        const Node* c = child(key);
         if (!c) return {};
         if (c->props.size() == 1 && !c->props.first().array.isEmpty()) return c->props.first().array;
         QVector<double> out;
@@ -80,9 +80,9 @@ struct Node
             if (p.text.isEmpty() && p.array.isEmpty()) out.append(p.number);
         return out;
     }
-    QByteArray childText(const char* name) const
+    QByteArray childText(const char* key) const
     {
-        const Node* c = child(name);
+        const Node* c = child(key);
         return c ? c->text(0) : QByteArray();
     }
 };

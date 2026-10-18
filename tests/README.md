@@ -379,6 +379,9 @@ saved data alone, then the same motion with the footage layer moved and turned (
 answers in the world `GetLayerInfoV2` gives it, the host takes it back off), and from a host
 whose open shot only nests the tracked one; it needs the OpenGL 4.1 context and skips offscreen
 (run it alone with `QT_QPA_PLATFORM=windows`, it shows no window).
+`exportedMoviesKeepTheShotsColours` (FFmpeg) exports a red plane to MP4 and checks the stream is
+tagged BT.709 / limited range and decodes back to the shot's red, where FFmpeg's untagged BT.601
+default made players that take HD video as BT.709 show it brighter than the Viewer.
 `effectPresetsAreWrittenReadAndApplied` writes and reads `.hfpr` effect presets in the reference's
 shape, refuses a newer version and a 3D preset with the reference's words, lists 2D/3D Presets in
 the Effects panel with import (a free "name (N)"), export, rename and remove, and puts a preset on

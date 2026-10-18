@@ -57,7 +57,6 @@ QVector<model3d::Light> sceneLightsOf(const composition::Composition* compositio
         if (layer.kind != composition::LayerKind::Light || !layer.visible
             || !composition::layerSpanCovers(layer, frame, composition->framesPerSecond()))
             continue;
-        const composition::LayerTransform& t = layer.transform;
         const composition::LightSettings& settings = layer.light;
         model3d::Light light;
         light.type = model3d::Light::Type(int(settings.type));

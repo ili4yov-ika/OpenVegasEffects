@@ -11705,6 +11705,68 @@ private slots:
         QCOMPARE(timeline.addPreset(0, 0, path), -1);
     }
 
+    // An exported movie shows the shot's colours: the frames go through the
+    // BT.709 matrix in limited range and the stream says so, where FFmpeg's
+    // default (BT.601, untagged) made players that take HD video as BT.709
+    // show reds brighter than the Viewer.
+    void exportedMoviesKeepTheShotsColours() {
+        // Arguments: a YUV output gets the conversion and the tags, after
+        // the filter it already has; an RGB one is left alone.
+        const QStringList tagged = render::withVideoColorTags(
+            {"-c:v", "libx264", "-pix_fmt", "yuv420p", "-vf", "setsar=1"});
+        QVERIFY(tagged.at(tagged.indexOf("-vf") + 1).startsWith("setsar=1,scale=out_color_matrix=bt709"));
+        QCOMPARE(tagged.at(tagged.indexOf("-colorspace") + 1), QString("bt709"));
+        QCOMPARE(tagged.at(tagged.indexOf("-color_range") + 1), QString("tv"));
+        const QStringList rgb {"-c:v", "png", "-pix_fmt", "rgba"};
+        QCOMPARE(render::withVideoColorTags(rgb), rgb);
+
+        const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
+        const QString ffprobe = QStandardPaths::findExecutable("ffprobe");
+        if (ffmpeg.isEmpty() || ffprobe.isEmpty()) QSKIP("FFmpeg is required");
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        composition::Composition scene;
+        scene.setSize(1280, 720); scene.setFrameRate(30, 1); scene.setDurationSeconds(1);
+        {
+            auto& plane = scene.addLayer("Red");
+            plane.kind = composition::LayerKind::Plane;
+            plane.planeColor = QColor(200, 40, 40);
+            composition::Clip clip; clip.durationSeconds = 1; plane.clips << clip;
+        }
+        media::MediaManager manager;
+        render::ExportJob::Request movie;
+        movie.composition = std::shared_ptr<composition::Composition>(&scene, [](auto*) {});
+        movie.media = std::shared_ptr<media::MediaManager>(&manager, [](auto*) {});
+        movie.outputPath = dir.filePath("red.mp4"); movie.lastFrame = 2;
+        movie.hardwareEncoding = false;
+        {
+            render::ExportJob job(movie);
+            QSignalSpy finished(&job, &render::ExportJob::finished);
+            job.start();
+            QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 60000);
+            QVERIFY2(finished[0][0].toBool(), qPrintable(finished[0][1].toString()));
+        }
+        QProcess probe;
+        probe.start(ffprobe, {"-v", "error", "-select_streams", "v:0", "-show_entries",
+                              "stream=color_space,color_range,color_primaries,color_transfer",
+                              "-of", "default=nw=1", movie.outputPath});
+        QVERIFY(probe.waitForFinished(10000));
+        const QString tags = QString::fromUtf8(probe.readAllStandardOutput());
+        for (const char* tag : {"color_space=bt709", "color_range=tv", "color_primaries=bt709",
+                                "color_transfer=bt709"})
+            QVERIFY2(tags.contains(tag), qPrintable(tags));
+        // Decoded by its tags, as a player does: the shot's red.
+        QProcess decode;
+        decode.start(ffmpeg, {"-v", "error", "-i", movie.outputPath, "-frames:v", "1", "-vf", "format=rgb24",
+                              "-f", "rawvideo", "pipe:1"});
+        QVERIFY(decode.waitForFinished(10000));
+        const QByteArray pixels = decode.readAllStandardOutput();
+        QCOMPARE(pixels.size(), 1280 * 720 * 3);
+        const qsizetype at = (qsizetype(360) * 1280 + 640) * 3;
+        const QColor seen {int(uchar(pixels[at])), int(uchar(pixels[at + 1])), int(uchar(pixels[at + 2]))};
+        QVERIFY2(qAbs(seen.red() - 200) <= 3 && qAbs(seen.green() - 40) <= 3 && qAbs(seen.blue() - 40) <= 3,
+                 qPrintable(seen.name()));
+    }
+
     void multiClipLayersGoOutAsSlices() {
         QTemporaryDir temp; QVERIFY(temp.isValid());
         media::MediaManager media;

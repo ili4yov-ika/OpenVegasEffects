@@ -682,6 +682,27 @@ QString exportVideoFilter(const ExportPreset& p, const QSize& source, double pix
     return chain.join(QLatin1Char(','));
 }
 
+QStringList withVideoColorTags(QStringList arguments)
+{
+    const int pixelFormat = arguments.lastIndexOf(QStringLiteral("-pix_fmt"));
+    if (pixelFormat < 0 || pixelFormat + 1 >= arguments.size()) return arguments;
+    const QString format = arguments.at(pixelFormat + 1);
+    if (!format.startsWith(QLatin1String("yuv")) && !format.startsWith(QLatin1String("nv"))) return arguments;
+    // The scale filter converts to the encoder's format itself (format
+    // negotiation), so its matrix is the one used; setparams marks the frames.
+    const QString convert = QStringLiteral(
+        "scale=out_color_matrix=bt709:out_range=tv,"
+        "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv");
+    const int filter = arguments.lastIndexOf(QStringLiteral("-vf"));
+    if (filter >= 0 && filter + 1 < arguments.size()) arguments[filter + 1] += QLatin1Char(',') + convert;
+    else arguments << QStringLiteral("-vf") << convert;
+    arguments << QStringLiteral("-colorspace") << QStringLiteral("bt709")
+              << QStringLiteral("-color_primaries") << QStringLiteral("bt709")
+              << QStringLiteral("-color_trc") << QStringLiteral("bt709")
+              << QStringLiteral("-color_range") << QStringLiteral("tv");
+    return arguments;
+}
+
 QStringList exportAudioArguments(const ExportPreset& p)
 {
     if (!p.hasAudio()) return {QStringLiteral("-an")};
