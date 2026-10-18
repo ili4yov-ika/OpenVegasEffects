@@ -1121,10 +1121,13 @@ void RenderWorker::applyClipEffects(QImage& image, const composition::Clip& clip
             && !resolved.isEmpty()) {
             resolved[0] = QString::number(resolved.first().toDouble() * m_renderScale);
         }
+        // A module blurring motion reads its keyframed values between frames.
+        plugin::NativeFrameTime at = time;
+        at.valueAt = [&fx](int index, double when) { return fx.parameterAtTime(index, when).toString(); };
         if (owner && plugin::nativeEffectAnalysesOwnLayer(fx.pluginId)) {
             // Drawn from the instance's data (NativeInstanceHost keeps it in
             // the effect); without any yet, the module draws the frame as it is.
-            plugin::NativeFrameTime own = time;
+            plugin::NativeFrameTime own = at;
             own.instanceKey = nativeInstanceKey(owner->id, clipIndex, int(effectIndex));
             own.instanceData = fx.instanceData;
             own.layerId = owner->id.value();
@@ -1132,7 +1135,7 @@ void RenderWorker::applyClipEffects(QImage& image, const composition::Clip& clip
             plugin::applyEffectToImage(image, fx.pluginId, resolved, own);
             continue;
         }
-        plugin::applyEffectToImage(image, fx.pluginId, resolved, time);
+        plugin::applyEffectToImage(image, fx.pluginId, resolved, at);
     }
 }
 

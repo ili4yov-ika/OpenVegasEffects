@@ -267,6 +267,13 @@ struct RenderInvocation
     int reducedValues = NativeReducesNothing;
     // NativeFrameTime::layerImage.
     QImage layerImage;
+    // NativeFrameTime::valueAt, when the module blurs motion, and where this
+    // render is: the layer's milliseconds the module asks for its values at
+    // now, a frame's milliseconds and the shot frame of the layer's frame 0.
+    std::function<QString(int, double)> valueAt;
+    qint32 layerMs = 0;
+    double msPerFrame = 1000.0 / 30.0;
+    double frameOffset = 0.0;
 };
 
 thread_local RenderInvocation* g_renderInvocation = nullptr;
@@ -294,6 +301,21 @@ int reducedValuesOf(const ModuleRecord& record)
         ? int(NativeReducesPoints) : int(NativeReducesPixels | NativeReducesPoints);
 }
 
+// Whether the module has Motion Blur on: a motionBlurMode other than Off
+// (stored as its index or its name), so it reads its values at sub-sample
+// times.
+bool blursMotion(const ModuleRecord& record, const QStringList& values)
+{
+    for (int i = 0; i < record.parameters.size(); ++i) {
+        if (record.parameters.at(i).name != QLatin1String("motionBlurMode")) continue;
+        QString mode = values.value(i).trimmed();
+        if (mode.isEmpty()) mode = record.parameters.at(i).defaultValue.trimmed();
+        return !mode.isEmpty() && mode != QLatin1String("0")
+               && mode.compare(QLatin1String("Off"), Qt::CaseInsensitive) != 0;
+    }
+    return false;
+}
+
 int parameterIndex(const char* key)
 {
     if (!g_renderInvocation || !g_renderInvocation->module || !key) {
@@ -309,7 +331,9 @@ int parameterIndex(const char* key)
     return -1;
 }
 
-QString parameterValue(const char* key)
+// `layerMs`: the time the module asks at, in its layer's milliseconds; the
+// value there when it is not the render's own time (RenderInvocation::valueAt).
+QString parameterValue(const char* key, qint64 layerMs = -1)
 {
     const int index = parameterIndex(key);
     if (index < 0) {
@@ -318,6 +342,11 @@ QString parameterValue(const char* key)
     const auto overridden = g_renderInvocation->valueOverrides.constFind(index);
     if (overridden != g_renderInvocation->valueOverrides.constEnd()) {
         return overridden.value();
+    }
+    if (layerMs >= 0 && layerMs != g_renderInvocation->layerMs && g_renderInvocation->valueAt) {
+        const double frame = layerMs / g_renderInvocation->msPerFrame + g_renderInvocation->frameOffset;
+        const QString value = g_renderInvocation->valueAt(index, frame);
+        if (!value.isEmpty()) return value;
     }
     const QStringList& values = *g_renderInvocation->values;
     if (index < values.size() && !values.at(index).isEmpty()) {
@@ -371,10 +400,10 @@ float pointValueScale()
         ? qMin(1.0f, g_renderInvocation->valueScale) : 1.0f;
 }
 
-float scalarParameter(quint64, const char* key, quint32)
+float scalarParameter(quint64, const char* key, quint32 time)
 {
     bool ok = false;
-    const float value = parameterValue(key).toFloat(&ok) * pixelValueScale(key);
+    const float value = parameterValue(key, time).toFloat(&ok) * pixelValueScale(key);
     if (qEnvironmentVariableIsSet("OPENVEGAS_HFPL_RENDER_TRACE")) {
         std::fprintf(stderr, "[hfpl-render] scalar %s=%g ok=%d\n",
                      key ? key : "<null>", double(value), ok ? 1 : 0);
@@ -383,10 +412,10 @@ float scalarParameter(quint64, const char* key, quint32)
     return ok ? value : 0.0f;
 }
 
-void colorParameter(quint64, const char* key, quint32,
+void colorParameter(quint64, const char* key, quint32 time,
                     float* red, float* green, float* blue)
 {
-    const QColor color(parameterValue(key));
+    const QColor color(parameterValue(key, time));
     if (red) {
         *red = color.isValid() ? color.redF() : 0.0f;
     }
@@ -398,9 +427,9 @@ void colorParameter(quint64, const char* key, quint32,
     }
 }
 
-QVector<float> vectorParameter(const char* key, int componentCount)
+QVector<float> vectorParameter(const char* key, int componentCount, qint64 layerMs = -1)
 {
-    const QStringList parts = parameterValue(key).split(QLatin1Char(','));
+    const QStringList parts = parameterValue(key, layerMs).split(QLatin1Char(','));
     QVector<float> result(componentCount, 0.0f);
     for (int i = 0; i < componentCount && i < parts.size(); ++i) {
         bool ok = false;
@@ -412,18 +441,18 @@ QVector<float> vectorParameter(const char* key, int componentCount)
     return result;
 }
 
-void point2dParameter(quint64, const char* key, quint32, float* x, float* y)
+void point2dParameter(quint64, const char* key, quint32 time, float* x, float* y)
 {
-    const QVector<float> value = vectorParameter(key, 2);
+    const QVector<float> value = vectorParameter(key, 2, time);
     const float scale = pointValueScale();
     if (x) *x = value.at(0) * scale;
     if (y) *y = value.at(1) * scale;
 }
 
-void point3dParameter(quint64, const char* key, quint32,
+void point3dParameter(quint64, const char* key, quint32 time,
                       float* x, float* y, float* z)
 {
-    const QVector<float> value = vectorParameter(key, 3);
+    const QVector<float> value = vectorParameter(key, 3, time);
     const float scale = pointValueScale();
     if (x) *x = value.at(0) * scale;
     if (y) *y = value.at(1) * scale;
@@ -965,13 +994,13 @@ int timelineInfo(quint64, void* info)
     return 0;
 }
 
-int integerParameter(quint64, const char* key, quint32)
+int integerParameter(quint64, const char* key, quint32 time)
 {
     const int index = parameterIndex(key);
     if (index < 0) {
         return 0;
     }
-    const QString value = parameterValue(key);
+    const QString value = parameterValue(key, time);
     bool ok = false;
     const int numeric = value.toInt(&ok);
     if (ok) {
@@ -987,9 +1016,9 @@ int integerParameter(quint64, const char* key, quint32)
     return 0;
 }
 
-int booleanParameter(quint64, const char* key, quint32)
+int booleanParameter(quint64, const char* key, quint32 time)
 {
-    const QString value = parameterValue(key).trimmed();
+    const QString value = parameterValue(key, time).trimmed();
     return value.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0
            || value == QLatin1String("1") ? 1 : 0;
 }
@@ -3464,6 +3493,15 @@ public:
         invocation.layerAsset = time.layerAsset;
         invocation.layerId = time.layerId;
         invocation.layerImage = time.layerImage;
+        if (time.valueAt && blursMotion(record, parameterValues)) {
+            // As the RenderContext has it: the layer frame held inside the
+            // layer, its milliseconds, and the shot moved by the same amount.
+            invocation.valueAt = time.valueAt;
+            invocation.msPerFrame = 1000.0 / qMax(0.001, time.frameRate);
+            const qint32 layerFrame = qBound(0, time.layerFrame, qMax(1, time.layerFrames) - 1);
+            invocation.layerMs = qint32(qRound64(layerFrame * invocation.msPerFrame));
+            invocation.frameOffset = double(time.frame) - time.layerFrame;
+        }
         RenderInvocation* previousInvocation = g_renderInvocation;
         g_renderInvocation = &invocation;
 

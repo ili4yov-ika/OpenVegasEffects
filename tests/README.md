@@ -382,6 +382,9 @@ whose open shot only nests the tracked one; it needs the OpenGL 4.1 context and 
 `projectFilesGetTheirIcon` registers the .vegfx ProgID into an ini stand-in for Software\Classes and
 checks its DefaultIcon (the executable's icon 1), open command, OpenWithProgids and the Applications
 entry, that the extension's own default is left alone and that an unchanged registration writes nothing.
+`keyFramesBetweenFrames` evaluates keys between frames (a segment's curve, a key on a key, Hold
+holding) and `nativeMotionBlurReadsKeyframesBetweenFrames` (OpenGL) has EnvironmentMapViewer with Motion
+Blur read a keyframed turn at its sub-samples: the stripes smear, and a still turn draws as without blur.
 `viewer360DrawsThroughEnvironmentMapViewer` (OpenGL) has the 360 viewer draw through the reference's
 EnvironmentMapViewer module and checks its CPU projection against it for both lenses, combined turns,
 Scale and Scale Ratio, the lens mapping both ways, and that Top and Left look where the reference's do.

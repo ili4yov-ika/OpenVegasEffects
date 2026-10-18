@@ -71,6 +71,16 @@ struct Effect
                    ? QVariant(parameterValues.at(parameterIndex))
                    : QVariant();
     }
+
+    // The same between frames (KeyFrameList::valueAtTime).
+    QVariant parameterAtTime(int parameterIndex, double frame) const
+    {
+        const auto it = animation.constFind(parameterIndex);
+        if (it != animation.constEnd() && !it->isEmpty()) {
+            return it->valueAtTime(frame);
+        }
+        return parameterAt(parameterIndex, 0);
+    }
 };
 
 } // namespace composition

@@ -599,6 +599,12 @@ struct NativeFrameTime
     // EnvironmentMapViewer the shot's equirectangular frame this way and has
     // it draw into a frame of the viewport's size.
     QImage layerImage;
+    // The effect's value of a parameter (by index) at a shot frame between
+    // frames. A module with Motion Blur on (motionBlurMode not Off) reads its
+    // values again at its sub-samples' times - EnvironmentMapViewer at the
+    // layer's milliseconds -250..+125 around the frame for Scale 0.5 - and
+    // gets them from here, so a keyframed turn blurs.
+    std::function<QString(int index, double frame)> valueAt;
 };
 
 // Executes the 2D BIFF GPU path (Notify 8 once per render thread, Notify 10 per

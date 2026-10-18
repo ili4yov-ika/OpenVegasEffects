@@ -7,6 +7,7 @@
   - [ ] Нативный pipeline 360/Layer, исполнение закрытого кода `.hfpl` целиком.
   - [ ] Используя Ghidra, доделай Layer и 360 Viewer.
     - [x] 360 Viewer рисует через native EffectInstance (18 октября 2026): модуль `EnvironmentMapViewer` рендерит вид в размер окна, хост отдаёт ему кадр композиции как слой `environment_map` (GetLayerInfoV2/GetLayerTexture). Модель снята с модуля (ошибка < 1°): поворот Rz(roll)·Ry(−yaw)·Rx(−pitch), перспектива и эквидистантный Fisheye по высоте, Scale/Scale Ratio (u = 0.5 + долгота/2π·100/S·2/R, v = 0.5 − широта/π·100/S). По `FUN_140380d60` Top = X +90°, Left = Y +90°; Fisheye включён по умолчанию, как у эталона. CPU-проекция и инструменты — по той же модели. Тест `viewer360DrawsThroughEnvironmentMapViewer`.
-    - [ ] Motion Blur 360-плагина (нужен кадр композиции в соседние моменты) и native Layer render pipeline.
+    - [x] Motion Blur 360-плагина (19 октября 2026): модуль размывает не кадры слоя, а свои значения — перечитывает параметры в миллисекундах слоя на подвыборках (−249…+125 мс). Хост отвечает значениями ключей эффекта в дробный кадр (`NativeFrameTime::valueAt`, `KeyFrameList::valueAtTime`), когда Motion Blur модуля включён; так же работают 360Text, AtomicParticle, MotionBlur, Shake, Shatter. Тесты `keyFramesBetweenFrames`, `nativeMotionBlurReadsKeyframesBetweenFrames`.
+    - [ ] Native Layer render pipeline.
   - [ ] Остаток по превью: 69 нативных 2D-эффектов (шумы, искажения, зависящие от сетки пикселей, световые мечи) и 40, не менявших картинку в проходах, рисуются в полном размере с уменьшением.
 - [ ] Проверить VLC 4 runtime, микрофон и системный аудиовыход на macOS/Linux; автоматические проверки подтверждают PCM и состояние VLC player, а не физическую слышимость.

@@ -121,6 +121,9 @@ public:
 
     // Value of the animated property at `frame`.
     QVariant valueAt(int frame) const;
+    // The same between frames (a motion blur's sub-samples): keys sit on
+    // whole frames, the segment's curve is followed in between.
+    QVariant valueAtTime(double frame) const;
 
     void clear();
 

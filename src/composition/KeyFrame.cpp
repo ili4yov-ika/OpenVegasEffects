@@ -285,13 +285,18 @@ void KeyFrameList::adjacentKeyFrames(int frame, const KeyFrame** previous,
 
 QVariant KeyFrameList::valueAt(int frame) const
 {
+    return valueAtTime(double(frame));
+}
+
+QVariant KeyFrameList::valueAtTime(double frame) const
+{
     if (m_frames.isEmpty()) {
         return m_defaultValue;
     }
 
     const KeyFrame* previous = nullptr;
     const KeyFrame* next = nullptr;
-    adjacentKeyFrames(frame, &previous, &next);
+    adjacentKeyFrames(int(std::floor(frame)), &previous, &next);
 
     if (!previous) {
         return next->value;          // before the first key: hold it
@@ -315,7 +320,7 @@ QVariant KeyFrameList::valueAt(int frame) const
     if (span <= 0) {
         return previous->value;
     }
-    double t = static_cast<double>(frame - previous->frame) / span;
+    double t = (frame - previous->frame) / span;
     // Either end can shape the segment: "Smooth Out" on the keyframe being left
     // and "Smooth In" on the one being reached ease their own side of it, so the
     // straight-line shortcut only applies when both ends are Linear.

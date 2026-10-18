@@ -2099,6 +2099,98 @@ private slots:
         QVERIFY(std::abs(qRed(view.project(pano, QSize(32, 18)).pixel(16, 9)) - 64) < 6);
     }
 
+    // Keys sit on whole frames; between them the segment's curve is
+    // followed (a motion blur's sub-samples), on a key it is the key, and
+    // a Hold segment holds.
+    void keyFramesBetweenFrames() {
+        composition::KeyFrameList keys(QVariant(0.0));
+        keys.set(10, 0.0); keys.set(20, 100.0);
+        QCOMPARE(keys.valueAtTime(12.5).toDouble(), 25.0);
+        QCOMPARE(keys.valueAtTime(19.9).toDouble(), keys.valueAt(20).toDouble() - 1.0);
+        QCOMPARE(keys.valueAtTime(10.0), keys.valueAt(10));
+        QCOMPARE(keys.valueAtTime(4.5).toDouble(), 0.0);
+        QCOMPARE(keys.valueAtTime(30.25).toDouble(), 100.0);
+        keys.set(10, 0.0, composition::TemporalType::Hold);
+        QCOMPARE(keys.valueAtTime(15.5).toDouble(), 0.0);
+        composition::Effect effect;
+        effect.parameterValues = {QStringLiteral("7")};
+        QCOMPARE(effect.parameterAtTime(0, 3.5).toString(), QString("7"));
+        composition::KeyFrameList turn(QVariant(0.0));
+        turn.set(0, 0.0); turn.set(10, 90.0);
+        effect.animation.insert(0, turn);
+        QCOMPARE(effect.parameterAtTime(0, 2.5).toDouble(), 22.5);
+    }
+    // With Motion Blur on, EnvironmentMapViewer reads its values again at
+    // its sub-samples' times (the layer's milliseconds); the host answers
+    // from the effect's keyframes there, so a keyframed turn blurs, and a
+    // still one draws as it does without blur. Needs the OpenGL 4.1 context
+    // native modules run in.
+    void nativeMotionBlurReadsKeyframesBetweenFrames() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/EnvironmentMapViewer.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference EnvironmentMapViewer.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("test.native.envviewer.blur");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        // Narrow vertical stripes: a turn about Y smears them sideways.
+        QImage pano(512, 256, QImage::Format_RGBA8888);
+        for (int y = 0; y < 256; ++y)
+            for (int x = 0; x < 512; ++x)
+                pano.setPixelColor(x, y, (x / 4) % 2 ? QColor(240, 240, 240) : QColor(20, 20, 20));
+        int yRotation = -1;
+        const auto values = [&](const QString& mode) {
+            QStringList list;
+            for (int i = 0; i < metadata.parameters.size(); ++i) {
+                const auto& parameter = metadata.parameters.at(i);
+                QString v = parameter.defaultValue;
+                if (parameter.name == "useFishEyeLens" || parameter.name == "useCameraFOV") v = "false";
+                if (parameter.name == "envWrapX" || parameter.name == "envWrapY") v = "1";
+                if (parameter.name == "motionBlurMode") v = mode;
+                if (parameter.name == "motionBlurSamples") v = "16";
+                if (parameter.name == "motionBlurScale") v = "0.5";
+                if (parameter.name == "envTrasnformYRot") { yRotation = i; v = "30"; }
+                list << v;
+            }
+            return list;
+        };
+        // 1 degree a frame; the render is at frame 30 (YRot 30).
+        const auto turning = [&](int index, double frame) {
+            return index == yRotation ? QString::number(frame) : QString();
+        };
+        const auto still = [](int, double) { return QString(); };
+        const auto draw = [&](const QString& mode, std::function<QString(int, double)> valueAt, bool* ok) {
+            QImage image = pano;
+            plugin::NativeFrameTime time;
+            time.frame = 30; time.layerFrame = 30; time.layerFrames = 100; time.frameRate = 30.0;
+            time.valueAt = valueAt;
+            *ok = plugin::applyEffectToImage(image, id, values(mode), time);
+            return image;
+        };
+        // How sharp the stripes are: the mean step between neighbours.
+        const auto sharpness = [](const QImage& image) {
+            double sum = 0; int n = 0;
+            for (int y = 64; y < 192; y += 4)
+                for (int x = 1; x < image.width(); ++x) {
+                    sum += std::abs(qGray(image.pixel(x, y)) - qGray(image.pixel(x - 1, y))); ++n;
+                }
+            return sum / n;
+        };
+        bool ok = false;
+        const QImage sharp = draw(QStringLiteral("0"), turning, &ok);
+        if (!ok) QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        const QImage blurred = draw(QStringLiteral("2"), turning, &ok);
+        QVERIFY(ok);
+        const QImage held = draw(QStringLiteral("2"), still, &ok);
+        QVERIFY(ok);
+        QVERIFY(yRotation >= 0);
+        const double edges = sharpness(sharp), smeared = sharpness(blurred), kept = sharpness(held);
+        QVERIFY2(smeared < edges * 0.6, qPrintable(QStringLiteral("%1 vs %2").arg(smeared).arg(edges)));
+        QVERIFY2(std::abs(kept - edges) < edges * 0.05, qPrintable(QStringLiteral("%1 vs %2").arg(kept).arg(edges)));
+    }
     // 2D effects that move by themselves get the time (RenderContext
     // +0x6c/+0x70/+0x98/+0x9c/+0xa0): Linear Wipe at frame 0 and at frame 30
     // of a 120-frame layer differ, the same frame is the same picture, and
