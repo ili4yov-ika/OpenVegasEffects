@@ -379,6 +379,10 @@ saved data alone, then the same motion with the footage layer moved and turned (
 answers in the world `GetLayerInfoV2` gives it, the host takes it back off), and from a host
 whose open shot only nests the tracked one; it needs the OpenGL 4.1 context and skips offscreen
 (run it alone with `QT_QPA_PLATFORM=windows`, it shows no window).
+`nativeEffectsGoInTheReferencesLists` writes native effects into the reference's own lists
+(`<Effects>` / `<BehaviorEffects>` with `<Instance Version="8">` and a typed PropertyManager), reads
+them back from a file without the port's extension, keeps an unknown plugin's instance verbatim and
+merges into project_1 without doubling its `<Effects>`.
 `effectsFavoritesAndRecentsAreKept` checks the Effects panel's favourites and recents in the
 reference's settings shape (group Plugins, QDataStream of int 0, the count and the IDs), five
 recents with the newest last, and the panel's Favorites/Recents rows above the categories.

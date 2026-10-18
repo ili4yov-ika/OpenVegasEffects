@@ -51,7 +51,7 @@ const QHash<QString, QSet<QString>>& containers()
          {QStringLiteral("ID"), QStringLiteral("Name"), QStringLiteral("ParentLayerID"),
           QStringLiteral("StartFrame"), QStringLiteral("EndFrame"), QStringLiteral("BlendMode"),
           QStringLiteral("Visible"), QStringLiteral("Muted"), QStringLiteral("Locked"),
-          QStringLiteral("MotionBlurOn")}},
+          QStringLiteral("MotionBlurOn"), QStringLiteral("BehaviorEffects")}},
         {QStringLiteral("TextBox"),
          {QStringLiteral("MinX"), QStringLiteral("MaxX"), QStringLiteral("MinY"),
           QStringLiteral("MaxY"), QStringLiteral("Mode"), QStringLiteral("VerticalAlignment"),
@@ -91,8 +91,9 @@ const QHash<QString, QSet<QString>>& containers()
 QSet<QString> ownedChildren(const QString& tag)
 {
     if (isLayerWrapper(tag)) {
+        // The effect lists follow the model: an effect taken off goes.
         return {QStringLiteral("AssetID"), QStringLiteral("AssetInstanceStart"),
-                QStringLiteral("Dimensions")};
+                QStringLiteral("Dimensions"), QStringLiteral("Effects"), QStringLiteral("GeometryEffects")};
     }
     return containers().value(tag);
 }

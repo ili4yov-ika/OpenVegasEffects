@@ -17,6 +17,7 @@
 #include "plugin/EffectRender.h"
 #include "plugin/NativeEffectRender.h"
 #include "plugin/NativePlugin.h"
+#include "project/NativeEffectCatalog.h"
 
 namespace openvegas {
 namespace plugin {
@@ -257,6 +258,16 @@ private:
 class DefaultPluginManager : public PluginManager
 {
 public:
+    DefaultPluginManager()
+    {
+        // Project files write and read the native effects through this.
+        project::setNativeEffectLookup([this](const QString& idOrGuid) { return nativeEntry(idOrGuid); });
+    }
+    ~DefaultPluginManager() override
+    {
+        project::setNativeEffectLookup({});
+    }
+
     void setPluginDirs(const QVector<QString>& dirs) override
     {
         m_dirs = dirs;
@@ -1325,6 +1336,40 @@ private:
             }
         }
         return -1;
+    }
+
+    // A native plugin by this port's ID or by its FXID, as a project file
+    // names it (project::NativeEffectEntry).
+    std::optional<project::NativeEffectEntry> nativeEntry(const QString& idOrGuid) const
+    {
+        for (const PluginEntry& entry : m_entries) {
+            const EffectSpec& spec = entry.spec;
+            if (spec.guid.isEmpty()
+                || (spec.id.value() != idOrGuid && spec.guid.compare(idOrGuid, Qt::CaseInsensitive) != 0)) {
+                continue;
+            }
+            project::NativeEffectEntry result;
+            result.pluginId = spec.id.value();
+            result.guid = spec.guid.toLower();
+            result.name = spec.name;
+            result.versionMajor = spec.version.major();
+            result.versionMinor = spec.version.minor();
+            using Container = project::NativeEffectEntry::Container;
+            switch (spec.kind) {
+            case PluginKind::GeometryEffect: result.container = Container::GeometryEffects; break;
+            case PluginKind::BehaviorEffect: result.container = Container::BehaviorEffects; break;
+            case PluginKind::VideoTransition:
+            case PluginKind::AudioTransition:
+            case PluginKind::Transitions: result.container = Container::None; break;
+            default: result.container = Container::Effects; break;
+            }
+            for (const EffectParameterSpec& parameter : spec.parameters) {
+                result.parameters.append({parameter.name, parameter.type, parameter.defaultValue,
+                                          parameter.choices});
+            }
+            return result;
+        }
+        return std::nullopt;
     }
 
     QVector<PluginEntry> m_entries;

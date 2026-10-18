@@ -171,6 +171,31 @@ Point, Point3D, Preset, Scale, SliderFloat, SliderInt, String, TonalCurves), `FX
 - Маск-пикеры: `LayerPickerPropertyNames @ 0x1803f8a10`, `ChangeLayerPickerValues @ 0x1803f8c10`
 - `~EffectInstance @ 0x1803f6a60`
 
+### EffectInstance в проекте (18 октября 2026)
+- Списки слоя: `EffectsHelper::SerializeEffects` (0x1803fb5e0) — `<Effects>` в обёртке слоя (после
+  содержимого, перед `Masks`/`LayerBase`), `SerializeGeometryEffects` — `<GeometryEffects>` там же,
+  `SerializeBehaviorEffects` — `<BehaviorEffects>` в `LayerBase` перед `PropertyManager`; в каждом —
+  `<Instance>` на эффект (`EffectInstance::Serialize` 0x1803f7e00 → `FUN_1803f4310`).
+- `<Instance Version="8">`: `ID`, `Name`, `PluginID` (FXID модуля, `PluginMetadata +0x04`),
+  `PluginName`, `PluginVersion` (атрибуты `Ma`/`Mi`/`Re`/`Bu`, `FUN_1803449f0`), `ParentID` (слой),
+  `ParentTimelineID` (шот), `Enabled`, `CreatedInComp`, `InitializedUIState`,
+  `ParentLayerLastSize` (`X`/`Y`, `%g`, `FUN_1800f7180`), `PropertyManager`, `UIState`
+  (`<Property name vis>` на ключ, кроме `pluginPreset*` и `HF_Persistant_Message_*`,
+  `SerializeUIState` 0x1803fc3c0), затем данные плагина (`SerializeInstanceData` модуля →
+  `<InstanceBytes>`) и Curves2D.
+- Чтение (`FUN_1803f4880`): `Version` < 3 — без `CreatedInComp`/`InitializedUIState`; свойства
+  файла сливаются со свойствами, которые зарегистрировал модуль, по имени
+  (`SynchronizeSourceWithDest`).
+- Типы свойств модуля (`PluginHostAPI::Create*`, Tannen.dll): CheckBox и Button — bool `<b>`,
+  ColorPicker — `<cl>`, ComboBox — int `<i>` без временной интерполяции, Point — `<p2>`, Point3D —
+  `<p3>`, Angle — float `<fl>`, SingleLineEditor — `<st>`, FloatSlider — `<fl>`, IntSlider — `<i>`.
+- Порт (`nativefx` в VegfxSerializer, каталог `project::NativeEffectCatalog` от PluginManager):
+  пишет нативные эффекты в эти списки (ID — UUID v5 от слоя и номера, если эффект не из файла), читает
+  их из файла эталона (если нет расширения порта), эффект неизвестного плагина хранит дословно и
+  пишет обратно в тот же список; при слиянии с исходным файлом списки следуют модели
+  (`VegfxMerge`: `Effects`/`GeometryEffects` у обёртки слоя, `BehaviorEffects` у `LayerBase`).
+  Переходы (`SerializeTransition`, `ref`/`transID`/`fromObjectID`) — пока только в расширении.
+
 ### AssetList
 `AddAsset @ 0x18035d630`, `Deserialize @ 0x18035dc10`.
 `AssetProxy::Create @ 0x1806b0d0` (пример shared_ptr-фабрики).

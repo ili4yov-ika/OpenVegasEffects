@@ -48,6 +48,7 @@
 #include "media/AudioWaveform.h"
 #include "media/ConformedAudio.h"
 #include "render/NestedAudioMix.h"
+#include "project/NativeEffectCatalog.h"
 #include "ui/EffectsFavorites.h"
 #include "ui/EffectsPanel.h"
 #include "ui/EffectPlacement.h"
@@ -11366,6 +11367,183 @@ private slots:
     // OpenVegasSliceOf, its range its clip's - and comes back as one layer
     // with both clips; the reference, without this port's attributes, reads
     // two layers.
+    // Native effects in the reference's own lists (EffectsHelper::
+    // SerializeEffects / EffectInstance::Serialize): an <Instance Version="8">
+    // per effect with its plugin's FXID and a PropertyManager of the keys the
+    // module registered, by type; Behaviors in LayerBase's BehaviorEffects.
+    // A file of the reference (no port extension) reads them back; an effect
+    // of a plugin this build does not know goes back out as it came.
+    void nativeEffectsGoInTheReferencesLists() {
+        using Entry = project::NativeEffectEntry;
+        const auto fx0Bytes = [] { return QByteArray("RTOM\x01\x02", 6); };
+        Entry glow;
+        glow.pluginId = "com.test.Glow"; glow.guid = "11111111-2222-3333-4444-555555555555";
+        glow.name = "Glow"; glow.versionMajor = 2; glow.versionMinor = 1;
+        glow.container = Entry::Container::Effects;
+        glow.parameters = {{"radius", "double", "10", {}}, {"mode", "int", "0", {"Add", "Screen"}},
+                           {"enabled2", "bool", "false", {}}, {"tint", "color", "#ff0000", {}},
+                           {"center", "point2d", "0,0", {}}, {"source", "layer", "", {}},
+                           {"caption", "string", "", {}}, {"note", "label", "", {}}};
+        Entry wobble;
+        wobble.pluginId = "com.test.Wobble"; wobble.guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        wobble.name = "Wobble"; wobble.container = Entry::Container::BehaviorEffects;
+        wobble.parameters = {{"amount", "double", "1", {}}};
+        project::setNativeEffectLookup([=](const QString& key) -> std::optional<Entry> {
+            for (const Entry& entry : {glow, wobble})
+                if (entry.pluginId == key || entry.guid == key) return entry;
+            return std::nullopt;
+        });
+        auto restore = qScopeGuard([] { project::setNativeEffectLookup({}); });
+
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        media::MediaManager media;
+        composition::Composition shot;
+        shot.setSize(320, 180); shot.setFrameRate(30, 1); shot.setDurationSeconds(4);
+        const QString sourceLayer = QStringLiteral("99999999-0000-0000-0000-000000000001");
+        {
+            auto& plane = shot.addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            composition::Clip clip; clip.startSeconds = 1.0; clip.durationSeconds = 2.0;
+            composition::Effect fx; fx.pluginId = core::Identifier("com.test.Glow"); fx.name = "My Glow";
+            fx.parameterValues = {"12.5", "Screen", "true", "#00ff80", "40,-20", sourceLayer, "Hi <there>", ""};
+            composition::KeyFrameList radius; radius.set(30, 5.0); radius.set(60, 25.0);
+            fx.animation.insert(0, radius);
+            fx.instanceData = QByteArray("RTOM\x01\x02", 6);
+            clip.effects.append(fx);
+            composition::Effect behavior; behavior.pluginId = core::Identifier("com.test.Wobble");
+            behavior.name = "Wobble"; behavior.parameterValues = {"3"}; behavior.enabled = false;
+            clip.effects.append(behavior);
+            composition::Effect builtin; builtin.pluginId = core::Identifier("openvegas.builtin.invert");
+            builtin.name = "Invert";
+            clip.effects.append(builtin);
+            plane.clips << clip;
+        }
+        const QString path = temp.filePath("effects.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(path, shot, media).isSuccess());
+        const auto readText = [&] {
+            QFile file(path); return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+        };
+        const QString xml = readText();
+        QDomDocument document; QVERIFY(document.setContent(xml));
+        QDomElement layer = document.elementsByTagName("AssetLayer").at(0).toElement();
+        QDomElement effects = layer.firstChildElement("Effects");
+        QVERIFY(!effects.isNull());
+        const QDomElement instance = effects.firstChildElement("Instance");
+        QCOMPARE(instance.attribute("Version"), QString("8"));
+        QCOMPARE(instance.firstChildElement("PluginID").text(), glow.guid);
+        QCOMPARE(instance.firstChildElement("PluginName").text(), QString("Glow"));
+        QCOMPARE(instance.firstChildElement("Name").text(), QString("My Glow"));
+        QCOMPARE(instance.firstChildElement("PluginVersion").attribute("Ma"), QString("2"));
+        QCOMPARE(instance.firstChildElement("ParentID").text(), shot.layers()[0].id.value());
+        QCOMPARE(instance.firstChildElement("ParentTimelineID").text(), shot.id().value());
+        QCOMPARE(instance.firstChildElement("Enabled").text(), QString("1"));
+        QCOMPARE(instance.firstChildElement("ParentLayerLastSize").attribute("X"), QString("320"));
+        QCOMPARE(instance.firstChildElement("InstanceBytes").text(), QString::fromLatin1(fx0Bytes().toBase64()));
+        QVERIFY(instance.nextSiblingElement("Instance").isNull());   // the built-in stays out
+        const QDomElement properties = instance.firstChildElement("PropertyManager");
+        QStringList names;
+        for (QDomElement p = properties.firstChildElement("Prop"); !p.isNull(); p = p.nextSiblingElement("Prop"))
+            names << p.firstChildElement("Name").text();
+        QCOMPARE(names, (QStringList {"radius", "mode", "enabled2", "tint", "center", "source", "caption"}));
+        const auto valueOf = [&](const QString& name, const QString& tag) {
+            for (QDomElement p = properties.firstChildElement("Prop"); !p.isNull(); p = p.nextSiblingElement("Prop"))
+                if (p.firstChildElement("Name").text() == name)
+                    return p.firstChildElement("Static").firstChildElement(tag);
+            return QDomElement();
+        };
+        QCOMPARE(valueOf("radius", "fl").text(), QString("12.5"));
+        QCOMPARE(valueOf("mode", "i").text(), QString("1"));
+        QCOMPARE(valueOf("enabled2", "b").text(), QString("1"));
+        QCOMPARE(valueOf("tint", "cl").attribute("G"), QString("1"));
+        QCOMPARE(valueOf("center", "p2").attribute("Y"), QString("-20"));
+        QCOMPARE(valueOf("source", "id").text(), sourceLayer);
+        QCOMPARE(valueOf("caption", "st").text(), QString("Hi <there>"));
+        QCOMPARE(properties.firstChildElement("Prop").firstChildElement("Animation").elementsByTagName("Key").size(), 2);
+        // The Behavior in LayerBase, before its PropertyManager.
+        const QDomElement named = layer.firstChildElement("LayerBase");
+        const QDomElement behaviors = named.firstChildElement("BehaviorEffects");
+        QCOMPARE(behaviors.firstChildElement("Instance").firstChildElement("PluginID").text(), wobble.guid);
+        QCOMPARE(behaviors.firstChildElement("Instance").firstChildElement("Enabled").text(), QString("0"));
+        QCOMPARE(behaviors.nextSiblingElement().tagName(), QString("PropertyManager"));
+
+        // As the reference would have it: no port extension. An unknown
+        // plugin's instance comes along too.
+        QDomElement stray = instance.cloneNode(true).toElement();
+        stray.firstChildElement("PluginID").firstChild().setNodeValue("deadbeef-0000-0000-0000-000000000000");
+        stray.firstChildElement("Name").firstChild().setNodeValue("Somebody Else's");
+        effects.appendChild(stray);
+        layer.removeChild(layer.firstChildElement("OpenVegasEffects"));
+        {
+            QFile out(path); QVERIFY(out.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            out.write(document.toByteArray()); out.close();
+        }
+        composition::Composition back; media::MediaManager media2;
+        QVERIFY(project::VegfxSerializer::loadFromFile(path, &back, &media2).isSuccess());
+        QCOMPARE(back.layers().size(), 1);
+        const QVector<composition::Effect>& read = back.layers()[0].clips[0].effects;
+        QCOMPARE(read.size(), 3);
+        QCOMPARE(read[0].pluginId.value(), QString("com.test.Glow"));
+        QCOMPARE(read[0].name, QString("My Glow"));
+        QCOMPARE(read[0].parameterValues, (QStringList {"12.5", "1", "true", "#00ff80", "40,-20", sourceLayer,
+                                                         "Hi <there>", ""}));
+        QCOMPARE(read[0].instanceData, fx0Bytes());
+        QVERIFY(read[0].isAnimated(0));
+        // Keys are relative to the layer in the file and back on the shot's time.
+        QCOMPARE(read[0].animation.value(0).locations(), (QVector<int> {30, 60}));
+        QCOMPARE(read[0].parameterAt(0, 60).toDouble(), 25.0);
+        QCOMPARE(read[1].pluginId.value(), QString("deadbeef-0000-0000-0000-000000000000"));
+        QCOMPARE(read[1].nativeContainer, QString("Effects"));
+        QVERIFY(!read[1].nativeXml.isEmpty());
+        QCOMPARE(read[2].pluginId.value(), QString("com.test.Wobble"));
+        QVERIFY(!read[2].enabled);
+        QCOMPARE(read[2].parameterValues, QStringList {"3"});
+
+        // Saved again: the unknown one goes out as it came, in its list.
+        QVERIFY(project::VegfxSerializer::saveToFile(path, back, media2).isSuccess());
+        const QString again = readText();
+        QCOMPARE(again.count("<PluginID>deadbeef-0000-0000-0000-000000000000</PluginID>"), 1);
+        QCOMPARE(again.count("Somebody Else's"), 2);   // Instance Name and the extension's copy
+        QDomDocument againDocument; QVERIFY(againDocument.setContent(again));
+        QCOMPARE(againDocument.elementsByTagName("Effects").size(), 1);
+        // An effect taken off goes from the file too (the list follows the model).
+        back.layerRef(0).clips[0].effects.remove(1);
+        QVERIFY(project::VegfxSerializer::saveToFile(path, back, media2).isSuccess());
+        QVERIFY(!readText().contains("deadbeef"));
+
+        // Into a file of the reference: its empty <Effects /> becomes the
+        // list, once, and the other layers keep theirs.
+        const QString sample = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects/project_1/Project.vegfx";
+        if (QFileInfo::exists(sample)) {
+            const QString copy = temp.filePath("project_1.vegfx");
+            QVERIFY(QFile::copy(sample, copy));
+            QFile::setPermissions(copy, QFile::ReadOwner | QFile::WriteOwner);
+            composition::Composition project; media::MediaManager media3;
+            QVERIFY(project::VegfxSerializer::loadFromFile(copy, &project, &media3).isSuccess());
+            const int layers = project.layers().size();
+            QVERIFY(layers >= 2);
+            composition::Effect fx; fx.pluginId = core::Identifier("com.test.Glow"); fx.name = "Glow";
+            fx.parameterValues = {"7", "0", "false", "#ffffff", "0,0", "", "", ""};
+            project.layerRef(0).clips[0].effects.append(fx);
+            QVERIFY(project::VegfxSerializer::saveToFile(copy, project, media3).isSuccess());
+            QFile file(copy); QVERIFY(file.open(QIODevice::ReadOnly));
+            QDomDocument saved; QVERIFY(saved.setContent(file.readAll()));
+            int lists = 0, instances = 0;
+            const QDomNodeList all = saved.elementsByTagName("Effects");
+            for (int i = 0; i < all.size(); ++i) {
+                ++lists;
+                instances += all.at(i).toElement().elementsByTagName("Instance").size();
+            }
+            QCOMPARE(instances, 1);
+            QVERIFY(lists >= layers);
+            for (int i = 0; i < all.size(); ++i) {
+                const QDomElement wrapper = all.at(i).parentNode().toElement();
+                int direct = 0;
+                for (QDomElement c = wrapper.firstChildElement("Effects"); !c.isNull(); c = c.nextSiblingElement("Effects"))
+                    ++direct;
+                QCOMPARE(direct, 1);
+            }
+        }
+    }
     void multiClipLayersGoOutAsSlices() {
         QTemporaryDir temp; QVERIFY(temp.isValid());
         media::MediaManager media;

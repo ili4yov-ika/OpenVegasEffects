@@ -89,6 +89,7 @@ HEADERS += \
     src/plugin/Plugin.h \
     src/plugin/PluginId.h \
     src/plugin/PluginManager.h \
+    src/project/NativeEffectCatalog.h \
     src/project/VegfxSerializer.h \
     src/project/VegfxMerge.h \
     src/model3d/Mesh.h \
