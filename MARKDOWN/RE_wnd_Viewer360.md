@@ -34,9 +34,9 @@ Custom сохраняет произвольное направление.
 
 `Preview360.ui` подключена через setupUi. Семь направлений, кнопка Properties,
 мышь, колесо, стрелки и Home работают. Стрелки поворачивают на 1°, Shift — 10°;
-Home возвращает Front. Проекция equirectangular → perspective выполняется на CPU.
-Повороты применяются в порядке Roll → Pitch → Yaw, поэтому изменение Yaw не
-меняет широту выбранного направления. Bilinear sampling сохраняет alpha.
+Home возвращает Front. Вид рисует сам модуль EnvironmentMapViewer, когда он
+зарегистрирован (см. «Native EffectInstance» ниже), иначе — CPU-проекция той же
+модели. Bilinear sampling сохраняет alpha.
 
 Properties редактирует Yaw, Pitch (включая ±90°), Roll, FOV, использование FOV
 камеры и wrap по обеим осям. Cancel ничего не меняет; OK без изменений сохраняет
@@ -54,10 +54,9 @@ Wrap по каждой оси — No (краевой пиксель), Tile (по
 RotationConventionVersion мигрирует прежний Custom Yaw, сохраняя направление
 при переходе на знаки поворотов оригинала.
 
-Ограничения: это CPU-проекция итогового кадра композиции, а не native EffectInstance
-с оригинальным GPU renderer. Fisheye, Scale/Scale Ratio и Motion Blur плагина
-ещё требуют реализации. Native focal length/FOV conversion требует
-отдельного исследования и не заменяется нашим расширением XML.
+Ограничения (до 18 октября 2026): CPU-проекция вместо native EffectInstance, без
+Fisheye и Scale/Scale Ratio. Закрыто разделом «Native EffectInstance»; Motion Blur
+плагина остаётся по умолчанию (Off).
 
 ## 360 Viewer — тот же Viewer (1 октября 2026)
 
@@ -73,11 +72,59 @@ RotationConventionVersion мигрирует прежний Custom Yaw, сохр
 второй — кнопка «Показать вьюер здесь». Решение принимается по сигналам `visibilityChanged`
 после их завершения (`isVisible()` у неактивной вкладки остаётся true).
 
+## Native EffectInstance (18 октября 2026)
+
+`FUN_140380d60` (повторно декомпилирована): Top — `envTrasnformXRot` = +90°
+(`DAT_1413334c8`), Bottom — −90° (`DAT_141333640`), Left — `envTrasnformYRot` =
++90°, Right — −90°, Back — 180° (`DAT_1413334f0`); Front обнуляет все три. Диалог
+Properties эталона — `EffectInstanceSettingsDialog` того же экземпляра, то есть Yaw,
+Pitch и Roll порта и есть Y, X и Z Rotation модуля. `FUN_140380680` задаёт только
+`useCameraFOV=false` и `envWrapX/Y=0`, поэтому `useFishEyeLens` остаётся включённым
+(умолчание модуля), Scale 100 %, Scale Ratio 2, Motion Blur Off.
+
+Модель снята с самого модуля через хост порта: панорама, в пикселях которой
+закодированы их долгота и широта, рендер при разных объективах и поворотах и
+подбор по всем 48 порядкам и знакам осей (медиана ошибки < 1° во всех
+случаях, следующий кандидат — 37°):
+
+- поворот: мир = Rz(roll)·Ry(−yaw)·Rx(−pitch)·луч камеры — сначала pitch вокруг X,
+  затем yaw вокруг Y, затем roll вокруг **мировой** Z (прежде порт крутил roll первым,
+  вокруг оси взгляда);
+- объектив без Fisheye — перспектива, FOV по высоте: r = tan θ / tan(fov/2);
+- Fisheye — эквидистантный: r = θ / (fov/2), r в полувысотах кадра от центра
+  (k = 1.909/1.276/0.766 при 60/90/150° против 1.910/1.273/0.764 по формуле);
+- текстура: u = 0.5 + долгота/2π · 100/Scale · 2/Ratio, v = 0.5 − широта/π ·
+  100/Scale (ошибка подбора 0.001); за пределами 0..1 — Wrap X/Y.
+
+Хост порта отдаёт модулю текстуры верхней строкой вперёд, а у эталона они идут
+снизу вверх, поэтому «верх» модуля — низ кадра: у порта X и Z Rotation модуля
+берутся с обратным знаком (X = −pitch, Z = −roll), и тогда Top смотрит в верхнюю
+строку панорамы, Left — в левую четверть, как у эталона.
+
+Реализация: `Viewer360View::project` находит модуль по имени файла
+(`nativeModuleNamed("EnvironmentMapViewer")`), задаёт его значения по именам
+параметров и рисует в кадр размера окна (до 960×540): `environment_map`
+указывает на отдельный слой, а хост отвечает на GetLayerInfoV2 (+0x128: видимый
+слой, размер +0x6c/+0x70) и GetLayerTexture/V2 (+0x100) кадром композиции
+(`NativeFrameTime::layerImage`). Пустой `environment_map` модуль заменяет своим
+исходником, поэтому без отдельного слоя он рисует только в размер панорамы. Свой
+слой (нулевой ID) хост по-прежнему не описывает. Без модуля или без OpenGL 4.1 —
+CPU-проекция с теми же поворотами, объективами, Scale и Wrap; через неё же
+инструменты переводят точки окна в пиксели панорамы и обратно. Properties
+добавил «Use Fisheye Lens», «Scale» (1–200 %) и «Scale Ratio» (0.1–10); значения
+хранятся в QSettings/Viewer360 (FishEyeLens, TextureScale, ScaleRatio).
+
+Остаётся: Motion Blur модуля. Вьюер получает один кадр композиции, и модуль
+при размытии читал бы тот же кадр на всех подвыборках; размытию нужен кадр
+композиции в соседние моменты времени.
+
 ## Проверки
 
 `timeline_regression`: viewer360ProjectionAndControls,
 viewer360RotationAndPropertiesCancel, viewer360NativeWrapAndDirectionRecovery,
-cameraFovProjectRoundTrip, viewer360ModeIsTheSameViewer.
+cameraFovProjectRoundTrip, viewer360ModeIsTheSameViewer,
+viewer360DrawsThroughEnvironmentMapViewer (GL: native и CPU совпадают в среднем
+до 2 уровней из 255 для восьми сочетаний объектива, поворотов, Scale и Ratio).
 
 ## Live-проверка 2026-09-27
 

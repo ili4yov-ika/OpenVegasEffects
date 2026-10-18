@@ -8367,31 +8367,46 @@ Continue?</source>
     </message>
     <message>
         <location filename="../src/ui/Preview360VideoPanel.cpp" line="211"/>
+        <source>Use Fisheye Lens</source>
+        <translation>魚眼レンズを使用</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="218"/>
         <source>Yaw</source>
         <translation>偏揺れ</translation>
     </message>
     <message>
-        <location filename="../src/ui/Preview360VideoPanel.cpp" line="212"/>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="219"/>
         <source>Pitch</source>
         <translation>ピッチ</translation>
     </message>
     <message>
-        <location filename="../src/ui/Preview360VideoPanel.cpp" line="214"/>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="221"/>
         <source>Field of view</source>
         <translation>画角</translation>
     </message>
     <message>
-        <location filename="../src/ui/Preview360VideoPanel.cpp" line="213"/>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="220"/>
         <source>Roll</source>
         <translation>ロール</translation>
     </message>
     <message>
-        <location filename="../src/ui/Preview360VideoPanel.cpp" line="216"/>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="224"/>
+        <source>Scale</source>
+        <translation>スケール</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="225"/>
+        <source>Scale Ratio</source>
+        <translation>比率を調整</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="226"/>
         <source>Wrap X</source>
         <translation>X方向の繰り返し</translation>
     </message>
     <message>
-        <location filename="../src/ui/Preview360VideoPanel.cpp" line="217"/>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="227"/>
         <source>Wrap Y</source>
         <translation>Y方向の繰り返し</translation>
     </message>

@@ -9,7 +9,8 @@ namespace openvegas::ui {
 
 // The direction, lens and wrap of a 360 view over an equirectangular (2:1)
 // frame - the state the reference keeps on its 360 viewer's EffectInstance
-// (envTrasnformXRot/YRot/ZRot, FOV, useCameraFOV, envWrapX/Y). Shared by
+// of EnvironmentMapViewer (envTrasnformXRot/YRot/ZRot, fov, useCameraFOV,
+// useFishEyeLens, envTexScale, envScaleRatio, envWrapX/Y). Shared by
 // whatever shows the view: the Viewer in its 360 mode and the standalone
 // Preview360VideoWidget, so both turn together and a direction picked in one
 // is the direction of the other.
@@ -33,6 +34,21 @@ public:
     bool useCameraFOV() const { return m_useCameraFOV; }
     WrapMode wrapXMode() const { return m_wrapX; }
     WrapMode wrapYMode() const { return m_wrapY; }
+    // useFishEyeLens: an equidistant lens (the angle from the view axis grows
+    // with the distance from the centre) instead of a perspective one. On by
+    // default, as the module's own default is and the reference's viewer
+    // leaves it.
+    bool fishEye() const { return m_fishEye; }
+    // envTexScale (%) and envScaleRatio: the panorama covers 100/scale of
+    // the sphere's height and, at ratio 2 (2:1), as much of its width.
+    double textureScale() const { return m_textureScale; }
+    double scaleRatio() const { return m_scaleRatio; }
+    // Draws through the registered EnvironmentMapViewer module when there is
+    // one (on by default); otherwise, or when it fails, on the CPU.
+    bool nativeRendering() const { return m_nativeRendering; }
+    void setNativeRendering(bool on);
+    // Whether the last projection came from the module.
+    bool lastProjectionWasNative() const { return m_projectionNative; }
     // The vertical field of view actually projected with: the camera's when
     // the view follows it, otherwise its own.
     double effectiveFieldOfView() const;
@@ -65,6 +81,9 @@ public slots:
     void setUseCameraFOV(bool on);
     void setWrapXMode(WrapMode mode);
     void setWrapYMode(WrapMode mode);
+    void setFishEye(bool on);
+    void setTextureScale(double percent);
+    void setScaleRatio(double ratio);
     // A turn by screen drag: right looks left, as the reference's viewer does.
     void turnBy(double yawDegrees, double pitchDegrees);
     // Zoom by changing the lens; a view following the camera stops doing so.
@@ -78,6 +97,7 @@ signals:
 
 private:
     void invalidate();
+    QImage projectNatively(const QImage& frame, const QSize& size) const;
 
     View m_view = View::Front;
     double m_yaw = 0.0;
@@ -88,6 +108,11 @@ private:
     bool m_useCameraFOV = false;
     WrapMode m_wrapX = WrapMode::No;
     WrapMode m_wrapY = WrapMode::No;
+    bool m_fishEye = true;
+    double m_textureScale = 100.0;
+    double m_scaleRatio = 2.0;
+    bool m_nativeRendering = true;
+    mutable bool m_projectionNative = false;
 
     mutable QImage m_projection;
     mutable QSize m_projectionSize;

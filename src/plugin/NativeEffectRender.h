@@ -498,6 +498,9 @@ bool nativeEffectAnalysesOwnLayer(const core::Identifier& id);
 inline constexpr char kNativeParentLayerKey[] = "Effect_Parent_Layer";
 // The registered module's parameters, in the order of its values.
 QVector<EffectParameterSpec> nativeParameters(const core::Identifier& id);
+// The registered module of that file name ("EnvironmentMapViewer"), or an
+// invalid id when there is none.
+core::Identifier nativeModuleNamed(const QString& baseName);
 void setNativeInstanceTransforms(const QString& instanceKey, int firstFrame,
                                  const QVector<std::array<float, 16>>& matrices);
 bool nativeInstanceTransformAt(const QString& instanceKey, int frame,
@@ -591,6 +594,11 @@ struct NativeFrameTime
     QByteArray instanceData;
     QString layerId;
     NativeAssetInfo layerAsset;
+    // What the module's layer pickers resolve to when they name another
+    // layer than its own (otherwise its source): the 360 viewer gives
+    // EnvironmentMapViewer the shot's equirectangular frame this way and has
+    // it draw into a frame of the viewport's size.
+    QImage layerImage;
 };
 
 // Executes the 2D BIFF GPU path (Notify 8 once per render thread, Notify 10 per

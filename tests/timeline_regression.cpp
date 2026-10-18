@@ -2021,6 +2021,83 @@ private slots:
         QCOMPARE(overlay.canvasQuad().size(), 4);
         viewer.removeOverlay(&overlay);
     }
+    // The 360 viewer draws through the reference's EnvironmentMapViewer
+    // module when it is registered, and its CPU projection is the module's:
+    // the same turns (pitch, then yaw, then roll about the world's Z), both
+    // lenses, Scale and Scale Ratio. Needs the OpenGL 4.1 context native
+    // modules run in.
+    void viewer360DrawsThroughEnvironmentMapViewer() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/EnvironmentMapViewer.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference EnvironmentMapViewer.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        plugin::registerNativeEffectModule(core::Identifier("test.native.envviewer"), module, dir, true,
+                                           metadata.parameters);
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        QCOMPARE(plugin::nativeModuleNamed(QStringLiteral("environmentmapviewer")).value(),
+                 QString("test.native.envviewer"));
+        // A smooth panorama, so a lens or turn that differs shows everywhere
+        // and the seam (a jump in red) counts for little.
+        QImage pano(1024, 512, QImage::Format_ARGB32);
+        for (int y = 0; y < 512; ++y)
+            for (int x = 0; x < 1024; ++x)
+                pano.setPixel(x, y, qRgb(x * 255 / 1023, y * 255 / 511,
+                                         qBound(0, int(128 + 100 * std::sin(x * M_PI / 64) * std::cos(y * M_PI / 64)), 255)));
+        const auto difference = [](const QImage& a, const QImage& b) {
+            double sum = 0; int n = 0;
+            for (int y = 0; y < a.height(); ++y)
+                for (int x = 0; x < a.width(); ++x) {
+                    const QRgb p = a.pixel(x, y), q = b.pixel(x, y);
+                    sum += std::abs(qGreen(p) - qGreen(q)) + std::abs(qBlue(p) - qBlue(q)); n += 2;
+                }
+            return sum / n;
+        };
+        struct Case { bool fish; double yaw, pitch, roll, fov, scale, ratio; };
+        const Case cases[] = {
+            {true, 0, 0, 0, 90, 100, 2}, {false, 0, 0, 0, 90, 100, 2},
+            {true, 50, 30, 20, 120, 100, 2}, {false, 50, 30, 20, 70, 100, 2},
+            {false, -120, -35, -40, 60, 100, 2}, {true, 160, 60, 10, 150, 100, 2},
+            {false, 30, 10, 0, 90, 200, 1}, {true, -20, -10, 0, 90, 150, 3},
+        };
+        for (const Case& c : cases) {
+            ui::Viewer360View view;
+            view.setFishEye(c.fish); view.setYawPitch(c.yaw, c.pitch); view.setRoll(c.roll);
+            view.setFieldOfView(c.fov); view.setTextureScale(c.scale); view.setScaleRatio(c.ratio);
+            const QImage native = view.project(pano, QSize(320, 180));
+            if (!view.lastProjectionWasNative())
+                QSKIP("No OpenGL 4.1 context for native modules on this platform");
+            QCOMPARE(native.size(), QSize(320, 180));
+            view.setNativeRendering(false);
+            const QImage cpu = view.project(pano, QSize(320, 180));
+            QVERIFY(!view.lastProjectionWasNative());
+            const double d = difference(native, cpu);
+            if (d >= 2.0) {
+                native.save(testArtifactPath(QStringLiteral("viewer360-native.png")));
+                cpu.save(testArtifactPath(QStringLiteral("viewer360-cpu.png")));
+            }
+            QVERIFY2(d < 2.0, qPrintable(QStringLiteral("fish %1 yaw %2 pitch %3 roll %4: %5")
+                                             .arg(c.fish).arg(c.yaw).arg(c.pitch).arg(c.roll).arg(d)));
+            // The lens maps both ways: the view's points go to the frame and back.
+            for (const QPointF point : {QPointF(40, 30), QPointF(160, 90), QPointF(300, 170)}) {
+                const QPointF at = view.frameAt(point, QSizeF(320, 180), QSizeF(1024, 512));
+                QPointF again;
+                QVERIFY(view.viewAt(at, QSizeF(1024, 512), QSizeF(320, 180), &again));
+                QVERIFY2(QLineF(point, again).length() < 0.01, qPrintable(QStringLiteral("%1,%2").arg(again.x()).arg(again.y())));
+            }
+        }
+        // The reference's names: Top looks at the frame's top row, Left at
+        // its left quarter.
+        ui::Viewer360View view;
+        view.setFishEye(false);
+        view.setCurrentView(ui::Viewer360View::View::Top);
+        QVERIFY(qGreen(view.project(pano, QSize(32, 18)).pixel(16, 9)) < 12);
+        view.setCurrentView(ui::Viewer360View::View::Left);
+        QVERIFY(std::abs(qRed(view.project(pano, QSize(32, 18)).pixel(16, 9)) - 64) < 6);
+    }
+
     // 2D effects that move by themselves get the time (RenderContext
     // +0x6c/+0x70/+0x98/+0x9c/+0xa0): Linear Wipe at frame 0 and at frame 30
     // of a 120-frame layer differ, the same frame is the same picture, and

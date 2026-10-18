@@ -265,6 +265,8 @@ struct RenderInvocation
     // A reduced preview's scale and the NativeReducedValues it applies to.
     float valueScale = 1.0f;
     int reducedValues = NativeReducesNothing;
+    // NativeFrameTime::layerImage.
+    QImage layerImage;
 };
 
 thread_local RenderInvocation* g_renderInvocation = nullptr;
@@ -441,13 +443,24 @@ void layerIdParameter(quint64, const char* key, quint32, char* layerId)
     std::memcpy(layerId, value.constData(), size_t(qMin(value.size(), 0x27)));
 }
 
-int layerInfo(quint64, const char*, quint32, void* info)
+bool servesLayerImage(const char* layerId);
+
+int layerInfo(quint64, const char* layerId, quint32, void* info)
 {
     // tagLayerInfo is 0x54 bytes. Tannen clears it before resolving the layer
     // and returns -5 when no project/layer is available. Native image renders
     // currently have no secondary layer graph, so expose that exact safe state.
     if (info) {
         std::memset(info, 0, 0x54);
+    }
+    // NativeFrameTime::layerImage: a visible picture layer (ID, +0x28 type
+    // 0, +0x34 length, +0x41 visible - tagBiffLayerInfo's first fields).
+    if (info && servesLayerImage(layerId)) {
+        if (layerId) std::memcpy(info, layerId, qstrnlen(layerId, 0x27));
+        const qint32 duration = qMax(1, g_renderInvocation->layerDurationFrames);
+        std::memcpy(static_cast<char*>(info) + 0x34, &duration, sizeof(duration));
+        static_cast<char*>(info)[0x41] = 1;
+        return 0;
     }
     return -5;
 }
@@ -793,16 +806,32 @@ int copySourceTexture(void* renderContext, void* texture)
     return 0;
 }
 
-int layerTexture(quint64, void* renderContext, const char*, void* texture)
+int uploadScratchTexture(const QImage& image, void* texture);
+
+// NativeFrameTime::layerImage, for a layer other than the module's own (a
+// render without a layer of its own has the null ID).
+bool servesLayerImage(const char* layerId)
 {
+    if (!g_renderInvocation || g_renderInvocation->layerImage.isNull() || !layerId
+        || !QOpenGLContext::currentContext() || !g_renderInvocation->scratchPool) {
+        return false;
+    }
+    const QString id = QString::fromLatin1(layerId);
+    return !id.isEmpty() && !QUuid::fromString(id).isNull() && id != g_renderInvocation->layerId;
+}
+
+int layerTexture(quint64, void* renderContext, const char* layerId, void* texture)
+{
+    if (servesLayerImage(layerId)) return uploadScratchTexture(g_renderInvocation->layerImage, texture);
     // The isolated renderer has one source layer. Layer pickers that resolve
     // to it use the same texture as GetSourceTexture.
     return copySourceTexture(renderContext, texture);
 }
 
-int layerTextureV2(quint64, void* renderContext, const char*, qint32,
+int layerTextureV2(quint64, void* renderContext, const char* layerId, qint32,
                    void* texture)
 {
+    if (servesLayerImage(layerId)) return uploadScratchTexture(g_renderInvocation->layerImage, texture);
     return copySourceTexture(renderContext, texture);
 }
 
@@ -1103,10 +1132,19 @@ NativeAssetInfo hostAssetInfo(const char* layerId)
 // Rendering keeps the isolated answer of layerInfo().
 int instanceLayerInfo(quint64 host, const char* layerId, quint32 frame, void* info)
 {
-    if (!g_customUiCall) return layerInfo(host, layerId, frame, info);
+    if (!g_customUiCall && !servesLayerImage(layerId)) return layerInfo(host, layerId, frame, info);
     if (!info) return -10;
     std::memset(info, 0, 0xf0);
-    const NativeLayerInfo layer = hostLayerInfo(layerId);
+    NativeLayerInfo layer;
+    if (g_customUiCall) {
+        layer = hostLayerInfo(layerId);
+    } else {
+        // NativeFrameTime::layerImage: a visible picture layer of its size.
+        layer.valid = true;
+        layer.type = 0;
+        layer.durationFrames = qMax(1, g_renderInvocation->layerDurationFrames);
+        layer.size = g_renderInvocation->layerImage.size();
+    }
     if (!layer.valid) return -5;
     // tagBiffLayerInfo: ID, +0x28 type, +0x2c start frame, +0x34 length,
     // +0x41 visible, +0x6c/+0x70 source size, +0x74 the world matrix.
@@ -1162,7 +1200,18 @@ int assetTextureService(quint64, void*, const char* layerId, qint32 frame, void*
     // layer pixels run downwards, matching the viewer's pointer positions
     // (checked with a still top half and a moving bottom half - a lasso
     // around the top tracks nothing only this way round).
-    const QImage rgba = frameImage.convertToFormat(QImage::Format_RGBA8888);
+    return uploadScratchTexture(frameImage, texture);
+}
+
+// A texture of the render's scratch pool holding `image`, described in
+// `texture` (a tagBiffTexture) as GetAssetTexture describes its own.
+int uploadScratchTexture(const QImage& image, void* texture)
+{
+    if (!texture) return -10;
+    std::memset(texture, 0, 0x34);
+    QOpenGLContext* context = QOpenGLContext::currentContext();
+    if (!context || !g_renderInvocation || !g_renderInvocation->scratchPool) return -4;
+    const QImage rgba = image.convertToFormat(QImage::Format_RGBA8888);
     auto* gl = context->extraFunctions();
     GLuint id = 0;
     gl->glGenTextures(1, &id);
@@ -3414,6 +3463,7 @@ public:
         invocation.timelineFrame = time.frame;
         invocation.layerAsset = time.layerAsset;
         invocation.layerId = time.layerId;
+        invocation.layerImage = time.layerImage;
         RenderInvocation* previousInvocation = g_renderInvocation;
         g_renderInvocation = &invocation;
 
@@ -4461,6 +4511,19 @@ QVector<EffectParameterSpec> nativeParameters(const core::Identifier& id)
     QMutexLocker lock(&g_registryMutex);
     const auto it = g_registry.constFind(id.value());
     return it == g_registry.constEnd() ? QVector<EffectParameterSpec>() : it->parameters;
+}
+
+core::Identifier nativeModuleNamed(const QString& baseName)
+{
+    QMutexLocker lock(&g_registryMutex);
+    QString found;
+    for (auto it = g_registry.constBegin(); it != g_registry.constEnd(); ++it) {
+        if (QFileInfo(it->filePath).baseName().compare(baseName, Qt::CaseInsensitive) == 0
+            && (found.isEmpty() || it.key() < found)) {
+            found = it.key();
+        }
+    }
+    return core::Identifier(found);
 }
 
 namespace {
