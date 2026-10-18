@@ -641,8 +641,8 @@
     </message>
     <message>
         <location filename="../src/media/MediaManager.cpp" line="117"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2797"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4890"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2798"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4891"/>
         <location filename="../src/ui/ModelAnimationDialog.cpp" line="142"/>
         <location filename="../src/ui/TimelineTreeRows.cpp" line="1077"/>
         <source>The animation could not be imported.</source>
@@ -1333,8 +1333,8 @@ Do you want to continue?</source>
         <translation>レイヤーサイズを設定</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3629"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3637"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3630"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3638"/>
         <source>Remove Layer(s)</source>
         <translation>レイヤーを削除</translation>
     </message>
@@ -3473,12 +3473,12 @@ Do you want to add a camera?</source>
         <translation>オーディオメーター</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3514"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3515"/>
         <source>Insert Layer</source>
         <translation>レイヤーを挿入</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5775"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5776"/>
         <source>Save Preset</source>
         <translation>プリセットを保存</translation>
     </message>
@@ -3593,8 +3593,8 @@ Do you want to add a camera?</source>
     </message>
     <message>
         <location filename="../src/composition/Layer.h" line="189"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2093"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2219"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2094"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2220"/>
         <source>Position</source>
         <translation>位置</translation>
     </message>
@@ -3635,7 +3635,7 @@ Do you want to add a camera?</source>
     </message>
     <message>
         <location filename="../src/composition/Layer.h" line="200"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2218"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2219"/>
         <source>Target</source>
         <translation>ターゲット</translation>
     </message>
@@ -3694,24 +3694,24 @@ Do you want to add a camera?</source>
 <context>
     <name>biff::ui::BiffFileFilter</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4389"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4390"/>
         <location filename="../src/ui/RecoveredProjectsDialog.cpp" line="108"/>
         <source>VEGAS Effects Projects (*.vegfx)</source>
         <translation>VEGAS Effects プロジェクト (*.vegfx)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4778"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4779"/>
         <source>Composite Shots (*.vegfxcs *.vegfx);;VEGAS Effects Composite Shots (*.vegfxcs);;VEGAS Effects Projects (*.vegfx)</source>
         <translation>コンポジットショット (*.vegfxcs *.vegfx);;VEGAS Effects Composite Shots (*.vegfxcs);;VEGAS Effects Projects (*.vegfx)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4852"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4853"/>
         <source>VEGAS Effects Composite Shots (*.vegfxcs)</source>
         <translation>VEGAS エフェクト コンポジットショット (*.vegfxcs)</translation>
     </message>
     <message>
         <location filename="../src/ui/EffectsPanel.cpp" line="512"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5777"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5778"/>
         <source>Presets</source>
         <translation>プリセット</translation>
     </message>
@@ -3719,18 +3719,18 @@ Do you want to add a camera?</source>
 <context>
     <name>biff::ui::MainAppWindow</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4002"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4003"/>
         <source>The recovered project cannot be opened.</source>
         <translation>復元したプロジェクトを開くことができません。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5228"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5229"/>
         <location filename="../src/ui/RecoveredProjectsDialog.cpp" line="83"/>
         <source>Recovered Untitled Project</source>
         <translation>無題のプロジェクトを復元</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5229"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5230"/>
         <source> - Recovered</source>
         <translation> 復元</translation>
     </message>
@@ -4018,12 +4018,12 @@ Do you want to add a camera?</source>
         <translation>エクスポートのスタート</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2475"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2476"/>
         <source>Starting...</source>
         <translation>起動中...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2476"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2477"/>
         <source>Inactive</source>
         <translation>無効</translation>
     </message>
@@ -4142,7 +4142,7 @@ Do you want to add a camera?</source>
         <translation>エクスポートプロジェクトのスナップショットをロードできませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4236"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4237"/>
         <source>The project snapshot could not be created.</source>
         <translation>プロジェクト スナップショットを作成できませんでした。</translation>
     </message>
@@ -4269,7 +4269,7 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>3Dモデルアニメーション...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2780"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2781"/>
         <location filename="../src/ui/TimelineTreeRows.cpp" line="1070"/>
         <location filename="../src/ui/TimelineTreeRows.cpp" line="1075"/>
         <source>Import 3D Model Animation</source>
@@ -4365,57 +4365,57 @@ You can queue exports from multiple projects by opening each one in turn and add
 <context>
     <name>openvegas::app::AppMain</name>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="113"/>
+        <location filename="../src/app/AppMain.cpp" line="114"/>
         <source>Preparing folders...</source>
         <translation>フォルダーを準備中…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="115"/>
+        <location filename="../src/app/AppMain.cpp" line="116"/>
         <source>Loading settings...</source>
         <translation>設定を読み込み中…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="117"/>
+        <location filename="../src/app/AppMain.cpp" line="120"/>
         <source>Opening media cache...</source>
         <translation>メディアキャッシュを開いています…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="119"/>
+        <location filename="../src/app/AppMain.cpp" line="122"/>
         <source>Checking license...</source>
         <translation>ライセンスを確認中…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="121"/>
+        <location filename="../src/app/AppMain.cpp" line="124"/>
         <source>Loading plug-ins...</source>
         <translation>プラグインを読み込み中…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="123"/>
+        <location filename="../src/app/AppMain.cpp" line="126"/>
         <source>Creating project...</source>
         <translation>プロジェクトを作成中…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="128"/>
+        <location filename="../src/app/AppMain.cpp" line="131"/>
         <source>Building workspace...</source>
         <translation>ワークスペースを準備中…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="148"/>
+        <location filename="../src/app/AppMain.cpp" line="151"/>
         <source>%1 : Unsupported GPU</source>
         <translation>%1 ：サポートされていない GPU</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="149"/>
+        <location filename="../src/app/AppMain.cpp" line="152"/>
         <source>Your computer does not appear to support OpenGL 4.1, which %1 needs to run its native GPU effects and transitions.&lt;br&gt;&lt;br&gt;If you choose to continue, those effects will not render.&lt;br&gt;&lt;br&gt;If you think this is incorrect, please ensure that you have the latest GPU drivers installed and try again.&lt;br&gt;</source>
         <translation>お使いのコンピューターは、%1 のネイティブ GPU エフェクトとトランジションに必要な OpenGL 4.1 に対応していないようです。&lt;br&gt;&lt;br&gt;続行すると、これらのエフェクトはレンダリングされません。&lt;br&gt;&lt;br&gt;これが誤りだと思われる場合は、最新の GPU ドライバーがインストールされていることを確認してから再度お試しください。&lt;br&gt;</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="157"/>
+        <location filename="../src/app/AppMain.cpp" line="160"/>
         <source>Continue</source>
         <translation>続行</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="158"/>
+        <location filename="../src/app/AppMain.cpp" line="161"/>
         <source>Exit</source>
         <translation>終了</translation>
     </message>
@@ -4505,7 +4505,7 @@ You can queue exports from multiple projects by opening each one in turn and add
 <context>
     <name>openvegas::render::RenderManager</name>
     <message>
-        <location filename="../src/render/RenderManager.cpp" line="3279"/>
+        <location filename="../src/render/RenderManager.cpp" line="3282"/>
         <source>Video decoding did not deliver the requested cache frame.</source>
         <translation>動画デコーダーが要求されたキャッシュフレームを返しませんでした。</translation>
     </message>
@@ -5310,7 +5310,7 @@ You can queue exports from multiple projects by opening each one in turn and add
     </message>
     <message>
         <location filename="../src/ui/LayerPanel.cpp" line="215"/>
-        <location filename="../src/ui/LayerPanel.cpp" line="371"/>
+        <location filename="../src/ui/LayerPanel.cpp" line="401"/>
         <source>Invalid Layer Type</source>
         <translation>無効のレイヤータイプ</translation>
     </message>
@@ -6102,45 +6102,45 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>スタート</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2805"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3069"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3112"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2806"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3070"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3113"/>
         <source>Import</source>
         <translation>インポート</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2820"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2821"/>
         <source>Orbit works on a 3D layer</source>
         <translation>オービットは3Dレイヤーで使用できます</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3014"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3019"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3015"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3020"/>
         <source>Import 3D Model</source>
         <translation>3Dモデルをインポート</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3020"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3021"/>
         <source>The 3D model could not be imported.</source>
         <translation>3Dモデルをインポートすることができませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3035"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3036"/>
         <source>Import 3D model &apos;%1&apos;</source>
         <translation>3Dモデル「%1」をインポート</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3044"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3045"/>
         <source>Imported %1</source>
         <translation>%1 をインポートしました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3113"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3114"/>
         <source>The 3D model could not be imported: %1</source>
         <translation>3Dモデルをインポートできませんでした: %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3146"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3147"/>
         <source>Imported %1 media file(s) and %2 3D model(s)</source>
         <translation>メディアファイル %1 件、3Dモデル %2 件をインポートしました</translation>
     </message>
@@ -6191,7 +6191,7 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>バージョン情報(&amp;A)...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1780"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1781"/>
         <source>Unknown command: %1</source>
         <translation>不明なコマンド: %1</translation>
     </message>
@@ -6249,62 +6249,62 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>アクティブなパネルを閉じる</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1910"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1911"/>
         <source>Value Graph shown</source>
         <translation>値グラフを表示しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1910"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1911"/>
         <source>Value Graph hidden</source>
         <translation>値グラフを非表示にしました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2270"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2271"/>
         <source>Text Properties</source>
         <translation>テキスト プロパティ</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2272"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3354"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2273"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3355"/>
         <source>Convert to Paragraph Text</source>
         <translation>パラグラフテキストに変換</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2272"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3354"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2273"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3355"/>
         <source>Convert to Point Text</source>
         <translation>ポイントテキストに変換</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2493"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2494"/>
         <source>Playback cache: %1 / %2 frames (256 MiB budget)</source>
         <translation>再生キャッシュ: %1 / %2 フレーム（上限256 MiB）</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2496"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2497"/>
         <source>Playback cache ready: %1 frames</source>
         <translation>再生キャッシュが完成しました: %1 フレーム</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2629"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2630"/>
         <source>Selected effect: %1 (%2)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>選択したエフェクト: %1 (%2)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2640"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5734"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5762"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2641"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5735"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5763"/>
         <source>Select a clip on the timeline first</source>
         <translation>まずタイムライン上のクリップを選択してください</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2650"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2651"/>
         <source>Add %1?</source>
         <translation>%1 を追加しますか？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2651"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2652"/>
         <source>%1
 
 It can still be added to the clip and saved with the project, and it will come back when this build can run it. Add it now?</source>
@@ -6313,30 +6313,30 @@ It can still be added to the clip and saved with the project, and it will come b
 クリップに追加してプロジェクトに保存できます。このビルドが実行に対応すると使用可能になります。今すぐ追加しますか？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2656"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2657"/>
         <source>%1 was not added</source>
         <translation>%1 は追加されませんでした</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2667"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5740"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2668"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5741"/>
         <source>The layer is locked</source>
         <translation>レイヤーはロックされています</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2685"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5753"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2686"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5754"/>
         <source>Applied %1</source>
         <translation>%1 を適用しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2766"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2767"/>
         <source>Render requested</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>レンダリングを要求しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3070"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3071"/>
         <source>It looks like some of the files to import are from image sequences.
 
 Do you want to import sequences as videos, or import individual images?</source>
@@ -6345,230 +6345,230 @@ Do you want to import sequences as videos, or import individual images?</source>
 シーケンスをビデオとしてインポートしますか、それとも個々の画像をインポートしますか？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3073"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3074"/>
         <source>Import Sequence Videos</source>
         <translation>シーケンスビデオをインポート</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3074"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3075"/>
         <source>Import Images</source>
         <translation>イメージをインポート</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3147"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3148"/>
         <source>Imported %1 media file(s)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>%1 個のメディアファイルを読み込みました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3191"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3223"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3192"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3224"/>
         <source>Add text layer &apos;%1&apos;</source>
         <translation>テキストレイヤー「%1」を追加</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3192"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3224"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3193"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3225"/>
         <source>Added text layer &apos;%1&apos;</source>
         <translation>テキストレイヤー「%1」を追加しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3344"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3345"/>
         <source>Edit Text</source>
         <translation>テキストを編集</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3455"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3456"/>
         <source>Layer %1</source>
         <translation>レイヤー %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3456"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3457"/>
         <source>New %1 %2</source>
         <translation>新規 %1 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3479"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3496"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4913"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4945"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3480"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3497"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4914"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4946"/>
         <source>Add layer &apos;%1&apos;</source>
         <translation>レイヤー「%1」を追加</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3498"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4915"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4947"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3499"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4916"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4948"/>
         <source>Added layer &apos;%1&apos;</source>
         <translation>レイヤー「%1」を追加しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3532"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3533"/>
         <source>Select one or more layers first</source>
         <translation>先に1つ以上のレイヤーを選択してください</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3537"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4674"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3538"/>
         <location filename="../src/ui/MainWindow.cpp" line="4675"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4676"/>
         <source>Composite Shot %1</source>
         <translation>コンポジットショット %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3596"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3597"/>
         <source>Created %1 from %2 layer(s)</source>
         <translation>%2 個のレイヤーから %1 を作成しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3604"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3655"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3605"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3656"/>
         <source>Select a layer on the timeline first</source>
         <translation>先にタイムラインでレイヤーを選択してください</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3610"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3611"/>
         <source>Unlock the layer before deleting it</source>
         <translation>削除する前にレイヤーのロックを解除してください</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3621"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3622"/>
         <source>Deleted selected clip</source>
         <translation>選択したクリップを削除しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3631"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3632"/>
         <source>Delete layer &apos;%1&apos;</source>
         <translation>レイヤー「%1」を削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3648"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3649"/>
         <source>Deleted layer &apos;%1&apos;</source>
         <translation>レイヤー「%1」を削除しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3669"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3670"/>
         <source>Duplicated selected clip</source>
         <translation>選択したクリップを複製しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3674"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3729"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3675"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3730"/>
         <source>%1 copy</source>
         <translation>%1 のコピー</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3675"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3676"/>
         <source>Duplicate layer &apos;%1&apos;</source>
         <translation>レイヤー「%1」を複製</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3679"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3680"/>
         <source>Duplicated layer &apos;%1&apos;</source>
         <translation>レイヤー「%1」を複製しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3686"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3687"/>
         <source>Select a layer or clip first</source>
         <translation>先にレイヤーまたはクリップを選択してください</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3694"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3695"/>
         <source>Copied selected clip</source>
         <translation>選択したクリップをコピーしました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3699"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3700"/>
         <source>Copied layer &apos;%1&apos;</source>
         <translation>レイヤー「%1」をコピーしました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3722"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3723"/>
         <source>Pasted clip at playhead</source>
         <translation>再生ヘッドの位置にクリップを貼り付けました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3730"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3731"/>
         <source>Paste layer &apos;%1&apos;</source>
         <translation>レイヤー「%1」を貼り付け</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3734"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3735"/>
         <source>Pasted layer &apos;%1&apos;</source>
         <translation>レイヤー「%1」を貼り付けました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3737"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3738"/>
         <source>Clipboard is empty</source>
         <translation>クリップボードは空です</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3767"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3768"/>
         <source>No compatible attributes in the clipboard</source>
         <translation>クリップボードに対応する属性がありません</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3776"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3777"/>
         <source>Pasted attributes</source>
         <translation>属性を貼り付けました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3797"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3798"/>
         <source>Removed attributes</source>
         <translation>属性を削除しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3813"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3814"/>
         <source>Removed effects</source>
         <translation>エフェクトを削除しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3821"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3822"/>
         <source>Place the playhead inside the selected clip</source>
         <translation>再生ヘッドを選択したクリップ内に移動してください</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3837"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3838"/>
         <source>Sliced selected clip</source>
         <translation>選択したクリップを分割しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3846"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3847"/>
         <source>Select a clip to ripple delete</source>
         <translation>リップル削除するクリップを選択してください</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3860"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3861"/>
         <source>Ripple deleted selected clip</source>
         <translation>選択したクリップをリップル削除しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3870"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3871"/>
         <source>Select a media asset first</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>先にメディアを選択してください</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3890"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3891"/>
         <source>Plugins looked for again</source>
         <translation>プラグインを再検索しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3986"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3987"/>
         <source>Auto-saved %1</source>
         <translation>%1 を自動保存しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3987"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3988"/>
         <source>Auto-save failed: %1</source>
         <translation>自動保存に失敗しました: %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4080"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4081"/>
         <source>Composite Shot Settings</source>
         <translation>コンポジットショットの設定</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4081"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4082"/>
         <source>The composite shot settings differ to this clip you are adding (%1 x %2).
 
 Do you want to change the composite shot&apos;s settings to match the clip?</source>
@@ -6577,79 +6577,79 @@ Do you want to change the composite shot&apos;s settings to match the clip?</sou
 コンポジットショットの設定をクリップに合わせますか?</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4088"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4089"/>
         <source>Composite shot resized to %1 x %2</source>
         <translation>コンポジットショットのサイズを %1 x %2 に変更しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4102"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4873"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5074"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4103"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4874"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5075"/>
         <source>Could not open %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>%1 を開けませんでした</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4145"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4146"/>
         <source>Insert clip from %1</source>
         <translation>%1 からクリップを挿入</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4146"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4147"/>
         <source>Overlay clip from %1</source>
         <translation>%1 のクリップを上書き配置</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4148"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4149"/>
         <source>Inserted clip from %1</source>
         <translation>%1 からクリップを挿入しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4149"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4150"/>
         <source>Overlaid clip from %1</source>
         <translation>%1 のクリップを上書き配置しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4160"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4161"/>
         <source>No frame available to export</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>書き出せるフレームがありません</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4169"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4170"/>
         <source>EXR export failed: %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>EXR の書き出しに失敗しました: %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4174"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4175"/>
         <source>Export failed: %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>書き出しに失敗しました: %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4177"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4178"/>
         <source>Exported frame to %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>フレームを %1 に書き出しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4179"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4180"/>
         <source>Export frame to %1</source>
         <translation>フレームを %1 にエクスポート</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4234"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4235"/>
         <source>Added %1 to the export queue</source>
         <translation>%1 をエクスポートキューに追加しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4261"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4262"/>
         <source>Exporting frame %1 of %2</source>
         <translation>フレーム %1 / %2 をエクスポート中</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4268"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4269"/>
         <source>Export contents to %1</source>
         <translation>コンテンツを %1 にエクスポート</translation>
     </message>
@@ -6676,54 +6676,54 @@ Do you want to change the composite shot&apos;s settings to match the clip?</sou
         <translation>処理済みの音声を書き込めませんでした: %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4264"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4265"/>
         <source>Encoding video...</source>
         <translation>動画をエンコード中…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4284"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4285"/>
         <source>Cannot create the snapshot folder: %1</source>
         <translation>スナップショット用フォルダーを作成できません: %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4304"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4305"/>
         <source>Snapshot folder is full: %1</source>
         <translation>スナップショット用フォルダーがいっぱいです: %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4315"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4316"/>
         <source>Applied %1 preset &apos;%2&apos;</source>
         <translation>%1 のプリセット「%2」を適用しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4317"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4318"/>
         <source>Apply %1: %2</source>
         <translation>%1 を適用: %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4444"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4445"/>
         <source>Saved %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>%1 を保存しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4707"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4708"/>
         <source>%1 is the project&apos;s only composite shot and cannot be deleted</source>
         <translation>%1 はプロジェクト唯一のコンポジットショットのため削除できません</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5121"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5122"/>
         <source>Opened %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>%1 を開きました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5133"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5134"/>
         <source>Missing Media</source>
         <translation>見つからないメディア</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5134"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5135"/>
         <source>These project files could not be found:
 %1
 
@@ -6734,81 +6734,81 @@ In the Media panel, right-click each missing file and choose Relink Media... to 
 メディアパネルで各ファイルを右クリックし、「メディアを再リンク…」から場所を指定してください。見つからないファイルの音声は再生できません。</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/MainWindow.cpp" line="5184"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5185"/>
         <source>%n plugin(s) used by this project are missing</source>
         <translation>
             <numerusform>このプロジェクトで使用するプラグインが %n 個見つかりません</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4001"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5063"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5091"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5185"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5197"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4002"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5064"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5092"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5186"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5198"/>
         <source>Open Project</source>
         <translation>プロジェクトを開く</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5186"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5187"/>
         <source>These plugins could not be found:</source>
         <translation>次のプラグインが見つかりませんでした:</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5188"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5189"/>
         <source>Effects that use them will have no result.</source>
         <translation>これらを使用するエフェクトは結果を生成しません。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5244"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5245"/>
         <source>%1[*] - %2</source>
         <translation>%1[*] - %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5461"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5462"/>
         <source>Mirror Horizontal</source>
         <translation>水平反射</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5461"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5462"/>
         <source>Mirror Vertical</source>
         <translation>垂直反射</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5474"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5475"/>
         <source>Rotate 90 Degrees Clockwise</source>
         <translation>計回りに90度回転</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5475"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5476"/>
         <source>Rotate 90 Degrees Counter Clockwise</source>
         <translation>逆時計回りに90度回転</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4402"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4422"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5236"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4403"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4423"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5237"/>
         <source>Save Project</source>
         <translation>プロジェクトを保存する</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4681"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4692"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4682"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4693"/>
         <source>New Composite Shot</source>
         <translation>新規コンポジットショット</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4696"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4697"/>
         <source>Created %1</source>
         <translation>%1 を作成しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4719"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4720"/>
         <source>Delete Composite Shot</source>
         <translation>コンポジットショットを削除</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/MainWindow.cpp" line="4720"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4721"/>
         <source>%1 is used by %n layer(s) in other composite shots. Deleting it removes those layers too.
 
 Continue?</source>
@@ -6819,147 +6819,147 @@ Continue?</source>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4743"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4744"/>
         <source>Remove Asset</source>
         <translation>アセットを削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4746"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4747"/>
         <source>Deleted %1</source>
         <translation>%1 を削除しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4762"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4763"/>
         <source>Set Primary Composite Shot</source>
         <translation>基本コンポジットショットを設定</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4777"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4792"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4796"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4814"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4825"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4778"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4793"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4797"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4815"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4826"/>
         <source>Import Composite Shot</source>
         <translation>コンポジットショットをインポート</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4797"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4798"/>
         <source>No composite shots can be imported from this file.</source>
         <translation>このファイルからコンポジットショットをインポートすることはできません。</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/MainWindow.cpp" line="4829"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4830"/>
         <source>Imported %n composite shot(s) from %1</source>
         <translation>
             <numerusform>%1 から %n 個のコンポジットショットをインポートしました</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4842"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4850"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4860"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4843"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4851"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4861"/>
         <source>Save Composite Shot</source>
         <translation>コンポジットショットを保存</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4843"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4844"/>
         <source>This composite shot cannot be saved because it contains one or more embedded composite shots.</source>
         <translation>コンポジットショットの中に一つ、または複数のコンポジットショットが組み込まれているため、このコンポジットショットを保存することができません。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4861"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4862"/>
         <source>The composite shot could not be saved to %1</source>
         <translation>コンポジットショットを%1へ保存することができませんでした</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4865"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4866"/>
         <source>Saved %1 to %2</source>
         <translation>%1 を %2 に保存しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4878"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4879"/>
         <source>Use Import to place a 3D model</source>
         <translation>3D モデルを配置するにはインポートを使用してください</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4886"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4887"/>
         <source>Drop a 3D model animation onto a 3D model layer</source>
         <translation>3D モデル アニメーションは 3D モデル レイヤーにドロップしてください</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4932"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4933"/>
         <source>%1 cannot be placed inside itself</source>
         <translation>%1 をそれ自体の中に配置することはできません</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5198"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5199"/>
         <source>The project file no longer exists:
 %1</source>
         <translation>プロジェクトファイルが存在しません:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5237"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5238"/>
         <source>Save Project (%1)</source>
         <translation>プロジェクトを保存する (%1)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5808"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5809"/>
         <source>Playing</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>再生中</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5822"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5823"/>
         <source>Stopped</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>停止</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5834"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5835"/>
         <source>Paused</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>一時停止</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5949"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5950"/>
         <source>Proxy ready: %1</source>
         <translation>プロキシの準備ができました: %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5950"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5951"/>
         <source>Proxy failed for %1: %2</source>
         <translation>%1 のプロキシを作成できませんでした: %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5967"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5968"/>
         <source>The proxy is being prepared.</source>
         <translation>プロキシを準備中です。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="6001"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6002"/>
         <source>Removed the pre-render of %1</source>
         <translation>%1 のプリレンダリングを削除しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="6140"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6141"/>
         <source>In point: %1s</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>イン点: %1 秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="6146"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6147"/>
         <source>Out point: %1s</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>アウト点: %1 秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="6192"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6193"/>
         <source>Shuttle: paused</source>
         <translation>シャトル: 一時停止</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="6197"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6198"/>
         <source>Shuttle: x%1</source>
         <translation>シャトル: x%1</translation>
     </message>
@@ -6981,55 +6981,55 @@ Continue?</source>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="1115"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1745"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1746"/>
         <source>Undo</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>元に戻す</translation>
     </message>
     <message>
         <location filename="../src/ui/MainWindow.cpp" line="1118"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1748"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1749"/>
         <source>Redo</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>やり直す</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3245"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3246"/>
         <source>Motion tracking needs a video clip</source>
         <translation>モーショントラッキングにはビデオクリップが必要です</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3250"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3251"/>
         <source>Could not open the video for motion tracking</source>
         <translation>モーショントラッキング用のビデオを開けませんでした</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3269"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3270"/>
         <source>Analyzing motion…</source>
         <translation>モーションを解析中…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3269"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3270"/>
         <source>Cancel</source>
         <translation>キャンセル</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3276"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3277"/>
         <source>Could not decode the first tracking frame</source>
         <translation>最初のトラッキングフレームをデコードできませんでした</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3281"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3282"/>
         <source>Motion tracking cancelled</source>
         <translation>モーショントラッキングをキャンセルしました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3287"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3288"/>
         <source>Motion tracking stopped at frame %1</source>
         <translation>モーショントラッキングはフレーム %1 で停止しました</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3306"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3307"/>
         <source>Motion track analyzed: %1 frames</source>
         <translation>モーショントラックを解析しました: %1 フレーム</translation>
     </message>
@@ -9465,8 +9465,8 @@ Double-click to rename</source>
         <translation>再生ヘッド位置のキーフレームを追加または削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2092"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2216"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2093"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2217"/>
         <location filename="../src/ui/TimelineEditing.cpp" line="248"/>
         <location filename="../src/ui/TimelineEditing.cpp" line="319"/>
         <location filename="../src/ui/TimelineEditing.cpp" line="358"/>

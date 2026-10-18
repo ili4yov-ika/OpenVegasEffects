@@ -252,7 +252,9 @@ Layer/360 Viewer дополнительно исследованы в Ghidra и 
 отдельный preview выделенного слоя; 360 — исправленные повороты, Roll,
 рабочий camera FOV и отмену Properties без изменения состояния.
 Wrap No/Tile/Reflect восстановлены через Notify(2) EnvironmentMapViewer.hfpl.
-Native render pipeline, lens model и Fisheye/Scale/Motion Blur пока не восстановлены полностью.
+С 18–19 октября 2026 360 Viewer рисует через native EnvironmentMapViewer (модель объектива,
+Fisheye, Scale, Motion Blur по ключам), а Layer — исходник и маски слоя на холсте его размера,
+как `Flux::RenderLayer` с флагами 0x13.
 Layout также имеет открытый геометрический путь: [аудит Раскладки](RE_wnd_Layout.md).
 
 | Группа | Настройки/элементы без полного потребителя | Что требуется |

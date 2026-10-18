@@ -328,32 +328,62 @@ void LayerPanel::setMediaManager(std::shared_ptr<media::MediaManager> media)
     requestPreview();
 }
 
+// What the reference's Layer panel shows (LayerPanelWidget FUN_1408cf1b0,
+// LayerProxy, RenderLayerViewJob FUN_1408fc880): only an asset layer - footage
+// with a picture or a plane, not a composite shot -, drawn by
+// Flux::RenderLayer with flags 0x13: its source (0x1) and its masks (0x2,
+// the material's MaskDataList), not its effects (0x4, which checks
+// EffectInstance::Enabled) nor its transform, opacity or blend, on a canvas
+// of the layer's own size (FUN_140a22e00: the asset's width and height) at
+// the layer's own frame. Here: a shot of the layer's size holding the layer
+// alone, untransformed, without effects, its masks moved with the canvas.
 std::shared_ptr<composition::Composition> LayerPanel::previewComposition() const
 {
     const int row = selectedLayer();
     if (!m_composition || row < 0 || row >= m_composition->layers().size()) return {};
     auto layer = m_composition->layerCopy(row);
-    if (layer.kind == composition::LayerKind::Point || layer.kind == composition::LayerKind::Camera
-        || layer.kind == composition::LayerKind::Light || layer.kind == composition::LayerKind::Grade) return {};
-    if (layer.kind == composition::LayerKind::Media && m_media && !layer.clips.isEmpty()) {
-        bool hasPicture = false;
+    if (layer.kind != composition::LayerKind::Media && layer.kind != composition::LayerKind::Plane) return {};
+    // The canvas: a plane's is the shot's; footage's is its picture, at its
+    // square shape (width x PAR), as the shot draws it.
+    const QSize shot = m_composition->displaySize();
+    QSize canvas = shot;
+    if (layer.kind == composition::LayerKind::Media) {
+        const composition::Clip* shown = nullptr;
         for (const auto& clip : layer.clips) {
-            const auto asset = m_media->assetById(clip.mediaId);
-            if (clip.nestedComposition || asset.kind() != media::MediaKind::Audio) { hasPicture = true; break; }
+            if (clip.nestedComposition) continue;
+            const auto asset = m_media ? m_media->assetById(clip.mediaId) : media::MediaAsset();
+            if (!asset.isValid() || asset.kind() == media::MediaKind::Audio
+                || asset.kind() == media::MediaKind::Composition || asset.frameSize().isEmpty()) continue;
+            const bool now = m_time >= clip.startSeconds && m_time <= clip.startSeconds + clip.durationSeconds;
+            if (!shown || now) shown = &clip;
+            if (now) break;
         }
-        if (!hasPicture) return {};
+        if (!shown) return {};
+        const auto asset = m_media->assetById(shown->mediaId);
+        canvas = QSize(qMax(1, int(std::lround(asset.frameSize().width() * asset.pixelAspectValue()))),
+                       asset.frameSize().height());
     }
+    // Masks are drawn in the shot's space over the clip's picture, which the
+    // shot centres: on a canvas of the picture's size they move by half the
+    // difference.
+    const QPointF shift((shot.width() - canvas.width()) / 2.0, (shot.height() - canvas.height()) / 2.0);
+    for (auto& mask : layer.masks) {
+        mask.bounds.translate(-shift);
+        for (QPointF& point : mask.points) point -= shift;
+    }
+    for (auto& clip : layer.clips) clip.effects.clear();
+    layer.transform = composition::LayerTransform();
+    layer.dimension = composition::LayerDimension::TwoD;
+    layer.autoOrient = composition::AutoOrient::None;
+    layer.motionBlur = false;
+    layer.opacity = 1.0;
     layer.visible = true;
     layer.parentLayerId = {};
     layer.blendMode = QStringLiteral("Normal");
     auto snapshot = std::make_shared<composition::Composition>(*m_composition);
-    QVector<composition::Layer> layers{layer};
-    if (layer.kind == composition::LayerKind::Model3D) {
-        for (const auto& scene : m_composition->layers())
-            if (scene.kind == composition::LayerKind::Camera || scene.kind == composition::LayerKind::Light)
-                layers.append(scene);
-    }
-    snapshot->setLayers(layers);
+    snapshot->setSize(canvas.width(), canvas.height());
+    snapshot->setPixelAspect(composition::Composition::SquarePixels);
+    snapshot->setLayers(QVector<composition::Layer>{layer});
     return snapshot;
 }
 
@@ -371,8 +401,7 @@ void LayerPanel::requestPreview()
     if (!snapshot) { m_previewFrame = {}; m_preview->setText(tr("Invalid Layer Type")); return; }
     if (!m_previewRenderer || !m_media) return;
     m_previewRenderer->setComposition(snapshot);
-    // At the shot's square shape (width x PAR), since the panel shows the
-    // picture as it is, not as stored.
+    // The layer's canvas (previewComposition), reduced for the panel.
     QSize size = snapshot->displaySize();
     if (size.width() > 960 || size.height() > 540) size.scale(QSize(960,540), Qt::KeepAspectRatio);
     m_previewRenderer->requestFrame(m_previewGeneration, m_time, size, true);

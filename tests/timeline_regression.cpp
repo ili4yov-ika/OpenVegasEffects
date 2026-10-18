@@ -640,6 +640,65 @@ private slots:
         inspector.setSelection(1); inspector.setSelection(QVector<int>{0,1});
         QTest::qWait(100); QVERIFY(inspector.previewFrame().isNull());
     }
+    // The Layer panel shows what the reference's RenderLayerViewJob draws
+    // (Flux::RenderLayer, flags 0x13): an asset layer's source and masks on a
+    // canvas of its own size - not its effects, transform or opacity - and
+    // only for footage with a picture or a plane.
+    void layerPanelShowsTheSourceAndItsMasks() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString still = temp.filePath("halves.png");
+        QImage halves(200, 100, QImage::Format_RGB32);
+        for (int y = 0; y < 100; ++y)
+            for (int x = 0; x < 200; ++x) halves.setPixelColor(x, y, x < 100 ? QColor(Qt::red) : QColor(Qt::green));
+        QVERIFY(halves.save(still));
+        auto media = std::make_shared<media::MediaManager>();
+        QVERIFY(media->importFile(still).isSuccess());
+        const core::Identifier stillId = media->assetByFilePath(QFileInfo(still).absoluteFilePath()).id();
+        auto model = std::make_shared<composition::Composition>();
+        model->setSize(640, 360); model->setDurationSeconds(2);
+        {
+            auto& layer = model->addLayer("Halves");
+            composition::Clip clip; clip.mediaId = stillId; clip.durationSeconds = 2;
+            composition::Effect invert; invert.pluginId = core::Identifier("openvegas.builtin.invert");
+            invert.name = "Invert"; clip.effects.append(invert);
+            layer.clips.append(clip);
+            layer.transform.position = QPointF(150, -80);
+            layer.transform.rotationDegrees = 90;
+            layer.transform.scalePercent = QPointF(50, 50);
+            layer.opacity = 0.25;
+            // The right quarter of the picture, in the shot's space over the
+            // centred picture (it spans 220..420 x 130..230).
+            composition::LayerMask mask; mask.bounds = QRectF(370, 130, 50, 100);
+            layer.masks.append(mask);
+        }
+        model->addLayer("Words").kind = composition::LayerKind::Text;
+        ui::LayerPanel panel; panel.resize(600, 650); panel.bindModel(model);
+        panel.setMediaManager(media); panel.show(); panel.setSelection(0);
+        const auto isolated = panel.previewComposition();
+        QVERIFY(isolated);
+        QCOMPARE(isolated->displaySize(), QSize(200, 100));
+        QCOMPARE(isolated->layers().size(), 1);
+        const auto& shown = isolated->layers().first();
+        QVERIFY(shown.clips.first().effects.isEmpty());
+        QCOMPARE(shown.transform.rotationDegrees, 0.0);
+        QCOMPARE(shown.opacity, 1.0);
+        QCOMPARE(shown.masks.first().bounds, QRectF(150, 0, 50, 100));
+        QTRY_VERIFY_WITH_TIMEOUT(!panel.previewFrame().isNull(), 5000);
+        const QImage frame = panel.previewFrame();
+        QCOMPARE(frame.size(), QSize(200, 100));
+        // Not inverted, not turned: green on the right, inside the mask;
+        // the rest masked away.
+        const QColor right = frame.pixelColor(175, 50);
+        QVERIFY2(right.green() > 240 && right.red() < 15 && right.alpha() > 240, qPrintable(right.name(QColor::HexArgb)));
+        // Outside the mask: the background, not the red half.
+        for (const QPoint at : {QPoint(50, 50), QPoint(125, 50)}) {
+            const QColor masked = frame.pixelColor(at);
+            QVERIFY2(masked.red() < 40 && masked.green() < 40, qPrintable(masked.name(QColor::HexArgb)));
+        }
+        // Text is not an asset layer.
+        panel.setSelection(1);
+        QVERIFY(!panel.previewComposition());
+    }
     // A model's objects are its nodes (the reference's Model3DGroup and
     // Model3DTransformNode): each with its pivot, a row under the layer's
     // Models branch with a Transform of its own, keyed like the layer's; a

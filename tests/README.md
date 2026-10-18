@@ -382,6 +382,9 @@ whose open shot only nests the tracked one; it needs the OpenGL 4.1 context and 
 `projectFilesGetTheirIcon` registers the .vegfx ProgID into an ini stand-in for Software\Classes and
 checks its DefaultIcon (the executable's icon 1), open command, OpenWithProgids and the Applications
 entry, that the extension's own default is left alone and that an unchanged registration writes nothing.
+`layerPanelShowsTheSourceAndItsMasks` checks the Layer panel draws what the reference's
+RenderLayerViewJob does: an asset layer's source and masks on a canvas of its own size, without its
+effects, transform or opacity, and nothing for a text layer.
 `keyFramesBetweenFrames` evaluates keys between frames (a segment's curve, a key on a key, Hold
 holding) and `nativeMotionBlurReadsKeyframesBetweenFrames` (OpenGL) has EnvironmentMapViewer with Motion
 Blur read a keyframed turn at its sub-samples: the stripes smear, and a still turn draws as without blur.
