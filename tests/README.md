@@ -379,6 +379,10 @@ saved data alone, then the same motion with the footage layer moved and turned (
 answers in the world `GetLayerInfoV2` gives it, the host takes it back off), and from a host
 whose open shot only nests the tracked one; it needs the OpenGL 4.1 context and skips offscreen
 (run it alone with `QT_QPA_PLATFORM=windows`, it shows no window).
+`effectPresetsAreWrittenReadAndApplied` writes and reads `.hfpr` effect presets in the reference's
+shape, refuses a newer version and a 3D preset with the reference's words, lists 2D/3D Presets in
+the Effects panel with import (a free "name (N)"), export, rename and remove, and puts a preset on
+a clip through the timeline with its keys moved to the clip's start, as one undoable edit.
 `nativeEffectsGoInTheReferencesLists` writes native effects into the reference's own lists
 (`<Effects>` / `<BehaviorEffects>` with `<Instance Version="8">` and a typed PropertyManager), reads
 them back from a file without the port's extension, keeps an unknown plugin's instance verbatim and

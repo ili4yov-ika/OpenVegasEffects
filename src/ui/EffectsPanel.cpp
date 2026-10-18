@@ -5,6 +5,14 @@
 
 #include <QApplication>
 #include <QBrush>
+#include <QDesktopServices>
+#include <QDir>
+#include <QFileDialog>
+#include <QInputDialog>
+#include <QMessageBox>
+#include <QStandardPaths>
+#include <QUrl>
+#include "app/Settings.h"
 #include <QCoreApplication>
 #include <QMenu>
 #include <QDrag>
@@ -46,7 +54,7 @@ EffectsPanel::EffectsPanel(QWidget* parent)
             return;
         }
         const QVariant id = item->data(0, Qt::UserRole);
-        if (column == 1 && id.isValid()) {
+        if (column == 1 && id.isValid() && presetPathOf(item).isEmpty()) {
             toggleFavourite(id.toString());
             return;
         }
@@ -58,6 +66,11 @@ EffectsPanel::EffectsPanel(QWidget* parent)
             [this](QTreeWidgetItem* item, int column) {
                 if (column == 1) {
                     return; // the favourites star column
+                }
+                const QString preset = presetPathOf(item);
+                if (!preset.isEmpty()) {
+                    emit presetActivated(preset);
+                    return;
                 }
                 if (const plugin::EffectSpec* spec = specForItem(item)) {
                     emit effectActivated(*spec);
@@ -83,7 +96,21 @@ bool EffectsPanel::eventFilter(QObject* object, QEvent* event)
             const QPoint pos = mouse->position().toPoint();
             if ((mouse->buttons() & Qt::LeftButton)
                 && (pos - m_dragStart).manhattanLength() >= QApplication::startDragDistance()) {
-                const plugin::EffectSpec* spec = specForItem(m_tree->itemAt(m_dragStart));
+                QTreeWidgetItem* dragged = m_tree->itemAt(m_dragStart);
+                const QString preset = presetPathOf(dragged);
+                if (!preset.isEmpty()) {
+                    // The reference drags a preset as its own resource kind;
+                    // here the effect drop takes it by the prefix.
+                    auto* mime = new QMimeData;
+                    mime->setData(QString::fromLatin1(kEffectMimeType),
+                                  (QStringLiteral("preset:") + preset).toUtf8());
+                    mime->setText(dragged->text(0));
+                    auto* drag = new QDrag(this);
+                    drag->setMimeData(mime);
+                    drag->exec(Qt::CopyAction);
+                    return true;
+                }
+                const plugin::EffectSpec* spec = specForItem(dragged);
                 if (spec) {
                     auto* mime = new QMimeData;
                     mime->setData(QString::fromLatin1(kEffectMimeType), spec->id.value().toUtf8());
@@ -265,6 +292,31 @@ void EffectsPanel::rebuildTree()
         root->addChild(addEffectRow(root, spec));
     }
 
+    // The presets in their two categories (the reference's 2D Presets and
+    // 3D Presets); a 3D preset makes a 3D effect layer this port lacks.
+    for (const bool threeD : {false, true}) {
+        QTreeWidgetItem* root = nullptr;
+        for (const project::EffectPreset& preset : std::as_const(m_presets)) {
+            if (preset.threeD != threeD) continue;
+            if (!root) {
+                root = new QTreeWidgetItem(m_tree, {threeD ? tr("3D Presets") : tr("2D Presets")});
+                root->setFlags(Qt::ItemIsEnabled);
+            }
+            auto* item = new QTreeWidgetItem(root, {preset.name, QString()});
+            item->setData(0, Qt::UserRole, QStringLiteral("preset:") + preset.path);
+            item->setData(0, Qt::UserRole + 1, preset.name.toLower());
+            item->setData(0, Qt::UserRole + 3, preset.path);
+            item->setIcon(0, iconForKind(plugin::PluginKind::Effects));
+            item->setToolTip(0, QDir::toNativeSeparators(preset.path));
+            if (threeD) {
+                QFont font = item->font(0);
+                font.setItalic(true);
+                item->setFont(0, font);
+                item->setForeground(0, QBrush(QColor(150, 150, 155)));
+            }
+        }
+    }
+
     m_tree->sortItems(0, Qt::AscendingOrder);
 
     // Reference order: Favorites first, then Recents (the order they were
@@ -351,13 +403,134 @@ void EffectsPanel::setFavoritesManager(EffectsFavorites* favorites)
     refresh();
 }
 
+QString EffectsPanel::aboutText(const plugin::EffectSpec& spec)
+{
+    QString text = (spec.displayName.isEmpty() ? spec.name : spec.displayName)
+                   + QCoreApplication::translate("QObject", ", V%1.%2")
+                         .arg(spec.version.major()).arg(spec.version.minor());
+    if (!spec.author.isEmpty() || !spec.copyright.isEmpty()) {
+        text += QLatin1Char('\n');
+        if (!spec.author.isEmpty()) text += QLatin1Char('\n') + spec.author;
+        if (!spec.copyright.isEmpty()) text += QLatin1Char('\n') + spec.copyright;
+    }
+    return text;
+}
+
+QString EffectsPanel::presetPathOf(const QTreeWidgetItem* item)
+{
+    return item ? item->data(0, Qt::UserRole + 3).toString() : QString();
+}
+
+void EffectsPanel::setPresetsDirectory(const QString& directory)
+{
+    m_presetsDirectory = directory;
+    reloadPresets();
+}
+
+void EffectsPanel::reloadPresets()
+{
+    m_presets = project::scanEffectPresets(m_presetsDirectory);
+    rebuildTree();
+    applyFilter();
+}
+
+bool EffectsPanel::importPresetFiles(const QStringList& files)
+{
+    if (m_presetsDirectory.isEmpty() || !QDir().mkpath(m_presetsDirectory)) return files.isEmpty();
+    bool ok = true;
+    for (const QString& file : files) {
+        // FUN_140672480: the file's name in the presets folder, made free,
+        // then the copy is read as a preset.
+        const QString target = project::uniqueFilePath(
+            QDir(m_presetsDirectory).filePath(QFileInfo(file).fileName()));
+        project::EffectPreset preset;
+        const bool copied = QFile::copy(file, target);
+        if (copied && !project::readEffectPreset(target, &preset)) QFile::remove(target);
+        ok = ok && copied && QFileInfo::exists(target);
+    }
+    reloadPresets();
+    return ok;
+}
+
+bool EffectsPanel::exportPresetFiles(const QStringList& presetPaths, const QString& directory)
+{
+    bool ok = !directory.isEmpty();
+    for (const QString& path : presetPaths) {
+        if (!QFileInfo::exists(path)) { ok = false; continue; }
+        ok = QFile::copy(path, project::uniqueFilePath(QDir(directory).filePath(QFileInfo(path).fileName()))) && ok;
+    }
+    return ok;
+}
+
+bool EffectsPanel::renamePreset(const QString& presetPath, const QString& name)
+{
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty() || trimmed.contains(QLatin1Char('/')) || trimmed.contains(QLatin1Char('\\'))) return false;
+    // The model's edit (FUN_14067a1d0): "<name>.hfpr" in the same folder.
+    const QString target = QFileInfo(presetPath).absoluteDir().filePath(trimmed + QStringLiteral(".hfpr"));
+    if (QFileInfo(target).absoluteFilePath() == QFileInfo(presetPath).absoluteFilePath()) return true;
+    if (QFileInfo::exists(target)) return false;
+    const bool ok = QFile::rename(presetPath, target);
+    reloadPresets();
+    return ok;
+}
+
+bool EffectsPanel::removePresets(const QStringList& presetPaths)
+{
+    bool ok = true;
+    for (const QString& path : presetPaths) ok = QFile::remove(path) && ok;
+    reloadPresets();
+    return ok;
+}
+
 void EffectsPanel::showContextMenu(const QPoint& position)
 {
-    const plugin::EffectSpec* spec = specForItem(m_tree->itemAt(position));
+    QTreeWidgetItem* clicked = m_tree->itemAt(position);
+    const plugin::EffectSpec* spec = specForItem(clicked);
     const QString id = spec ? spec->id.value() : QString();
     const bool favourite = !id.isEmpty() && m_favourites.contains(id);
     const auto label = [](const char* text) { return QCoreApplication::translate("EffectsActions", text); };
+    // The preset rows chosen, and whether all of them may be changed.
+    QStringList chosen;
+    for (QTreeWidgetItem* item : m_tree->selectedItems())
+        if (!presetPathOf(item).isEmpty()) chosen.append(presetPathOf(item));
+    if (!presetPathOf(clicked).isEmpty() && !chosen.contains(presetPathOf(clicked))) chosen = {presetPathOf(clicked)};
+    bool editable = !chosen.isEmpty();
+    for (const project::EffectPreset& preset : std::as_const(m_presets))
+        if (chosen.contains(preset.path) && !preset.editable) editable = false;
     QMenu menu(this);
+    menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Reload All Presets")), this,
+                   &EffectsPanel::reloadPresets);
+    menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Import Presets...")), this, [this] {
+        // RecentFolders/ImportPresets, the desktop the first time.
+        QSettings settings = app::Settings::optionSettings();
+        QString folder = settings.value(QStringLiteral("RecentFolders/ImportPresets")).toString();
+        if (folder.isEmpty()) folder = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+        const QStringList files = QFileDialog::getOpenFileNames(
+            this, QCoreApplication::translate("EffectsPanel", "Import Presets"), folder,
+            QStringLiteral("%1 (*.hfpr)")
+                .arg(QCoreApplication::translate("biff::ui::BiffFileFilter", "Presets")));
+        if (files.isEmpty()) return;
+        settings.setValue(QStringLiteral("RecentFolders/ImportPresets"), QFileInfo(files.last()).absolutePath());
+        if (!importPresetFiles(files))
+            QMessageBox::warning(this, QString(), QCoreApplication::translate(
+                                                      "EffectsPanel", "One or more presets failed to import."));
+    });
+    QAction* exportAction = menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Export Presets...")), this,
+                                           [this, chosen] {
+        QSettings settings = app::Settings::optionSettings();
+        QString folder = settings.value(QStringLiteral("RecentFolders/ExportPresets")).toString();
+        if (folder.isEmpty()) folder = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+        const QString directory = QFileDialog::getExistingDirectory(
+            this, QCoreApplication::translate("EffectsPanel", "Choose a folder to export chosen presets into"),
+            folder, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+        if (directory.isEmpty()) return;
+        settings.setValue(QStringLiteral("RecentFolders/ExportPresets"), directory);
+        if (!exportPresetFiles(chosen, directory))
+            QMessageBox::warning(this, QString(), QCoreApplication::translate(
+                                                      "EffectsPanel", "One or more presets failed to export."));
+    });
+    exportAction->setEnabled(!chosen.isEmpty());
     QAction* add = menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Add to Favorites")), this, [this, id] { toggleFavourite(id); });
     add->setEnabled(!id.isEmpty() && !favourite);
     QAction* remove = menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Remove from Favorites")), this, [this, id] { toggleFavourite(id); });
@@ -366,6 +539,38 @@ void EffectsPanel::showContextMenu(const QPoint& position)
         if (m_favoritesManager) m_favoritesManager->clearRecents();
     });
     clear->setEnabled(!recents().isEmpty());
+    QAction* about = menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "About...")), this, [this, spec] {
+        QMessageBox box(this);
+        box.setObjectName(QStringLiteral("effectsPanelAbout"));
+        box.setIcon(QMessageBox::NoIcon);
+        box.setStandardButtons(QMessageBox::Ok);
+        box.setDefaultButton(QMessageBox::Ok);
+        box.setText(aboutText(*spec));
+        box.exec();
+    });
+    about->setEnabled(spec != nullptr);
+    QAction* rename = menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Rename")), this, [this, chosen, label] {
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, label(QT_TRANSLATE_NOOP("EffectsActions", "Rename")),
+                                                   QString(), QLineEdit::Normal,
+                                                   QFileInfo(chosen.first()).completeBaseName(), &ok);
+        if (ok) renamePreset(chosen.first(), name);
+    });
+    rename->setEnabled(editable && chosen.size() == 1);
+    QAction* removePreset = menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Remove")), this, [this, chosen] {
+        const QString question = chosen.size() == 1
+            ? QCoreApplication::translate("EffectsPanel",
+                                          "Are you sure you want to delete this preset? You cannot undo this action.")
+            : QCoreApplication::translate("EffectsPanel",
+                                          "Are you sure you want to delete these presets? You cannot undo this action.");
+        if (QMessageBox::question(this, QString(), question) == QMessageBox::Yes) removePresets(chosen);
+    });
+    removePreset->setEnabled(editable);
+    QAction* location = menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Open File Location...")), this,
+                                       [chosen] {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(chosen.first()).absolutePath()));
+    });
+    location->setEnabled(chosen.size() == 1);
     menu.addSeparator();
     menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Collapse All")), m_tree, &QTreeWidget::collapseAll);
     menu.exec(m_tree->viewport()->mapToGlobal(position));

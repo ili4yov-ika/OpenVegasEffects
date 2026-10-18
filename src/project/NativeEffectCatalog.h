@@ -38,6 +38,7 @@ struct NativeEffectEntry
     int versionMajor = 0;
     int versionMinor = 0;
     Container container = Container::None;
+    bool audio = false;        // an audio effect (HasAudioEffects of a preset)
     QVector<Parameter> parameters;
 };
 

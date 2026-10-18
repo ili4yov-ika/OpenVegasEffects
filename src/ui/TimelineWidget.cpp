@@ -2148,6 +2148,12 @@ TimelineWidget::TimelineWidget(QWidget* parent)
     connect(m_canvas, &TimelineCanvas::compositeShotDropped, this, &TimelineWidget::compositeShotDropped);
     connect(m_canvas, &TimelineCanvas::effectDropped, this,
             [this](int layerIndex, int clipIndex, const QString& pluginId, double seconds) {
+        if (pluginId.startsWith(QLatin1String("preset:"))) {
+            QString error;
+            if (addPreset(layerIndex, clipIndex, pluginId.mid(7), &error) == 0 && !error.isEmpty())
+                emit presetFailed(error);
+            return;
+        }
         if (!m_pluginManager) return;
         const plugin::EffectSpec spec = m_pluginManager->spec(plugin::PluginId(pluginId));
         if (!spec.id.isValid()) return;

@@ -415,6 +415,13 @@ protected:
     // Plays the audio again from the playhead when playing (a processed
     // clip has arrived).
     void restartPlaybackAudio();
+    // Effect presets: the folder (Options/PresetsPath, else the Presets
+    // folder of the user data), applying one to the selected clip, and
+    // Create Preset (shown while Enable Effect Preset Creation is on).
+    QString effectPresetsDirectory() const;
+    void applyEffectPreset(const QString& presetPath);
+    void createEffectPreset();
+    QAction* m_createPresetAction = nullptr;
 
     double m_inPoint = -1.0;
     double m_outPoint = -1.0;

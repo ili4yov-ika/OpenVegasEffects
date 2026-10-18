@@ -533,6 +533,8 @@ signals:
     void layersSelected(const QVector<int>& layerIndices);
     // An effect dropped from the Effects panel was added to a clip.
     void effectAdded(const QString& pluginId);
+    // A preset dropped on a clip could not be used (the reference's words).
+    void presetFailed(const QString& message);
     // A row of a model node (or one of its Transform rows) became current:
     // that node's path; empty for any other row.
     void modelNodeSelected(int layerIndex, const QString& path);
@@ -564,6 +566,10 @@ public:
     // transition lands on the clip edge nearer `seconds`. Returns the new
     // effect's index, or -1 when the clip is missing or its layer locked.
     int addEffect(int layerIndex, int clipIndex, const plugin::EffectSpec& spec, double seconds);
+    // An effect preset's effects (.hfpr, keys from the layer's start) added
+    // to a clip as one undoable edit; their keys move to the clip's start.
+    // The number added, -1 when the clip is missing or its layer locked.
+    int addPreset(int layerIndex, int clipIndex, const QString& presetPath, QString* error = nullptr);
     // Insert 3D Model Animation Instance: animation `index` of `filePath`
     // (empty: the model's own file) playing on a model layer, as one
     // undoable edit. False when there is no such animation or the layer is

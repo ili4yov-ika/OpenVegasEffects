@@ -48,6 +48,7 @@
 #include "media/AudioWaveform.h"
 #include "media/ConformedAudio.h"
 #include "render/NestedAudioMix.h"
+#include "project/EffectPresets.h"
 #include "project/NativeEffectCatalog.h"
 #include "ui/EffectsFavorites.h"
 #include "ui/EffectsPanel.h"
@@ -10646,6 +10647,13 @@ private slots:
         QVERIFY(count);
         QVERIFY2(count->text().startsWith("7"), qPrintable(count->text()));
 
+        // About: the name and version, then author and copyright.
+        plugin::EffectSpec about = specs[0];
+        about.version = core::Version(5, 0, 0);
+        QCOMPARE(ui::EffectsPanel::aboutText(about), QStringLiteral("Effect 0, V5.0"));
+        about.author = "FXhome"; about.copyright = "(c) 2023";
+        QCOMPARE(ui::EffectsPanel::aboutText(about), QStringLiteral("Effect 0, V5.0\n\nFXhome\n(c) 2023"));
+
         // The star toggles through the manager; Clear Recents empties them.
         QTreeWidgetItem* row = tree->topLevelItem(3)->child(0);   // Color: Effect 4
         QCOMPARE(row->text(0), QStringLiteral("Effect 4"));
@@ -11408,6 +11416,10 @@ private slots:
             fx.parameterValues = {"12.5", "Screen", "true", "#00ff80", "40,-20", sourceLayer, "Hi <there>", ""};
             composition::KeyFrameList radius; radius.set(30, 5.0); radius.set(60, 25.0);
             fx.animation.insert(0, radius);
+            composition::KeyFrameList tint; tint.set(30, QStringLiteral("#00ff80")); tint.set(90, QStringLiteral("#0000ff"));
+            fx.animation.insert(3, tint);
+            composition::KeyFrameList center; center.set(45, QStringLiteral("40,-20")); center.set(75, QStringLiteral("-10,5"));
+            fx.animation.insert(4, center);
             fx.instanceData = QByteArray("RTOM\x01\x02", 6);
             clip.effects.append(fx);
             composition::Effect behavior; behavior.pluginId = core::Identifier("com.test.Wobble");
@@ -11491,6 +11503,11 @@ private slots:
         // Keys are relative to the layer in the file and back on the shot's time.
         QCOMPARE(read[0].animation.value(0).locations(), (QVector<int> {30, 60}));
         QCOMPARE(read[0].parameterAt(0, 60).toDouble(), 25.0);
+        // A colour and a point keyed whole, each key a <cl> / <p2>.
+        QCOMPARE(read[0].animation.value(3).locations(), (QVector<int> {30, 90}));
+        QCOMPARE(read[0].animation.value(3).at(90)->value.toString(), QString("#0000ff"));
+        QCOMPARE(read[0].animation.value(4).locations(), (QVector<int> {45, 75}));
+        QCOMPARE(read[0].animation.value(4).at(75)->value.toString(), QString("-10,5"));
         QCOMPARE(read[1].pluginId.value(), QString("deadbeef-0000-0000-0000-000000000000"));
         QCOMPARE(read[1].nativeContainer, QString("Effects"));
         QVERIFY(!read[1].nativeXml.isEmpty());
@@ -11544,6 +11561,150 @@ private slots:
             }
         }
     }
+    // Effect presets (.hfpr) as the reference writes and reads them: a 2D
+    // preset of the chosen effects (<Preset Type Version Editable Has...>,
+    // <ID>, <EffectsPreset> of <Instance>), its header, a newer version and a
+    // 3D one refused with the reference's words, the Effects panel's 2D and
+    // 3D Presets with import/export/rename/remove, and a preset on a clip
+    // with its keys moved to the clip's start, as one undoable edit.
+    void effectPresetsAreWrittenReadAndApplied() {
+        using Entry = project::NativeEffectEntry;
+        Entry glow;
+        glow.pluginId = "com.test.Glow"; glow.guid = "11111111-2222-3333-4444-555555555555";
+        glow.name = "Glow"; glow.container = Entry::Container::Effects;
+        glow.parameters = {{"radius", "double", "10", {}}};
+        Entry wobble;
+        wobble.pluginId = "com.test.Wobble"; wobble.guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        wobble.name = "Wobble"; wobble.container = Entry::Container::BehaviorEffects;
+        wobble.parameters = {{"amount", "double", "1", {}}};
+        project::setNativeEffectLookup([=](const QString& key) -> std::optional<Entry> {
+            for (const Entry& entry : {glow, wobble})
+                if (entry.pluginId == key || entry.guid == key) return entry;
+            return std::nullopt;
+        });
+        auto restore = qScopeGuard([] { project::setNativeEffectLookup({}); });
+
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString folder = temp.filePath("Presets");
+        QVERIFY(QDir().mkpath(folder));
+        composition::Effect fx; fx.pluginId = core::Identifier("com.test.Glow"); fx.name = "Soft Glow";
+        fx.parameterValues = {"4"};
+        composition::KeyFrameList radius; radius.set(0, 2.0); radius.set(30, 8.0);
+        fx.animation.insert(0, radius);
+        composition::Effect behavior; behavior.pluginId = core::Identifier("com.test.Wobble");
+        behavior.name = "Wobble"; behavior.parameterValues = {"5"};
+        const QString path = QDir(folder).filePath("Dreamy.hfpr");
+        QCOMPARE(project::writeEffectPreset(path, {fx, behavior}, 30.0), int(project::PresetOk));
+        QDomDocument document;
+        {
+            QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); QVERIFY(document.setContent(&file));
+        }
+        const QDomElement root = document.documentElement();
+        QCOMPARE(root.tagName(), QString("Preset"));
+        QCOMPARE(root.attribute("Type"), QString("2D"));
+        QCOMPARE(root.attribute("Version"), QString("1"));
+        QCOMPARE(root.attribute("Editable"), QString("1"));
+        QCOMPARE(root.attribute("HasVisualEffects"), QString("1"));
+        QCOMPARE(root.attribute("HasBehaviorEffects"), QString("1"));
+        QCOMPARE(root.attribute("HasAudioEffects"), QString("0"));
+        QVERIFY(!QUuid(root.firstChildElement("ID").text()).isNull());
+        QCOMPARE(root.firstChildElement("EffectsPreset").elementsByTagName("Instance").size(), 2);
+        // Nothing native to keep: no preset.
+        QCOMPARE(project::writeEffectPreset(QDir(folder).filePath("Empty.hfpr"), {}, 30.0),
+                 int(project::PresetNothingToSave));
+        QVERIFY(!project::effectPresetError(project::PresetNothingToSave).isEmpty());
+
+        project::EffectPreset header;
+        QVERIFY(project::readEffectPreset(path, &header));
+        QCOMPARE(header.name, QString("Dreamy"));
+        QVERIFY(!header.threeD && header.editable && header.hasVisualEffects && header.hasBehaviorEffects);
+        const QVector<composition::Effect> effects = project::effectPresetEffects(path, 30.0);
+        QCOMPARE(effects.size(), 2);
+        QCOMPARE(effects[0].name, QString("Soft Glow"));
+        QVERIFY(!effects[0].instanceId.isValid());
+        QCOMPARE(effects[0].animation.value(0).locations(), (QVector<int> {0, 30}));
+        QCOMPARE(effects[1].pluginId.value(), QString("com.test.Wobble"));
+
+        // A newer one and a 3D one.
+        const auto writeText = [](const QString& file, const QString& text) {
+            QFile out(file); if (!out.open(QIODevice::WriteOnly)) return false;
+            out.write(text.toUtf8()); return true;
+        };
+        const QString newer = QDir(folder).filePath("Future.hfpr");
+        QVERIFY(writeText(newer, "<Preset Type=\"2D\" Version=\"9\"><ID>x</ID><EffectsPreset/></Preset>"));
+        int result = 0;
+        QVERIFY(!project::readEffectPreset(newer, nullptr, &result));
+        QCOMPARE(result, int(project::PresetTooNew));
+        QVERIFY(project::effectPresetError(result).contains("newer version"));
+        QVERIFY(QFile::remove(newer));
+        const QString sparks = QDir(QDir(folder).filePath("Fire")).filePath("Sparks.hfpr");
+        QVERIFY(QDir().mkpath(QFileInfo(sparks).absolutePath()));
+        QVERIFY(writeText(sparks, "<Preset Type=\"3D\" Version=\"1\" Editable=\"0\"><ID>y</ID>"
+                                  "<EffectsPreset><Effect3DLayer/></EffectsPreset></Preset>"));
+        QVERIFY(project::effectPresetEffects(sparks, 30.0, &result).isEmpty());
+        QCOMPARE(result, int(project::PresetCannotRead));
+
+        // The Effects panel: 2D Presets and 3D Presets (sub-folders too).
+        ui::EffectsPanel panel;
+        panel.setPresetsDirectory(folder);
+        auto* tree = panel.findChild<QTreeWidget*>();
+        QVERIFY(tree);
+        QTreeWidgetItem* twoD = nullptr; QTreeWidgetItem* threeD = nullptr;
+        for (int i = 0; i < tree->topLevelItemCount(); ++i) {
+            if (tree->topLevelItem(i)->text(0) == "2D Presets") twoD = tree->topLevelItem(i);
+            if (tree->topLevelItem(i)->text(0) == "3D Presets") threeD = tree->topLevelItem(i);
+        }
+        QVERIFY(twoD && threeD);
+        QCOMPARE(twoD->childCount(), 1);
+        QCOMPARE(twoD->child(0)->text(0), QString("Dreamy"));
+        QCOMPARE(ui::EffectsPanel::presetPathOf(twoD->child(0)), QFileInfo(path).absoluteFilePath());
+        QCOMPARE(threeD->child(0)->text(0), QString("Sparks"));
+        QSignalSpy activated(&panel, &ui::EffectsPanel::presetActivated);
+        emit tree->itemDoubleClicked(twoD->child(0), 0);
+        QCOMPARE(activated.size(), 1);
+        // Import: the name is taken, so it comes in as "Dreamy (1)".
+        const QString outside = temp.filePath("Dreamy.hfpr");
+        QVERIFY(QFile::copy(path, outside));
+        QVERIFY(panel.importPresetFiles({outside}));
+        QVERIFY(QFileInfo::exists(QDir(folder).filePath("Dreamy (1).hfpr")));
+        QCOMPARE(panel.presets().size(), 3);
+        // Rename, export, remove.
+        QVERIFY(panel.renamePreset(QDir(folder).filePath("Dreamy (1).hfpr"), "Hazy"));
+        QVERIFY(QFileInfo::exists(QDir(folder).filePath("Hazy.hfpr")));
+        QVERIFY(!panel.renamePreset(QDir(folder).filePath("Hazy.hfpr"), "Dreamy"));   // taken
+        const QString exported = temp.filePath("out");
+        QVERIFY(QDir().mkpath(exported));
+        QVERIFY(panel.exportPresetFiles({QDir(folder).filePath("Hazy.hfpr")}, exported));
+        QVERIFY(QFileInfo::exists(QDir(exported).filePath("Hazy.hfpr")));
+        QVERIFY(panel.removePresets({QDir(folder).filePath("Hazy.hfpr")}));
+        QCOMPARE(panel.presets().size(), 2);
+        QCOMPARE(project::uniqueFilePath(path), QFileInfo(QDir(folder).filePath("Dreamy (1).hfpr")).absoluteFilePath());
+
+        // On a clip starting at 1 s: the keys move 30 frames, one undo step.
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(4);
+        {
+            auto& plane = shot->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            composition::Clip clip; clip.startSeconds = 1.0; clip.durationSeconds = 2.0;
+            plane.clips << clip;
+        }
+        QUndoStack stack;
+        ui::TimelineWidget timeline;
+        timeline.setUndoStack(&stack); timeline.setComposition(shot);
+        QCOMPARE(timeline.addPreset(0, 0, path), 2);
+        QCOMPARE(shot->layers()[0].clips[0].effects.size(), 2);
+        QCOMPARE(shot->layers()[0].clips[0].effects[0].animation.value(0).locations(), (QVector<int> {30, 60}));
+        QCOMPARE(stack.count(), 1);
+        stack.undo();
+        QCOMPARE(shot->layers()[0].clips[0].effects.size(), 0);
+        QString error;
+        QCOMPARE(timeline.addPreset(0, 0, sparks, &error), 0);
+        QVERIFY(!error.isEmpty());
+        shot->layerRef(0).locked = true;
+        QCOMPARE(timeline.addPreset(0, 0, path), -1);
+    }
+
     void multiClipLayersGoOutAsSlices() {
         QTemporaryDir temp; QVERIFY(temp.isValid());
         media::MediaManager media;

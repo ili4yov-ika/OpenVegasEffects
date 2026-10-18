@@ -89,6 +89,7 @@ HEADERS += \
     src/plugin/Plugin.h \
     src/plugin/PluginId.h \
     src/plugin/PluginManager.h \
+    src/project/EffectPresets.h \
     src/project/NativeEffectCatalog.h \
     src/project/VegfxSerializer.h \
     src/project/VegfxMerge.h \
@@ -203,6 +204,7 @@ SOURCES += \
     src/plugin/NativeEffectRender.cpp \
     src/plugin/NativePlugin.cpp \
     src/plugin/PluginManager.cpp \
+    src/project/EffectPresets.cpp \
     src/project/VegfxSerializer.cpp \
     src/project/VegfxMerge.cpp \
     src/model3d/AlembicReader.cpp \

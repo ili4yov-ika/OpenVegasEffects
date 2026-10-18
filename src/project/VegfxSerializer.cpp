@@ -1618,6 +1618,43 @@ int choiceIndex(const QString& value, const QStringList& choices)
     return 0;
 }
 
+bool isScalar(const QString& type)
+{
+    return type == QLatin1String("double") || type == QLatin1String("angle");
+}
+
+// A value of `p`'s type, as this port keeps it, into `parent`.
+void writeValue(QDomDocument& doc, QDomElement& parent, const project::NativeEffectEntry::Parameter& p,
+                const QString& value)
+{
+    const QString& type = p.type;
+    if (isScalar(type)) {
+        addText(doc, parent, QStringLiteral("fl"), number(value.toDouble()));
+    } else if (type == QLatin1String("int") || type == QLatin1String("enum")) {
+        addText(doc, parent, QStringLiteral("i"), QString::number(choiceIndex(value, p.choices)));
+    } else if (type == QLatin1String("bool") || type == QLatin1String("button")) {
+        const QString v = value.trimmed();
+        addText(doc, parent, QStringLiteral("b"),
+                v == QLatin1String("1") || v.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0
+                    ? QStringLiteral("1") : QStringLiteral("0"));
+    } else if (type == QLatin1String("color")) {
+        const QColor color(value.trimmed());
+        parent.appendChild(colorElement(doc, color.isValid() ? color : QColor(Qt::black)));
+    } else if (type == QLatin1String("point2d") || type == QLatin1String("point3d")) {
+        const bool three = type == QLatin1String("point3d");
+        const QStringList parts = components(value, three ? 3 : 2);
+        QDomElement point = doc.createElement(three ? QStringLiteral("p3") : QStringLiteral("p2"));
+        point.setAttribute(QStringLiteral("X"), number(parts.at(0).toDouble()));
+        point.setAttribute(QStringLiteral("Y"), number(parts.at(1).toDouble()));
+        if (three) point.setAttribute(QStringLiteral("Z"), number(parts.at(2).toDouble()));
+        parent.appendChild(point);
+    } else if (type == QLatin1String("layer") || type == QLatin1String("mask")) {
+        addText(doc, parent, QStringLiteral("id"), value.trimmed().isEmpty() ? kZeroId : value.trimmed());
+    } else {
+        addText(doc, parent, QStringLiteral("st"), value);
+    }
+}
+
 void appendProperty(QDomDocument& doc, QDomElement& propertyManager, const project::NativeEffectEntry::Parameter& p,
                     const composition::Effect& effect, int index, double fps)
 {
@@ -1625,62 +1662,35 @@ void appendProperty(QDomDocument& doc, QDomElement& propertyManager, const proje
         ? effect.parameterValues.at(index) : p.defaultValue;
     const QString& type = p.type;
     if (type == QLatin1String("label")) return;
-    if (type == QLatin1String("double") || type == QLatin1String("angle")) {
-        QDomElement element = prop(doc, propertyManager, p.name, 0, false, true);
-        QDomElement stat = holder(doc, element);
-        addText(doc, stat, QStringLiteral("fl"), number(value.toDouble()));
-        const auto curve = effect.animation.constFind(index);
-        if (curve != effect.animation.cend() && !curve->isEmpty()) {
-            const QVector<composition::KeyFrame> keys = curve->all();
-            QDomElement animation = doc.createElement(QStringLiteral("Animation"));
-            for (int k = 0; k < keys.size(); ++k) {
-                const composition::KeyFrame& key = keys.at(k);
-                const bool hasPrevious = k > 0, hasNext = k + 1 < keys.size();
-                appendKey(doc, animation, key, fps, hasPrevious ? keyTimeMs(keys.at(k - 1).frame, fps) : 0.0,
-                          hasNext ? keyTimeMs(keys.at(k + 1).frame, fps) : 0.0,
-                          hasPrevious ? keys.at(k - 1).value.toDouble() : 0.0,
-                          hasNext ? keys.at(k + 1).value.toDouble() : 0.0, hasPrevious, hasNext,
-                          [&doc, &key](QDomElement& holderElement) {
-                              addText(doc, holderElement, QStringLiteral("fl"), number(key.value.toDouble()));
-                          });
-            }
-            element.appendChild(animation);
-        }
-    } else if (type == QLatin1String("int") || type == QLatin1String("enum")) {
-        QDomElement element = prop(doc, propertyManager, p.name, 1, false, p.choices.isEmpty());
-        QDomElement stat = holder(doc, element);
-        addText(doc, stat, QStringLiteral("i"), QString::number(choiceIndex(value, p.choices)));
-    } else if (type == QLatin1String("bool") || type == QLatin1String("button")) {
-        QDomElement element = prop(doc, propertyManager, p.name, 1, false, false);
-        QDomElement stat = holder(doc, element);
-        const QString v = value.trimmed();
-        addText(doc, stat, QStringLiteral("b"),
-                v == QLatin1String("1") || v.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0
-                    ? QStringLiteral("1") : QStringLiteral("0"));
-    } else if (type == QLatin1String("color")) {
-        QDomElement element = prop(doc, propertyManager, p.name, 0, false, true);
-        QDomElement stat = holder(doc, element);
-        const QColor color(value.trimmed());
-        stat.appendChild(colorElement(doc, color.isValid() ? color : QColor(Qt::black)));
-    } else if (type == QLatin1String("point2d") || type == QLatin1String("point3d")) {
-        const bool three = type == QLatin1String("point3d");
-        QDomElement element = prop(doc, propertyManager, p.name, 0, true, true);
-        QDomElement stat = holder(doc, element);
-        const QStringList parts = components(value, three ? 3 : 2);
-        QDomElement point = doc.createElement(three ? QStringLiteral("p3") : QStringLiteral("p2"));
-        point.setAttribute(QStringLiteral("X"), number(parts.at(0).toDouble()));
-        point.setAttribute(QStringLiteral("Y"), number(parts.at(1).toDouble()));
-        if (three) point.setAttribute(QStringLiteral("Z"), number(parts.at(2).toDouble()));
-        stat.appendChild(point);
-    } else if (type == QLatin1String("layer") || type == QLatin1String("mask")) {
-        QDomElement element = prop(doc, propertyManager, p.name, 1, false, false);
-        QDomElement stat = holder(doc, element);
-        addText(doc, stat, QStringLiteral("id"), value.trimmed().isEmpty() ? kZeroId : value.trimmed());
-    } else {
-        QDomElement element = prop(doc, propertyManager, p.name, 1, false, false);
-        QDomElement stat = holder(doc, element);
-        addText(doc, stat, QStringLiteral("st"), value);
+    // Type 0 for what animates smoothly (floats, colours, points - spatial),
+    // 1 for discrete values; a combo box does not interpolate in time.
+    const bool smooth = isScalar(type) || type == QLatin1String("color") || type == QLatin1String("point2d")
+                        || type == QLatin1String("point3d");
+    const bool spatial = type == QLatin1String("point2d") || type == QLatin1String("point3d");
+    const bool interpolates = smooth || (type == QLatin1String("int") && p.choices.isEmpty());
+    QDomElement element = prop(doc, propertyManager, p.name, smooth ? 0 : 1, spatial, interpolates);
+    QDomElement stat = holder(doc, element);
+    writeValue(doc, stat, p, value);
+    const auto curve = effect.animation.constFind(index);
+    if (curve == effect.animation.cend() || curve->isEmpty()) return;
+    const QVector<composition::KeyFrame> keys = curve->all();
+    const auto numeric = [&](const QVariant& v) { return isScalar(type) ? v.toDouble() : 0.0; };
+    QDomElement animation = doc.createElement(QStringLiteral("Animation"));
+    for (int k = 0; k < keys.size(); ++k) {
+        const composition::KeyFrame& key = keys.at(k);
+        const bool hasPrevious = k > 0, hasNext = k + 1 < keys.size();
+        appendKey(doc, animation, key, fps, hasPrevious ? keyTimeMs(keys.at(k - 1).frame, fps) : 0.0,
+                  hasNext ? keyTimeMs(keys.at(k + 1).frame, fps) : 0.0,
+                  hasPrevious ? numeric(keys.at(k - 1).value) : 0.0,
+                  hasNext ? numeric(keys.at(k + 1).value) : 0.0, hasPrevious, hasNext,
+                  [&](QDomElement& holderElement) {
+                      const QString text = key.value.typeId() == QMetaType::Bool
+                          ? (key.value.toBool() ? QStringLiteral("true") : QStringLiteral("false"))
+                          : key.value.toString();
+                      writeValue(doc, holderElement, p, text);
+                  });
     }
+    element.appendChild(animation);
 }
 
 // The effect's <Instance> in `container`.
@@ -1736,9 +1746,8 @@ QString textOf(const QDomElement& element)
 }
 
 // The value a property of `type` holds, as this port keeps it.
-QString readValue(const QDomElement& property, const project::NativeEffectEntry::Parameter& p)
+QString readHolderValue(const QDomElement& value, const project::NativeEffectEntry::Parameter& p)
 {
-    const QDomElement value = propValueHolder(property);
     const QString& type = p.type;
     if (type == QLatin1String("double") || type == QLatin1String("angle")) {
         const QDomElement fl = value.firstChildElement(QStringLiteral("fl"));
@@ -1787,13 +1796,80 @@ QString readValue(const QDomElement& property, const project::NativeEffectEntry:
     return p.defaultValue;
 }
 
+QString readValue(const QDomElement& property, const project::NativeEffectEntry::Parameter& p)
+{
+    return readHolderValue(propValueHolder(property), p);
+}
+
+// The keys of a property that is not a float: each value whole, as this
+// port keys it (a colour "#rrggbb", a point "x,y"), at the key's time.
+composition::KeyFrameList readKeys(const QDomElement& property, const project::NativeEffectEntry::Parameter& p,
+                                   double fps)
+{
+    composition::KeyFrameList curve;
+    const QDomElement animation = property.firstChildElement(QStringLiteral("Animation"));
+    if (animation.isNull() || fps <= 0.0) return curve;
+    const bool discrete = !(p.type == QLatin1String("color") || p.type == QLatin1String("point2d")
+                            || p.type == QLatin1String("point3d")
+                            || (p.type == QLatin1String("int") && p.choices.isEmpty()));
+    curve.setCanInterpolate(!discrete);
+    for (QDomElement key = animation.firstChildElement(QStringLiteral("Key")); !key.isNull();
+         key = key.nextSiblingElement(QStringLiteral("Key"))) {
+        composition::KeyFrame frame;
+        frame.frame = int(qRound(key.attribute(QStringLiteral("Ti")).toDouble() / 1000.0 * fps));
+        frame.temporal = discrete ? composition::TemporalType::Hold
+                                  : temporalTypeFromId(key.attribute(QStringLiteral("Tp")).toInt());
+        const QString text = readHolderValue(key.firstChildElement(QStringLiteral("Vl")), p);
+        if (p.type == QLatin1String("int") || p.type == QLatin1String("enum")) frame.value = text.toInt();
+        else if (p.type == QLatin1String("bool") || p.type == QLatin1String("button"))
+            frame.value = text == QLatin1String("true");
+        else frame.value = text;
+        curve.add(frame);
+    }
+    return curve;
+}
+
+QVector<composition::Effect> readInstanceList(const QDomElement& list, const QString& tag, double fps);
+
 // The effects of the reference's own lists under `layerWrapper` (Effects,
 // GeometryEffects) and `named` (BehaviorEffects), in that order.
 QVector<composition::Effect> readInstances(const QDomElement& layerWrapper, const QDomElement& named, double fps)
 {
     QVector<composition::Effect> effects;
     const auto readList = [&](const QDomElement& parent, const QString& tag) {
-        const QDomElement list = parent.firstChildElement(tag);
+        effects += readInstanceList(parent.firstChildElement(tag), tag, fps);
+    };
+    readList(layerWrapper, QStringLiteral("Effects"));
+    readList(layerWrapper, QStringLiteral("GeometryEffects"));
+    readList(named, QStringLiteral("BehaviorEffects"));
+    return effects;
+}
+
+// Writes `effects` - native ones as <Instance>, unknown ones as they were
+// read - into `list`, whatever their kind (a preset's EffectsPreset holds all
+// of them).
+void appendInstanceList(QDomDocument& doc, QDomElement& list, const QVector<composition::Effect>& effects,
+                        const QString& layerId, const QString& shotId, const QSizeF& layerSize, double fps)
+{
+    for (int e = 0; e < effects.size(); ++e) {
+        const composition::Effect& effect = effects.at(e);
+        if (effect.isTransition()) continue;
+        if (!effect.nativeXml.isEmpty()) {
+            appendVerbatim(doc, list, effect.nativeXml);
+            continue;
+        }
+        const std::optional<project::NativeEffectEntry> entry = project::findNativeEffect(effect.pluginId.value());
+        if (!entry || entry->guid.isEmpty()) continue;
+        const QString instanceId = effect.instanceId.isValid()
+            ? effect.instanceId.value() : QUuid::createUuid().toString(QUuid::WithoutBraces);
+        appendInstance(doc, list, *entry, effect, instanceId, layerId, shotId, layerSize, fps);
+    }
+}
+
+QVector<composition::Effect> readInstanceList(const QDomElement& list, const QString& tag, double fps)
+{
+    QVector<composition::Effect> effects;
+    {
         for (QDomElement instance = list.firstChildElement(QStringLiteral("Instance")); !instance.isNull();
              instance = instance.nextSiblingElement(QStringLiteral("Instance"))) {
             composition::Effect effect;
@@ -1820,21 +1896,35 @@ QVector<composition::Effect> readInstances(const QDomElement& layerWrapper, cons
                 const project::NativeEffectEntry::Parameter& p = entry->parameters.at(i);
                 const QDomElement property = propElement(properties, p.name);
                 effect.parameterValues.append(property.isNull() ? p.defaultValue : readValue(property, p));
-                if (!property.isNull() && (p.type == QLatin1String("double") || p.type == QLatin1String("angle"))) {
-                    composition::KeyFrameList curve = propAnimation(property, fps, QString());
-                    if (!curve.isEmpty()) effect.animation.insert(i, curve);
-                }
+                if (property.isNull()) continue;
+                composition::KeyFrameList curve = isScalar(p.type) ? propAnimation(property, fps, QString())
+                                                                   : readKeys(property, p, fps);
+                if (curve.isEmpty()) continue;
+                curve.setDefaultValue(effect.parameterValues.last());
+                effect.animation.insert(i, curve);
             }
             effects.append(effect);
         }
-    };
-    readList(layerWrapper, QStringLiteral("Effects"));
-    readList(layerWrapper, QStringLiteral("GeometryEffects"));
-    readList(named, QStringLiteral("BehaviorEffects"));
+    }
     return effects;
 }
 
 } // namespace nativefx
+
+} // namespace
+
+QVector<composition::Effect> VegfxSerializer::effectsFromInstances(const QDomElement& list, double fps)
+{
+    return nativefx::readInstanceList(list, list.tagName(), fps);
+}
+
+void VegfxSerializer::appendEffectInstances(QDomDocument& doc, QDomElement& list,
+                                            const QVector<composition::Effect>& effects, double fps)
+{
+    nativefx::appendInstanceList(doc, list, effects, nativefx::kZeroId, nativefx::kZeroId, QSizeF(), fps);
+}
+
+namespace {
 
 void appendClipsExtension(QDomDocument& doc, QDomElement& wrapper,
                           const QVector<composition::Clip>& clips, bool force = false)

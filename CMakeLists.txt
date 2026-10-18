@@ -279,6 +279,8 @@ add_executable(OpenVegasEffects WIN32
     src/composition/MotionTracker.cpp
     src/cache/CacheDB.h
     src/cache/CacheDB.cpp
+    src/project/EffectPresets.h
+    src/project/EffectPresets.cpp
     src/project/NativeEffectCatalog.h
     src/project/VegfxSerializer.h
     src/project/VegfxSerializer.cpp

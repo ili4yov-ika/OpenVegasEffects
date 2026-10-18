@@ -744,6 +744,8 @@ private:
         spec.subCategory = native.subCategory;
         spec.keywords = native.keywords;
         spec.guid = native.guid;
+        spec.author = native.vendor;
+        spec.copyright = native.copyright;
         if (native.metadataFromModule) {
             spec.version = core::Version(native.versionMajor, native.versionMinor, 0);
         }
@@ -1363,6 +1365,7 @@ private:
             case PluginKind::Transitions: result.container = Container::None; break;
             default: result.container = Container::Effects; break;
             }
+            result.audio = spec.kind == PluginKind::AudioEffect;
             for (const EffectParameterSpec& parameter : spec.parameters) {
                 result.parameters.append({parameter.name, parameter.type, parameter.defaultValue,
                                           parameter.choices});

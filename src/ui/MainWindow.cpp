@@ -77,6 +77,7 @@
 #include "media/VideoProbe.h"
 #include "license/LicenseManager.h"
 #include "media/ExrImage.h"
+#include "project/EffectPresets.h"
 #include "project/VegfxSerializer.h"
 #include "plugin/NativeEffectRender.h"
 #include "ui/AboutDialog.h"
@@ -751,6 +752,8 @@ void MainWindow::buildUi()
     m_effectsPanel = new EffectsPanel(this);
     m_effectFavorites = new EffectsFavorites(QString(), this);
     m_effectsPanel->setFavoritesManager(m_effectFavorites);
+    m_effectsPanel->setPresetsDirectory(effectPresetsDirectory());
+    connect(m_effectsPanel, &EffectsPanel::presetActivated, this, &MainWindow::applyEffectPreset);
     addDockWidget(Qt::RightDockWidgetArea, m_effectsPanel);
 
     m_controlsPanel = new EffectInspector(this);
@@ -1182,6 +1185,12 @@ void MainWindow::configureMenus()
                 m_effectsPanel->raise();
             });
 
+    m_createPresetAction = m_ui->menuEffects->addAction(
+        QCoreApplication::translate("EffectsPanel", "Create Preset..."), this, &MainWindow::createEffectPreset);
+    m_createPresetAction->setObjectName(QStringLiteral("actionCreateEffectPreset"));
+    m_createPresetAction->setVisible(
+        app::Settings::optionSettings().value(QStringLiteral("Options/EnableEffectPresetCreation"), false).toBool()
+        || QSettings().value(QStringLiteral("Debug/EffectPresetCreation"), false).toBool());
     m_effectFavoritesMenu = m_ui->menuEffects->addMenu(tr("Favorites"));
     m_effectFavoritesMenu->setObjectName(QStringLiteral("menuEffectFavorites"));
     m_effectRecentsMenu = m_ui->menuEffects->addMenu(tr("Recents"));
@@ -1252,8 +1261,11 @@ void MainWindow::configureMenus()
         OV_LOG_INFO(QStringLiteral("Analytics logging %1").arg(on ? QStringLiteral("enabled")
                                                                    : QStringLiteral("disabled")));
     });
-    connect(m_ui->actionEnableEffectPresetCreation, &QAction::toggled, this, [](bool on) {
+    connect(m_ui->actionEnableEffectPresetCreation, &QAction::toggled, this, [this](bool on) {
         QSettings().setValue(QStringLiteral("Debug/EffectPresetCreation"), on);
+        // The reference's own key (FUN_1402a7140), which shows Create Preset.
+        app::Settings::optionSettings().setValue(QStringLiteral("Options/EnableEffectPresetCreation"), on);
+        if (m_createPresetAction) m_createPresetAction->setVisible(on);
     });
     connect(m_ui->actionExportFontList, &QAction::triggered, this, [this] {
         const QString path = QFileDialog::getSaveFileName(
@@ -1923,6 +1935,8 @@ void MainWindow::wireSignals()
     });
     connect(m_timeline, &TimelineWidget::effectAdded, this,
             [this](const QString& pluginId) { m_effectFavorites->addRecent(pluginId); });
+    connect(m_timeline, &TimelineWidget::presetFailed, this,
+            [this](const QString& message) { QMessageBox::warning(window(), QString(), message); });
     connect(m_timeline, &TimelineWidget::clipSelected, this, [this](int layerIndex, int clipIndex) {
         m_selectedLayer = layerIndex;
         m_selectedClip = clipIndex;
@@ -5694,6 +5708,80 @@ double MainWindow::prepareAudioSource()
                       m_composition->audioSampleRate());
     m_audioClipStart = sources.isEmpty() ? -1 : 0;
     return m_audioClipStart;
+}
+
+QString MainWindow::effectPresetsDirectory() const
+{
+    // FUN_140230140: Options/PresetsPath when it names a folder that can be
+    // written to, else the Presets folder of the user data (written back).
+    QSettings settings = app::Settings::optionSettings();
+    const QString chosen = settings.value(QStringLiteral("Options/PresetsPath")).toString();
+    const QFileInfo info(chosen);
+    if (!chosen.isEmpty() && info.exists() && info.isDir() && info.isWritable())
+        return QDir::toNativeSeparators(chosen);
+    const QString folder = m_owner
+        ? m_owner->userDataPaths().pathFor(app::UserDataFolder::Presets)
+        : QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("Presets"));
+    QDir().mkpath(folder);
+    settings.setValue(QStringLiteral("Options/PresetsPath"), QDir::toNativeSeparators(folder));
+    return QDir::toNativeSeparators(folder);
+}
+
+void MainWindow::applyEffectPreset(const QString& presetPath)
+{
+    if (!m_composition || !m_timeline) return;
+    if (!m_composition->clipAt(m_selectedLayer, m_selectedClip)) {
+        statusBar()->showMessage(tr("Select a clip on the timeline first"));
+        return;
+    }
+    QString error;
+    const int added = m_timeline->addPreset(m_selectedLayer, m_selectedClip, presetPath, &error);
+    if (added < 0) {
+        statusBar()->showMessage(tr("The layer is locked"));
+        return;
+    }
+    if (added == 0) {
+        QMessageBox::warning(this, QString(), error);
+        return;
+    }
+    m_projectModified = true;
+    updateWindowTitle();
+    m_controlsPanel->setSelection(m_selectedLayer, m_selectedClip);
+    m_timeline->setComposition(m_composition);
+    m_timeline->update();
+    requestRenderFrame();
+    statusBar()->showMessage(tr("Applied %1").arg(QFileInfo(presetPath).completeBaseName()));
+}
+
+void MainWindow::createEffectPreset()
+{
+    // The reference's Create Preset (FUN_14056a4e0): the chosen effects, a
+    // file name in the presets folder, the preset written (FUN_14038da20).
+    const composition::Clip* clip = m_composition ? m_composition->clipAt(m_selectedLayer, m_selectedClip) : nullptr;
+    if (!clip) {
+        statusBar()->showMessage(tr("Select a clip on the timeline first"));
+        return;
+    }
+    const double fps = m_composition->fpsDenominator() > 0
+        ? double(m_composition->fpsNumerator()) / m_composition->fpsDenominator() : 30.0;
+    const int start = int(std::lround(clip->startSeconds * fps));
+    QVector<composition::Effect> effects;
+    for (composition::Effect effect : clip->effects) {
+        if (effect.isTransition()) continue;
+        for (auto it = effect.animation.begin(); it != effect.animation.end(); ++it) it->shift(-start);
+        effects.append(effect);
+    }
+    const QString path = QFileDialog::getSaveFileName(
+        this, QCoreApplication::translate("QObject", "Save Preset"), effectPresetsDirectory(),
+        QStringLiteral("%1 (*.hfpr)")
+            .arg(QCoreApplication::translate("biff::ui::BiffFileFilter", "Presets")));
+    if (path.isEmpty()) return;
+    const int result = project::writeEffectPreset(path, effects, fps);
+    if (result != project::PresetOk) {
+        QMessageBox::warning(window(), QString(), project::effectPresetError(result));
+        return;
+    }
+    m_effectsPanel->reloadPresets();
 }
 
 void MainWindow::restartPlaybackAudio()
