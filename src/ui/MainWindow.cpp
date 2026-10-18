@@ -749,6 +749,8 @@ void MainWindow::buildUi()
 
     // Right column: Effects + Controls + Library + History tabbed.
     m_effectsPanel = new EffectsPanel(this);
+    m_effectFavorites = new EffectsFavorites(QString(), this);
+    m_effectsPanel->setFavoritesManager(m_effectFavorites);
     addDockWidget(Qt::RightDockWidgetArea, m_effectsPanel);
 
     m_controlsPanel = new EffectInspector(this);
@@ -1206,7 +1208,7 @@ void MainWindow::configureMenus()
             });
     connect(m_effectRecentsMenu, &QMenu::aboutToShow, this,
             [this, populateEffectsMenu] {
-                populateEffectsMenu(m_effectRecentsMenu, m_recentEffectIds);
+                populateEffectsMenu(m_effectRecentsMenu, m_effectFavorites->recents());
             });
 
     connect(m_ui->actionRenderFrame, &QAction::triggered, this, &MainWindow::onRenderRequested);
@@ -1919,6 +1921,8 @@ void MainWindow::wireSignals()
             }
         }
     });
+    connect(m_timeline, &TimelineWidget::effectAdded, this,
+            [this](const QString& pluginId) { m_effectFavorites->addRecent(pluginId); });
     connect(m_timeline, &TimelineWidget::clipSelected, this, [this](int layerIndex, int clipIndex) {
         m_selectedLayer = layerIndex;
         m_selectedClip = clipIndex;
@@ -2651,9 +2655,7 @@ void MainWindow::onEffectActivated(const plugin::EffectSpec& spec)
     }
     clip = m_composition->clipAt(m_selectedLayer, m_selectedClip);
     const composition::Effect effect = clip->effects.at(effectIndex);
-    m_recentEffectIds.removeAll(spec.id.value());
-    m_recentEffectIds.prepend(spec.id.value());
-    while (m_recentEffectIds.size() > 10) m_recentEffectIds.removeLast();
+    m_effectFavorites->addRecent(spec.id.value());
 
     m_projectModified = true;
     updateWindowTitle();

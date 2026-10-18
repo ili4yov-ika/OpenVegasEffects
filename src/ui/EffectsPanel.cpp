@@ -1,9 +1,12 @@
 #include "ui/EffectsPanel.h"
 #include "ui_Effects.h"
 #include "ui/EffectPlacement.h"
+#include "ui/EffectsFavorites.h"
 
 #include <QApplication>
 #include <QBrush>
+#include <QCoreApplication>
+#include <QMenu>
 #include <QDrag>
 #include <QMimeData>
 #include <QMouseEvent>
@@ -63,6 +66,8 @@ EffectsPanel::EffectsPanel(QWidget* parent)
     // Rows can also be dragged onto a clip in the timeline; a transition then
     // lands on the clip edge nearer the drop point.
     m_tree->viewport()->installEventFilter(this);
+    m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_tree, &QWidget::customContextMenuRequested, this, &EffectsPanel::showContextMenu);
 
     rebuildTree();
 }
@@ -248,18 +253,6 @@ void EffectsPanel::rebuildTree()
     }
     m_tree->clear();
 
-    // Reference order: Favorites first, then the effect categories.
-    if (!m_favourites.isEmpty()) {
-        auto* favouritesRoot = new QTreeWidgetItem(m_tree, {tr("Favorites")});
-        favouritesRoot->setFlags(Qt::ItemIsEnabled);
-        m_tree->addTopLevelItem(favouritesRoot);
-        for (const plugin::EffectSpec& spec : m_effects) {
-            if (m_favourites.contains(spec.id.value())) {
-                favouritesRoot->addChild(addEffectRow(favouritesRoot, spec));
-            }
-        }
-    }
-
     QHash<QString, QTreeWidgetItem*> categoryRoots;
     for (const plugin::EffectSpec& spec : m_effects) {
         QTreeWidgetItem* root = categoryRoots.value(spec.category);
@@ -273,6 +266,27 @@ void EffectsPanel::rebuildTree()
     }
 
     m_tree->sortItems(0, Qt::AscendingOrder);
+
+    // Reference order: Favorites first, then Recents (the order they were
+    // used in), then the effect categories.
+    const auto pinned = [this](const QString& name, const QStringList& ids, int at) {
+        if (ids.isEmpty()) return at;
+        auto* root = new QTreeWidgetItem({name});
+        root->setFlags(Qt::ItemIsEnabled);
+        root->setData(0, Qt::UserRole + 2, true);
+        m_tree->insertTopLevelItem(at, root);
+        for (const QString& id : ids) {
+            for (const plugin::EffectSpec& spec : m_effects) {
+                if (spec.id.value() == id) {
+                    addEffectRow(root, spec);
+                    break;
+                }
+            }
+        }
+        return at + 1;
+    };
+    int at = pinned(tr("Favorites"), favourites(), 0);
+    pinned(tr("Recents"), recents(), at);
     m_tree->expandAll();
     updateItemCount();
 }
@@ -280,6 +294,10 @@ void EffectsPanel::rebuildTree()
 void EffectsPanel::toggleFavourite(const QString& effectId)
 {
     if (effectId.isEmpty()) {
+        return;
+    }
+    if (m_favoritesManager) {
+        m_favoritesManager->toggleFavorite(effectId);   // favoritesChanged rebuilds
         return;
     }
     if (m_favourites.contains(effectId)) {
@@ -293,6 +311,7 @@ void EffectsPanel::toggleFavourite(const QString& effectId)
 
 QStringList EffectsPanel::favourites() const
 {
+    if (m_favoritesManager) return m_favoritesManager->favorites();
     QStringList ids(m_favourites.cbegin(), m_favourites.cend());
     ids.sort();
     return ids;
@@ -300,8 +319,56 @@ QStringList EffectsPanel::favourites() const
 
 void EffectsPanel::setFavourites(const QStringList& ids)
 {
+    if (m_favoritesManager) {
+        for (const QString& id : m_favoritesManager->favorites())
+            if (!ids.contains(id)) m_favoritesManager->setFavorite(id, false);
+        for (const QString& id : ids) m_favoritesManager->setFavorite(id, true);
+        return;
+    }
     m_favourites = QSet<QString>(ids.cbegin(), ids.cend());
     rebuildTree();
+}
+
+QStringList EffectsPanel::recents() const
+{
+    return m_favoritesManager ? m_favoritesManager->recents() : QStringList();
+}
+
+void EffectsPanel::setFavoritesManager(EffectsFavorites* favorites)
+{
+    if (m_favoritesManager) disconnect(m_favoritesManager, nullptr, this, nullptr);
+    m_favoritesManager = favorites;
+    const auto refresh = [this] {
+        const QStringList ids = favourites();
+        m_favourites = QSet<QString>(ids.cbegin(), ids.cend());
+        rebuildTree();
+        applyFilter();
+    };
+    if (m_favoritesManager) {
+        connect(m_favoritesManager, &EffectsFavorites::favoritesChanged, this, refresh);
+        connect(m_favoritesManager, &EffectsFavorites::recentsChanged, this, refresh);
+    }
+    refresh();
+}
+
+void EffectsPanel::showContextMenu(const QPoint& position)
+{
+    const plugin::EffectSpec* spec = specForItem(m_tree->itemAt(position));
+    const QString id = spec ? spec->id.value() : QString();
+    const bool favourite = !id.isEmpty() && m_favourites.contains(id);
+    const auto label = [](const char* text) { return QCoreApplication::translate("EffectsActions", text); };
+    QMenu menu(this);
+    QAction* add = menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Add to Favorites")), this, [this, id] { toggleFavourite(id); });
+    add->setEnabled(!id.isEmpty() && !favourite);
+    QAction* remove = menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Remove from Favorites")), this, [this, id] { toggleFavourite(id); });
+    remove->setEnabled(favourite);
+    QAction* clear = menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Clear Recents")), this, [this] {
+        if (m_favoritesManager) m_favoritesManager->clearRecents();
+    });
+    clear->setEnabled(!recents().isEmpty());
+    menu.addSeparator();
+    menu.addAction(label(QT_TRANSLATE_NOOP("EffectsActions", "Collapse All")), m_tree, &QTreeWidget::collapseAll);
+    menu.exec(m_tree->viewport()->mapToGlobal(position));
 }
 
 // Footer counter, matching the reference "424 item(s)" readout. Counts the
@@ -314,7 +381,8 @@ void EffectsPanel::updateItemCount()
     int visible = 0;
     for (int t = 0; t < m_tree->topLevelItemCount(); ++t) {
         QTreeWidgetItem* root = m_tree->topLevelItem(t);
-        if (!root || root->isHidden()) {
+        // Favorites and Recents repeat effects their categories list.
+        if (!root || root->isHidden() || root->data(0, Qt::UserRole + 2).toBool()) {
             continue;
         }
         for (int c = 0; c < root->childCount(); ++c) {

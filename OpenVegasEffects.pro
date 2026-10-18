@@ -114,6 +114,7 @@ HEADERS += \
     src/ui/DockTitleBar.h \
     src/ui/SplashScreen.h \
     src/ui/EffectInspector.h \
+    src/ui/EffectsFavorites.h \
     src/ui/EffectsPanel.h \
     src/ui/HistoryPanel.h \
     src/ui/LayerPanel.h \
@@ -226,6 +227,7 @@ SOURCES += \
     src/ui/DockTitleBar.cpp \
     src/ui/SplashScreen.cpp \
     src/ui/EffectInspector.cpp \
+    src/ui/EffectsFavorites.cpp \
     src/ui/EffectsPanel.cpp \
     src/ui/HistoryPanel.cpp \
     src/ui/LayerPanel.cpp \

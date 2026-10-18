@@ -2156,6 +2156,7 @@ TimelineWidget::TimelineWidget(QWidget* parent)
             if (clipIndex < 0 || clipIndex >= layer.clips.size()) return;
             addEffectToClip(layer.clips[clipIndex], spec, seconds);
         }, true);
+        emit effectAdded(pluginId);
     });
     connect(m_canvas, &TimelineCanvas::keyFrameDragged, this, &TimelineWidget::keyFramesChanged);
     connect(m_canvas, &TimelineCanvas::keyFramesEdited, this,

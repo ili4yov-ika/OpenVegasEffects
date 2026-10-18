@@ -379,6 +379,9 @@ saved data alone, then the same motion with the footage layer moved and turned (
 answers in the world `GetLayerInfoV2` gives it, the host takes it back off), and from a host
 whose open shot only nests the tracked one; it needs the OpenGL 4.1 context and skips offscreen
 (run it alone with `QT_QPA_PLATFORM=windows`, it shows no window).
+`effectsFavoritesAndRecentsAreKept` checks the Effects panel's favourites and recents in the
+reference's settings shape (group Plugins, QDataStream of int 0, the count and the IDs), five
+recents with the newest last, and the panel's Favorites/Recents rows above the categories.
 `clipsAreProcessedWholeForPlayback` (FFmpeg and `OPENVEGAS_HFPL_BALANCE`) processes a 2 s clip
 through AudioReverse as export does - the clip's end comes first, the gain is left to playback - and
 checks that `ProcessedClipAudioCache` makes it once per state of the clip; audio_regression's

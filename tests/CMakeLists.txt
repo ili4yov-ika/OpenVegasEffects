@@ -47,6 +47,8 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/ui/Preview360VideoPanel.cpp
     ../src/ui/TrimmerPanel.cpp ../src/ui/TrimmerPanel.h
     ../src/ui/HistoryPanel.cpp ../src/ui/HistoryPanel.h
+    ../src/ui/EffectsFavorites.cpp ../src/ui/EffectsFavorites.h
+    ../src/ui/EffectsPanel.cpp ../src/ui/EffectsPanel.h ../ui/panels/Effects.ui
     ../src/ui/StartPanel.cpp ../src/ui/StartPanel.h
     ../src/ui/LibraryPanel.cpp ../src/ui/LibraryPanel.h
     ../src/ui/MediaPanel.cpp ../src/ui/MediaPanel.h

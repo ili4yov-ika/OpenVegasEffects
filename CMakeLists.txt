@@ -353,6 +353,8 @@ src/ui/OptionsDialog.cpp
     src/ui/TextureWarning.h
     src/ui/Theme.h
     src/ui/Theme.cpp
+    src/ui/EffectsFavorites.h
+    src/ui/EffectsFavorites.cpp
     src/ui/EffectsPanel.h
     src/ui/EffectsPanel.cpp
     src/ui/MediaPanel.h

@@ -48,6 +48,8 @@
 #include "media/AudioWaveform.h"
 #include "media/ConformedAudio.h"
 #include "render/NestedAudioMix.h"
+#include "ui/EffectsFavorites.h"
+#include "ui/EffectsPanel.h"
 #include "ui/EffectPlacement.h"
 #include "ui/TextureWarning.h"
 #include "ui/CameraRule.h"
@@ -10577,6 +10579,83 @@ private slots:
             const auto changed = inputs[0].delay < inputs[1].delay ? inputs[0] : inputs[1];
             QVERIFY(qAbs(valueAt(changed, 0.66) - 125) <= 8);
         }
+    }
+
+    // The Effects panel's favourites and recents as the reference keeps them
+    // (EffectsFavoritesManager): settings group Plugins, keys Favorites and
+    // Recents, a QDataStream of int 0, the count and the IDs; five recents,
+    // the newest last; the panel shows Favorites then Recents first and its
+    // menu adds, removes and clears.
+    void effectsFavoritesAndRecentsAreKept() {
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString ini = dir.filePath("settings.ini");
+        QStringList ids;
+        for (int i = 0; i < 7; ++i) ids << QStringLiteral("{0000000%1-0000-0000-0000-000000000000}").arg(i);
+        {
+            ui::EffectsFavorites favorites(ini);
+            QSignalSpy changed(&favorites, &ui::EffectsFavorites::favoritesChanged);
+            favorites.setFavorite(ids[2], true);
+            favorites.setFavorite(ids[0], true);
+            favorites.setFavorite(ids[0], true);   // already one
+            QCOMPARE(changed.size(), 2);
+            for (const QString& id : ids) favorites.addRecent(id);
+            QCOMPARE(favorites.recents(), ids.mid(2));
+            favorites.addRecent(ids[3]);           // used again: moves to the end
+            QCOMPARE(favorites.recents(), (QStringList {ids[2], ids[4], ids[5], ids[6], ids[3]}));
+        }
+        {
+            // The stored shape, byte for byte.
+            QSettings settings(ini, QSettings::IniFormat);
+            const QByteArray stored = settings.value("Plugins/Favorites").toByteArray();
+            QByteArray expected;
+            QDataStream stream(&expected, QIODevice::WriteOnly);
+            stream.setVersion(QDataStream::Qt_5_11);
+            stream << qint32(0) << qint32(2) << ids[2] << ids[0];
+            QCOMPARE(stored, expected);
+            QCOMPARE(ui::EffectsFavorites::decode(settings.value("Plugins/Recents").toByteArray()).size(), 5);
+        }
+        ui::EffectsFavorites favorites(ini);
+        QCOMPARE(favorites.favorites(), (QStringList {ids[2], ids[0]}));
+        QCOMPARE(favorites.recents().last(), ids[3]);
+
+        // The panel: Favorites, then Recents, then the categories.
+        QVector<plugin::EffectSpec> specs;
+        for (int i = 0; i < 7; ++i) {
+            plugin::EffectSpec spec;
+            spec.id = core::Identifier(ids[i]);
+            spec.name = spec.displayName = QStringLiteral("Effect %1").arg(i);
+            spec.category = i < 4 ? QStringLiteral("Blur") : QStringLiteral("Color");
+            specs << spec;
+        }
+        ui::EffectsPanel panel;
+        panel.setEffects(specs);
+        panel.setFavoritesManager(&favorites);
+        auto* tree = panel.findChild<QTreeWidget*>();
+        QVERIFY(tree);
+        QCOMPARE(tree->topLevelItemCount(), 4);
+        QCOMPARE(tree->topLevelItem(0)->text(0), QStringLiteral("Favorites"));
+        QCOMPARE(tree->topLevelItem(0)->childCount(), 2);
+        QCOMPARE(tree->topLevelItem(0)->child(0)->text(0), QStringLiteral("Effect 2"));
+        QCOMPARE(tree->topLevelItem(1)->text(0), QStringLiteral("Recents"));
+        QCOMPARE(tree->topLevelItem(1)->childCount(), 5);
+        QCOMPARE(tree->topLevelItem(1)->child(4)->text(0), QStringLiteral("Effect 3"));
+        QCOMPARE(tree->topLevelItem(2)->text(0), QStringLiteral("Blur"));
+        // The count is of the effects, not their repeats.
+        auto* count = panel.findChild<QLabel*>("effects_panel_count");
+        QVERIFY(count);
+        QVERIFY2(count->text().startsWith("7"), qPrintable(count->text()));
+
+        // The star toggles through the manager; Clear Recents empties them.
+        QTreeWidgetItem* row = tree->topLevelItem(3)->child(0);   // Color: Effect 4
+        QCOMPARE(row->text(0), QStringLiteral("Effect 4"));
+        QCOMPARE(row->text(1), QString(QChar(0x2606)));
+        emit tree->itemClicked(row, 1);
+        QVERIFY(favorites.isFavorite(ids[4]));
+        QCOMPARE(tree->topLevelItem(0)->childCount(), 3);
+        favorites.clearRecents();
+        QCOMPARE(tree->topLevelItemCount(), 3);
+        QCOMPARE(tree->topLevelItem(1)->text(0), QStringLiteral("Blur"));
+        QVERIFY(ui::EffectsFavorites(ini).recents().isEmpty());
     }
 
     // A clip processed whole for playback, as export processes it: Reverse

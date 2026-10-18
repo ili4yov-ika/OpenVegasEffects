@@ -32,6 +32,7 @@ class QTemporaryDir;
 #include "render/ExportJob.h"
 #include "ui/CameraRule.h"
 #include "ui/EffectInspector.h"
+#include "ui/EffectsFavorites.h"
 #include "ui/EffectsPanel.h"
 #include "ui/LayerPanel.h"
 #include "ui/TrackPanel.h"
@@ -430,7 +431,8 @@ protected:
     composition::Clip m_clipClipboard;
     bool m_clipboardHasLayer = false;
     bool m_clipboardHasClip = false;
-    QStringList m_recentEffectIds;
+    // Favourite and recent effects (Effects panel, Effects menu).
+    EffectsFavorites* m_effectFavorites = nullptr;
 
     // Undo history for model edits. The Edit menu, the toolbar's undo/redo and
     // the History panel are all views onto this one stack.

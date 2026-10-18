@@ -531,6 +531,8 @@ signals:
     void timeScrubbed(double timeSeconds);
     void clipSelected(int layerIndex, int clipIndex);
     void layersSelected(const QVector<int>& layerIndices);
+    // An effect dropped from the Effects panel was added to a clip.
+    void effectAdded(const QString& pluginId);
     // A row of a model node (or one of its Transform rows) became current:
     // that node's path; empty for any other row.
     void modelNodeSelected(int layerIndex, const QString& path);
