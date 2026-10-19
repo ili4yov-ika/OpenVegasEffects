@@ -57,6 +57,9 @@ bool nativeEffectFrameRenderingVerified(const core::Identifier& id);
 bool isNativeModule(const core::Identifier& id);
 // A 2D effect whose render at a reduced preview's size (NativeFrameTime::
 // renderScale) matches its full render reduced; the others are drawn full.
+// Whether a reduced preview of the module comes out as its full picture
+// reduced, with the host reducing its px values and points; the others are
+// drawn reduced too, with their values as they are, as the reference does.
 bool nativeEffectRendersReduced(const core::Identifier& id);
 bool nativeGeometryRenderingVerified(const core::Identifier& id);
 bool nativeVideoTransitionRenderingVerified(const core::Identifier& id);

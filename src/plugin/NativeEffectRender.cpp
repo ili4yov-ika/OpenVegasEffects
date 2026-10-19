@@ -293,11 +293,19 @@ const QSet<QString>& ownPixelScaleModules()
     return names;
 }
 
-// What the host reduces for a module in a reduced preview: its px values and
-// its points, both in the layer's pixels.
+const QSet<QString>& reducedPreviewModules();
+
+// What the host reduces for a module in a reduced preview: for those seen to
+// draw it as the full picture reduced (reducedPreviewModules), their px
+// values and points, both in the layer's pixels; for the rest nothing - the
+// reference's value services (FloatValue = AngleValue 0x180377400,
+// PointValue, IntValue) give every module its values as they are, and only
+// the scale fields (+0x2c/+0x30) say the canvas is reduced.
 int reducedValuesOf(const ModuleRecord& record)
 {
-    return ownPixelScaleModules().contains(QFileInfo(record.filePath).completeBaseName())
+    const QString name = QFileInfo(record.filePath).completeBaseName();
+    if (!reducedPreviewModules().contains(name)) return NativeReducesNothing;
+    return ownPixelScaleModules().contains(name)
         ? int(NativeReducesPoints) : int(NativeReducesPixels | NativeReducesPoints);
 }
 
@@ -4182,7 +4190,11 @@ namespace {
 // module changed; seven more once their values in pixels registered without
 // the unit are reduced too (unmarkedPixelValues). The others - noise,
 // distortions, effects that depend on the pixel grid, ones that need other
-// frames - are drawn full and reduced.
+// frames - are drawn reduced as the reference draws them: Flux's effect pass
+// (Flux.dll FUN_180345bf0, bit 0x4 of a layer material's render) puts every
+// effect on a canvas of the layer's size times the preview's scale
+// (DAT_1807897b8[downsample]), with that scale in the textures, and the
+// module gets its values as they are (reducedValuesOf).
 const QSet<QString>& reducedPreviewModules()
 {
     static const QSet<QString> names {

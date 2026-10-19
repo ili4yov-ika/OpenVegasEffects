@@ -220,31 +220,6 @@ plugin::NativeBehaviorLayer behaviorLayerAt(const composition::Composition* comp
     return info;
 }
 
-// Whether a reduced preview may draw this clip at its reduced size: footage,
-// planes and text with the built-in effects. Native 2D effects read pixel
-// sizes and positions their own way (their render scale fields disagree from
-// module to module), so a clip with one that has not been seen to draw a
-// reduced preview right is drawn at full size and reduced once finished.
-// Behaviors (the layer's, the glyphs', MotionTrack's) and Geometry modules
-// draw no pixels: they move the layer, its glyphs or the text mesh in the
-// shot's units, which a reduced preview keeps (applyClipBehaviors, the text
-// painter's scale, the scene canvas).
-bool clipScalesDown(const composition::Clip& clip)
-{
-    for (const composition::Effect& fx : clip.effects) {
-        if (!fx.enabled || !plugin::isNativeModule(fx.pluginId)
-            || plugin::nativeEffectRendersReduced(fx.pluginId)) {
-            continue;
-        }
-        const bool movesOnly = plugin::nativeBehaviorRenderingVerified(fx.pluginId)
-            || plugin::nativeBehaviorSubObjectRenderingVerified(fx.pluginId)
-            || plugin::nativeBehaviorUsesInstance(fx.pluginId)
-            || plugin::nativeGeometryRenderingVerified(fx.pluginId);
-        if (!movesOnly) return false;
-    }
-    return true;
-}
-
 // The image moved by (dx, dy) pixels, between pixels too: Qt's raster engine
 // puts an image that is only translated on whole pixels, while a module's
 // move - and the same move in a reduced preview - is rarely whole. Bilinear,
@@ -277,14 +252,6 @@ QImage translatedSubpixel(const QImage& image, double dx, double dy)
         }
     }
     return out.convertToFormat(QImage::Format_RGBA8888);
-}
-
-QImage reducedTo(const QImage& image, const QSize& size)
-{
-    if (image.isNull() || image.size() == size) return image;
-    return image.convertToFormat(QImage::Format_RGBA8888_Premultiplied)
-        .scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
-        .convertToFormat(QImage::Format_RGBA8888);
 }
 
 } // namespace
@@ -2255,19 +2222,6 @@ model3d::Mesh RenderWorker::textGeometryMesh(const composition::Layer& layer, co
     return meshFromGeometry(geometry, {material});
 }
 
-bool RenderWorker::frameScalesDown() const
-{
-    if (!m_composition) return false;
-    for (const composition::Layer& layer : m_composition->layers()) {
-        if (layer.kind == composition::LayerKind::Grade) {
-            for (const composition::Clip& clip : layer.clips) {
-                if (!clipScalesDown(clip)) return false;
-            }
-        }
-    }
-    return true;
-}
-
 QImage RenderWorker::renderShotImage(double timeSeconds, double scale, bool withEffects,
                                      bool transparentBackground) const
 {
@@ -2278,10 +2232,6 @@ QImage RenderWorker::renderShotImage(double timeSeconds, double scale, bool with
     }
     const QSize reduced(qMax(1, int(std::lround(full.width() * scale))),
                         qMax(1, int(std::lround(full.height() * scale))));
-    if (!frameScalesDown()) {
-        return reducedTo(renderFrameImage(timeSeconds, full, withEffects, transparentBackground),
-                         reduced);
-    }
     const double previous = m_renderScale;
     m_renderScale = scale;
     QImage image = renderFrameImage(timeSeconds, reduced, withEffects, transparentBackground);
@@ -2776,16 +2726,6 @@ QImage RenderWorker::renderLayerClipImage(const composition::Layer& layer,
         && !contributesVideo(clip.mediaId)) {
         return QImage();
     }
-    if (m_renderScale < 1.0 && m_composition && !clipScalesDown(clip)) {
-        // Native modules see the frame at full size; the finished clip is
-        // reduced for the preview.
-        const double scale = m_renderScale;
-        m_renderScale = 1.0;
-        const QImage full = renderLayerClipImage(layer, clip, timeSeconds,
-                                                 m_composition->displaySize(), withEffects);
-        m_renderScale = scale;
-        return reducedTo(full, size);
-    }
     if (layer.dimension == composition::LayerDimension::TwoD
         && layer.autoOrient == composition::AutoOrient::AlongMotionPath) {
         // Along Motion Path in the plane: drawn at the angle its motion gives.
@@ -2927,8 +2867,8 @@ void RenderWorker::renderFrame(const FrameRequest& request, QByteArray mediaByte
     // a Half/Quarter preview or the Layer panel's 960x540 one no longer gets
     // full-scale content cropped into the smaller frame.
     // A preview smaller than the shot (Half, Quarter, the Layer panel) is
-    // drawn at that size rather than drawn full and thrown away; what cannot
-    // be (see frameScalesDown, clipScalesDown) is drawn full and reduced.
+    // drawn at that size rather than drawn full and thrown away - native 2D
+    // effects too, on the reduced canvas, as Flux's effect pass draws them.
     const QSize native = m_composition ? m_composition->displaySize() : QSize();
     const double scale = native.isEmpty() || request.size.isEmpty()
         ? 1.0 : qMin(1.0, double(request.size.height()) / native.height());

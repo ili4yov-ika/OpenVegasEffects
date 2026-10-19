@@ -132,15 +132,11 @@ private:
     QImage renderFrameImage(double timeSeconds, const QSize& size, bool withEffects,
                             bool transparentBackground = false) const;
     // The shot's frame at `scale` of its square size (Half 0.5, Quarter
-    // 0.25): drawn at that size when everything in it can be (frameScalesDown),
-    // else at full size and reduced.
+    // 0.25), drawn at that size: native 2D effects on the reduced canvas, the
+    // 3D scene through the full shot's camera rasterised into the smaller
+    // frame, motion blur with the samples its smear needs at that size.
     QImage renderShotImage(double timeSeconds, double scale, bool withEffects,
                            bool transparentBackground) const;
-    // Whether a reduced preview may draw the whole shot reduced: no native
-    // module on a grade layer that cannot be. The 3D scene is drawn reduced
-    // too (its camera is the full shot's, rasterised into the smaller frame),
-    // and so is motion blur, with the samples its smear needs at that size.
-    bool frameScalesDown() const;
     // The shot's full square size while a reduced frame of `canvasSize` is
     // drawn, else `canvasSize`: what the camera is set up for and what text
     // geometry is laid out in.

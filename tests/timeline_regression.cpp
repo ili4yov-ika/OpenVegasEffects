@@ -2292,7 +2292,8 @@ private slots:
     // normalisation factor) and the host reduces its moved centre; the host
     // reduces BoxBlur's radius in px and Magnify's iris radius, in pixels
     // without saying so (unmarkedPixelValues). Emboss, which depends on the
-    // pixel grid, is drawn full and reduced. All four look like the full frame
+    // pixel grid, is drawn at half size too, as Flux's effect pass draws every
+    // effect, with its values as they are. All four look like the full frame
     // reduced.
     void nativeEffectsDrawReducedPreviews() {
         const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
