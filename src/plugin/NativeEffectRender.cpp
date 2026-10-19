@@ -3149,8 +3149,8 @@ public:
         auto* gl = m_context.extraFunctions();
         const int width = image.width();
         const int height = image.height();
-        // An effect on its own instance gets its data back, then is asked how
-        // far its picture reaches past the layer's frame - GetRenderGrowth
+        // An effect (one on its own instance after getting its data back) is
+        // asked how far its picture reaches past the layer's frame - GetRenderGrowth
         // (PluginFile::GetRenderGrowth, Tannen 0x18035aa90, Notify 9), as
         // Flux asks before each Render: the render context with +0x78..+0x90
         // pointing at four values, the left, right and the two vertical
@@ -3160,20 +3160,27 @@ public:
         // out of it.
         std::array<qint32, 4> growth {0, 0, 0, 0};
         const QByteArray ownLayerId = time.layerId.toLatin1();
-        if (ownInstance) {
+        if (!transition) {
             RenderInvocation early {&record, &parameterValues, &m_scratchPool, &m_scratchVboPool,
                                     &m_scratchRenderbufferPool, width, height};
             early.frameRate = time.frameRate;
             early.timelineFrame = time.frame;
             early.layerAsset = time.layerAsset;
             early.layerId = time.layerId;
+            // Its values as the Render reads them (a reduced preview's too).
+            early.valueScale = qBound(0.01f, time.renderScale, 1.0f);
+            early.reducedValues = time.reducedValues >= 0 ? time.reducedValues : reducedValuesOf(record);
             RenderInvocation* previous = g_renderInvocation;
             g_renderInvocation = &early;
-            restoreInstanceData(*runtime, time.instanceData);
+            if (ownInstance) restoreInstanceData(*runtime, time.instanceData);
             QByteArray growthBlock(0x400, '\0');
             static constexpr char kNullLayer[] = "00000000-0000-0000-0000-000000000000";
             const char* layerPointer = ownLayerId.isEmpty() ? kNullLayer : ownLayerId.constData();
             std::memcpy(growthBlock.data() + 0x08, &layerPointer, sizeof(layerPointer));
+            // +0x24 the normalisation factor, 1 as in the Render's context:
+            // without it Drop Shadow works its margins out as none.
+            const float normalization = 1.0f;
+            std::memcpy(growthBlock.data() + 0x24, &normalization, sizeof(normalization));
             const float scale = qBound(0.01f, time.renderScale, 1.0f);
             std::memcpy(growthBlock.data() + 0x2c, &scale, sizeof(scale));
             std::memcpy(growthBlock.data() + 0x30, &scale, sizeof(scale));
@@ -3206,8 +3213,8 @@ public:
                 || width + growth[0] + growth[1] < 1 || height + growth[2] + growth[3] < 1)
                 growth = {0, 0, 0, 0};
             if (trace) {
-                std::fprintf(stderr, "[hfpl-render] growth %d %d %d %d\n", growth[0], growth[1],
-                             growth[2], growth[3]);
+                std::fprintf(stderr, "[hfpl-render] growth %d %d %d %d result=%d\n", growth[0], growth[1],
+                             growth[2], growth[3], growthResult);
                 std::fflush(stderr);
             }
         }
@@ -3368,11 +3375,15 @@ public:
             std::memcpy(outputTextureBlock.data() + 0x18, &grownHeight, sizeof(grownHeight));
         }
 
+        // The target's pixels across it: on a grown target the module places
+        // the layer at its margins itself (Drop Shadow), so the projection
+        // spans the grown canvas - over the layer's size it would squeeze
+        // the canvas into the frame.
         const std::array<float, 16> projection {
-            2.0f / width, 0.0f,          0.0f, 0.0f,
-            0.0f,         2.0f / height, 0.0f, 0.0f,
-            0.0f,         0.0f,         -1.0f, 0.0f,
-           -1.0f,        -1.0f,          0.0f, 1.0f
+            2.0f / canvasWidth, 0.0f,                0.0f, 0.0f,
+            0.0f,               2.0f / canvasHeight, 0.0f, 0.0f,
+            0.0f,               0.0f,               -1.0f, 0.0f,
+           -1.0f,              -1.0f,                0.0f, 1.0f
         };
         const std::array<float, 16> modelView {
             1.0f, 0.0f, 0.0f, 0.0f,

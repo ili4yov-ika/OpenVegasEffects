@@ -388,6 +388,10 @@ effects, transform or opacity, and nothing for a text layer.
 `keyFramesBetweenFrames` evaluates keys between frames (a segment's curve, a key on a key, Hold
 holding) and `nativeMotionBlurReadsKeyframesBetweenFrames` (OpenGL) has EnvironmentMapViewer with Motion
 Blur read a keyframed turn at its sub-samples: the stripes smear, and a still turn draws as without blur.
+`effectsGrowTheirTarget` (OpenGL) has Drop Shadow asked for its growth with the render's context, drawn into
+the grown target and cut back: the layer stays in place, unscaled, with its shadow beside it.
+`buildProject3` writes `SAMPLES/vegfx_projects/project_3` when `OPENVEGAS_PROJECT3_OUT` names the folder
+(skipped otherwise) and renders preview frames into `OPENVEGAS_PROJECT3_PREVIEW`.
 `everyShippedModuleRuns` (OpenGL) runs every module of `SAMPLES/VEGAS_Effects/Plugins` through the host as
 its kind is rendered (2D effects, video and audio transitions, audio effects, layer and glyph Behaviors,
 Geometry) with its defaults and expects none to fail.

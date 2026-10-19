@@ -2436,6 +2436,296 @@ private slots:
         QVERIFY2(failed.isEmpty(), qPrintable(failed.join(", ")));
     }
 
+    // Builds SAMPLES/vegfx_projects/project_3 (OPENVEGAS_PROJECT3_OUT names
+    // the folder; skipped without it): the cube of project_2 turning on
+    // keyframes in a shot of its own with a text centred on each face and
+    // parented to it, effects, glyph Behaviors and Extrude on the texts,
+    // that shot nested in the main one over a ramp, with effects, a
+    // transition and a shake burst on it, a title, a grade layer and the
+    // folder's two songs with audio effects and fades. The project is saved
+    // with relative paths, read back and, with OPENVEGAS_PROJECT3_PREVIEW
+    // naming a folder, frames are rendered there.
+    void buildProject3() {
+        const QString out = qEnvironmentVariable("OPENVEGAS_PROJECT3_OUT");
+        if (out.isEmpty()) QSKIP("OPENVEGAS_PROJECT3_OUT is not set");
+        const QString samples = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES";
+        auto manager = plugin::createPluginManager();
+        manager->setPluginDirs({samples + "/VEGAS_Effects/Plugins"});
+        QVERIFY(manager->scan().isSuccess());
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        // An effect of module `name`, its defaults with `values` over them.
+        const auto effect = [&](const QString& name, const QHash<QString, QString>& values = {}) {
+            const core::Identifier id = plugin::nativeModuleNamed(name);
+            const plugin::EffectSpec spec = manager->spec(id);
+            composition::Effect fx;
+            fx.pluginId = id;
+            fx.name = spec.displayName.isEmpty() ? spec.name : spec.displayName;
+            for (const auto& parameter : spec.parameters)
+                fx.parameterValues << values.value(parameter.name, parameter.defaultValue);
+            for (auto it = values.cbegin(); it != values.cend(); ++it) {
+                bool known = false;
+                for (const auto& parameter : spec.parameters) known |= parameter.name == it.key();
+                if (!known) qWarning().noquote() << "no parameter" << it.key() << "in" << name;
+            }
+            return fx;
+        };
+        const auto keyed = [](std::initializer_list<std::pair<int, double>> keys,
+                              composition::TemporalType temporal = composition::TemporalType::Linear) {
+            composition::KeyFrameList list(QVariant(0.0));
+            for (const auto& [frame, value] : keys) list.set(frame, value, temporal);
+            return list;
+        };
+        const auto textClip = [](const QString& words, int size, const QColor& colour, double seconds) {
+            composition::TextStyle style;
+            style.text = words; style.fontSize = size; style.fontColor = colour;
+            style.fontStyle = QStringLiteral("Bold");
+            style.alignH = composition::TextStyle::AlignH::Center;
+            style.alignV = composition::TextStyle::AlignV::Middle;
+            composition::Clip clip; clip.durationSeconds = seconds;
+            composition::Effect text; text.pluginId = core::Identifier("text"); text.name = "Text";
+            text.parameterValues = composition::textStyleToParameters(style);
+            clip.effects << text;
+            return clip;
+        };
+
+        auto media = std::make_shared<media::MediaManager>();
+        const QString cubePath = QFileInfo(samples + "/vegfx_projects/project_2/model/cube.obj").absoluteFilePath();
+        QVERIFY(media->importModel(cubePath, model3d::ImportSettings()).isSuccess());
+        const core::Identifier cubeId = media->assetByFilePath(cubePath).id();
+        const QString song1 = QDir(out).absoluteFilePath("Alf42red - Mauiwowi.wav");
+        const QString song2 = QDir(out).absoluteFilePath("TameAnderson - MakeMe.flac");
+        QVERIFY(media->importFile(song1).isSuccess());
+        QVERIFY(media->importFile(song2).isSuccess());
+        QVector3D low, high;
+        QVERIFY(media->modelMesh(cubeId).bounds(&low, &high));
+        const double half = (high - low).length() / std::sqrt(3.0) / 2.0;   // the cube's half side
+        qInfo() << "cube half side" << half;
+
+        const double seconds = 20.0;
+        const int frames = 600;
+        // The scene: the cube, its six faces' words and the light.
+        auto scene = std::make_shared<composition::Composition>();
+        scene->setName("Cube Scene"); scene->setSize(1920, 1080); scene->setFrameRate(30, 1);
+        scene->setDurationSeconds(seconds);
+        composition::Layer cube;
+        cube.name = "Cube"; cube.kind = composition::LayerKind::Model3D;
+        cube.dimension = composition::LayerDimension::ThreeD; cube.modelAssetId = cubeId;
+        cube.spanStartSeconds = 0.0; cube.spanEndSeconds = seconds;
+        {
+            auto& t = cube.transform;
+            t.rotationXCurve = keyed({{0, -20}, {120, 70}, {240, 160}, {330, 200}, {450, 290}, {600, 340}},
+                                     composition::TemporalType::EasyEase);
+            t.rotationYCurve = keyed({{0, 30}, {150, 210}, {300, 330}, {420, 480}, {600, 750}},
+                                     composition::TemporalType::EasyEase);
+            t.rotationCurve = keyed({{0, 0}, {200, 45}, {360, -30}, {520, 90}, {600, 0}},
+                                    composition::TemporalType::EasyEase);
+            t.positionYCurve = keyed({{0, 0}, {75, 60}, {150, 0}, {225, -60}, {300, 0}, {375, 60}, {450, 0},
+                                      {525, -60}, {600, 0}}, composition::TemporalType::EasyEase);
+            t.scaleXCurve = keyed({{0, 100}, {280, 100}, {300, 125}, {320, 100}, {600, 100}});
+            t.scaleYCurve = t.scaleXCurve; t.scaleZCurve = t.scaleXCurve;
+        }
+        QVector<composition::Layer> sceneLayers;
+        struct Face { QString words; QVector3D offset; double rotationX, rotationY; QColor colour; QString extra; };
+        const double lift = half * 1.01;
+        const QVector<Face> faces{
+            {"OpenVegas", {0, 0, float(-lift)}, 0, 0, QColor(255, 240, 200), "Glow"},
+            {"EFFECTS", {0, 0, float(lift)}, 0, 180, QColor(200, 230, 255), "Typewriter"},
+            {"3D", {float(lift), 0, 0}, 0, -90, QColor(255, 200, 120), "Extrude"},
+            {u8"Тест", {float(-lift), 0, 0}, 0, 90, QColor(180, 255, 180), "WavyStyle"},
+            {"HFPL", {0, float(lift), 0}, 90, 0, QColor(255, 180, 220), "OuterGlow"},
+            {u8"日本語", {0, float(-lift), 0}, -90, 0, QColor(220, 220, 255), "Bevel"},
+        };
+        for (const Face& face : faces) {
+            composition::Layer text;
+            text.name = face.words; text.kind = composition::LayerKind::Text;
+            text.dimension = composition::LayerDimension::ThreeD;
+            text.parentLayerId = cube.id;
+            text.transform.position = QPointF(face.offset.x(), face.offset.y());
+            text.transform.positionZ = face.offset.z();
+            text.transform.rotationXDegrees = face.rotationX;
+            text.transform.rotationYDegrees = face.rotationY;
+            composition::Clip clip = textClip(face.words, int(half * 0.42), face.colour, seconds);
+            if (face.extra == "Glow") clip.effects << effect("Glow", {{"intensity", "1.2"}, {"threshold", "30"}, {"radius_f", "18"}});
+            if (face.extra == "OuterGlow") clip.effects << effect("OuterGlow", {{"color", "#ff3080"}, {"opacity", "0.8"}, {"size", "14"}});
+            if (face.extra == "Typewriter") clip.effects << effect("Typewriter", {{"revealLength", "40"}});
+            if (face.extra == "WavyStyle") clip.effects << effect("WavyStyle", {{"revealLength", "60"}});
+            if (face.extra == "Extrude") clip.effects << effect("Extrude", {{"extrusion", "20"}});
+            if (face.extra == "Bevel") clip.effects << effect("Bevel", {{"extrusion", "8"}, {"expansion", "-4"}});
+            text.clips << clip;
+            sceneLayers << text;
+        }
+        sceneLayers << cube;
+        composition::Layer key;
+        key.name = "Key Light"; key.kind = composition::LayerKind::Light;
+        key.dimension = composition::LayerDimension::ThreeD;
+        key.light.type = composition::LightSettings::Type::Point; key.light.intensity = 110;
+        key.transform.position = QPointF(-700, 500); key.transform.positionZ = -900;
+        key.spanStartSeconds = 0.0; key.spanEndSeconds = seconds;
+        composition::Layer fill;
+        fill.name = "Fill Light"; fill.kind = composition::LayerKind::Light;
+        fill.dimension = composition::LayerDimension::ThreeD;
+        fill.light.type = composition::LightSettings::Type::Ambient; fill.light.intensity = 35;
+        fill.light.color = QColor(170, 190, 255);
+        fill.spanStartSeconds = 0.0; fill.spanEndSeconds = seconds;
+        sceneLayers << key << fill;
+        scene->setLayers(sceneLayers);
+
+        // The main shot.
+        composition::Composition shot;
+        shot.setName("project_3"); shot.setSize(1920, 1080); shot.setFrameRate(30, 1);
+        shot.setDurationSeconds(seconds);
+        QVector<composition::Layer> layers;
+        {
+            composition::Layer grade; grade.name = "Grade"; grade.kind = composition::LayerKind::Grade;
+            composition::Clip clip; clip.durationSeconds = seconds;
+            clip.effects << effect("ColorCorrection", {{"saturation", "1.15"}, {"exposure", "0.1"}, {"shadowStrength", "0.3"},
+                                                       {"shadowHue", "220"}, {"highlightStrength", "0.2"}, {"highlightHue", "40"}})
+                         << effect("Vignette", {{"boundingBoxWidth", "1920"}, {"boundingBoxHeight", "1080"}, {"opacity", "0.7"}})
+                         << effect("LightLeak", {{"threashold", "75"}, {"leakBrightness", "60"}})
+                         << effect("FilmGrain", {{"grainStrength", "12"}});
+            grade.clips << clip;
+            layers << grade;
+        }
+        {
+            composition::Layer title; title.name = "Title"; title.kind = composition::LayerKind::Text;
+            title.transform.position = QPointF(0, -430);
+            composition::Clip clip = textClip(u8"project_3 · OpenVegas Effects", 64, QColor(255, 255, 255), seconds);
+            clip.effects << effect("DropInByChar", {{"revealLength", "30"}})
+                         << effect("OuterGlow", {{"color", "#40a0ff"}, {"opacity", "0.7"}, {"size", "18"}});
+            title.clips << clip;
+            layers << title;
+        }
+        {
+            composition::Layer nested; nested.name = "Cube Scene";
+            composition::Clip clip; clip.durationSeconds = seconds;
+            clip.nestedComposition = scene; clip.nestedCompositionId = scene->id();
+            clip.mediaId = core::Identifier("composition:" + scene->id().value());
+            clip.effects << effect("Glow", {{"intensity", "0.5"}, {"threshold", "55"}, {"radius_f", "30"}})
+                         << effect("ChromaticAberration", {{"separation", "2"}})
+                         << effect("DropShadow", {{"distance_f", "24"}, {"opacity", "0.6"}, {"radius_f", "16"}, {"angle", "135"}});
+            composition::Effect shake = effect("Shake", {{"amount", "0"}, {"speed", "4"}, {"motionBlurMode", "Custom"},
+                                                         {"motionBlurSamples", "12"}});
+            for (int i = 0; i < shake.parameterValues.size(); ++i)
+                if (manager->spec(shake.pluginId).parameters.at(i).name == "amount")
+                    shake.animation.insert(i, keyed({{0, 0}, {290, 0}, {300, 45}, {330, 0}}));
+            clip.effects << shake;
+            composition::Effect fadeIn = effect("FadeTransition");
+            fadeIn.transitionEdge = composition::TransitionEdge::In; fadeIn.transitionSeconds = 1.5;
+            composition::Effect fadeOut = effect("FadeTransition");
+            fadeOut.transitionEdge = composition::TransitionEdge::Out; fadeOut.transitionSeconds = 1.5;
+            clip.effects << fadeIn << fadeOut;
+            nested.clips << clip;
+            layers << nested;
+        }
+        {
+            composition::Layer background; background.name = "Background"; background.kind = composition::LayerKind::Plane;
+            background.planeColor = QColor(16, 16, 32);
+            composition::Clip clip; clip.durationSeconds = seconds;
+            clip.effects << effect("4PointRamp", {{"point1", "-960,540"}, {"color1", "#1a1040"}, {"point2", "960,540"},
+                                                  {"color2", "#0b2a4a"}, {"point3", "960,-540"}, {"color3", "#3a0f2a"},
+                                                  {"point4", "-960,-540"}, {"color4", "#06141c"}})
+                         << effect("Grain", {{"amount", "8"}});
+            background.clips << clip;
+            layers << background;
+        }
+        {
+            composition::Layer music; music.name = "Mauiwowi";
+            composition::Clip clip; clip.mediaId = media->assetByFilePath(song1).id();
+            clip.durationSeconds = 12.0; clip.sourceStartSeconds = 30.0;
+            clip.effects << effect("Equaliser", {{"EQ_band_63Hz", "4"}, {"EQ_band_125Hz", "3"}, {"EQ_band_8000Hz", "2"}})
+                         << effect("AudioEcho", {{"delay", "350"}, {"falloff", "60"}, {"numberOfEchoes", "2"}});
+            composition::Effect in = effect("Fade"); in.transitionEdge = composition::TransitionEdge::In; in.transitionSeconds = 1.0;
+            composition::Effect out2 = effect("Fade"); out2.transitionEdge = composition::TransitionEdge::Out; out2.transitionSeconds = 2.0;
+            clip.effects << in << out2;
+            music.clips << clip;
+            layers << music;
+        }
+        {
+            composition::Layer music; music.name = "MakeMe";
+            composition::Clip clip; clip.mediaId = media->assetByFilePath(song2).id();
+            clip.startSeconds = 10.0; clip.durationSeconds = 10.0; clip.sourceStartSeconds = 45.0;
+            clip.effects << effect("Compressor", {{"threshold", "-14"}, {"ratio", "3"}, {"outputGain", "3"}})
+                         << effect("LargeRoom", {{"gain", "-6"}});
+            composition::Effect in = effect("Fade"); in.transitionEdge = composition::TransitionEdge::In; in.transitionSeconds = 2.0;
+            composition::Effect out2 = effect("Fade"); out2.transitionEdge = composition::TransitionEdge::Out; out2.transitionSeconds = 1.5;
+            clip.effects << in << out2;
+            music.clips << clip;
+            layers << music;
+        }
+        shot.setLayers(layers);
+        Q_UNUSED(frames);
+
+        project::ProjectSaveOptions options; options.useRelativePaths = true;
+        const QString path = QDir(out).absoluteFilePath("Project.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(path, shot, *media, options).isSuccess());
+        // Read back as a project is opened.
+        auto loaded = std::make_shared<composition::Composition>();
+        auto loadedMedia = std::make_shared<media::MediaManager>();
+        QVERIFY(project::VegfxSerializer::loadFromFile(path, loaded.get(), loadedMedia.get()).isSuccess());
+        QCOMPARE(loaded->layers().size(), layers.size());
+        QVERIFY(loaded->layers().at(2).clips.first().nestedComposition);
+        QCOMPARE(loaded->layers().at(2).clips.first().nestedComposition->layers().size(), sceneLayers.size());
+
+        const QString preview = qEnvironmentVariable("OPENVEGAS_PROJECT3_PREVIEW");
+        if (preview.isEmpty()) return;
+        render::RenderManager renderer; renderer.setMediaManager(loadedMedia); renderer.setComposition(loaded);
+        QSignalSpy ready(&renderer, &render::RenderManager::frameReady);
+        for (double at : {0.5, 2.0, 5.0, 8.0, 10.0, 13.0, 16.0, 19.0}) {
+            ready.clear();
+            renderer.requestFrame(0, at, QSize(960, 540));
+            QVERIFY(QTest::qWaitFor([&] { return ready.count() >= 1; }, 60000));
+            const QByteArray rgba = ready.last()[1].toByteArray();
+            const QSize size = ready.last()[2].toSize();
+            QImage(reinterpret_cast<const uchar*>(rgba.constData()), size.width(), size.height(), size.width() * 4,
+                   QImage::Format_RGBA8888).copy().save(QDir(preview).filePath(QStringLiteral("p3_%1.png").arg(at, 4, 'f', 1, QLatin1Char('0'))));
+        }
+    }
+
+    // Before every Render Flux asks a 2D effect how far it reaches past its
+    // layer (GetRenderGrowth, Notify 9) with the render's context - +0x24 the
+    // normalisation 1 among it - and grows its target by that: Drop Shadow
+    // answers with the room its shadow needs, places the layer at those
+    // margins itself and draws its shadow there. The layer stays where it
+    // is, unscaled, with the shadow beside it. Needs the OpenGL 4.1 context
+    // native modules run in.
+    void effectsGrowTheirTarget() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/DropShadow.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference DropShadow.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("test.native.dropshadow");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        for (const bool wide : {false, true}) {
+            QImage image(256, 144, QImage::Format_RGBA8888);
+            image.fill(Qt::transparent);
+            for (int y = 40; y < 100; ++y) for (int x = 100; x < 160; ++x) image.setPixelColor(x, y, QColor(250, 200, 50));
+            QStringList values;
+            for (const auto& p : metadata.parameters) {
+                QString v = p.defaultValue;
+                if (wide && p.name == "distance_f") v = "24";
+                if (wide && p.name == "radius_f") v = "16";
+                if (wide && p.name == "angle") v = "135";
+                values << v;
+            }
+            plugin::NativeFrameTime time; time.frame = 10; time.layerFrame = 10; time.layerFrames = 60;
+            if (!plugin::applyEffectToImage(image, id, values, time))
+                QSKIP("No OpenGL 4.1 context for native modules on this platform");
+            // The layer where it was, its corners included.
+            for (const QPoint at : {QPoint(100, 40), QPoint(159, 40), QPoint(100, 99), QPoint(159, 99), QPoint(130, 70)})
+                QCOMPARE(image.pixelColor(at), QColor(250, 200, 50));
+            // A shadow outside it.
+            int shadow = 0;
+            for (int y = 0; y < 144; ++y)
+                for (int x = 0; x < 256; ++x)
+                    if ((x < 100 || x >= 160 || y < 40 || y >= 100) && image.pixelColor(x, y).alpha() > 40) ++shadow;
+            QVERIFY2(shadow > (wide ? 600 : 100), qPrintable(QString::number(shadow)));
+        }
+    }
+
     // 2D effects that move by themselves get the time (RenderContext
     // +0x6c/+0x70/+0x98/+0x9c/+0xa0): Linear Wipe at frame 0 and at frame 30
     // of a 120-frame layer differ, the same frame is the same picture, and
