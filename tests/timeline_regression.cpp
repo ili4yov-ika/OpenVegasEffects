@@ -2531,11 +2531,11 @@ private slots:
         struct Face { QString words; QVector3D offset; double rotationX, rotationY; QColor colour; QString extra; };
         const double lift = half * 1.01;
         const QVector<Face> faces{
-            {"OpenVegas", {0, 0, float(-lift)}, 0, 0, QColor(255, 240, 200), "Glow"},
-            {"EFFECTS", {0, 0, float(lift)}, 0, 180, QColor(200, 230, 255), "Typewriter"},
+            {"OpenVegas", {0, 0, float(lift)}, 0, 0, QColor(255, 240, 200), "Glow"},
+            {"EFFECTS", {0, 0, float(-lift)}, 0, 180, QColor(200, 230, 255), "Typewriter"},
             {"3D", {float(lift), 0, 0}, 0, -90, QColor(255, 200, 120), "Extrude"},
             {u8"Тест", {float(-lift), 0, 0}, 0, 90, QColor(180, 255, 180), "WavyStyle"},
-            {"HFPL", {0, float(lift), 0}, 90, 0, QColor(255, 180, 220), "OuterGlow"},
+            {"HFPL", {0, float(lift), 0}, 90, 0, QColor(255, 180, 220), "DropShadow"},
             {u8"日本語", {0, float(-lift), 0}, -90, 0, QColor(220, 220, 255), "Bevel"},
         };
         for (const Face& face : faces) {
@@ -2549,7 +2549,7 @@ private slots:
             text.transform.rotationYDegrees = face.rotationY;
             composition::Clip clip = textClip(face.words, int(half * 0.42), face.colour, seconds);
             if (face.extra == "Glow") clip.effects << effect("Glow", {{"intensity", "1.2"}, {"threshold", "30"}, {"radius_f", "18"}});
-            if (face.extra == "OuterGlow") clip.effects << effect("OuterGlow", {{"color", "#ff3080"}, {"opacity", "0.8"}, {"size", "14"}});
+            if (face.extra == "DropShadow") clip.effects << effect("DropShadow", {{"distance_f", "10"}, {"opacity", "0.7"}, {"radius_f", "6"}, {"shadowColor", "#400020"}});
             if (face.extra == "Typewriter") clip.effects << effect("Typewriter", {{"revealLength", "40"}});
             if (face.extra == "WavyStyle") clip.effects << effect("WavyStyle", {{"revealLength", "60"}});
             if (face.extra == "Extrude") clip.effects << effect("Extrude", {{"extrusion", "20"}});
@@ -2561,13 +2561,13 @@ private slots:
         composition::Layer key;
         key.name = "Key Light"; key.kind = composition::LayerKind::Light;
         key.dimension = composition::LayerDimension::ThreeD;
-        key.light.type = composition::LightSettings::Type::Point; key.light.intensity = 110;
+        key.light.type = composition::LightSettings::Type::Point; key.light.intensity = 70;
         key.transform.position = QPointF(-700, 500); key.transform.positionZ = -900;
         key.spanStartSeconds = 0.0; key.spanEndSeconds = seconds;
         composition::Layer fill;
         fill.name = "Fill Light"; fill.kind = composition::LayerKind::Light;
         fill.dimension = composition::LayerDimension::ThreeD;
-        fill.light.type = composition::LightSettings::Type::Ambient; fill.light.intensity = 35;
+        fill.light.type = composition::LightSettings::Type::Ambient; fill.light.intensity = 25;
         fill.light.color = QColor(170, 190, 255);
         fill.spanStartSeconds = 0.0; fill.spanEndSeconds = seconds;
         sceneLayers << key << fill;
@@ -2594,7 +2594,8 @@ private slots:
             title.transform.position = QPointF(0, -430);
             composition::Clip clip = textClip(u8"project_3 · OpenVegas Effects", 64, QColor(255, 255, 255), seconds);
             clip.effects << effect("DropInByChar", {{"revealLength", "30"}})
-                         << effect("OuterGlow", {{"color", "#40a0ff"}, {"opacity", "0.7"}, {"size", "18"}});
+                         << effect("Glow", {{"intensity", "0.9"}, {"threshold", "20"}, {"radius_f", "14"}, {"useAandBColors", "true"},
+                                            {"colorA", "#40a0ff"}, {"colorB", "#40a0ff"}});
             title.clips << clip;
             layers << title;
         }
@@ -2671,6 +2672,27 @@ private slots:
 
         const QString preview = qEnvironmentVariable("OPENVEGAS_PROJECT3_PREVIEW");
         if (preview.isEmpty()) return;
+        // The cube still, turned to show each face head on.
+        const QVector<QVector3D> turns{{0, 0, 0}, {0, 180, 0}, {0, 90, 0}, {0, -90, 0}, {90, 0, 0}, {-90, 0, 0},
+                                       {30, 50, 20}, {150, 40, 0}, {-60, 120, 45}};
+        for (int t = 0; t < turns.size(); ++t) {
+            auto still = std::make_shared<composition::Composition>(*loaded->layers().at(2).clips.first().nestedComposition);
+            for (int i = 0; i < still->layers().size(); ++i) {
+                if (still->layers().at(i).kind != composition::LayerKind::Model3D) continue;
+                auto& cubeLayer = still->layerRef(i);
+                cubeLayer.transform = composition::LayerTransform();
+                cubeLayer.transform.rotationXDegrees = turns[t].x();
+                cubeLayer.transform.rotationYDegrees = turns[t].y();
+                cubeLayer.transform.rotationDegrees = turns[t].z();
+            }
+            render::RenderManager faceRenderer; faceRenderer.setMediaManager(loadedMedia); faceRenderer.setComposition(still);
+            QSignalSpy face(&faceRenderer, &render::RenderManager::frameReady);
+            faceRenderer.requestFrame(0, 3.0, QSize(480, 270));
+            QVERIFY(QTest::qWaitFor([&] { return face.count() >= 1; }, 60000));
+            const QByteArray rgba = face.last()[1].toByteArray();
+            QImage(reinterpret_cast<const uchar*>(rgba.constData()), 480, 270, 480 * 4, QImage::Format_RGBA8888).copy()
+                .save(QDir(preview).filePath(QStringLiteral("face_%1.png").arg(t)));
+        }
         render::RenderManager renderer; renderer.setMediaManager(loadedMedia); renderer.setComposition(loaded);
         QSignalSpy ready(&renderer, &render::RenderManager::frameReady);
         for (double at : {0.5, 2.0, 5.0, 8.0, 10.0, 13.0, 16.0, 19.0}) {
@@ -2754,6 +2776,45 @@ private slots:
         const QColor top = image.pixelColor(96, 2), bottom = image.pixelColor(96, 105);
         QVERIFY2(top.red() > 200 && top.blue() < 50, qPrintable(top.name()));
         QVERIFY2(bottom.blue() > 200 && bottom.red() < 50, qPrintable(bottom.name()));
+    }
+
+    // In a shared 3D space a body is met where its surface lies, pixel by
+    // pixel: a red sheet inside a cube, between its centre and its front
+    // face, stays behind the face (by the layer's position alone it was
+    // nearer than the cube and drawn over it); the same sheet in front of
+    // the cube covers it.
+    void bodiesHideWhatIsBehindTheirSurface() {
+        const QString cubePath = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects/project_2/model/cube.obj";
+        if (!QFileInfo::exists(cubePath)) QSKIP("The project_2 cube is not in SAMPLES");
+        auto media = std::make_shared<media::MediaManager>();
+        QVERIFY(media->importModel(cubePath, model3d::ImportSettings()).isSuccess());
+        const core::Identifier cubeId = media->assetByFilePath(QFileInfo(cubePath).absoluteFilePath()).id();
+        QVector3D low, high;
+        QVERIFY(media->modelMesh(cubeId).bounds(&low, &high));
+        const float half = (high.z() - low.z()) / 2.0f;
+        const auto centreWith = [&](float sheetZ) {
+            auto shot = std::make_shared<composition::Composition>();
+            shot->setSize(1920, 1080); shot->setDurationSeconds(1);
+            composition::Layer sheet; sheet.name = "Sheet"; sheet.kind = composition::LayerKind::Plane;
+            sheet.dimension = composition::LayerDimension::ThreeD; sheet.planeColor = QColor(255, 0, 0);
+            sheet.transform.scalePercent = QPointF(10, 10); sheet.transform.positionZ = sheetZ;
+            composition::Clip clip; clip.durationSeconds = 1; sheet.clips << clip;
+            composition::Layer cube; cube.name = "Cube"; cube.kind = composition::LayerKind::Model3D;
+            cube.dimension = composition::LayerDimension::ThreeD; cube.modelAssetId = cubeId;
+            cube.spanStartSeconds = 0.0; cube.spanEndSeconds = 1.0;
+            shot->setLayers({sheet, cube});
+            render::RenderManager manager; manager.setMediaManager(media); manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 0.0, QSize(960, 540));
+            if (!QTest::qWaitFor([&] { return frames.count() >= 1; }, 20000)) return QColor();
+            const QByteArray rgba = frames.last()[1].toByteArray();
+            const QImage image(reinterpret_cast<const uchar*>(rgba.constData()), 960, 540, 960 * 4, QImage::Format_RGBA8888);
+            return image.pixelColor(480, 270);
+        };
+        // The camera stands on the +Z side, some 1500 out: a sheet at +Z is nearer.
+        const QColor inside = centreWith(half * 0.5f), before = centreWith(half * 1.5f);
+        QVERIFY2(!(inside.red() > 200 && inside.green() < 40 && inside.blue() < 40), qPrintable(inside.name()));
+        QVERIFY2(before.red() > 200 && before.green() < 40 && before.blue() < 40, qPrintable(before.name()));
     }
 
     // 2D effects that move by themselves get the time (RenderContext

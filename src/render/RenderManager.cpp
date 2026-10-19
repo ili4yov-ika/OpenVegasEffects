@@ -1449,9 +1449,13 @@ QVector<float> RenderWorker::sceneDistances(const composition::Layer& layer, con
     bool invertible = false;
     const QMatrix4x4 unproject = viewProjection.inverted(&invertible);
     const QVector3D eye = camera.position;
-    // A body is placed in depth by where the layer stands. A sheet is met
-    // pixel by pixel.
+    // A body is met where its drawn surface lies (its mesh's pixels, noted
+    // as it was drawn), else by where the layer stands. A sheet is met pixel
+    // by pixel on its plane.
     const bool sheet = !sceneBody(layer);
+    const auto drawn = sheet ? m_meshSurfaces.constEnd() : m_meshSurfaces.constFind(layer.id.value());
+    const model3d::SurfaceBuffer* surface =
+        drawn != m_meshSurfaces.constEnd() && drawn->size == size ? &drawn.value() : nullptr;
     const QMatrix4x4 model = sheet ? layerSheetMatrixAt(m_composition.get(), layer, frame, m_mediaManager.get())
                                    : QMatrix4x4();
     const QVector3D origin = sheet ? model.map(QVector3D(0.0f, 0.0f, 0.0f))
@@ -1467,6 +1471,8 @@ QVector<float> RenderWorker::sceneDistances(const composition::Layer& layer, con
         for (int x = 0; x < size.width(); ++x) {
             if (row[x * 4 + 3] == 0) continue;
             float distance = bodyDistance;
+            if (surface && surface->has(y * size.width() + x))
+                distance = (surface->positions.at(y * size.width() + x) - eye).length();
             if (sheet && invertible) {
                 const double ndcX = 2.0 * (x + 0.5) / width - 1.0;
                 const QVector3D ray = unproject.map(QVector3D(float(ndcX), float(ndcY), 1.0f)) - eye;
@@ -2369,6 +2375,12 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
     const bool occlusion = std::any_of(layers.cbegin(), layers.cend(), [](const composition::Layer& layer) {
         return layer.visible && inScene(layer) && layer.surface.receiveAmbientOcclusion;
     });
+    // With more than one layer in the space, a body (a model, a text made
+    // solid) notes where its pixels lie, so what is nearer covers what is
+    // further pixel by pixel - a word on a cube's far face stays behind it.
+    const bool sharedSpace = std::count_if(layers.cbegin(), layers.cend(), [](const composition::Layer& layer) {
+        return layer.visible && inScene(layer);
+    }) > 1;
     m_meshSurfaces.clear();
     m_modelReflections.clear();
     // Whether a scene sheet receives reflections or a 3D text has an
@@ -2676,7 +2688,7 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
             }
             QImage image(size, QImage::Format_RGBA8888);
             image.fill(Qt::transparent);
-            m_collectSurfaces = occlusion;
+            m_collectSurfaces = occlusion || (sharedSpace && sceneBody(layer));
             paintLayer(layer, image, QPainter::CompositionMode_SourceOver);
             m_collectSurfaces = false;
             scene.append({&layer, image});

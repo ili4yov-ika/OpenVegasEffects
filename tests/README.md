@@ -390,6 +390,9 @@ holding) and `nativeMotionBlurReadsKeyframesBetweenFrames` (OpenGL) has Environm
 Blur read a keyframed turn at its sub-samples: the stripes smear, and a still turn draws as without blur.
 `nativeEffectsSeeYUp` (OpenGL) checks native modules see Y running up, as Flux's bottom-row-first
 textures give it: 4PointRamp's points at +54 colour the top of the frame.
+`bodiesHideWhatIsBehindTheirSurface` puts a red 3D sheet inside a cube model, between its centre and its
+front face, and checks the face covers it (a body is met where its surface lies, pixel by pixel), while
+the same sheet in front of the cube shows.
 `effectsGrowTheirTarget` (OpenGL) has Drop Shadow asked for its growth with the render's context, drawn into
 the grown target and cut back: the layer stays in place, unscaled, with its shadow beside it.
 `buildProject3` writes `SAMPLES/vegfx_projects/project_3` when `OPENVEGAS_PROJECT3_OUT` names the folder
