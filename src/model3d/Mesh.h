@@ -188,6 +188,15 @@ struct Skin
     QVector<int> normals;              // Mesh::normals it carries
     QVector<QVector3D> bindNormals;
     QVector<SkinInfluence> normalInfluences;
+    // How the joints carry a point, as the reference's FBX importer takes
+    // FbxSkin::GetSkinningType (Project.dll FUN_18007d150): Linear (and
+    // Rigid) sums the joints' matrices; DualQuaternion blends their rigid
+    // motions as dual quaternions (FUN_18007cc40); Blend mixes the two by
+    // each point's BlendWeights, the dual quaternion's share. glTF: Linear.
+    enum class Method { Linear, DualQuaternion, Blend };
+    Method method = Method::Linear;
+    QVector<float> positionBlend;      // Blend: the share, per position
+    QVector<float> normalBlend;        // and per normal
 };
 
 // One animated property of one node: keyed translation, rotation (a
@@ -241,7 +250,27 @@ struct Morph
     // Not skinned: the normals its targets turn as the file has them, before
     // the weights it rests at, so they can be turned again exactly.
     QHash<int, QVector3D> baseNormals;
+    // FBX blend shape channels (FbxBlendShapeChannel): each holds the targets
+    // from `first` on, one a shape, at their full weights (FullWeights / 100,
+    // ascending). An animation keys such a morph's channels, one weight each
+    // (DeformPercent / 100), and morphWeights() spreads them over the targets
+    // as the reference does (channelTargetWeights). Empty for glTF morphs,
+    // whose weights are the targets' own.
+    struct Channel
+    {
+        int first = 0;
+        QVector<float> fullWeights;
+    };
+    QVector<Channel> channels;
 };
+
+// The weights of a channel's targets at the channel's weight `weight`, as
+// the reference's ComputeShapeDeformation (Project.dll FUN_18007d510, the
+// FBX SDK's ViewScene way) moves the shapes: up to the first full weight the
+// first shape grows from nothing; strictly between two full weights it goes
+// from one shape to the next; at or below 0, at a later full weight itself
+// and past the last, the channel moves nothing.
+QVector<float> channelTargetWeights(const QVector<float>& fullWeights, float weight);
 
 // One animation a file holds - glTF's animations[], the reference's
 // Model3DAnimationAsset with its AnimationIndex.

@@ -636,9 +636,24 @@ private:
     // A skin's clusters as a Skin: each bone a joint (its inverse bind
     // TransformLink^-1 x Transform), and per control point its four
     // heaviest joints, their weights summing to one.
-    Skin skinFor(qint64 skin, int points, QVector<SkinInfluence>* influences) const
+    // `blend`: per control point, the dual quaternion's share of a Blend skin.
+    Skin skinFor(qint64 skin, int points, QVector<SkinInfluence>* influences, QVector<float>* blend) const
     {
         Skin out;
+        // SkinningType: Rigid and Linear are both the matrices' sum.
+        const Node* skinNode = m_objects.value(skin).node;
+        const QByteArray type = skinNode ? skinNode->childText("SkinningType") : QByteArray();
+        if (type == "DualQuaternion") out.method = Skin::Method::DualQuaternion;
+        else if (type == "Blend") out.method = Skin::Method::Blend;
+        blend->fill(0.0f, points);
+        if (out.method == Skin::Method::Blend) {
+            const QVector<double> indexes = skinNode->values("Indexes");
+            const QVector<double> weights = skinNode->values("BlendWeights");
+            for (int i = 0; i < indexes.size() && i < weights.size(); ++i) {
+                const int point = int(indexes.at(i));
+                if (point >= 0 && point < points) (*blend)[point] = float(qBound(0.0, weights.at(i), 1.0));
+            }
+        }
         QVector<QVector<QPair<int, float>>> perPoint(points);
         for (qint64 cluster : childrenOf(skin, "Deformer")) {
             if (m_objects.value(cluster).subclass != "Cluster") continue;
@@ -695,9 +710,10 @@ private:
         // own place does not count), and kept for them to move.
         Skin skin;
         QVector<SkinInfluence> influences;
+        QVector<float> pointBlend;
         QVector<QMatrix4x4> joints, jointNormals;
         if (skinId) {
-            skin = skinFor(skinId, points, &influences);
+            skin = skinFor(skinId, points, &influences, &pointBlend);
             for (int j = 0; j < skin.joints.size(); ++j) {
                 const int bone = skin.joints.at(j);
                 joints.append((bone >= 0 ? m_mesh->nodes.at(bone).baseWorld : QMatrix4x4()) * skin.inverseBind.at(j));
@@ -723,6 +739,7 @@ private:
                 skin.positions.append(m_mesh->positions.size());
                 skin.bindPositions.append(point);
                 skin.positionInfluences.append(influences.at(i));
+                skin.positionBlend.append(pointBlend.value(i));
                 m_mesh->positions.append(carried(influences.at(i), point, false));
             } else {
                 m_mesh->positions.append(matrix.map(point));
@@ -731,8 +748,12 @@ private:
         bool invertible = false;
         const QMatrix4x4 normalMatrix = matrix.inverted(&invertible).transposed();
         const bool mirrored = !skinId && matrix.determinant() < 0.0;
-        // Blend shapes: a morph target per channel, its shape's moves of the
-        // control points; one that is not skinned rests at DeformPercent.
+        // Blend shapes: a morph target per shape, its moves of the control
+        // points, and a channel per BlendShapeChannel holding its shapes - an
+        // in-between one too - at their FullWeights. The mesh rests without
+        // them: the reference moves points only by channels an animation
+        // keys (ComputeShapeDeformation asks GetShapeChannel for the
+        // animation layer's curve), never by a resting DeformPercent.
         int morphIndex = -1;
         struct ShapeTarget { QVector<double> indexes, deltas, normals; float weight = 0.0f; };
         QVector<ShapeTarget> shapes;
@@ -740,10 +761,10 @@ private:
             if (m_objects.value(blend).subclass != "BlendShape") continue;
             for (qint64 channel : childrenOf(blend, "Deformer")) {
                 if (m_objects.value(channel).subclass != "BlendShapeChannel") continue;
-                qint64 shape = 0;
+                QVector<qint64> channelShapes;
                 for (qint64 candidate : childrenOf(channel, "Geometry"))
-                    if (m_objects.value(candidate).subclass == "Shape") { shape = candidate; break; }
-                if (!shape) continue;
+                    if (m_objects.value(candidate).subclass == "Shape") channelShapes.append(candidate);
+                if (channelShapes.isEmpty()) continue;
                 if (morphIndex < 0) {
                     Morph morph;
                     morph.node = node;
@@ -753,33 +774,37 @@ private:
                     morphIndex = m_mesh->morphs.size() - 1;
                 }
                 const Node* channelNode = m_objects.value(channel).node;
-                const Node* shapeNode = m_objects.value(shape).node;
-                QVector<double> percent = channelNode->values("DeformPercent");
-                ShapeTarget target;
-                target.weight = float((percent.isEmpty() ? scalar70(channelNode, "DeformPercent", 0.0)
-                                                         : percent.first()) / 100.0);
-                target.indexes = shapeNode->values("Indexes");
-                target.deltas = shapeNode->values("Vertices");
-                target.normals = shapeNode->values("Normals");
-                shapes.append(target);
+                // FullWeights in percent, one a shape; without them the
+                // shapes share the way to 100 evenly, as the SDK reads them.
+                const QVector<double> full = channelNode->values("FullWeights");
                 Morph& morph = m_mesh->morphs[morphIndex];
-                MorphTarget entry;
-                entry.name = m_objects.value(channel).name;
-                morph.targets.append(entry);
-                morph.defaultWeights.append(target.weight);
-                m_morphChannels.insert(channel, qMakePair(morphIndex, int(morph.targets.size()) - 1));
-                for (int k = 0; k < target.indexes.size() && 3 * k + 2 < target.deltas.size(); ++k) {
-                    const int point = int(target.indexes.at(k));
-                    if (point < 0 || point >= points) continue;
-                    const QVector3D delta{float(target.deltas[3 * k]), float(target.deltas[3 * k + 1]),
-                                          float(target.deltas[3 * k + 2])};
-                    MorphTarget& added = morph.targets.last();
-                    added.positions.append(base + point);
-                    added.positionDeltas.append(delta);
-                    // A mesh that is not skinned rests at its weights.
-                    if (!m_mesh->nodes.at(node).skinned)
-                        m_mesh->positions[base + point] += matrix.mapVector(target.weight * delta);
+                Morph::Channel stages;
+                stages.first = morph.targets.size();
+                for (int s = 0; s < channelShapes.size(); ++s) {
+                    const Node* shapeNode = m_objects.value(channelShapes.at(s)).node;
+                    ShapeTarget target;
+                    target.indexes = shapeNode->values("Indexes");
+                    target.deltas = shapeNode->values("Vertices");
+                    target.normals = shapeNode->values("Normals");
+                    shapes.append(target);
+                    MorphTarget entry;
+                    entry.name = channelShapes.size() == 1
+                        ? m_objects.value(channel).name
+                        : m_objects.value(channel).name + QLatin1Char('/') + m_objects.value(channelShapes.at(s)).name;
+                    for (int k = 0; k < target.indexes.size() && 3 * k + 2 < target.deltas.size(); ++k) {
+                        const int point = int(target.indexes.at(k));
+                        if (point < 0 || point >= points) continue;
+                        entry.positions.append(base + point);
+                        entry.positionDeltas.append({float(target.deltas[3 * k]), float(target.deltas[3 * k + 1]),
+                                                     float(target.deltas[3 * k + 2])});
+                    }
+                    morph.targets.append(entry);
+                    morph.defaultWeights.append(0.0f);
+                    stages.fullWeights.append(float((s < full.size() ? full.at(s)
+                                                                     : 100.0 * (s + 1) / channelShapes.size()) / 100.0));
                 }
+                m_morphChannels.insert(channel, qMakePair(morphIndex, int(morph.channels.size())));
+                morph.channels.append(stages);
             }
         }
         QVector<QVector<int>> cornerNormals(morphIndex >= 0 ? points : 0);
@@ -808,6 +833,7 @@ private:
                         skin.normals.append(corner.normal);
                         skin.bindNormals.append(v);
                         skin.normalInfluences.append(influences.at(vertex));
+                        skin.normalBlend.append(pointBlend.value(vertex));
                         m_mesh->normals.append(carried(influences.at(vertex), v, true).normalized());
                     } else {
                         m_mesh->normals.append((invertible ? normalMatrix : matrix).mapVector(v).normalized());
@@ -1094,8 +1120,9 @@ private:
                 if (turns) clip.channels.append(rotation);
                 if (scales) clip.channels.append(scale);
             }
-            // Blend shape weights: one channel per morph, its targets' curves
-            // (DeformPercent / 100) or their resting weights.
+            // Blend shape weights: one animation channel per morph, a weight
+            // for each of its blend shape channels - its curve (DeformPercent
+            // / 100), or none without one (the reference moves nothing then).
             QHash<int, bool> keyedMorphs;
             for (auto it = deforms.cbegin(); it != deforms.cend(); ++it)
                 keyedMorphs.insert(m_morphChannels.value(it.key()).first, true);
@@ -1105,13 +1132,13 @@ private:
                 channel.path = AnimationChannel::Path::Weights;
                 channel.sourceNode = morph.sourceNode;
                 channel.times = times;
-                channel.weightCount = morph.targets.size();
+                channel.weightCount = morph.channels.size();
                 for (float t : std::as_const(times)) {
-                    for (int target = 0; target < morph.targets.size(); ++target) {
-                        float weight = morph.defaultWeights.value(target);
+                    for (int slotIndex = 0; slotIndex < morph.channels.size(); ++slotIndex) {
+                        float weight = 0.0f;
                         for (auto curveIt = deforms.cbegin(); curveIt != deforms.cend(); ++curveIt) {
                             const QPair<int, int> slot = m_morphChannels.value(curveIt.key());
-                            if (slot.first == it.key() && slot.second == target)
+                            if (slot.first == it.key() && slot.second == slotIndex)
                                 weight = float(curveIt.value().at(t) / 100.0);
                         }
                         channel.weights.append(weight);
@@ -1133,7 +1160,7 @@ private:
     QHash<qint64, int> m_nodeOf;            // model -> its ModelNode
     qint64 m_geometryId = 0;                // the geometry addGeometry reads
     qint64 m_geometryModel = 0;             // and its model
-    QHash<qint64, QPair<int, int>> m_morphChannels;   // BlendShapeChannel -> (morph, target)
+    QHash<qint64, QPair<int, int>> m_morphChannels;   // BlendShapeChannel -> (morph, channel)
     QVector<GeometryJob> m_geometry;
     QHash<qint64, Pivots> m_pivots;
     const Node* m_settings = nullptr;   // GlobalSettings

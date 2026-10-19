@@ -213,6 +213,26 @@ QVector<float> AnimationChannel::sampleWeights(double seconds) const
     return out;
 }
 
+QVector<float> channelTargetWeights(const QVector<float>& fullWeights, float weight)
+{
+    QVector<float> out(fullWeights.size(), 0.0f);
+    if (fullWeights.isEmpty() || !(weight > 0.0f)) return out;
+    if (weight <= fullWeights.first()) {
+        out[0] = fullWeights.first() > 0.0f ? weight / fullWeights.first() : 1.0f;
+        return out;
+    }
+    for (int i = 0; i + 1 < fullWeights.size(); ++i) {
+        const float from = fullWeights.at(i), to = fullWeights.at(i + 1);
+        if (from < weight && weight < to) {
+            const float t = (weight - from) / (to - from);
+            out[i] = 1.0f - t;
+            out[i + 1] = t;
+            break;
+        }
+    }
+    return out;
+}
+
 QVector<QVector<float>> Mesh::morphWeights(const ModelAnimation& clip, double seconds) const
 {
     QVector<QVector<float>> result;
@@ -224,7 +244,17 @@ QVector<QVector<float>> Mesh::morphWeights(const ModelAnimation& clip, double se
             if (channel.path != AnimationChannel::Path::Weights || channel.sourceNode != morph.sourceNode)
                 continue;
             const QVector<float> keyed = channel.sampleWeights(time);
-            for (int k = 0; k < keyed.size() && k < weights.size(); ++k) weights[k] = keyed.at(k);
+            if (morph.channels.isEmpty()) {
+                for (int k = 0; k < keyed.size() && k < weights.size(); ++k) weights[k] = keyed.at(k);
+                continue;
+            }
+            // FBX: the channels' weights, spread over their shapes.
+            for (int c = 0; c < morph.channels.size() && c < keyed.size(); ++c) {
+                const Morph::Channel& stages = morph.channels.at(c);
+                const QVector<float> spread = channelTargetWeights(stages.fullWeights, keyed.at(c));
+                for (int s = 0; s < spread.size() && stages.first + s < weights.size(); ++s)
+                    weights[stages.first + s] = spread.at(s);
+            }
         }
         result.append(weights);
     }
@@ -388,6 +418,42 @@ QVector<QMatrix4x4> Mesh::animatedNodeWorlds(const ModelAnimation& clip, double 
     return worlds;
 }
 
+namespace {
+
+// A rigid motion as a unit dual quaternion: `real` the rotation, `dual`
+// half the translation times it.
+struct DualQuaternion
+{
+    QQuaternion real;
+    QQuaternion dual;
+
+    // The rotation and translation of `matrix`; its scale is left out, as
+    // FbxDualQuaternion is made of an FbxAMatrix's rotation and translation.
+    static DualQuaternion fromMatrix(const QMatrix4x4& matrix)
+    {
+        QMatrix3x3 rotation;
+        for (int row = 0; row < 3; ++row) {
+            const QVector3D column(matrix(0, row), matrix(1, row), matrix(2, row));
+            const float length = column.length();
+            for (int r = 0; r < 3; ++r)
+                rotation(r, row) = length > 1e-12f ? matrix(r, row) / length : (r == row ? 1.0f : 0.0f);
+        }
+        DualQuaternion out;
+        out.real = QQuaternion::fromRotationMatrix(rotation).normalized();
+        const QVector3D t = matrix.column(3).toVector3D();
+        out.dual = 0.5f * QQuaternion(0.0f, t) * out.real;
+        return out;
+    }
+
+    QVector3D map(const QVector3D& point) const
+    {
+        const QQuaternion translation = 2.0f * dual * real.conjugated();
+        return real.rotatedVector(point) + translation.vector();
+    }
+};
+
+} // namespace
+
 Mesh Mesh::skinned(const QVector<QMatrix4x4>& nodeWorlds) const
 {
     Mesh out = *this;
@@ -418,18 +484,62 @@ Mesh Mesh::skinned(const QVector<QMatrix4x4>& nodeWorlds) const
             }
             return sum;
         };
+        // Dual quaternion skinning (the FBX SDK's ComputeDualQuaternion-
+        // Deformation): each joint's rigid motion as a unit dual quaternion,
+        // the point's joints summed by weight - turned to the first one's
+        // hemisphere - and normalised by the rotation's length.
+        const bool dual = skin.method != Skin::Method::Linear;
+        QVector<DualQuaternion> jointDuals;
+        if (dual) {
+            jointDuals.reserve(joints.size());
+            for (const QMatrix4x4& joint : std::as_const(joints)) jointDuals.append(DualQuaternion::fromMatrix(joint));
+        }
+        const auto dualBlend = [&](const SkinInfluence& influence, bool* any) {
+            DualQuaternion sum{QQuaternion(0, 0, 0, 0), QQuaternion(0, 0, 0, 0)};
+            QQuaternion first;
+            bool started = false;
+            *any = false;
+            for (int k = 0; k < 4; ++k) {
+                const int j = influence.joints[k];
+                float w = influence.weights[k];
+                if (j < 0 || j >= jointDuals.size() || w <= 0.0f) continue;
+                const DualQuaternion& d = jointDuals.at(j);
+                if (!started) { first = d.real; started = true; }
+                else if (QQuaternion::dotProduct(first, d.real) < 0.0f) w = -w;
+                sum.real += w * d.real;
+                sum.dual += w * d.dual;
+                *any = true;
+            }
+            const float length = sum.real.length();
+            if (length > 1e-12f) { sum.real /= length; sum.dual /= length; }
+            return sum;
+        };
         for (int k = 0; k < skin.positions.size(); ++k) {
             const int index = skin.positions.at(k);
             if (index < 0 || index >= out.positions.size()) continue;
             bool any = false;
-            const QVector3D placed = blend(skin.positionInfluences.value(k), skin.bindPositions.value(k), false, &any);
+            const QVector3D bind = skin.bindPositions.value(k);
+            QVector3D placed = blend(skin.positionInfluences.value(k), bind, false, &any);
+            if (dual) {
+                bool dualAny = false;
+                const QVector3D moved = dualBlend(skin.positionInfluences.value(k), &dualAny).map(bind);
+                const float share = skin.method == Skin::Method::Blend ? skin.positionBlend.value(k) : 1.0f;
+                if (dualAny) placed = moved * share + placed * (1.0f - share);
+            }
             if (any) out.positions[index] = importTransform.map(placed);
         }
         for (int k = 0; k < skin.normals.size(); ++k) {
             const int index = skin.normals.at(k);
             if (index < 0 || index >= out.normals.size()) continue;
             bool any = false;
-            const QVector3D turned = blend(skin.normalInfluences.value(k), skin.bindNormals.value(k), true, &any);
+            const QVector3D bind = skin.bindNormals.value(k);
+            QVector3D turned = blend(skin.normalInfluences.value(k), bind, true, &any);
+            if (dual) {
+                bool dualAny = false;
+                const QVector3D rotated = dualBlend(skin.normalInfluences.value(k), &dualAny).real.rotatedVector(bind);
+                const float share = skin.method == Skin::Method::Blend ? skin.normalBlend.value(k) : 1.0f;
+                if (dualAny) turned = rotated * share + turned.normalized() * (1.0f - share);
+            }
             if (any) out.normals[index] = importNormal.mapVector(turned).normalized();
         }
     }

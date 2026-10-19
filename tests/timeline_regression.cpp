@@ -6946,6 +6946,42 @@ private slots:
         QVERIFY(close(bent.positions[0], QVector3D(-10, 0, 0)));
         // The normals turn with the bone too: the upper corners' stay along z.
         QVERIFY(qAbs(bent.normals[2].z() - 1.0f) < 1e-3f);
+
+        // SkinningType, as the reference's importer takes it: the top right
+        // point held half by each bone. Linear sums the matrices (half way
+        // between the points they make); DualQuaternion turns it half the
+        // bone's quarter about the bone; Blend mixes the two by the point's
+        // BlendWeights.
+        const auto shared = [&](const char* type, double share) {
+            QVector<FbxRecord> variant = scene;
+            for (FbxRecord& section : variant) {
+                if (section.name != "Objects") continue;
+                for (FbxRecord& record : section.children) {
+                    const qint64 id = qint64(record.values.value(0).number);
+                    if (record.name == "Deformer" && id == 30) {
+                        record.children = {text("SkinningType", type), array("Indexes", 'i', {2}),
+                                           array("BlendWeights", 'd', {share})};
+                    }
+                    if (record.name == "Deformer" && id == 31)
+                        record.children[0] = array("Indexes", 'i', {0, 1, 2}), record.children[1] = array("Weights", 'd', {1, 1, 1});
+                }
+            }
+            const QString path = dir.filePath(QStringLiteral("strip-%1.fbx").arg(type));
+            QFile out(path);
+            if (!out.open(QIODevice::WriteOnly)) return QVector3D();
+            out.write(fbxBinary(variant, 7400, true));
+            out.close();
+            const auto model = model3d::loadModel(path, settings);
+            if (!model.ok) return QVector3D();
+            return model.mesh.skinned(model.mesh.animatedNodeWorlds(model.mesh.animations[0], 1.0)).positions[2];
+        };
+        const float h = std::sqrt(0.5f);
+        const QVector3D linear(-5, 35, 0), dual(10 * h - 20 * h, 20 + 10 * h + 20 * h, 0);
+        const QVector3D asLinear = shared("Linear", 0.0), asDual = shared("DualQuaternion", 0.0),
+                        asBlend = shared("Blend", 0.5);
+        QVERIFY2(close(asLinear, linear), qPrintable(QString("%1 %2").arg(asLinear.x()).arg(asLinear.y())));
+        QVERIFY2(close(asDual, dual), qPrintable(QString("%1 %2").arg(asDual.x()).arg(asDual.y())));
+        QVERIFY2(close(asBlend, (linear + dual) / 2), qPrintable(QString("%1 %2").arg(asBlend.x()).arg(asBlend.y())));
     }
     // FBX pivots and time: "Arm" turns about its RotationPivot and scales
     // about its ScalingPivot (both at x 10), as FbxNode::EvaluateGlobalTransform
@@ -7029,8 +7065,11 @@ private slots:
         QVERIFY(close(mesh.animatedNodeMatrices(0, 1.9)[arm].map(mesh.positions[1]), QVector3D(110, 20, 0)));
     }
     // FBX blend shapes: a quad whose "Raise" channel's shape lifts its top
-    // edge 10 and tilts its normals, resting at DeformPercent 50 and keyed
-    // from 0 to 100 by "Smile"; its model's place carries the motion.
+    // edge 10 and tilts its normals, keyed from 0 to 100 by "Smile"; its
+    // model's place carries the motion. Its DeformPercent 50 at rest moves
+    // nothing - the reference moves points only by keyed channels - and an
+    // in-between shape goes the way the reference's ComputeShapeDeformation
+    // takes it.
     void fbxBlendShapesFollowTheirWeights() {
         QTemporaryDir dir; QVERIFY(dir.isValid());
         using V = FbxValue;
@@ -7095,13 +7134,15 @@ private slots:
         QCOMPARE(mesh.morphs[0].targets.size(), 1);
         QCOMPARE(mesh.morphs[0].targets[0].name, QString("Raise"));
         QCOMPARE(mesh.morphs[0].targets[0].positions.size(), 2);
-        QCOMPARE(mesh.morphs[0].defaultWeights, QVector<float>{0.5f});
+        QCOMPARE(mesh.morphs[0].defaultWeights, QVector<float>{0.0f});
+        QCOMPARE(mesh.morphs[0].channels.size(), 1);
+        QCOMPARE(mesh.morphs[0].channels[0].fullWeights, QVector<float>{1.0f});
         const auto close = [](const QVector3D& a, const QVector3D& b) { return (a - b).length() < 1e-3f; };
-        // At rest: the top edge raised 5, its normals tilted half way.
-        QVERIFY2(close(mesh.positions[2], QVector3D(110, 25, 0)),
+        // At rest: as the file has it, DeformPercent or not.
+        QVERIFY2(close(mesh.positions[2], QVector3D(110, 20, 0)),
                  qPrintable(QString("%1 %2").arg(mesh.positions[2].x()).arg(mesh.positions[2].y())));
         QVERIFY(close(mesh.positions[0], QVector3D(90, 0, 0)));
-        QVERIFY(close(mesh.normals[2], QVector3D(1, 0, 0.5f).normalized()));
+        QVERIFY(close(mesh.normals[2], QVector3D(0, 0, 1)));
         QVERIFY(close(mesh.normals[0], QVector3D(0, 0, 1)));
         QCOMPARE(mesh.animations.size(), 1);
         QCOMPARE(mesh.animations[0].name, QString("Smile"));
@@ -7123,7 +7164,52 @@ private slots:
         layer.modelAnimations.append(smile);
         QVERIFY(close(render::posedModelMesh(layer, mesh, 24, 24.0, file).positions[2], QVector3D(110, 30, 0)));
         layer.modelAnimations[0].strength = 50.0;
-        QVERIFY(close(render::posedModelMesh(layer, mesh, 24, 24.0, file).positions[2], QVector3D(110, 27.5f, 0)));
+        QVERIFY(close(render::posedModelMesh(layer, mesh, 24, 24.0, file).positions[2], QVector3D(110, 25.0f, 0)));
+
+        // The rule: up to the first full weight the first shape grows; between
+        // two it goes from one to the next; at 0, at a later full weight and
+        // past the last, nothing.
+        const QVector<float> stages{0.5f, 1.0f};
+        QCOMPARE(model3d::channelTargetWeights(stages, 0.25f), (QVector<float>{0.5f, 0.0f}));
+        QCOMPARE(model3d::channelTargetWeights(stages, 0.5f), (QVector<float>{1.0f, 0.0f}));
+        QCOMPARE(model3d::channelTargetWeights(stages, 0.75f), (QVector<float>{0.5f, 0.5f}));
+        QCOMPARE(model3d::channelTargetWeights(stages, 1.0f), (QVector<float>{0.0f, 0.0f}));
+        QCOMPARE(model3d::channelTargetWeights(stages, 1.5f), (QVector<float>{0.0f, 0.0f}));
+        QCOMPARE(model3d::channelTargetWeights(stages, 0.0f), (QVector<float>{0.0f, 0.0f}));
+        QCOMPARE(model3d::channelTargetWeights({1.0f}, 1.0f), QVector<float>{1.0f});
+
+        // An in-between shape: "Raise" lifts the top edge 10 at 50% and 30
+        // at 100%, keyed 0 to 100 over the second.
+        QVector<FbxRecord> staged = scene;
+        for (FbxRecord& section : staged) {
+            if (section.name == "Objects") {
+                for (FbxRecord& record : section.children) {
+                    if (record.name == "Deformer" && record.values.value(0).number == 31)
+                        record.children.append(array("FullWeights", 'd', {50, 100}));
+                }
+                section.children.append(object("Geometry", 33, "Raise30" + sep + "Geometry", "Shape", {
+                    array("Indexes", 'i', {2, 3}), array("Vertices", 'd', {0, 30, 0, 0, 30, 0})}));
+            }
+            if (section.name == "Connections") section.children.append(link("OO", 33, 31));
+        }
+        const QString stagedFile = dir.filePath("staged.fbx");
+        {
+            QFile out(stagedFile); QVERIFY(out.open(QIODevice::WriteOnly));
+            out.write(fbxBinary(staged, 7400, false));
+        }
+        const auto stagedLoaded = model3d::loadModel(stagedFile, settings);
+        QVERIFY2(stagedLoaded.ok, qPrintable(stagedLoaded.message));
+        const model3d::Mesh& twoStep = stagedLoaded.mesh;
+        QCOMPARE(twoStep.morphs[0].targets.size(), 2);
+        QCOMPARE(twoStep.morphs[0].channels[0].fullWeights, (QVector<float>{0.5f, 1.0f}));
+        const auto liftAt = [&](double seconds) {
+            return twoStep.deformed(twoStep.restNodeWorlds(), twoStep.morphWeights(twoStep.animations[0], seconds))
+                .positions[2].y() - 20.0f;
+        };
+        QVERIFY2(qAbs(liftAt(0.25) - 5.0f) < 1e-3f, qPrintable(QString::number(liftAt(0.25))));
+        QVERIFY(qAbs(liftAt(0.5) - 10.0f) < 1e-3f);
+        QVERIFY2(qAbs(liftAt(0.75) - 20.0f) < 1e-3f, qPrintable(QString::number(liftAt(0.75))));
+        QVERIFY(qAbs(liftAt(1.0)) < 1e-3f);
     }
     // FBX, binary (7.4, 7.5 with deflated arrays) and ASCII: an "Arm" null
     // holding "Hand", whose quad is turned, scaled and coloured by a red
