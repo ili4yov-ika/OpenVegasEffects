@@ -65,6 +65,7 @@
 #include "render/AudioExport.h"
 #include "render/VideoEncoder.h"
 #include "render/ExportJob.h"
+#include "render/FrameDiskCache.h"
 #include "ui/ExportQueue.h"
 #include "ui/ExportPresets.h"
 #include "ui/ExportQueueView.h"
@@ -1240,8 +1241,22 @@ void MainWindow::configureMenus()
     const QSettings debugSettings;
     m_ui->actionShowRenderTimings->setChecked(
         debugSettings.value(QStringLiteral("Debug/ShowRenderTimings"), false).toBool());
-    m_ui->actionShowHardwareDecodingIndicator->setChecked(
-        debugSettings.value(QStringLiteral("Debug/HardwareDecodingIndicator"), false).toBool());
+    // The reference keeps it as Options/ShowHardwareDecodingIndicator
+    // (VegasEffects.exe FUN_1402a6810/FUN_1402a6e80); the port's earlier key
+    // is taken over once.
+    {
+        QSettings options = app::Settings::optionSettings();
+        QSettings legacy;
+        if (!options.contains(QStringLiteral("Options/ShowHardwareDecodingIndicator"))
+            && legacy.contains(QStringLiteral("Debug/HardwareDecodingIndicator"))) {
+            options.setValue(QStringLiteral("Options/ShowHardwareDecodingIndicator"),
+                             legacy.value(QStringLiteral("Debug/HardwareDecodingIndicator")));
+            legacy.remove(QStringLiteral("Debug/HardwareDecodingIndicator"));
+        }
+        m_ui->actionShowHardwareDecodingIndicator->setChecked(
+            options.value(QStringLiteral("Options/ShowHardwareDecodingIndicator"), false).toBool());
+    }
+    render::FrameDiskCache::setDebugSquares(m_ui->actionShowHardwareDecodingIndicator->isChecked());
     m_ui->actionPrintAnalytics->setChecked(
         debugSettings.value(QStringLiteral("Debug/PrintAnalytics"), false).toBool());
     m_ui->actionEnableEffectPresetCreation->setChecked(
@@ -1252,7 +1267,8 @@ void MainWindow::configureMenus()
     });
     connect(m_ui->actionShowHardwareDecodingIndicator, &QAction::toggled,
             this, [this](bool on) {
-                QSettings().setValue(QStringLiteral("Debug/HardwareDecodingIndicator"), on);
+                app::Settings::optionSettings().setValue(QStringLiteral("Options/ShowHardwareDecodingIndicator"), on);
+                render::FrameDiskCache::setDebugSquares(on);
                 statusBar()->showMessage(on ? tr("Hardware decoding indicator enabled")
                                             : tr("Hardware decoding indicator disabled"));
             });

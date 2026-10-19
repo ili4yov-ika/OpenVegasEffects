@@ -7,10 +7,29 @@
 #include <QFileInfo>
 #include <QSaveFile>
 
+#include <atomic>
+
 namespace openvegas {
 namespace render {
 
 namespace {
+
+std::atomic<bool> g_debugSquares{false};
+
+// A 200 px square (less on a smaller frame) of `colour` into RGBA rows, at
+// the top left or the top right.
+void drawDebugSquare(QByteArray& rgba, const QSize& size, bool right, uchar red, uchar blue)
+{
+    const int side = qMin(200, qMin(size.width(), size.height()));
+    const int left = right ? size.width() - side : 0;
+    uchar* pixels = reinterpret_cast<uchar*>(rgba.data());
+    for (int y = 0; y < side; ++y) {
+        uchar* row = pixels + qsizetype(y) * size.width() * 4;
+        for (int x = left; x < left + side; ++x) {
+            row[x * 4] = red; row[x * 4 + 1] = 0; row[x * 4 + 2] = blue; row[x * 4 + 3] = 255;
+        }
+    }
+}
 
 constexpr quint32 kMagic = 0x4f56464d; // "OVFM"
 constexpr quint32 kVersion = 1;
@@ -60,6 +79,7 @@ bool FrameDiskCache::load(const QString& key, const QSize& size, QByteArray* rgb
     QByteArray pixels = qUncompress(compressed);
     if (pixels.size() != qsizetype(width) * height * 4) return discard();
     if (touch) file.setFileTime(QDateTime::currentDateTime(), QFileDevice::FileModificationTime);
+    if (debugSquares()) drawDebugSquare(pixels, size, true, 0, 128);
     *rgba = std::move(pixels);
     return true;
 }
@@ -75,10 +95,15 @@ bool FrameDiskCache::store(const QString& key, const QSize& size, const QByteArr
     if (!file.open(QIODevice::WriteOnly)) return false;
     QDataStream stream(&file);
     stream.setByteOrder(QDataStream::LittleEndian);
+    QByteArray stored = rgba;
+    if (debugSquares()) drawDebugSquare(stored, size, false, 0, 255);
     stream << kMagic << kVersion << qint32(size.width()) << qint32(size.height())
-           << qCompress(rgba, 1);
+           << qCompress(stored, 1);
     return stream.status() == QDataStream::Ok && file.commit();
 }
+
+void FrameDiskCache::setDebugSquares(bool on) { g_debugSquares = on; }
+bool FrameDiskCache::debugSquares() { return g_debugSquares; }
 
 int FrameDiskCache::prune(int days, const QDateTime& now) const
 {

@@ -2250,6 +2250,36 @@ private slots:
         QVERIFY2(smeared < edges * 0.6, qPrintable(QStringLiteral("%1 vs %2").arg(smeared).arg(edges)));
         QVERIFY2(std::abs(kept - edges) < edges * 0.05, qPrintable(QStringLiteral("%1 vs %2").arg(kept).arg(edges)));
     }
+    // Debug > Show Hardware Decoding Indicator, as the reference's viewer
+    // cache draws its encode/decode squares: a frame stored gets a blue
+    // square at the top left (a software encoder's colour), a frame read
+    // back a dark blue one at the top right (a software decoder's); off,
+    // the frame comes back as it went in.
+    void cacheDebugSquaresFollowTheReference() {
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        render::FrameDiskCache cache; cache.setDirectory(dir.path());
+        const QSize size(320, 240);
+        QByteArray grey(size.width() * size.height() * 4, char(100));
+        const auto pixel = [&](const QByteArray& rgba, int x, int y) {
+            const uchar* p = reinterpret_cast<const uchar*>(rgba.constData()) + (y * size.width() + x) * 4;
+            return QColor(p[0], p[1], p[2], p[3]);
+        };
+        auto reset = qScopeGuard([] { render::FrameDiskCache::setDebugSquares(false); });
+        QVERIFY(cache.store("plain", size, grey));
+        QByteArray back;
+        QVERIFY(cache.load("plain", size, &back));
+        QCOMPARE(back, grey);
+        render::FrameDiskCache::setDebugSquares(true);
+        QVERIFY(cache.store("squared", size, grey));
+        QVERIFY(cache.load("squared", size, &back));
+        QCOMPARE(pixel(back, 10, 10), QColor(0, 0, 255, 255));
+        QCOMPARE(pixel(back, 119, 199), QColor(0, 0, 255, 255));
+        QCOMPARE(pixel(back, 310, 10), QColor(0, 0, 128, 255));
+        QCOMPARE(pixel(back, 120, 199), QColor(0, 0, 128, 255));   // the read one drawn over
+        QCOMPARE(pixel(back, 160, 220), QColor(100, 100, 100, 100));
+        QCOMPARE(pixel(back, 10, 230), QColor(100, 100, 100, 100));
+    }
+
     // 2D effects that move by themselves get the time (RenderContext
     // +0x6c/+0x70/+0x98/+0x9c/+0xa0): Linear Wipe at frame 0 and at frame 30
     // of a 120-frame layer differ, the same frame is the same picture, and
