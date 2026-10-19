@@ -2280,6 +2280,162 @@ private slots:
         QCOMPARE(pixel(back, 10, 230), QColor(100, 100, 100, 100));
     }
 
+    // Whether glyph Behavior `id` moves the letters of a text layer at some
+    // frame of its first three seconds, rendered as the viewer renders it.
+    bool glyphBehaviorMovesText(const core::Identifier& id, const QStringList& values) {
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setDurationSeconds(4);
+        auto& layer = shot->addLayer("Text"); layer.kind = composition::LayerKind::Text;
+        composition::TextStyle style;
+        style.text = "MOVE"; style.fontSize = 48;
+        style.alignH = composition::TextStyle::AlignH::Center;
+        style.alignV = composition::TextStyle::AlignV::Middle;
+        composition::Clip clip; clip.durationSeconds = 4;
+        composition::Effect text; text.pluginId = core::Identifier("text"); text.name = "Text";
+        text.parameterValues = composition::textStyleToParameters(style);
+        composition::Effect behavior; behavior.pluginId = id; behavior.name = id.value();
+        behavior.parameterValues = values;
+        clip.effects << text << behavior;
+        layer.clips.append(clip);
+        auto plain = std::make_shared<composition::Composition>(*shot);
+        plain->layerRef(0).clips[0].effects.removeLast();
+        const auto frameOf = [](const std::shared_ptr<composition::Composition>& composition, double seconds) {
+            render::RenderManager manager; manager.setComposition(composition);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, seconds, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() >= 1; }, 10000)) return QByteArray();
+            return frames.last()[1].toByteArray();
+        };
+        for (double seconds : {0.1, 0.5, 1.0, 2.0, 3.0}) {
+            const QByteArray moved = frameOf(shot, seconds);
+            if (!moved.isEmpty() && moved != frameOf(plain, seconds)) return true;
+        }
+        return false;
+    }
+
+    // Every module the reference ships runs its own machine code through the
+    // host as its kind is rendered - a 2D effect over a picture, a video
+    // transition between two, an audio effect and an audio transition over
+    // PCM, a Behavior asked for its layer's transformation, a Geometry module
+    // over a quad - with its default values, and none fails. MotionTrack and
+    // the effects that analyse their own layer run on an instance of their
+    // own (motionTrackHostTracksFootage, stabilizersSteadyTheirOwnLayer).
+    // Needs the OpenGL 4.1 context native modules run in.
+    void everyShippedModuleRuns() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects/Plugins";
+        if (!QFileInfo::exists(dir)) QSKIP("The reference plugins are not in SAMPLES");
+        auto manager = plugin::createPluginManager();
+        manager->setPluginDirs({dir});
+        QVERIFY(manager->scan().isSuccess());
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        QImage pattern(64, 64, QImage::Format_RGBA8888);
+        for (int y = 0; y < 64; ++y)
+            for (int x = 0; x < 64; ++x) pattern.setPixelColor(x, y, QColor(x * 4, y * 4, 128));
+        QImage other = pattern.mirrored(true, false);
+        QVector<qint16> tone(4800 * 2);
+        for (int i = 0; i < 4800; ++i)
+            tone[2 * i] = tone[2 * i + 1] = qint16(8000 * std::sin(i * 2 * M_PI * 440 / 48000.0));
+        {
+            QImage probe = pattern;
+            bool any = false;
+            for (const auto& id : manager->allPluginIds())
+                if (manager->spec(id).kind == plugin::PluginKind::Effect2D && !any) {
+                    QStringList values;
+                    for (const auto& parameter : manager->spec(id).parameters) values << parameter.defaultValue;
+                    any = plugin::applyEffectToImage(probe, id, values, plugin::NativeFrameTime());
+                }
+            if (!any) QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        }
+        QStringList failed;
+        QHash<int, int> ran;
+        for (const auto& id : manager->allPluginIds()) {
+            const plugin::EffectSpec spec = manager->spec(id);
+            QStringList values;
+            for (const auto& parameter : spec.parameters) values << parameter.defaultValue;
+            bool ok = true;
+            switch (spec.kind) {
+            case plugin::PluginKind::Effect2D: {
+                if (plugin::nativeEffectAnalysesOwnLayer(id)) continue;
+                QImage image = pattern;
+                plugin::NativeFrameTime time; time.frame = 10; time.layerFrame = 10; time.layerFrames = 60;
+                ok = plugin::applyEffectToImage(image, id, values, time);
+                break;
+            }
+            case plugin::PluginKind::VideoTransition: {
+                QImage out(64, 64, QImage::Format_RGBA8888);
+                ok = plugin::applyNativeVideoTransition(out, pattern, other, 0.5f, id, values);
+                break;
+            }
+            case plugin::PluginKind::AudioEffect: {
+                QVector<qint16> samples = tone;
+                ok = plugin::applyNativeAudioEffect(samples, 2, 48000, 0, id, values);
+                break;
+            }
+            case plugin::PluginKind::AudioTransition: {
+                QVector<qint16> out(tone.size());
+                ok = plugin::applyNativeAudioTransition(out, tone, tone, 2, 0, 4800, id, values);
+                break;
+            }
+            case plugin::PluginKind::BehaviorEffect: {
+                if (plugin::nativeBehaviorUsesInstance(id)) continue;
+                if (plugin::nativeBehaviorSubObjectRenderingVerified(id)) {
+                    // A glyph Behavior moves the letters of a text layer.
+                    ok = glyphBehaviorMovesText(id, values);
+                    break;
+                }
+                plugin::NativeBehaviorResult result;
+                ok = plugin::evaluateNativeBehavior(result, 10, 10, 60, 640, 360, 30.0, id, values);
+                break;
+            }
+            case plugin::PluginKind::GeometryEffect: {
+                plugin::NativeGeometryBatch quad;
+                const float corners[4][2] = {{-50, -50}, {50, -50}, {50, 50}, {-50, 50}};
+                for (const auto& corner : corners) {
+                    plugin::NativeGeometryVertex vertex;
+                    vertex.position[0] = corner[0]; vertex.position[1] = corner[1];
+                    vertex.uv[0] = corner[0] > 0 ? 1.0f : 0.0f; vertex.uv[1] = corner[1] > 0 ? 1.0f : 0.0f;
+                    quad.vertices << vertex;
+                }
+                plugin::NativeGeometryTriangle a, b;
+                a.indices[0] = 0; a.indices[1] = 1; a.indices[2] = 2;
+                b.indices[0] = 0; b.indices[1] = 2; b.indices[2] = 3;
+                quad.triangles << a << b;
+                plugin::NativeGeometryPolygon polygon; polygon.indices = {0, 1, 2, 3};
+                quad.polygons << polygon;
+                quad.extents[0] = -50; quad.extents[1] = -50; quad.extents[2] = 50; quad.extents[3] = 50;
+                QVector<plugin::NativeGeometryBatch> geometry{quad};
+                ok = plugin::applyNativeGeometryEffect(geometry, id, values, 10, 10, 60, 30.0);
+                if (!ok) {
+                    // A module whose defaults change nothing sets no output:
+                    // every ranged number a third into its range.
+                    QStringList moved = values;
+                    for (int i = 0; i < spec.parameters.size(); ++i) {
+                        const auto& parameter = spec.parameters.at(i);
+                        if ((parameter.type == "double" || parameter.type == "int" || parameter.type == "angle")
+                            && parameter.maximum > parameter.minimum && parameter.maximum < 100000)
+                            moved[i] = QString::number(parameter.minimum + (parameter.maximum - parameter.minimum) / 3.0);
+                    }
+                    geometry = {quad};
+                    ok = plugin::applyNativeGeometryEffect(geometry, id, moved, 10, 10, 60, 30.0);
+                }
+                break;
+            }
+            default:
+                continue;
+            }
+            ++ran[int(spec.kind)];
+            if (!ok) failed << QStringLiteral("%1 (%2)").arg(spec.name).arg(int(spec.kind));
+        }
+        int total = 0;
+        for (int count : std::as_const(ran)) total += count;
+        qInfo().noquote() << "modules run" << total << "failed" << failed.size() << failed.join(", ");
+        QVERIFY(total > 300);
+        QVERIFY2(failed.isEmpty(), qPrintable(failed.join(", ")));
+    }
+
     // 2D effects that move by themselves get the time (RenderContext
     // +0x6c/+0x70/+0x98/+0x9c/+0xa0): Linear Wipe at frame 0 and at frame 30
     // of a 120-frame layer differ, the same frame is the same picture, and

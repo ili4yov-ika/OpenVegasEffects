@@ -388,6 +388,9 @@ effects, transform or opacity, and nothing for a text layer.
 `keyFramesBetweenFrames` evaluates keys between frames (a segment's curve, a key on a key, Hold
 holding) and `nativeMotionBlurReadsKeyframesBetweenFrames` (OpenGL) has EnvironmentMapViewer with Motion
 Blur read a keyframed turn at its sub-samples: the stripes smear, and a still turn draws as without blur.
+`everyShippedModuleRuns` (OpenGL) runs every module of `SAMPLES/VEGAS_Effects/Plugins` through the host as
+its kind is rendered (2D effects, video and audio transitions, audio effects, layer and glyph Behaviors,
+Geometry) with its defaults and expects none to fail.
 `viewer360DrawsThroughEnvironmentMapViewer` (OpenGL) has the 360 viewer draw through the reference's
 EnvironmentMapViewer module and checks its CPU projection against it for both lenses, combined turns,
 Scale and Scale Ratio, the lens mapping both ways, and that Top and Left look where the reference's do.
