@@ -395,6 +395,9 @@ front face, and checks the face covers it (a body is met where its surface lies,
 the same sheet in front of the cube shows.
 `effectsGrowTheirTarget` (OpenGL) has Drop Shadow asked for its growth with the render's context, drawn into
 the grown target and cut back: the layer stays in place, unscaled, with its shadow beside it.
+`fadeToColorDrawsItsSide` (OpenGL) has Fade to Color told its side of the edit point (RenderContext +0x08)
+and its window in milliseconds: red dips to black before the edit point, green rises out of it after,
+and from nothing the clip rises out of black over the whole window.
 `buildProject3` writes `SAMPLES/vegfx_projects/project_3` when `OPENVEGAS_PROJECT3_OUT` names the folder
 (skipped otherwise) and renders preview frames into `OPENVEGAS_PROJECT3_PREVIEW`.
 `everyShippedModuleRuns` (OpenGL) runs every module of `SAMPLES/VEGAS_Effects/Plugins` through the host as

@@ -3411,7 +3411,8 @@ public:
         // An effect on its own instance is told its layer: AutomaticStabilizer
         // describes that layer's footage with it (GetAssetInfo).
         if (ownInstance && !ownLayerId.isEmpty()) sourceUuid = ownLayerId.constData();
-        std::memcpy(frameBlock.data() + 0x08, &sourceUuid, sizeof(sourceUuid));
+        if (!transition)
+            std::memcpy(frameBlock.data() + 0x08, &sourceUuid, sizeof(sourceUuid));
         void* inputPointer = inputTextureBlock.data();
         std::memcpy(frameBlock.data() + 0x10, &inputPointer, sizeof(inputPointer));
         void* outputPointer = outputTextureBlock.data();
@@ -3446,11 +3447,17 @@ public:
         const qint32 frameWidth = width;
         const qint32 frameHeight = height;
         if (transition) {
-            // PluginVideoTransition::Render builds a different context: three
-            // textures at +0x10/+0x18/+0x20, two matrices at +0x38/+0x40,
-            // output dimensions at +0x48/+0x4c and sample/start/end at
-            // +0x54/+0x58/+0x60. Native modules derive their normalized
-            // progress from those integer positions.
+            // PluginVideoTransition::Render builds a different context: the
+            // side at +0x08, three textures at +0x10/+0x18/+0x20, two
+            // matrices at +0x38/+0x40, output dimensions at +0x48/+0x4c and
+            // position/start/edit point/end at +0x54/+0x58/+0x5c/+0x60 in
+            // milliseconds. Most modules take (position - start) / (end -
+            // start). Fade to Color draws only the texture of its side (2
+            // the outgoing +0x10, 1 the incoming +0x18; nothing for any
+            // other) - into its colour before the edit point and out of it
+            // after - and with the edit point at the start fades the incoming
+            // one in over the whole window less a frame (1000 / the frame
+            // rate GetTimelineInfo gives).
             std::memcpy(frameBlock.data() + 0x38, &modelViewPointer,
                         sizeof(modelViewPointer));
             std::memcpy(frameBlock.data() + 0x40, &projectionPointer,
@@ -3458,17 +3465,22 @@ public:
             std::memcpy(frameBlock.data() + 0x48, &frameWidth, sizeof(frameWidth));
             std::memcpy(frameBlock.data() + 0x4c, &frameHeight, sizeof(frameHeight));
             constexpr qint32 transitionStart = 0;
-            constexpr qint32 transitionEnd = 1000000;
+            const qint32 transitionEnd = qMax(1, qRound(time.transitionSeconds * 1000.0));
             const qint32 transitionFrame = qBound(
                 transitionStart,
                 qRound(qBound(0.0f, transitionProgress, 1.0f) * transitionEnd),
                 transitionEnd);
+            const qint32 transitionCut = time.transitionCut < 0.0f
+                ? transitionEnd / 2
+                : qBound(transitionStart, qRound(time.transitionCut * transitionEnd), transitionEnd);
+            const qint32 side = transitionFrame < transitionCut ? 2 : 1;
+            std::memcpy(frameBlock.data() + 0x08, &side, sizeof(side));
             std::memcpy(frameBlock.data() + 0x54, &transitionFrame,
                         sizeof(transitionFrame));
             std::memcpy(frameBlock.data() + 0x58, &transitionStart,
                         sizeof(transitionStart));
-            std::memcpy(frameBlock.data() + 0x5c, &transitionEnd,
-                        sizeof(transitionEnd));
+            std::memcpy(frameBlock.data() + 0x5c, &transitionCut,
+                        sizeof(transitionCut));
             std::memcpy(frameBlock.data() + 0x60, &transitionEnd,
                         sizeof(transitionEnd));
         } else {
@@ -4946,7 +4958,8 @@ bool applyNativeEffectToImage(QImage& image, const core::Identifier& id,
 
 bool applyNativeVideoTransition(QImage& output, const QImage& from, const QImage& to,
                                 float progress, const core::Identifier& id,
-                                const QStringList& parameterValues)
+                                const QStringList& parameterValues,
+                                const NativeFrameTime& time)
 {
     ModuleRecord record;
     {
@@ -4968,7 +4981,7 @@ bool applyNativeVideoTransition(QImage& output, const QImage& from, const QImage
         g_threadRenderer = std::make_unique<ThreadRenderer>();
     }
     return g_threadRenderer->render(output, id.value(), record, parameterValues,
-                                    &to, progress);
+                                    &to, progress, time);
 }
 
 bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,

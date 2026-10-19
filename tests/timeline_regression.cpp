@@ -2817,6 +2817,56 @@ private slots:
         QVERIFY2(before.red() > 200 && before.green() < 40 && before.blue() < 40, qPrintable(before.name()));
     }
 
+    // Fade to Color draws only the side of the edit point it is told
+    // (RenderContext +0x08: 2 the outgoing clip, 1 the incoming one) and
+    // reads its position, start, edit point and end (+0x54..+0x60) in
+    // milliseconds: red dips to its black before the edit point, green rises
+    // out of it after, and from nothing (the edit point at the start) the
+    // clip rises out of black over the whole window. With no side it drew
+    // nothing at all. Needs the OpenGL 4.1 context native modules run in.
+    void fadeToColorDrawsItsSide() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/VideoTransitions/FadeTransition.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference FadeTransition.hfpl is not in SAMPLES");
+        auto manager = plugin::createPluginManager();
+        manager->setPluginDirs({dir + "/Plugins"});
+        QVERIFY(manager->scan().isSuccess());
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        const core::Identifier id = plugin::nativeModuleNamed(QStringLiteral("FadeTransition"));
+        QVERIFY(id.isValid());
+        QStringList values;
+        for (const auto& parameter : manager->spec(id).parameters) values << parameter.defaultValue;
+        QImage red(32, 32, QImage::Format_RGBA8888); red.fill(QColor(200, 0, 0));
+        QImage green(32, 32, QImage::Format_RGBA8888); green.fill(QColor(0, 200, 0));
+        QImage none(32, 32, QImage::Format_RGBA8888); none.fill(Qt::transparent);
+        const auto at = [&](const QImage& from, const QImage& to, float progress, float cut, bool* ok) {
+            plugin::NativeFrameTime time;
+            time.transitionSeconds = 1.5;
+            time.transitionCut = cut;
+            QImage out;
+            *ok = plugin::applyNativeVideoTransition(out, from, to, progress, id, values, time);
+            return out.pixelColor(16, 16);
+        };
+        bool ok = false;
+        const QColor before = at(red, green, 0.25f, 0.5f, &ok);
+        if (!ok) QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        QVERIFY2(before.red() > 80 && before.red() < 120 && before.green() < 10 && before.alpha() == 255,
+                 qPrintable(before.name(QColor::HexArgb)));
+        const QColor after = at(red, green, 0.75f, 0.5f, &ok);
+        QVERIFY(ok);
+        QVERIFY2(after.green() > 80 && after.green() < 120 && after.red() < 10 && after.alpha() == 255,
+                 qPrintable(after.name(QColor::HexArgb)));
+        const QColor start = at(none, green, 0.0f, 0.0f, &ok);
+        QVERIFY(ok);
+        QVERIFY2(start.alpha() == 255 && start.green() < 10, qPrintable(start.name(QColor::HexArgb)));
+        const QColor middle = at(none, green, 0.5f, 0.0f, &ok);
+        QVERIFY(ok);
+        QVERIFY2(middle.green() > 80 && middle.green() < 120, qPrintable(middle.name(QColor::HexArgb)));
+    }
+
     // 2D effects that move by themselves get the time (RenderContext
     // +0x6c/+0x70/+0x98/+0x9c/+0xa0): Linear Wipe at frame 0 and at frame 30
     // of a 120-frame layer differ, the same frame is the same picture, and

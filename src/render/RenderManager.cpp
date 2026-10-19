@@ -2342,11 +2342,17 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
                 values.append(effect.parameterAt(i, frameNo).toString());
             }
             const float progress = float(window.progressAt(timeSeconds));
+            plugin::NativeFrameTime transitionTime;
+            transitionTime.frameRate = fps;
+            transitionTime.transitionSeconds = window.end - window.start;
+            transitionTime.transitionCut = window.end > window.start
+                ? float((window.cut - window.start) / (window.end - window.start)) : 0.0f;
             QImage mixed;
             if (!withEffects
                 || !plugin::nativeVideoTransitionRenderingVerified(effect.pluginId)
                 || !plugin::applyNativeVideoTransition(mixed, from, to, progress,
-                                                       effect.pluginId, values)) {
+                                                       effect.pluginId, values,
+                                                       transitionTime)) {
                 // Effects disabled by the quality profile, or a module this
                 // build cannot run: keep the cut soft with a plain dissolve.
                 mixed = dissolveImages(from, to, progress);
@@ -3080,8 +3086,11 @@ QString renderStateKey(const composition::Composition& composition,
             });
         });
         // Behaviors and Geometry modules are drawn reduced in Half and
-        // Quarter since October 2026.
-        if (native) stream << QStringLiteral("native-time-1") << QStringLiteral("reduced-moves-1");
+        // Quarter since October 2026; video transitions are told their side
+        // of the edit point since 19 October 2026 (Fade to Color drew none).
+        if (native)
+            stream << QStringLiteral("native-time-1") << QStringLiteral("reduced-moves-1")
+                   << QStringLiteral("transition-side-1");
         for (const composition::Layer& layer : shot.layers()) {
             // A model as it was read and its materials as they were edited.
             if (layer.kind == composition::LayerKind::Model3D && media && media->hasModel(layer.modelAssetId)) {

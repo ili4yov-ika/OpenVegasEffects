@@ -608,6 +608,13 @@ struct NativeFrameTime
     // layer's milliseconds -250..+125 around the frame for Scale 0.5 - and
     // gets them from here, so a keyframed turn blurs.
     std::function<QString(int index, double frame)> valueAt;
+    // A video transition's window: its length and its edit point in it
+    // (0..1; -1 the middle). PluginVideoTransition::Render gives the module
+    // its position, start, edit point and end in milliseconds and the side
+    // it draws (RenderContext +0x08: 2 the outgoing clip before the edit
+    // point, 1 the incoming one after it).
+    double transitionSeconds = 1.0;
+    float transitionCut = -1.0f;
 };
 
 // Executes the 2D BIFF GPU path (Notify 8 once per render thread, Notify 10 per
@@ -622,7 +629,8 @@ bool applyNativeEffectToImage(QImage& image, const core::Identifier& id,
 // RenderContext recovered from PluginVideoTransition::Render.
 bool applyNativeVideoTransition(QImage& output, const QImage& from, const QImage& to,
                                 float progress, const core::Identifier& id,
-                                const QStringList& parameterValues = {});
+                                const QStringList& parameterValues = {},
+                                const NativeFrameTime& time = {});
 
 // Timing of the layer that owns an audio effect, reported through
 // GetLayerInfoV2/GetTimelineInfo. Modules such as AudioReverse derive their
