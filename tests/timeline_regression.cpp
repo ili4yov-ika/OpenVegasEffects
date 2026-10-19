@@ -2726,6 +2726,36 @@ private slots:
         }
     }
 
+    // Native modules see Y running up, as Flux's GL textures run bottom row
+    // first: 4PointRamp's points at +54 colour the top of the frame, those at
+    // -54 its bottom (uploaded top row first, the picture came out mirrored).
+    // Needs the OpenGL 4.1 context native modules run in.
+    void nativeEffectsSeeYUp() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/4PointRamp.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference 4PointRamp.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("test.native.ramp");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        QImage image(192, 108, QImage::Format_RGBA8888); image.fill(Qt::white);
+        QStringList values;
+        for (const auto& p : metadata.parameters) {
+            QString v = p.defaultValue;
+            if (p.name == "point1") v = "-96,54"; if (p.name == "color1") v = "#ff0000";
+            if (p.name == "point2") v = "96,54"; if (p.name == "color2") v = "#ff0000";
+            if (p.name == "point3") v = "96,-54"; if (p.name == "color3") v = "#0000ff";
+            if (p.name == "point4") v = "-96,-54"; if (p.name == "color4") v = "#0000ff";
+            if (p.name == "tansferMode") v = "None";
+            values << v;
+        }
+        if (!plugin::applyEffectToImage(image, id, values, plugin::NativeFrameTime()))
+            QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        const QColor top = image.pixelColor(96, 2), bottom = image.pixelColor(96, 105);
+        QVERIFY2(top.red() > 200 && top.blue() < 50, qPrintable(top.name()));
+        QVERIFY2(bottom.blue() > 200 && bottom.red() < 50, qPrintable(bottom.name()));
+    }
+
     // 2D effects that move by themselves get the time (RenderContext
     // +0x6c/+0x70/+0x98/+0x9c/+0xa0): Linear Wipe at frame 0 and at frame 30
     // of a 120-frame layer differ, the same frame is the same picture, and
@@ -3712,16 +3742,14 @@ private slots:
         QVERIFY(qAbs(std::hypot(world[0], world[1]) - 2.0f) < 1e-4f);
 
         // What the module gives for a world W and the footage's motion R
-        // (measured with the reference module: F*W*F*R, F the Y flip); the
-        // host gets R back.
+        // (measured with the reference module: W*R, its pixels running Y up
+        // as the port's layer space does); the host gets R back.
         QMatrix4x4 w(world.data());
         w = w.transposed();
         QMatrix4x4 motion;
         motion.translate(58.0f, -29.0f);
         motion.rotate(5.0f, 0.0f, 0.0f, 1.0f);
-        QMatrix4x4 flip;
-        flip.scale(1.0f, -1.0f, 1.0f);
-        const QMatrix4x4 given = flip * w * flip * motion;
+        const QMatrix4x4 given = w * motion;
         std::array<float, 16> answer {};
         std::copy(given.constData(), given.constData() + 16, answer.begin());
         const std::array<float, 16> alone = ui::NativeInstanceHost::withoutWorld(answer, world);

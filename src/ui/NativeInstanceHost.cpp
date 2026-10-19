@@ -161,9 +161,9 @@ std::array<float, 16> NativeInstanceHost::canvasMotion(const std::array<float, 1
                                                        const QSize& canvas)
 {
     const std::array<float, 16>& m = footageMotion;
-    // Back to the module's own Y-down result; on the canvas that motion is
-    // seen through the footage layer's placement; the renderer takes it in
-    // the layer's terms.
+    // Into the footage's pixels, Y down; on the canvas that motion is seen
+    // through the footage layer's placement; the renderer takes it in the
+    // layer's terms.
     const QTransform flip = QTransform::fromScale(1.0, -1.0);
     const QTransform motion = flip * QTransform(m[0], m[1], m[4], m[5], m[12], m[13]) * flip;
     const QTransform onCanvas = placement.inverted() * motion * placement;
@@ -586,8 +586,8 @@ bool NativeInstanceHost::footagePlacement(const Ref& ref, int frame, QSize* cont
 std::array<float, 16> NativeInstanceHost::withoutWorld(const std::array<float, 16>& motion,
                                                        const std::array<float, 16>& world)
 {
-    // nativeInstanceTransformation gives F*W*F*R (F the Y flip between the
-    // module's pixels and the port's layer space): R = F*W^-1*F*result.
+    // nativeInstanceTransformation gives W*R, the module's pixels and the
+    // port's layer space both running Y up: R = W^-1*result.
     QMatrix4x4 w;
     QMatrix4x4 result;
     std::copy(world.cbegin(), world.cend(), w.data());
@@ -595,9 +595,7 @@ std::array<float, 16> NativeInstanceHost::withoutWorld(const std::array<float, 1
     bool invertible = false;
     const QMatrix4x4 inverse = w.inverted(&invertible);
     if (!invertible) return motion;
-    QMatrix4x4 flip;
-    flip.scale(1.0f, -1.0f, 1.0f);
-    const QMatrix4x4 alone = flip * inverse * flip * result;
+    const QMatrix4x4 alone = inverse * result;
     std::array<float, 16> out {};
     std::copy(alone.constData(), alone.constData() + 16, out.begin());
     return out;

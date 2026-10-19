@@ -1260,10 +1260,10 @@ int uploadScratchTexture(const QImage& image, void* texture)
     gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    // Rows as they are stored (top first), as the source textures of the
-    // effect path are uploaded.
-    gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, rgba.width(), rgba.height(), 0, GL_RGBA,
-                     GL_UNSIGNED_BYTE, rgba.constBits());
+    // Rows bottom first, as the effect path uploads its source.
+    const QImage rows = rgba.flipped(Qt::Vertical);
+    gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, rows.width(), rows.height(), 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, rows.constBits());
     // In the scratch pool: ClearReservedTexture (+0x120) gives it back.
     g_renderInvocation->scratchPool->textures.append(
         {id, rgba.width(), rgba.height(), GL_RGBA8, GL_RGBA, 0, true});
@@ -3252,10 +3252,15 @@ public:
         gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        // Rows bottom first, as GL keeps them and as Flux's layer textures
+        // reach the modules: their Y runs up, so a point at +y is above the
+        // centre (4PointRamp's, Drop Shadow's angle) and EnvironmentMapViewer
+        // turns to the top at X +90 - uploaded top first, every picture came
+        // out mirrored. The result is read back the same way (below).
         const QImage rgbaInput = image.convertToFormat(QImage::Format_RGBA8888);
         QVector<float> inputPixels(width * height * 4);
         for (int y = 0; y < height; ++y) {
-            const uchar* source = rgbaInput.constScanLine(y);
+            const uchar* source = rgbaInput.constScanLine(height - 1 - y);
             float* destination = inputPixels.data() + y * width * 4;
             for (int x = 0; x < width * 4; ++x) {
                 destination[x] = float(source[x]) / 255.0f;
@@ -3278,7 +3283,7 @@ public:
                                           .convertToFormat(QImage::Format_RGBA8888);
             QVector<float> secondPixels(width * height * 4);
             for (int y = 0; y < height; ++y) {
-                const uchar* source = rgbaSecond.constScanLine(y);
+                const uchar* source = rgbaSecond.constScanLine(height - 1 - y);
                 float* destination = secondPixels.data() + y * width * 4;
                 for (int x = 0; x < width * 4; ++x) {
                     destination[x] = float(source[x]) / 255.0f;
@@ -3583,10 +3588,12 @@ public:
                                      << record.filePath;
             }
             if (ok) {
-                // The layer's frame out of a grown target: rows run as
-                // uploaded, so it starts `left` across and `[+0x90]` in.
+                // GL rows run bottom first; the picture top first. On a
+                // grown target the layer's frame starts `left` across and
+                // [+0x90] up from the bottom - [+0x88] down from the top.
+                rendered = rendered.flipped(Qt::Vertical);
                 image = canvasWidth == width && canvasHeight == height
-                    ? rendered : rendered.copy(QRect(growth[0], growth[3], width, height));
+                    ? rendered : rendered.copy(QRect(growth[0], growth[2], width, height));
             }
         }
         // Multi-pass plugins can leave work for scratch targets queued after
@@ -4534,11 +4541,9 @@ bool nativeInstanceTransformation(const core::Identifier& id, const QStringList&
     const bool ok = runInstanceCall(102, id, values, at, {}, ThreadRenderer::Context::Transformation,
                                     {}, nullptr, result.data()).handled;
     if (!ok) return false;
-    // The module works in its layer pixels, Y down; the port's layer space
-    // has Y up. Flip, apply, flip back: a move down comes out as -Y.
-    QMatrix4x4 flip;
-    flip.scale(1.0f, -1.0f, 1.0f);
-    const QMatrix4x4 converted = flip * QMatrix4x4(result.data()).transposed() * flip;
+    // In its layer pixels with Y up, as the port's layer space: its footage
+    // reaches it bottom row first (assetTextureService), as Flux's does.
+    const QMatrix4x4 converted = QMatrix4x4(result.data()).transposed();
     std::copy(converted.constData(), converted.constData() + 16, matrix->begin());
     return true;
 }

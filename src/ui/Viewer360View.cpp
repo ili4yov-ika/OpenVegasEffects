@@ -340,10 +340,8 @@ QImage Viewer360View::projectNatively(const QImage& frame, const QSize& size) co
     const core::Identifier module = plugin::nativeModuleNamed(QStringLiteral("EnvironmentMapViewer"));
     if (!module.isValid()) return {};
     // The values the reference's viewer gives its instance (FUN_140380680
-    // sets useCameraFOV false and the wraps; the rest are the Properties').
-    // The host hands the module its textures top row first where the
-    // reference's run bottom-up, so the module's up is the frame's down:
-    // the turns about X and Z take the other sign here.
+    // sets useCameraFOV false and the wraps; the rest are the Properties':
+    // Pitch, Yaw and Roll are its X, Y and Z Rotation).
     QStringList values;
     for (const plugin::EffectParameterSpec& parameter : plugin::nativeParameters(module)) {
         const QString& name = parameter.name;
@@ -356,9 +354,9 @@ QImage Viewer360View::projectNatively(const QImage& frame, const QSize& size) co
         else if (name == QLatin1String("envScaleRatio")) value = number(m_scaleRatio);
         else if (name == QLatin1String("envWrapX")) value = QString::number(int(m_wrapX));
         else if (name == QLatin1String("envWrapY")) value = QString::number(int(m_wrapY));
-        else if (name == QLatin1String("envTrasnformXRot")) value = number(-m_pitch);
+        else if (name == QLatin1String("envTrasnformXRot")) value = number(m_pitch);
         else if (name == QLatin1String("envTrasnformYRot")) value = number(m_yaw);
-        else if (name == QLatin1String("envTrasnformZRot")) value = number(-m_roll);
+        else if (name == QLatin1String("envTrasnformZRot")) value = number(m_roll);
         values << value;
     }
     // The module draws into its source's size and reads the panorama as the
