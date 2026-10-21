@@ -131,7 +131,18 @@ Point, Point3D, Preset, Scale, SliderFloat, SliderInt, String, TonalCurves), `FX
 
 ### AbstractLayer (база, 104 метода)
 - `CreateFromXml @ 0x1802db9e0`, `Deserialize @ 0x1802e1000`, `Serialize`
-- Трансформации: `WorldTransformationAtTime`, `ParentingWorldTransformationAtTime`
+- Трансформации: `WorldTransformationAtTime`, `ParentingWorldTransformationAtTime`.
+  `WorldTransformationAtTime` (0x1802de460) → `TransformationHelper::WorldTransformationAtTimePreAlignToMotion`
+  (0x180322d20): `ParentTransformationAtTime` × `TransformationAtTime` (виртуальный слот), затем
+  AlignToMotion/AlignToTarget. `ParentTransformationAtTime` (0x1802df0a0): при FXID родителя (+0x188)
+  — родитель (`ParentLayer`), время пересчитывается (`RelativeTimeToRelativeSubFrame` + сдвиг +0x198
+  своего − сдвиг родителя), матрица — его `ParentingWorldTransformationAtTime` (слот +0xa8); если сам
+  слой 2D (слот +0x38 = 0), а родитель 3D, и тип слоя 0/4/5/6 — только перенос к проекции позиции
+  родителя через активную камеру (`ProjectPositionOntoLayer`) минус половина кадра; затем умножается
+  на матрицы ограничений из списка +0x88. `ParentingWorldTransformationAtTime`: у AbstractLayer — мир
+  без выравниваний; у AssetLayer (0x1802ea6b0) ещё × T(−anchorPoint). `TransformationAtTime`:
+  AssetLayer, TextLayer, Model3DLayer — T(position)·Rotation·Scale; CameraLayer и LightLayer —
+  T(position)·AutoOrientAtTime·Rotation; PointLayer — T(position)·AutoOrientAtTime·Rotation·Scale.
 - Маск `UpdateMaskPickerValues`, трекеры `Trackers`, эффекты `Effects/GeometryEffects/BehaviorEffects`, `Supports*`
 - Конкретные через `CreateFromXml`: `AssetLayer @ 0x1802e8bb0`, `CameraLayer @ 0x1802f0190`,
   `Effect3DLayer @ 0x1802f5e10`, `GradeLayer @ 0x1802faeb0`, `LightLayer @ 0x1802fe550`,
@@ -159,6 +170,31 @@ Point, Point3D, Preset, Scale, SliderFloat, SliderInt, String, TonalCurves), `FX
   `TakeCopyOf @ 0x1803f8770`
 - Маск-пикеры: `LayerPickerPropertyNames @ 0x1803f8a10`, `ChangeLayerPickerValues @ 0x1803f8c10`
 - `~EffectInstance @ 0x1803f6a60`
+
+### EffectInstance в проекте (18 октября 2026)
+- Списки слоя: `EffectsHelper::SerializeEffects` (0x1803fb5e0) — `<Effects>` в обёртке слоя (после
+  содержимого, перед `Masks`/`LayerBase`), `SerializeGeometryEffects` — `<GeometryEffects>` там же,
+  `SerializeBehaviorEffects` — `<BehaviorEffects>` в `LayerBase` перед `PropertyManager`; в каждом —
+  `<Instance>` на эффект (`EffectInstance::Serialize` 0x1803f7e00 → `FUN_1803f4310`).
+- `<Instance Version="8">`: `ID`, `Name`, `PluginID` (FXID модуля, `PluginMetadata +0x04`),
+  `PluginName`, `PluginVersion` (атрибуты `Ma`/`Mi`/`Re`/`Bu`, `FUN_1803449f0`), `ParentID` (слой),
+  `ParentTimelineID` (шот), `Enabled`, `CreatedInComp`, `InitializedUIState`,
+  `ParentLayerLastSize` (`X`/`Y`, `%g`, `FUN_1800f7180`), `PropertyManager`, `UIState`
+  (`<Property name vis>` на ключ, кроме `pluginPreset*` и `HF_Persistant_Message_*`,
+  `SerializeUIState` 0x1803fc3c0), затем данные плагина (`SerializeInstanceData` модуля →
+  `<InstanceBytes>`) и Curves2D.
+- Чтение (`FUN_1803f4880`): `Version` < 3 — без `CreatedInComp`/`InitializedUIState`; свойства
+  файла сливаются со свойствами, которые зарегистрировал модуль, по имени
+  (`SynchronizeSourceWithDest`).
+- Типы свойств модуля (`PluginHostAPI::Create*`, Tannen.dll): CheckBox и Button — bool `<b>`,
+  ColorPicker — `<cl>`, ComboBox — int `<i>` без временной интерполяции, Point — `<p2>`, Point3D —
+  `<p3>`, Angle — float `<fl>`, SingleLineEditor — `<st>`, FloatSlider — `<fl>`, IntSlider — `<i>`.
+- Порт (`nativefx` в VegfxSerializer, каталог `project::NativeEffectCatalog` от PluginManager):
+  пишет нативные эффекты в эти списки (ID — UUID v5 от слоя и номера, если эффект не из файла), читает
+  их из файла эталона (если нет расширения порта), эффект неизвестного плагина хранит дословно и
+  пишет обратно в тот же список; при слиянии с исходным файлом списки следуют модели
+  (`VegfxMerge`: `Effects`/`GeometryEffects` у обёртки слоя, `BehaviorEffects` у `LayerBase`).
+  Переходы (`SerializeTransition`, `ref`/`transID`/`fromObjectID`) — пока только в расширении.
 
 ### AssetList
 `AddAsset @ 0x18035d630`, `Deserialize @ 0x18035dc10`.
@@ -275,12 +311,20 @@ Point, Point3D, Preset, Scale, SliderFloat, SliderInt, String, TonalCurves), `FX
   AlphaCutOff, AlphaMode (Guess 0, Opaque 1, Blend 2, Mask 3); числа — `%g`. Список — `<Materials>`
   в `<Model3DAsset>` (ID, Name, ModelFileName, ParentFolderID, BoundingBox*, Model3DGroup,
   GeometryBatches, Materials, IsHidden).
+- Чтение моделей через assimp.dll: `Assimp::Importer::ReadFile(путь, 0x3F9ECB)` (вызов 0x180066bfa) —
+  CalcTangentSpace | JoinIdenticalVertices | Triangulate | GenSmoothNormals | SplitLargeMeshes |
+  LimitBoneWeights | ValidateDataStructure | ImproveCacheLocality | RemoveRedundantMaterials |
+  SortByPType | FindDegenerates | FindInvalidData | GenUVCoords | TransformUVCoords | FindInstances |
+  OptimizeMeshes; без MakeLeftHanded, FlipUVs, FlipWindingOrder.
 - Импортёры материалов: Assimp (`FUN_1800670e0`) и FBX (`FUN_180080ef0`) — Phong; glTF
   (`FUN_1800af2a0`) — Metallic-Roughness: specular белый, base color и emissive переводятся из
   линейного в sRGB (12.92·c до 0.0031308, иначе 1.055·c^(1/2.4) − 0.055), metallic/roughness/
   alphaCutoff/occlusion strength/лак × 100, Opacity и обе Reflectivity 100, alphaMode MASK → 3,
   BLEND → 2, иначе 1; с `KHR_materials_pbrSpecularGlossiness` — Specular-Glossiness (diffuse и
   specular в sRGB, glossiness × 100).
+- `ReflectionType` материала (`Model3DMaterial::ReflectionMode`): в диалоге материалов
+  (`FUN_1404fad30`, тип строки 0x2530 «Reflection Mode», после Specular Reflectivity 0x2525)
+  варианты «Spherical» = 1 и «Planar» = 0; по умолчанию 1.
 - VegasEffects.exe: `Model3DSettingsDialog` (ui `FUN_1404da7c0`): вкладки Groups, Materials
   (`Model3DMaterialsTree`), Advanced (`Model3DAdvancedPane`), текущая — Materials; Name:, Path:,
   Upgrade, Import Maps, OK, Cancel. Строка материала — `Model3DMaterialWidget` (стрелка + имя в
@@ -312,6 +356,51 @@ Point, Point3D, Preset, Scale, SliderFloat, SliderInt, String, TonalCurves), `FX
   `blurDoF`. `selfShadowBias` создаётся у модели (`FUN_1802a5fc0`, при чтении старого проекта
   `FUN_1802a7500`): float, статический, по умолчанию 1, диапазон `DAT_18070af70` 1…1000
   (статический инициализатор `FUN_180001940`).
+- Отражения: у AssetLayer (`FUN_1802e52c0`) `castReflections`, `castReflectionsIfLayerDisabled`,
+  `receiveReflections` (bool false, статические) и `specularReflectivity` (float 100, диапазон
+  0…100, анимируется); у TextLayer (`FUN_180312cf0`) ещё `diffuseReflectivity` (float 0, 0…100,
+  анимируется), `environmentMapType` (int 1000, статический) и `environmentMapLayerID` (FXID,
+  статический); у модели (`FUN_1802a5fc0`) — `environmentMapType`, `environmentMapLayerID` и три
+  флажка, без reflectivity. При `environmentMapType` 1001 TextLayer пересылает уведомления об
+  изменении картинки соседних слоёв (`NotifyChildObserversOfSiblingLayerPixelDataChange`).
+- Ambient Occlusion (`FUN_180312a80`; у модели — в `FUN_1802a5fc0` со своими копиями диапазонов
+  `DAT_18070ae50`…`DAT_18070b1b0` с теми же значениями, инициализаторы `FUN_1800017f0`…`FUN_180001bb0`,
+  и теми же умолчаниями; у слоя с одним `castAmbientOcclusion` — `FUN_1802f33b0`):
+  все статические. `castAmbientOcclusion`, `receiveAmbientOcclusion` — bool, false; `aoSamples`
+  int 4, диапазон `DAT_18070bfc0` 4…10 (`FUN_180002bb0`); `aoSampleRadius` int 15, 0…20
+  (`DAT_18070c050`, `FUN_180002c40`); `aoIntensity` float 50, `aoDepthScale` float 10,
+  `aoDepthFallOff` float 10 — диапазон `DAT_18070bea0` 0…100 (`FUN_180002a60`); `aoBias` float
+  0.01, 0…10 (`DAT_18070c0e0`, `FUN_180002cd0`); `aoBlurRadius` int 5, 1…20 (`DAT_18070c170`,
+  `FUN_180002d70`); у модели `includeSemiTransparentTriangles` bool true.
+- Alignment (`AutoOrient`, виртуальный `AutoOrientation()` — слот +0x78): None 0, Along Motion Path 1,
+  Towards Active Camera 2, Towards Target Position 4, Towards Layer 5; `AutoOrientPathAxis` X 1, Y 2,
+  Z 3 (в старых версиях XML: 3 у 3D-слоя, 1 у 2D). XML слоя (AssetLayer `FUN_1802e69c0`/`FUN_1802e6090`,
+  CameraLayer `FUN_1802ef700`/`FUN_1802ef240`, LightLayer `FUN_1802fd7e0`/`FUN_1802fd5c0`, PointLayer
+  `FUN_180300330`/`FUN_180300190` — без оси): `<AutoOrient>`, `<AutoOrientPathAxis>`, `<AutoOrientLayer>`
+  (FXID). `TransformationAtTime` камеры, света и точки = Translate(position) · `AutoOrientAtTime` ·
+  `Rotation` (у AssetLayer — без AutoOrientAtTime, · Scale). `AutoOrientAtTime` (0x180323060): только
+  режим 4 и только если position ≠ target: d = target − position (у PointLayer × −1, `DAT_1805c0454`),
+  `FUN_180325550`(d, up (0, 1, 0)) — look-at: r = norm(d × up), v = norm(r × d), строки r, v, −d (при d ∥
+  up берётся up (−1, 0, 0)), затем при ненулевом определителе (`FUN_180111f00`) обращается
+  (`FUN_1800c9480`). `target` — пространственное свойство (0, 0, 0) у камеры (`FUN_1802eec70`), света
+  (`FUN_1802fce00`) и точки. Along Motion Path — `AlignToMotionAtTime` слоя (режим 1) через
+  `TransformationHelper::AlignToMotion` (0x180323280: движение между мировыми позициями, ось X/Y/Z слоя,
+  `FUN_180325a50`); Towards Layer — `TransformationHelper::AlignToTarget` (0x180323650, режим 5).
+  `AlignToMotion`(точка p, мировая W сейчас, мировая W' через 10 мс, ось): P0 = W·p, P1 = W'·p (p —
+  у AssetLayer (ширина/2, высота/2) с `DAT_1805c00c4` = 0.5, у камеры и света начало координат); без
+  движения — единичная; ось X/Y/−Z слоя (`FUN_180068990` — поворот нормированным базисом W) и
+  запасная ось (−Z для X/Y, X для Z) → `FUN_180325a50`(P0, ось, движение, запасная): поворот на
+  acos(a·b) вокруг a × b относительно P0, при встречных векторах — пол-оборота вокруг запасной
+  (`FUN_1803262a0`); результат умножается на W. `AlignToTarget`: точки P0 своего слоя и выбранного
+  (через их мировые матрицы); лицевая ось — (0, 0, 1), у камеры и света (тип 2/3) — (0, 0, −1); тот же
+  кратчайший поворот к направлению (при встречных — вокруг оси X слоя), затем второй поворот, сводящий
+  верх слоя с верхом выбранного слоя: свой верх u = R1·W·(0, 1, 0) (если u ∥ d — R1·W·(0, 0, −1)) и
+  верх выбранного t = W_t·(0, 1, 0) (если ∥ d — W_t·(0, 0, −1)) проецируются поперёк d (d × (d × v),
+  нормировано), поворот на acos между ними вокруг их векторного произведения (при нуле — вокруг d),
+  относительно P0; итог R2·R1·W. W_t — `WorldTransformationAtTimePreAlignToMotion` выбранного слоя во
+  времени `RelativeSubFrameToRelativeTime(выбранный, кадр(свой) + сдвиг(свой +0x198) − сдвиг
+  (выбранного))`; P0 выбранного — его мировое начало (через виртуальный слот +0x50 × −1). Если
+  выбранный слой — предок (`TargetLayerIsAncestor`) или не найден, слой не поворачивается.
 - `LayerType` (`AbstractLayer::Type`, слот +0x10): AssetLayer 0, Effect3DLayer 1, CameraLayer 2,
   LightLayer 3, GradeLayer 4, PointLayer 5, TextLayer 6, Model3DLayer 7.
 - VegasEffects.exe, контроллеры камеры видов (`biff::ui::viewer::CameraController` и наследники
@@ -385,3 +474,65 @@ Point, Point3D, Preset, Scale, SliderFloat, SliderInt, String, TonalCurves), `FX
   `parentLayerID`, 2D/3D-поля и кривые не теряются после открытия проекта.
 - `MediaManager::Reload/Relink` отражены в панели Media: relink меняет asset id всех клипов,
   сохраняя монтаж. `EditorSequence` хранит video/audio track headers и параметры master track.
+
+## Время ключей слоя (17 октября 2026)
+
+Ключи свойств слоя хранятся во времени **относительно начала слоя**. `AbstractLayer::StartFrame`
+(0x1802dd1d0) — `*(+0x198)` данных слоя, `StartTime` (0x1802dd010) — то же в миллисекундах
+(`BiffTime::Milliseconds`). `GlobalFrameToRelativeTime` (0x1802dfa00) =
+`RelativeFrameToRelativeTime(кадр − StartFrame)`, `RelativeTimeToGlobalFrame` (0x1802dfc60) =
+`RelativeTimeToRelativeFrame(время) + StartFrame`, `PlayheadRelativeTime` (0x1802df780) — плейхед
+композиции минус `StartFrame`, `RelativeTimeToLayerRelativeTime` (0x1802dfcb0) — подкадр + своё начало −
+начало другого слоя. Flux вызывает `GlobalFrameToRelativeTime` перед вычислением масок и камеры
+(`CameraLayer::MatchActiveCameraTransform`), Tannen передаёт модулям время слоя (`+0x70`), по нему
+модули читают параметры эффектов. Порт хранит ключи в кадрах шота и переводит их при чтении и
+записи проекта (`composition::shiftLayerKeys`), см. CHECKLIST.
+
+`KeyFrameList::AreTimesRelative` (0x1804036c0) — байт +0x19 данных списка, `OverrideRelativeTimes`
+(0x1804036d0) его сбрасывает. VegasEffects двигает при смене начала слоя только списки с этим флагом:
+обрезка начала (`FUN_1405ca860`) — на (начало при нажатии − новое начало) в мс, ключи остаются на
+кадрах шота, `AssetLayer::SetAssetInstanceStart` (+0x28 данных, виртуальный +0x48 подобъекта +0x10)
+сдвигает начало медиа на столько же; разрез (Slice Layer, `FUN_14059e770`) клонирует слой и сдвигает
+ключи клона на (начало − точка разреза).
+
+Мировое преобразование слоя: `AbstractLayer::WorldTransformationAtTime` (0x1802de460) →
+`TransformationHelper::WorldTransformationAtTimePreAlignToMotion` (0x180322d20) =
+`ParentTransformationAtTime` × `TransformationAtTime` (вирт. +0x48; у AssetLayer — позиция × `Rotation` ×
+`Scale`) × `OriginAtTime` (+0x50), затем `AlignToTarget`, затем `AlignToMotionAtTime` (+0x58).
+`ParentTransformationAtTime` (0x1802df0a0): мир родителя (его вирт. +0xa8, время пересчитано по
+началам слоёв; 2D-слой под 3D-родителем — через `ProjectPositionOntoLayer` и активную камеру), затем
+× матрицы Behaviors слоя по порядку (+0x88..+0x90 данных; слот эффекта +0x170; флаг 0x20 у эффекта —
+не умножать). `FUN_180068e80` — `A = A × B` для матриц по столбцам. Детей ставят под
+`ParentingWorldTransformationAtTime` родителя (AssetLayer 0x1802ea6b0, AbstractLayer 0x1802dcc30): тот же
+`PreAlignToMotion` с родителем и без FXID-ограничения — значит, с Behaviors родителя; у AssetLayer затем
+× сдвиг на −anchorPoint.
+
+Симуляция: в `PreAlignToMotion` (флаг param_9, без FXID-ограничения, без родительского флага стопа)
+вызывается `CompositionAsset::SimulateLayers(проект, подкадр)` (0x1803738c0), затем `FUN_18036c010`(шот,
+шот+0x1e0, ID слоя +0x18, время, мир): ищет слой (`FindLayerByID`) с симулируемыми Behaviors (+0x88),
+берёт запись тела (0xb4 байта; +0x00 скорость, +0x34 матрица 4×4) на кадр `ceil(время)` и записывает её в
+мир — целиком; при дробной доле кадра — с переносом минус скорость × доля × шаг. Записи `SimulateLayers`
+строит от `PreAlignToMotion(слой, …, false, false)` — мира без симуляции и без AlignToTarget.
+
+`SimulateLayers` подробно: тела — слои, у которых есть видимый эффект с флагом 0x20 (`+0x58`); начало —
+наименьший `StartFrame` тел; `FUN_18036c710` строит записи слоёв для модулей (ID, флаг типа +0x08,
+размер +0x0c/+0x10, начало/конец в секундах +0x18/+0x20) и шаг `dt` (шот +600). Кадр за кадром:
+запись тела (0xb4) — `P` (+0x28), `A = (P − P′)/dt` (+0x0c), `D = A − A′` (+0x18), `V = V′ + D` (+0x00),
+матрица `T(тело′ − P) × W` (+0x34; `W` — +0x74; на первом кадре всё нулевое, матрица = W);
+`FUN_18036cc80` заполняет записи модулей (тело — его V, D, матрица; прочие — `W(f+1) − W(f)`,
+вторая разность и `W(f)`); каждое тело в диапазоне зовёт свои симулируемые эффекты (слот +400) с
+лямбдой сил (`SimulationForceMode`: 0 — ускорение, 1 — сила, с подсчётом) и лямбдой затухания;
+`D += a·dt + (f/n)·dt`, `k(+0x24) *= затухание^dt` — и тем же телам-детям из списка по `ParentLayer`;
+затем `V = k·V′ + D`, `тело = тело′ + dt·V`, матрица `T(тело − P) × W`.
+Лямбды: `lambda_133db8…` (vtable 0x1805bdf60, вызов `FUN_180381490`) — слой в список каждого предка
+(рекурсия по `ParentLayer`); `lambda_51740a87…` (0x1805bdef0, `FUN_180381180`) — сила/ускорение
+только для текущего тела (индекс объекта ищется в списке тел), режим 1 увеличивает счётчик;
+`lambda_34ea78db…` (0x1805bdeb8, `FUN_180381080`) — затухание текущего тела. Записи слоёв
+(`FUN_18036c710`): +0x08 = `Dimensions() == 0`, +0x0c/+0x10 — ширина/высота ассета (виртуальные
++0x78/+0x80 ассета) у футажа, поля данных +0x0c/+0x10 у типа 4, рамка (+0x28 − +0x24, +0x30 − +0x2c)
+у текста (тип 6). Слоты vtable AssetLayer
+(0x1805b97b0): +0x48 `TransformationAtTime`, +0x50 `OriginAtTime`, +0x58 `AlignToMotionAtTime`.
+
+Диапазон слоя: `StartFrame` +0x198, `EndFrame` +0x19c данных слоя. `CompositionAsset::ActiveCameraLayer(кадр)`
+(0x180373080) собирает видимые (+0x1a4) слои типа 2 (камера) и берёт первый с
+`StartFrame ≤ кадр < EndFrame`; нет такого — камеры нет.

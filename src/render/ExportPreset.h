@@ -112,6 +112,13 @@ QStringList validateExportPreset(const ExportPreset& preset, const QSize& source
 // frame rate, and the audio codec.
 QStringList exportVideoArguments(const ExportPreset& preset, const QString& h264Encoder);
 QString exportVideoFilter(const ExportPreset& preset, const QSize& source, double pixelAspect);
+// The rendered frames are RGB pictures (sRGB, as the Viewer shows them). A
+// YUV output - H.264 in any encoder, ProRes - gets them through the BT.709
+// matrix in limited range and says so in the stream; left to FFmpeg's
+// default the conversion was BT.601 and untagged, which players take as
+// BT.709 for HD video, showing reds and yellows brighter and greens darker
+// than the shot. Arguments without a YUV -pix_fmt come back unchanged.
+QStringList withVideoColorTags(QStringList arguments);
 QStringList exportAudioArguments(const ExportPreset& preset);
 
 } // namespace render

@@ -96,6 +96,8 @@ public:
     bool removeById(int id);
     // Reference: Move(FXID, newTime) - identity is preserved.
     bool moveById(int id, int newFrame);
+    // Every key `frames` later (earlier when negative), identities kept.
+    void shift(int frames);
 
     bool contains(int frame) const { return m_frames.contains(frame); }
     const KeyFrame* at(int frame) const;
@@ -119,6 +121,9 @@ public:
 
     // Value of the animated property at `frame`.
     QVariant valueAt(int frame) const;
+    // The same between frames (a motion blur's sub-samples): keys sit on
+    // whole frames, the segment's curve is followed in between.
+    QVariant valueAtTime(double frame) const;
 
     void clear();
 

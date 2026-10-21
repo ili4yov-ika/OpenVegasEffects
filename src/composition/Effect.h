@@ -46,6 +46,14 @@ struct Effect
     // handed back with Notify(6) when the instance is made again.
     QByteArray instanceData;
 
+    // The reference's EffectInstance ID, kept from the file it was read from.
+    core::Identifier instanceId;
+    // An effect of a plugin this build does not know, read from the
+    // reference's <Instance>: written back as it was, in the container it
+    // came from ("Effects", "GeometryEffects" or "BehaviorEffects").
+    QString nativeXml;
+    QString nativeContainer;
+
     bool isAnimated(int parameterIndex) const
     {
         const auto it = animation.constFind(parameterIndex);
@@ -62,6 +70,16 @@ struct Effect
         return (parameterIndex >= 0 && parameterIndex < parameterValues.size())
                    ? QVariant(parameterValues.at(parameterIndex))
                    : QVariant();
+    }
+
+    // The same between frames (KeyFrameList::valueAtTime).
+    QVariant parameterAtTime(int parameterIndex, double frame) const
+    {
+        const auto it = animation.constFind(parameterIndex);
+        if (it != animation.constEnd() && !it->isEmpty()) {
+            return it->valueAtTime(frame);
+        }
+        return parameterAt(parameterIndex, 0);
     }
 };
 

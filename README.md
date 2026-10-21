@@ -1,119 +1,121 @@
 # OpenVegas Effects
 
-Открытая (clean-room) реимплементация композитинга / эффект-приложения в стиле
-**VEGAS Effects** на **C++17 / Qt 6** с лицензией **GNU GPL v3**.
-
-Написано с нуля по поведенческой архитектуре, выявленной при реверс-инжиниринге
-референсных бинарников (см. `SAMPLES/VEGAS_Effects/MARKDOWN/RE_VegasEffects.md`).
-Это **оригинальный код**: проприетарных исходников не копируется. Раскладка
-модулей повторяет наблюдаемую высокоуровневую структуру референс-приложения,
-чтобы проект мог постепенно вырасти в совместимый рабочий процесс, но каждая
-строка написана заново.
-
-Сейчас: **ранний каркас** — окно с доками, свободный license manager, скан и
-реестр плагинов, объектная модель композиции, SQLite-кэш, placeholder‑рендер.
-
----
-
-## Скриншот
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README.zh.md">简体中文</a> |
+  <a href="README.ja.md">日本語</a> |
+  <a href="README.ru.md">Русский</a> |
+</p>
 
 ![Main Interface](docs/main_ui.png)
 
----
+An open (clean-room) reimplementation of a compositing / effects application in the
+style of **VEGAS Effects**, written in **C++17 / Qt 6** and licensed under **GNU GPL v3**.
 
-## Что уже работает
+Written from scratch based on the behavioral architecture uncovered while reverse
+engineering the reference binaries (see `SAMPLES/VEGAS_Effects/MARKDOWN/RE_VegasEffects.md`).
+This is **original code**: no proprietary sources are copied. The module layout
+mirrors the observable high-level structure of the reference application so the
+project can gradually grow into a compatible workflow, but every line is written
+anew.
 
-| Область | Статус |
-|---------|--------|
-| Вход (WinMain → UTF‑8 argv → QApplication) | Done |
-| Папки пользовательских данных (11 шт., создаются при первом запуске) | Done |
-| Settings через QSettings (ini) | Done |
-| Логирование в файл | Done |
-| Свободный manager лицензий (без активации / серверов) | Done |
-| PluginManager + реестр, нативное обнаружение `.vfx` в `Plugins/` | Done (скан/реестр) |
-| Объектная модель композиции / слои / клипы / эффекты | Каркас |
-| MediaManager / импорт медиа | Каркас |
-| SQLite-кэш (`CacheDB`) | Done |
-| Фоновый render-воркер (placeholder) | Каркас |
-| UI: MainWindow + доки (Effects panel, Viewer, Timeline) | Done (каркас) |
-| Learn sidebar (нативные виджеты, без Qt WebEngine) | Done |
-
-Подробности и план — [`MARKDOWN/ARCHITECTURE.md`](MARKDOWN/ARCHITECTURE.md).
+Current state: **an early skeleton** — a docked window, a free license manager, plugin
+scan and registry, a composition object model, an SQLite cache, and a placeholder renderer.
 
 ---
 
-## Стек
+## What already works
 
-| Слой | Выбор |
+| Area | Status |
 |------|--------|
-| Язык / UI | C++17, Qt 6 (Widgets, UI строится в коде) |
-| Сборка | CMake 3.21+ (предпочтительно) и `OpenVegasEffects.pro` |
-| Компиляторы | MSVC 2022, LLVM‑MinGW (Clang), MinGW, GCC |
-| Медиа | **libVLC** — видеокадры, PCM мастер-микс, аудиовыход и запись voiceover |
-| Кэш | QtSql (SQLite `cache.db`) |
-| Плагины | Основа для будущего OFX‑хоста |
-| Лицензия | GNU GPL v3 ([LICENSE](LICENSE)) |
+| Entry point (WinMain-style → UTF-8 argv → QApplication) | Done |
+| User data folders (11, created on first launch) | Done |
+| Settings via QSettings (ini) | Done |
+| File logging | Done |
+| Free license manager (no activation / servers) | Done |
+| PluginManager + registry, native discovery of `.vfx` in `Plugins/` | Done (scan/registry) |
+| Composition object model / layers / clips / effects | Skeleton |
+| MediaManager / media import | Skeleton |
+| SQLite cache (`CacheDB`) | Done |
+| Background render worker (placeholder) | Skeleton |
+| UI: MainWindow + docks (Effects panel, Viewer, Timeline) | Done (skeleton) |
+| Learn sidebar (native widgets, no Qt WebEngine) | Done |
+
+Details and the roadmap are in [`MARKDOWN/ARCHITECTURE.md`](MARKDOWN/ARCHITECTURE.md).
 
 ---
 
-## Сборка и запуск
+## Stack
 
-Требуется **Qt 6.8+** (Core/Gui/Widgets/OpenGLWidgets/Sql). Qt WebEngine не
-нужен. Перед rebuild на
-Windows закройте `OpenVegas Effects.exe`, если линковка падает из‑за занятого
-файла.
+| Layer | Choice |
+|-------|--------|
+| Language / UI | C++17, Qt 6 (Widgets, UI built in code) |
+| Build | CMake 3.21+ (preferred) and `OpenVegasEffects.pro` |
+| Compilers | MSVC 2022, LLVM-MinGW (Clang), MinGW, GCC |
+| Media | **libVLC** — video frames, PCM master mix, audio output and voiceover recording |
+| Cache | QtSql (SQLite `cache.db`) |
+| Plugins | Foundation for a future OFX host |
+| License | GNU GPL v3 ([LICENSE](LICENSE)) |
 
-### libVLC (медиа)
+---
 
-Qt Multimedia больше не требуется. libVLC декодирует видео и звук, выводит PCM
-мастер-микс и захватывает микрофон. Микшер учитывает интервалы клипов, mute,
-source offset, скорость, уровень и вложенные композиции; Audio Meters измеряет
-тот же итоговый PCM. Изменение скорости использует ресемплирование с изменением
-высоты тона. Realtime native `.hfpl` DSP/AudioTransition ещё не подключены;
-экспорт звука сохраняет отдельный путь FFmpeg/native DSP.
+## Building and running
 
-Заголовки и исходники VLC находятся в `thirdparty/vlc`. Это дерево исходников,
-а не готовый runtime. Адаптер `Vlc4Adapter.cpp` использует его заголовки и
-проверяет ABI VLC 4; VLC 3 использует отдельные совместимые сигнатуры.
-В этой сессии запуск проверен с Windows VLC 3.0.24; адаптер VLC 4 собран,
-но запуск с VLC 4 и проверки на macOS/Linux ещё предстоят.
+**Qt 6.8+** is required (Core/Gui/Widgets/OpenGLWidgets/Sql). Qt WebEngine is not
+needed. Before rebuilding on Windows, close `OpenVegas Effects.exe` if linking fails
+because the file is in use.
 
-Для упаковки подготовьте runtime соответствующей архитектуры в
-`thirdparty/vlc/runtime/Windows`, `Darwin` или `Linux`: библиотеки вместе
-с зависимостями и плагинами. Можно указать иной prefix через CMake
-`-DOPENVEGAS_VLC_RUNTIME_DIR=<prefix>`; qmake читает одноимённую переменную
-окружения. На Windows при отсутствии подготовленного runtime используется
-установленный VLC из Program Files. Обе сборки копируют runtime в `vlc`
-рядом с EXE; CMake install сохраняет эту структуру, а NSIS проверяет наличие
-DLL и плагинов. Поставляются также `COPYING` и `COPYING.LIB`.
+### libVLC (media)
 
-Загрузчик ищет библиотеки в `OPENVEGAS_VLC_DIR` (переопределение при запуске),
-рядом с приложением, в настроенном prefix и системных каталогах.
-Поддерживаются Windows DLL, macOS dylib и Linux SONAME; import-библиотека
-не нужна. Без доступного libVLC приложение запускается, но медиа и запись
-недоступны. Для записи используются DirectShow, qtsound или PulseAudio;
-Linux перечисляет устройства через `pactl` (также PipeWire Pulse compatibility).
-После перехода с Qt нужно заново выбрать микрофон в Options: старые base64 ID
-устройств не совпадают с новыми ID. Аппаратная запись и вывод звука требуют
-отдельной проверки на целевых ОС; тесты проверяют PCM и состояние VLC player.
+Qt Multimedia is no longer required. libVLC decodes video and audio, outputs the PCM
+master mix and captures the microphone. The mixer accounts for clip intervals, mute,
+source offset, speed, level and nested compositions; Audio Meters measures the same
+final PCM. Speed changes use resampling with pitch shift. Realtime native `.hfpl`
+DSP/AudioTransition are not yet connected; audio export keeps a separate
+FFmpeg/native DSP path.
+
+The VLC headers and sources live in `thirdparty/vlc`. This is a source tree, not a
+ready-to-use runtime. The `Vlc4Adapter.cpp` adapter uses its headers and checks the
+VLC 4 ABI; VLC 3 uses separate compatible signatures. In this session, launch was
+verified with Windows VLC 3.0.24; the VLC 4 adapter builds, but running with VLC 4
+and testing on macOS/Linux are still pending.
+
+For packaging, prepare a runtime for the target architecture in
+`thirdparty/vlc/runtime/Windows`, `Darwin` or `Linux`: the libraries together with
+their dependencies and plugins. You can also point to a different prefix via the
+CMake option `-DOPENVEGAS_VLC_RUNTIME_DIR=<prefix>`; qmake reads the environment
+variable of the same name. On Windows, when no prepared runtime is present, the
+installed VLC from Program Files is used. Both builds copy the runtime into `vlc`
+next to the EXE; the CMake install preserves this structure, and NSIS verifies that
+the DLLs and plugins are present. `COPYING` and `COPYING.LIB` are shipped as well.
+
+The loader looks for the libraries in `OPENVEGAS_VLC_DIR` (a runtime override), next
+to the application, in the configured prefix and in the system directories. Windows
+DLLs, macOS dylibs and Linux SONAMEs are supported; no import library is needed.
+Without an available libVLC the application still starts, but media and recording are
+unavailable. Recording uses DirectShow, qtsound or PulseAudio; on Linux devices are
+enumerated via `pactl` (also PipeWire Pulse compatibility). After switching away from
+Qt, the microphone must be selected again in Options: the old base64 device IDs do
+not match the new IDs. Hardware recording and audio output require separate
+verification on the target OSes; the tests check PCM and the VLC player state.
 
 ### Qt Creator (qmake)
 
-Откройте [`OpenVegasEffects.pro`](OpenVegasEffects.pro), kit **Qt 6.8+ Widgets**
-(MSVC / MinGW / Clang) → Build. Держите `SOURCES`/`HEADERS` в синхроне с
+Open [`OpenVegasEffects.pro`](OpenVegasEffects.pro), kit **Qt 6.8+ Widgets**
+(MSVC / MinGW / Clang) → Build. Keep `SOURCES`/`HEADERS` in sync with
 `CMakeLists.txt`.
 
-На Windows qmake создаёт актуальные `Makefile.Debug` и `Makefile.Release` для
-шагов сборки Qt Creator. Заголовки форм, moc/rcc, объектные файлы и каталоги
-переводов разделены по конфигурациям; исполняемый файл находится в `debug/`
-или `release/` внутри shadow build. После изменения `.pro` выполните
-**Build → Run qmake**. Старые Makefile от другой конфигурации могут давать
-`C1083` для `QAudioBuffer` и `ui_*.h`, даже если новый основной Makefile уже есть.
+On Windows, qmake generates up-to-date `Makefile.Debug` and `Makefile.Release` for
+Qt Creator's build steps. Form headers, moc/rcc output, object files and translation
+directories are separated by configuration; the executable lives in `debug/` or
+`release/` inside the shadow build. After editing `.pro`, run **Build → Run qmake**.
+Stale Makefiles from a different configuration may cause `C1083` for `QAudioBuffer`
+and `ui_*.h`, even if the new top-level Makefile is already in place.
 
 ### CMake
 
 ```bash
-# LLVM-MinGW (рекомендуется, MSVC не нужен)
+# LLVM-MinGW (recommended, no MSVC needed)
 cmake -S . -B build -G "MinGW Makefiles" ^
   -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/llvm-mingw_64 ^
   -DCMAKE_C_COMPILER=C:/Qt/Tools/llvm-mingw1706_64/bin/clang.exe ^
@@ -122,17 +124,17 @@ cmake -S . -B build -G "MinGW Makefiles" ^
 cmake --build build -j 8
 ```
 
-### MSVC (пресеты)
+### MSVC (presets)
 
-Пресеты в [`CMakePresets.json`](CMakePresets.json) — единый источник правды для обеих IDE:
+The presets in [`CMakePresets.json`](CMakePresets.json) are the single source of truth for both IDEs:
 
-| Пресет | Тулчейн | Каталог |
-|--------|---------|---------|
+| Preset | Toolchain | Directory |
+|--------|-----------|-----------|
 | `windows-msvc-debug` | MSVC v143 (VS 2022) + Qt `msvc2022_64` | `build/Windows_MSVC-x64/` |
-| `windows-msvc-release` | то же, RelWithDebInfo | `build/Windows_MSVC-x64-Release/` |
+| `windows-msvc-release` | same, RelWithDebInfo | `build/Windows_MSVC-x64-Release/` |
 | `windows-mingw-debug` / `-release` | MinGW GCC + Qt `mingw_64` | `build/Windows_MinGW-x64/` |
 
-Из окна **x64 Native Tools Command Prompt for VS 2022**:
+From an **x64 Native Tools Command Prompt for VS 2022** window:
 
 ```bat
 cmake --preset windows-msvc-debug
@@ -141,78 +143,79 @@ cmake --build --preset windows-msvc-debug --parallel
 
 ### GitHub Actions CI
 
-При push в `main`, pull request и ручном запуске workflow [CI](.github/workflows/ci.yml)
-собирает приложение MSVC 2022 с Qt 6.9.3, запускает шесть регрессионных
-наборов через CTest и проверяет каталоги переводов. Аудиотесты используют libVLC 3.0.24 с официального
-сервера VideoLAN (архив закреплён SHA-256) и выход `dummy`, поэтому они
-проверяют декодирование и мастер-микс без звукового устройства runner.
+On pushes to `main`, pull requests and manual runs, the [CI](.github/workflows/ci.yml)
+workflow builds the application with MSVC 2022 and Qt 6.9.3, runs six regression
+suites via CTest and validates the translation catalogs. The audio tests use libVLC
+3.0.24 from the official VideoLAN server (archive pinned by SHA-256) and the `dummy`
+output, so they check decoding and the master mix without an audio device on the runner.
 
-### Панель Learn (без Qt WebEngine)
+### Learn panel (no Qt WebEngine)
 
-Референс показывает через Qt WebEngine онлайн-уроки VEGAS в Home/Learn и веб-версию Library
-(страница встроенного сервера на `localhost`; в его пакете лежат `QtWebEngineProcess.exe` и
-ресурсы Chromium). Уроков в порте нет, а Library — нативная панель, поэтому WebEngine
-убран: панель **Learn** — обычные виджеты с теми же действиями (уроки в системном браузере,
-новый композитный кадр, импорт медиа). Включается в меню **Window → Toggle Learn Sidebar**,
-состояние запоминается (`learnSidebarIsOpen`). Справка тоже открывается в системном браузере,
-лицензия веб-компонентов не использует. Панель теперь есть и в MinGW-сборках (раньше она
-требовала MSVC-кит), а Debug-каталог развёртывания стал меньше примерно на 900 МБ.
+The reference displays VEGAS online tutorials in Home/Learn and a web-based Library
+via Qt WebEngine (a page served by a built-in localhost server; its package includes
+`QtWebEngineProcess.exe` and Chromium resources). The port has no tutorials, and the
+Library is a native panel, so WebEngine was removed: the **Learn** panel uses ordinary
+widgets with the same actions (tutorials in the system browser, a new composite frame,
+media import). It is toggled via **Window → Toggle Learn Sidebar**, and the state is
+remembered (`learnSidebarIsOpen`). Help also opens in the system browser, and no
+web-component license is used. The panel is now available in MinGW builds too
+(previously it required an MSVC kit), and the Debug deployment directory is about
+900 MB smaller.
 
-### OpenEXR (экспорт кадра в `.exr`)
+### OpenEXR (frame export to `.exr`)
 
-У Qt нет плагина записи EXR, поэтому пресет **OpenEXR (.exr)** в панели Export
-работает только в сборке с OpenEXR. По умолчанию выключено:
+Qt has no EXR writer plugin, so the **OpenEXR (.exr)** preset in the Export panel only
+works in a build with OpenEXR. It is disabled by default:
 
 ```bat
 cmake --preset windows-msvc-debug -DOPENVEGAS_WITH_OPENEXR=ON
 ```
 
-Порядок поиска: сначала установленный `find_package(OpenEXR 3 CONFIG)`, при
-неудаче — исходники из [`thirdparty/openexr`](thirdparty/openexr).
+Lookup order: first an installed `find_package(OpenEXR 3 CONFIG)`, otherwise the
+sources from [`thirdparty/openexr`](thirdparty/openexr).
 
-**Оговорка про зависимость.** Рядом с `thirdparty/openexr` нет Imath, и
-CMake OpenEXR тогда тянет его из GitHub (ветка `main`) прямо на этапе
-configure — то есть сборка перестаёт быть офлайновой и воспроизводимой.
-Сам склонированный OpenEXR — версии `4.0.0-dev` из `main`, тогда как референс
-поставляет стабильную 3.1. Для повторяемости стоит зафиксировать теги релизов и
-вендорить Imath рядом.
+**A caveat about the dependency.** There is no Imath next to `thirdparty/openexr`, so
+CMake's OpenEXR then pulls it from GitHub (the `main` branch) right at configure
+time — meaning the build is no longer offline or reproducible. The cloned OpenEXR
+itself is version `4.0.0-dev` from `main`, whereas the reference ships stable 3.1.
+For reproducibility, release tags should be pinned and Imath vendored alongside.
 
-Без этой опции экспорт в `.exr` не падает молча, а сообщает, что сборка без
-OpenEXR.
+Without this option, `.exr` export does not fail silently; it reports that the build
+has no OpenEXR.
 
-### VS Code и Zed (отладка на Qt MSVC)
+### VS Code and Zed (Qt MSVC debugging)
 
-Обе IDE настроены на Qt `msvc2022_64` и берут окружение MSVC сами — отдельный developer prompt
-не нужен, задачи сборки вызывают `vcvars64.bat` (через `vswhere -version "[17.0,18.0)"`, чтобы
-не поймать параллельно установленный VS 18, чей тулсет не соответствует Qt-киту).
+Both IDEs are configured for Qt `msvc2022_64` and pick up the MSVC environment
+themselves — no separate developer prompt is needed; the build tasks call
+`vcvars64.bat` (via `vswhere -version "[17.0,18.0)"`, so as not to catch a
+concurrently installed VS 18 whose toolset does not match the Qt kit).
 
-Для кнопки сборки CMake Tools включено `cmake.useVsDeveloperEnvironment=always`,
-а `cmake.buildTask=false` оставляет запуск расширению вместе с окружением пресета.
-Задачи `Ctrl+Shift+B` и сборка перед F5 вызывают `tools/msvc_build.cmd`, который
-сам загружает окружение MSVC. Для Ninja CMake также создаёт
-`msvc_environment.cmd`: команды компиляции и линковки загружают окружение
-установки, которой принадлежит выбранный `cl.exe`. Это предотвращает
-`STL1001` при смешивании компилятора VS 2022 с заголовками VS 2026, даже если
-CMake Tools выбрал окружение более новой Visual Studio. Для существующего
-каталога сборки один раз выполните configure, чтобы обновить правила Ninja.
-Launcher также включает UTF-8 (`chcp 65001`): иначе русские строки
-`/showIncludes` могут не совпасть с префиксом CMake, Ninja пропустит зависимости
-заголовков и смешает несовместимые объектные файлы после изменения классов.
-Если каталог уже собирался с неверной кодовой страницей, после configure
-выполните `cmake --build build/Windows_MSVC-x64 --target clean` и полную сборку.
-Из обычного терминала используйте:
+For the CMake Tools build button, `cmake.useVsDeveloperEnvironment=always` is enabled,
+while `cmake.buildTask=false` leaves the launch to the extension together with the
+preset environment. The `Ctrl+Shift+B` tasks and the pre-F5 build call
+`tools/msvc_build.cmd`, which loads the MSVC environment itself. For Ninja, CMake also
+generates `msvc_environment.cmd`: the compile and link commands load the environment
+of the installation that owns the selected `cl.exe`. This prevents `STL1001` when
+mixing the VS 2022 compiler with VS 2026 headers, even if CMake Tools picked the
+environment of a newer Visual Studio. For an existing build directory, run configure
+once to refresh the Ninja rules. The launcher also enables UTF-8 (`chcp 65001`):
+otherwise Russian `/showIncludes` lines may not match CMake's prefix, Ninja will miss
+header dependencies and mix incompatible object files after class changes. If the
+directory was already built with the wrong code page, after configure run
+`cmake --build build/Windows_MSVC-x64 --target clean` and a full rebuild. From a
+regular terminal use:
 
 ```bat
 tools\msvc_build.cmd build windows-msvc-debug
 ```
 
-Скрипт можно запускать из любого каталога. Без аргументов он выполняет
-`buildall windows-msvc-debug` (configure и build); также доступны `configure`,
-`build`, `probe` и `clean`. Например, `tools\msvc_build.cmd clean windows-msvc-release`
-очищает только результаты Release через CMake, сохраняя конфигурацию сборки.
+The script can be run from any directory. Without arguments it performs
+`buildall windows-msvc-debug` (configure and build); `configure`, `build`, `probe` and
+`clean` are also available. For example, `tools\msvc_build.cmd clean windows-msvc-release`
+cleans only the Release results via CMake, preserving the build configuration.
 
-Для установщика сначала соберите Release, установите приложение во временный
-префикс и разложите зависимости Qt. Из корня проекта:
+For the installer, first build Release, install the application into a temporary
+prefix and deploy the Qt dependencies. From the project root:
 
 ```bat
 tools\msvc_build.cmd buildall windows-msvc-release
@@ -221,65 +224,75 @@ cmake --install build\Windows_MSVC-x64-Release --prefix build\installer-stage
 "C:\Program Files (x86)\NSIS\makensis.exe" /DBUILD_DIR=build\installer-stage /DOUTPUT_FILE=build\OpenVegasEffects_Setup.exe tools\nsis_installer.nsi
 ```
 
-NSIS требует подготовленный `bin` с приложением и `platforms\qwindows.dll`.
-Во время компиляции `tools/nsis_payload.ps1` через Windows PowerShell составляет
-список файлов, включая вложенные ресурсы Qt и добавленные в префикс плагины.
-Удаление использует этот список и удаляет только опустевшие каталоги.
+NSIS requires a prepared `bin` containing the application and `platforms\qwindows.dll`.
+During compilation, `tools/nsis_payload.ps1` compiles a file list via Windows
+PowerShell, including nested Qt resources and plugins added to the prefix.
+Uninstallation uses this list and removes only directories that have become empty.
 
-- **VS Code** — [`.vscode/`](.vscode/): `launch.json` (отладчик `cppvsdbg`, читает MSVC-PDB;
-  конфигурации Debug / RelWithDebInfo / attach), `tasks.json` (configure / build / clean / run),
-  `qt6.natvis` (человекочитаемые `QString`, `QList`, `QRect`… в отладчике). Расширения —
-  в `extensions.json`. F5 собирает и запускает.
-- **Zed** — [`.zed/debug.json`](.zed/debug.json) (адаптер CodeLLDB, PDB рядом с exe) и
-  [`.zed/tasks.json`](.zed/tasks.json) с теми же пресетами. `clangd` индексирует
+`.vegfx` project files are shown with the `resources/icons/iconfile.svg` icon: it is
+embedded into the EXE as the second icon (index 1, `resources/icons/iconfile.ico`,
+regenerated by `python tools/make_file_icon.py`). The installer references it in the
+`DefaultIcon` of the `OpenVegasEffects.Project` ProgID, and on startup the program
+registers the same ProgID, `OpenWithProgids` and `Applications\OpenVegasEffects.exe`
+for the current user (`app/FileAssociation`) — so the icon also appears for a portable
+build when it is chosen as the default program ("Open with → Always"). It does not
+make itself the default program for `.vegfx`.
+
+- **VS Code** — [`.vscode/`](.vscode/): `launch.json` (`cppvsdbg` debugger, reads MSVC
+  PDBs; Debug / RelWithDebInfo / attach configurations), `tasks.json` (configure /
+  build / clean / run), `qt6.natvis` (human-readable `QString`, `QList`, `QRect`… in
+  the debugger). Extensions are listed in `extensions.json`. F5 builds and runs.
+- **Zed** — [`.zed/debug.json`](.zed/debug.json) (CodeLLDB adapter, PDB next to the
+  exe) and [`.zed/tasks.json`](.zed/tasks.json) with the same presets. `clangd` indexes
   `build/Windows_MSVC-x64/compile_commands.json`.
 
-Запуск вне Qt Creator — добавьте Qt bin/plugins в PATH:
+Running outside Qt Creator — add Qt bin/plugins to PATH:
 
 ```powershell
 $env:PATH = "C:/Qt/6.9.3/llvm-mingw_64/bin;" + $env:PATH
 $env:QT_QPA_PLATFORM_PLUGIN_PATH = "C:/Qt/6.9.3/llvm-mingw_64/plugins"
 ```
 
-**Не коммитьте** `build/` — он в [`.gitignore`](.gitignore).
+**Do not commit** `build/` — it is in [`.gitignore`](.gitignore).
 
 ---
 
-## Локализация
+## Localization
 
-Интерфейс переведён на русский, японский и упрощённый китайский; исходный язык —
-английский.
+The interface is translated into Russian, Japanese and Simplified Chinese; the source
+language is English.
 
-| Язык | Покрытие | Источник |
-|------|----------|----------|
-| Русский | 216/233 | написан для этого порта |
-| 日本語 | 206/233 | 79 строк из референсных `.qm`, остальное — для этого порта |
-| 简体中文 | 206/233 | 79 строк из референсных `.qm`, остальное — для этого порта |
+| Language | Coverage | Source |
+|----------|----------|--------|
+| Russian | 216/233 | written for this port |
+| 日本語 | 206/233 | 79 strings from the reference `.qm`, the rest written for this port |
+| 简体中文 | 206/233 | 79 strings from the reference `.qm`, the rest written for this port |
 
-Непереведённое — форматные строки (`%1:%2:%3:%4`, `00:00:00:00`, `|<`, `+1`),
-их переводить не нужно.
+What remains untranslated is format strings (`%1:%2:%3:%4`, `00:00:00:00`, `|<`, `+1`),
+which do not need translation.
 
-Терминология ja/zh взята из
-`SAMPLES/VEGAS_Effects/Translations/*/VegasEffects_*.qm` (12041 сообщение,
-конвертация через `lconvert`) — совпавшие по исходному тексту строки получают
-формулировку самого референса. Строки, переведённые для порта, помечены
-`<translatorcomment>` и видны в Qt Linguist как требующие вычитки носителем.
+The ja/zh terminology comes from
+`SAMPLES/VEGAS_Effects/Translations/*/VegasEffects_*.qm` (12,041 messages, converted
+with `lconvert`) — strings whose source text matches get the reference's own wording.
+Strings translated for the port are marked with `<translatorcomment>` and appear in
+Qt Linguist as needing native-speaker proofreading.
 
-### Как это устроено
+### How it works
 
-- Каталоги — [`translations/openvegaseffects_*.ts`](translations/); CMake
-  компилирует их через `qt_add_translations` и встраивает в бинарник как
-  `:/i18n/`. Нужен компонент Qt **LinguistTools**; без него сборка проходит,
-  интерфейс остаётся английским.
-- Загрузка — `app::Translations::install()`, вызывается в `main.cpp` **до**
-  создания виджетов.
-- Порядок поиска повторяет референс: сначала
-  `<user data>/Translations/<locale>/openvegaseffects_<locale>.qm` (можно
-  подложить свой каталог), затем встроенный. Рядом подхватывается `qt_<locale>.qm`.
-- Язык выбирается в **Options → Interface → Язык**, ключ `Options/Language`;
-  пусто = как в системе. Применяется при следующем запуске.
+- The catalogs are [`translations/openvegaseffects_*.ts`](translations/); CMake
+  compiles them via `qt_add_translations` and embeds them into the binary as
+  `:/i18n/`. The Qt **LinguistTools** component is required; without it the build
+  succeeds, but the interface stays English.
+- Loading — `app::Translations::install()`, called in `main.cpp` **before** the
+  widgets are created.
+- The lookup order mirrors the reference: first
+  `<user data>/Translations/<locale>/openvegaseffects_<locale>.qm` (you can drop in
+  your own catalog), then the embedded one. The matching `qt_<locale>.qm` is picked up
+  alongside.
+- The language is selected in **Options → Interface → Language**, key
+  `Options/Language`; empty = follow the system. Applied on the next launch.
 
-### Обновить каталоги после правки строк
+### Updating catalogs after editing strings
 
 ```bat
 cmake --build --preset windows-msvc-debug --target update_translations
@@ -287,64 +300,65 @@ cmake --build --preset windows-msvc-debug --target update_translations
 
 ---
 
-## Папки данных времени выполнения
+## Runtime data folders
 
-При первом запуске приложение создаёт папки пользовательских данных, повторяя
-раскладку референса (восстановлена из его резолвера `FUN_14025b000`):
+On first launch the application creates the user data folders, reproducing the
+reference layout (recovered from its resolver `FUN_14025b000`):
 `Translations`, `Templates\AV`, `EnvironmentMaps`, `ExportPresets`,
 `PluginPresets`, `Plugins`, `Presets`, `Textures`, `Templates\Workspaces`,
-`Objects`, `Tutorials`. Две из них вложены в `Templates` — голой папки
-`Templates` референс не отдаёт. На Windows корень — `%LOCALAPPDATA%\OpenVegas\OpenVegasEffects`.
+`Objects`, `Tutorials`. Two of them are nested under `Templates` — the reference does
+not expose a bare `Templates` folder. On Windows the root is
+`%LOCALAPPDATA%\OpenVegas\OpenVegasEffects`.
 
-Отличие от референса намеренное: тот каталоги только проверяет и при отсутствии
-отдаёт пустой путь (дерево раскладывает инсталлятор), а этот порт инсталлятора
-не имеет и создаёт их сам.
+The difference from the reference is intentional: it only checks the folders and
+returns an empty path when they are missing (the installer lays out the tree), whereas
+this port has no installer and creates them itself.
 
-Положите файлы определений эффектов (`.vfx`, JSON) в папку `Plugins`, чтобы они
-появились в панели **Effects**.
+Put effect definition files (`.vfx`, JSON) into the `Plugins` folder so they appear in
+the **Effects** panel.
 
 ---
 
-## Структура репозитория
+## Repository structure
 
 ```
 OpenVegas_Effects/
 ├── CMakeLists.txt / OpenVegasEffects.pro
 ├── src/
-│   ├── main.cpp          # WinMain-подобный вход → UTF-8 argv → QApplication
+│   ├── main.cpp          # WinMain-like entry → UTF-8 argv → QApplication
 │   ├── core/             # Identifier, Result, Version, Log
 │   ├── app/              # AppMain init, UserDataPaths, Settings
-│   ├── license/          # LicenseManager + свободный manager
-│   ├── plugin/           # Plugins/ , PluginPresets/ — поиск + registry
-│   ├── media/            # импорт медиа
+│   ├── license/          # LicenseManager + free manager
+│   ├── plugin/           # Plugins/ , PluginPresets/ — discovery + registry
+│   ├── media/            # media import
 │   ├── composition/      # Composition / layers / clips / effects
-│   ├── cache/            # SQLite-кэш (QtSql)
-│   ├── render/           # фоновый render-воркер (placeholder)
+│   ├── cache/            # SQLite cache (QtSql)
+│   ├── render/           # background render worker (placeholder)
 │   └── ui/               # MainWindow, Effects panel, Viewer, Timeline
-├── resources/            # иконки
-├── MARKDOWN/             # планы / реверс-заметки для разработчиков
-├── tools/                # утилиты (анализаторы, NSIS, svg_to_ico, …)
-└── SAMPLES/              # референс-бинарники и реверс-заметки (не в сборке)
+├── resources/            # icons
+├── MARKDOWN/             # plans / reverse-engineering notes for developers
+├── tools/                # utilities (analyzers, NSIS, svg_to_ico, …)
+└── SAMPLES/              # reference binaries and RE notes (not part of the build)
 ```
 
-`SAMPLES/` содержит референс-бинарники и реверс-заметки; он не входит в
-открытую сборку.
+`SAMPLES/` contains the reference binaries and reverse-engineering notes; it is not
+part of the open build.
 
 ---
 
-## Документация
+## Documentation
 
-1. **Архитектура и план** — [`MARKDOWN/ARCHITECTURE.md`](MARKDOWN/ARCHITECTURE.md)
-2. **Правила разработки** — [`MARKDOWN/INIT.MD`](MARKDOWN/INIT.MD)
-3. **Реверс референса VEGAS Effects** — [`MARKDOWN/RE_VegasEffects.md`](MARKDOWN/RE_VegasEffects.md)
-4. **Разбор дистрибутива референса** — [`MARKDOWN/RE_VegasEffects_Distribution.md`](MARKDOWN/RE_VegasEffects_Distribution.md)
+1. **Architecture and plan** — [`MARKDOWN/ARCHITECTURE.md`](MARKDOWN/ARCHITECTURE.md)
+2. **Development rules** — [`MARKDOWN/INIT.MD`](MARKDOWN/INIT.MD)
+3. **Reverse engineering of the VEGAS Effects reference** — [`MARKDOWN/RE_VegasEffects.md`](MARKDOWN/RE_VegasEffects.md)
+4. **Analysis of the reference distribution** — [`MARKDOWN/RE_VegasEffects_Distribution.md`](MARKDOWN/RE_VegasEffects_Distribution.md)
 
 ---
 
-## Лицензия
+## License
 
-Код этого репозитория, если не указано иное, — **GNU GPL v3**. Полный текст:
-[`LICENSE`](LICENSE).
+The code in this repository, unless stated otherwise, is licensed under **GNU GPL v3**.
+Full text: [`LICENSE`](LICENSE).
 
-Референс-бинарники в `SAMPLES/` остаются собственностью правообладателей и
-хранятся только для изучения.
+The reference binaries in `SAMPLES/` remain the property of their respective rights
+holders and are kept for study purposes only.

@@ -131,7 +131,9 @@ Section "${PRODUCT_NAME}" SEC_APP
   ${EndIf}
   WriteRegStr HKCR ".vegfx" "" "${PROJECT_PROGID}"
   WriteRegStr HKCR "${PROJECT_PROGID}" "" "OpenVegas Effects Project"
-  WriteRegStr HKCR "${PROJECT_PROGID}\DefaultIcon" "" '$\"$INSTDIR\OpenVegasEffects.exe$\",0'
+  ; Icon 1 of the executable: resources/icons/iconfile.ico.
+  WriteRegStr HKCR "${PROJECT_PROGID}\DefaultIcon" "" '$\"$INSTDIR\OpenVegasEffects.exe$\",1'
+  WriteRegStr HKCR ".vegfx\OpenWithProgids" "${PROJECT_PROGID}" ""
   WriteRegStr HKCR "${PROJECT_PROGID}\shell\open\command" "" '$\"$INSTDIR\OpenVegasEffects.exe$\" $\"%1$\"'
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 SectionEnd
@@ -158,6 +160,17 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall ${PRODUCT_NAME}.lnk"
   RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
+  DeleteRegValue HKCR ".vegfx\OpenWithProgids" "${PROJECT_PROGID}"
+  DeleteRegKey /ifempty HKCR ".vegfx\OpenWithProgids"
+  ; What the program registers for its user on start (app/FileAssociation.h).
+  ReadRegStr $0 HKCU "Software\Classes\${PROJECT_PROGID}\shell\open\command" ""
+  ${If} $0 == '$\"$INSTDIR\OpenVegasEffects.exe$\" $\"%1$\"'
+    DeleteRegKey HKCU "Software\Classes\${PROJECT_PROGID}"
+    DeleteRegKey HKCU "Software\Classes\Applications\OpenVegasEffects.exe"
+    DeleteRegValue HKCU "Software\Classes\.vegfx\OpenWithProgids" "${PROJECT_PROGID}"
+    DeleteRegKey /ifempty HKCU "Software\Classes\.vegfx\OpenWithProgids"
+    DeleteRegKey /ifempty HKCU "Software\Classes\.vegfx"
+  ${EndIf}
   ReadRegStr $0 HKCR ".vegfx" ""
   ${If} $0 == "${PROJECT_PROGID}"
     ReadRegStr $1 HKLM "${APP_KEY}" "PreviousVegfxProgId"

@@ -46,6 +46,8 @@ HEADERS += \
     src/app/AppMain.h \
     src/app/GpuDriver.h \
     src/app/Settings.h \
+    src/app/PluginFolders.h \
+    src/app/FileAssociation.h \
     src/app/OptionValues.h \
     src/app/ProjectDefaults.h \
     src/app/Translations.h \
@@ -73,6 +75,7 @@ HEADERS += \
     src/media/AudioPlayer.h \
     src/media/AudioFormat.h \
     src/media/AudioWaveform.h \
+    src/media/ConformedAudio.h \
     src/media/DecodedFrameCache.h \
     src/media/ProxyMedia.h \
     src/media/PcmWave.h \
@@ -87,6 +90,8 @@ HEADERS += \
     src/plugin/Plugin.h \
     src/plugin/PluginId.h \
     src/plugin/PluginManager.h \
+    src/project/EffectPresets.h \
+    src/project/NativeEffectCatalog.h \
     src/project/VegfxSerializer.h \
     src/project/VegfxMerge.h \
     src/model3d/Mesh.h \
@@ -98,6 +103,7 @@ HEADERS += \
     src/model3d/LwoReader.h \
     src/model3d/ThreeDsReader.h \
     src/render/PreRenderManager.h \
+    src/render/NestedAudioMix.h \
     src/model3d/Renderer3D.h \
     src/render/AudioExport.h \
     src/render/FrameDiskCache.h \
@@ -111,10 +117,12 @@ HEADERS += \
     src/ui/DockTitleBar.h \
     src/ui/SplashScreen.h \
     src/ui/EffectInspector.h \
+    src/ui/EffectsFavorites.h \
     src/ui/EffectsPanel.h \
     src/ui/HistoryPanel.h \
     src/ui/LayerPanel.h \
     src/ui/LayoutPanel.h \
+    src/ui/ScrubberSpinBox.h \
     src/ui/LayoutTransformCommand.h \
     src/ui/LearnSidebar.h \
     src/ui/StartPanel.h \
@@ -171,6 +179,8 @@ SOURCES += \
     src/app/AppMain.cpp \
     src/app/GpuDriver.cpp \
     src/app/Settings.cpp \
+    src/app/PluginFolders.cpp \
+    src/app/FileAssociation.cpp \
     src/app/Translations.cpp \
     src/app/UserDataPaths.cpp \
     src/cache/CacheDB.cpp \
@@ -184,6 +194,7 @@ SOURCES += \
     src/media/AudioCapture.cpp \
     src/media/AudioPlayer.cpp \
     src/media/AudioWaveform.cpp \
+    src/media/ConformedAudio.cpp \
     src/media/DecodedFrameCache.cpp \
     src/media/ProxyMedia.cpp \
     src/media/ExrImage.cpp \
@@ -195,6 +206,7 @@ SOURCES += \
     src/plugin/NativeEffectRender.cpp \
     src/plugin/NativePlugin.cpp \
     src/plugin/PluginManager.cpp \
+    src/project/EffectPresets.cpp \
     src/project/VegfxSerializer.cpp \
     src/project/VegfxMerge.cpp \
     src/model3d/AlembicReader.cpp \
@@ -203,6 +215,7 @@ SOURCES += \
     src/model3d/LwoReader.cpp \
     src/model3d/ThreeDsReader.cpp \
     src/render/PreRenderManager.cpp \
+    src/render/NestedAudioMix.cpp \
     src/model3d/Mesh.cpp \
     src/model3d/ModelImportSettings.cpp \
     src/model3d/ModelLoader.cpp \
@@ -219,10 +232,12 @@ SOURCES += \
     src/ui/DockTitleBar.cpp \
     src/ui/SplashScreen.cpp \
     src/ui/EffectInspector.cpp \
+    src/ui/EffectsFavorites.cpp \
     src/ui/EffectsPanel.cpp \
     src/ui/HistoryPanel.cpp \
     src/ui/LayerPanel.cpp \
     src/ui/LayoutPanel.cpp \
+    src/ui/ScrubberSpinBox.cpp \
     src/ui/LearnSidebar.cpp \
     src/ui/StartPanel.cpp \
     src/ui/LibraryPanel.cpp \
@@ -302,7 +317,8 @@ EXTRA_TRANSLATIONS += \
     translations/openvegaseffects_plugins_zh_CN.ts
 QM_FILES_RESOURCE_PREFIX = /i18n
 
-win32:RC_ICONS = resources/icons/logo.ico
+# The second icon (index 1) is the .vegfx project files' (FileAssociation).
+win32:RC_ICONS = resources/icons/logo.ico resources/icons/iconfile.ico
 
 # Warning levels. For MSVC do not append /W4 on top of Qt mkspec /W3 (D9025).
 win32-msvc {

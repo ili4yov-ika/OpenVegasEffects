@@ -90,8 +90,8 @@ struct AudioPlayer::Engine {
             auto* media = api.libvlc_media_new_path(vlcInstance(), path.constData());
             if (!media) { qWarning("VLC media creation failed: %s", api.libvlc_errmsg()); return false; }
             const double offset = std::max(0.0, clip.sourceStart + (timeline - clip.start) * clip.speed);
-            const QByteArray start = QStringLiteral(":start-time=%1").arg(offset, 0, 'f', 9).toUtf8();
-            api.libvlc_media_add_option(media, start.constData());
+            const QByteArray startTime = QStringLiteral(":start-time=%1").arg(offset, 0, 'f', 9).toUtf8();
+            api.libvlc_media_add_option(media, startTime.constData());
             api.libvlc_media_add_option(media, ":no-video");
             if (clip.audioStreamIndex >= 0) {
                 const QByteArray track = QByteArray(":audio-track=") + QByteArray::number(clip.audioStreamIndex);
@@ -145,6 +145,7 @@ struct AudioPlayer::Engine {
     QVector<AudioClip> clips;
     QVector<AudioTransition> transitions;
     QSet<QString> failedNativeEffects;
+    QSet<QString> wholeClipReported;
     QHash<QString, NativeDryHistory> nativeHistory;
     std::vector<std::unique_ptr<Decoder>> decoders;
     libvlc_media_player_t* output = nullptr;
@@ -359,7 +360,8 @@ struct AudioPlayer::Engine {
                         // effect also sees 0.25 seconds of the dry
                         // future (NoiseReduction's window); later effects and
                         // whole-layer requests such as AudioReverse read
-                        // silence there. Export is exact.
+                        // silence there - reported once, so the owner can
+                        // play the clip processed whole, as export does.
                         const qint64 layerSample = qRound64((first - effect.layerStart) * self.rate);
                         NativeDryHistory& history = self.nativeHistory[effect.instanceKey];
                         history.append(nativeSamples, layerSample);
@@ -375,6 +377,14 @@ struct AudioPlayer::Engine {
                             effect.pluginId, values, effect.instanceKey,
                             &history.samples, history.first, layer);
                         history.samples.resize(historySize);
+                        if (applied && plugin::nativeAudioWantedLaterSamples() && !clip.processKey.isEmpty()
+                            && !self.wholeClipReported.contains(clip.processKey)) {
+                            self.wholeClipReported.insert(clip.processKey);
+                            QMetaObject::invokeMethod(self.owner, [owner = self.owner, serial = self.generation,
+                                                                   key = clip.processKey] {
+                                if (owner->m_generation == serial) emit owner->nativeEffectsNeedWholeClip(key);
+                            }, Qt::QueuedConnection);
+                        }
                         if (!applied) {
                             nativeSamples = before;
                             self.failedNativeEffects.insert(effect.instanceKey);
@@ -385,7 +395,7 @@ struct AudioPlayer::Engine {
                     }
                 }
                 const auto kept = transitionInputs.find(i);
-                float* destination = kept != transitionInputs.end() ? kept->data() : samples.data();
+                float* mixInto = kept != transitionInputs.end() ? kept->data() : samples.data();
                 const bool enveloped = !clip.envelope.isEmpty();
                 double gain = clip.gain;
                 for (unsigned sample = 0; sample < count * Channels; ++sample) {
@@ -394,7 +404,7 @@ struct AudioPlayer::Engine {
                     const double value = nativeSamples.isEmpty()
                         ? double(contribution[sample])
                         : double(nativeSamples[int(sample)]) / 32768.0;
-                    destination[(offset * Channels) + sample] += float(value * gain);
+                    mixInto[(offset * Channels) + sample] += float(value * gain);
                 }
             }
             self.mixTransitions(samples.data(), frames, now, transitionInputs);

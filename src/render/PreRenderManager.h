@@ -5,6 +5,7 @@
 #include <QPointer>
 #include <QString>
 #include <QStringList>
+#include <QThread>
 #include <QTimer>
 
 #include <memory>
@@ -30,6 +31,10 @@ class RenderManager;
 // A shot edited after its pre-render (its render state - layers, nested
 // shots, media files - no longer what was rendered) is queued again once the
 // edits have settled; until it is done again the shot renders live.
+//
+// Its audio is pre-rendered too, once its frames are: the shot's mix as a WAV
+// in its folder (preRenderAudioPath), which playback and export use instead
+// of mixing the shot again while it matches.
 class PreRenderManager : public QObject
 {
     Q_OBJECT
@@ -62,7 +67,7 @@ public:
     QString statusText(const QString& shotId) const;
     int framesDone(const QString& shotId) const;
     int framesTotal(const QString& shotId) const;
-    bool isBusy() const { return !m_queue.isEmpty() || m_running; }
+    bool isBusy() const { return !m_queue.isEmpty() || m_running || !m_runningId.isEmpty(); }
 
 signals:
     // A shot's state or progress changed.
@@ -84,6 +89,8 @@ private:
     void setState(const QString& id, State state);
     void startNext();
     void finishRunning(bool completed, const QString& reason = QString());
+    // The running shot's audio, mixed on a thread of its own.
+    void mixAudio(const QString& id);
 
     QString m_root;
     std::shared_ptr<media::MediaManager> m_media;
@@ -93,6 +100,8 @@ private:
     QPointer<RenderManager> m_running;
     QTimer m_settle;
     QStringList m_changed;             // shots to queue again once settled
+    QPointer<QThread> m_audioThread;   // mixing the running shot's audio
+    quint64 m_generation = 0;          // which run a finished mix belongs to
 };
 
 } // namespace render

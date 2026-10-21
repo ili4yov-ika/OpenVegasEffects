@@ -1,6 +1,8 @@
 #include "render/RenderManager.h"
 #include "composition/CompositionState.h"
 #include <QCryptographicHash>
+#include "composition/CompositionState.h"
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
 #include <QRegularExpression>
@@ -74,6 +76,27 @@ bool hasMotion(const composition::Layer& layer)
     for (P prop : {P::Position, P::Scale, P::Rotation})
         if (layer.transform.isAnimated(prop)) return true;
     return false;
+}
+
+QImage translatedSubpixel(const QImage& image, double dx, double dy);
+
+// `image` moved by `transform` about its centre: a whole translation as a
+// sub-pixel shift, anything else painted through.
+QImage movedAboutCentre(const QImage& image, const QTransform& transform)
+{
+    if (transform.isIdentity()) return image;
+    if (transform.type() == QTransform::TxTranslate) return translatedSubpixel(image, transform.dx(), transform.dy());
+    QImage transformed(image.size(), QImage::Format_RGBA8888);
+    transformed.fill(Qt::transparent);
+    QPainter painter(&transformed);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    const QPointF centre(image.width() / 2.0, image.height() / 2.0);
+    painter.translate(centre);
+    painter.setTransform(transform, true);
+    painter.translate(-centre);
+    painter.drawImage(QPoint(0, 0), image);
+    painter.end();
+    return transformed;
 }
 
 // The layer as it stands at a fractional frame: each animated 2D property is
@@ -152,7 +175,8 @@ QImage dissolveImages(const QImage& from, const QImage& to, float progress)
 // the layer's own placement at `frame` - from the frame's centre, Y up, a
 // positive rotation turning clockwise as the renderer draws it - and its
 // extent as PluginBehaviorEffect::TransformationAtTime measures it.
-plugin::NativeBehaviorLayer behaviorLayerAt(const composition::Layer& layer,
+plugin::NativeBehaviorLayer behaviorLayerAt(const composition::Composition* composition,
+                                            const composition::Layer& layer,
                                             const composition::Clip& clip,
                                             const composition::Effect* text, int frame,
                                             const QSize& canvas,
@@ -160,16 +184,7 @@ plugin::NativeBehaviorLayer behaviorLayerAt(const composition::Layer& layer,
 {
     plugin::NativeBehaviorLayer info;
     info.composition = canvas;
-    const composition::LayerTransform& t = layer.transform;
-    const QPointF position = t.positionAt(frame);
-    const QPointF scale = t.scaleAt(frame);
-    QMatrix4x4 world;
-    world.translate(float(position.x()), float(position.y()), float(t.positionZAt(frame)));
-    world.translate(float(t.anchorPoint.x()), float(t.anchorPoint.y()));
-    world.rotate(float(-t.rotationAt(frame)), 0.0f, 0.0f, 1.0f);
-    world.translate(float(-t.anchorPoint.x()), float(-t.anchorPoint.y()));
-    world.scale(float(scale.x() / 100.0), float(scale.y() / 100.0), 1.0f);
-    std::copy(world.constData(), world.constData() + 16, info.world.begin());
+    info.world = nativeLayerWorld(composition, layer, frame);
 
     if (text) {
         // A text layer (type 6): a paragraph its box; point text the frame's
@@ -205,31 +220,6 @@ plugin::NativeBehaviorLayer behaviorLayerAt(const composition::Layer& layer,
     return info;
 }
 
-// Whether a reduced preview may draw this clip at its reduced size: footage,
-// planes and text with the built-in effects. Native 2D effects read pixel
-// sizes and positions their own way (their render scale fields disagree from
-// module to module), so a clip with one that has not been seen to draw a
-// reduced preview right is drawn at full size and reduced once finished.
-// Behaviors (the layer's, the glyphs', MotionTrack's) and Geometry modules
-// draw no pixels: they move the layer, its glyphs or the text mesh in the
-// shot's units, which a reduced preview keeps (applyClipBehaviors, the text
-// painter's scale, the scene canvas).
-bool clipScalesDown(const composition::Clip& clip)
-{
-    for (const composition::Effect& fx : clip.effects) {
-        if (!fx.enabled || !plugin::isNativeModule(fx.pluginId)
-            || plugin::nativeEffectRendersReduced(fx.pluginId)) {
-            continue;
-        }
-        const bool movesOnly = plugin::nativeBehaviorRenderingVerified(fx.pluginId)
-            || plugin::nativeBehaviorSubObjectRenderingVerified(fx.pluginId)
-            || plugin::nativeBehaviorUsesInstance(fx.pluginId)
-            || plugin::nativeGeometryRenderingVerified(fx.pluginId);
-        if (!movesOnly) return false;
-    }
-    return true;
-}
-
 // The image moved by (dx, dy) pixels, between pixels too: Qt's raster engine
 // puts an image that is only translated on whole pixels, while a module's
 // move - and the same move in a reduced preview - is rarely whole. Bilinear,
@@ -262,14 +252,6 @@ QImage translatedSubpixel(const QImage& image, double dx, double dy)
         }
     }
     return out.convertToFormat(QImage::Format_RGBA8888);
-}
-
-QImage reducedTo(const QImage& image, const QSize& size)
-{
-    if (image.isNull() || image.size() == size) return image;
-    return image.convertToFormat(QImage::Format_RGBA8888_Premultiplied)
-        .scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
-        .convertToFormat(QImage::Format_RGBA8888);
 }
 
 } // namespace
@@ -405,14 +387,7 @@ QImage RenderWorker::renderClip(const composition::Layer& layer, const compositi
 {
     // A 3D layer is seen through the shot's camera. Text that Geometry
     // modules turned into a mesh is already 3D and keeps the mesh path below.
-    if (layer.dimension == composition::LayerDimension::ThreeD
-        && layer.kind != composition::LayerKind::Model3D) {
-        const bool meshText = textEffectOf(clip)
-            && std::any_of(clip.effects.cbegin(), clip.effects.cend(), [](const composition::Effect& fx) {
-                   return fx.enabled && plugin::nativeGeometryRenderingVerified(fx.pluginId);
-               });
-        if (!meshText) return renderClipIn3D(layer, clip, localTimeSeconds, canvasSize, frame);
-    }
+    if (layerDrawnAsSheet(layer, &clip)) return renderClipIn3D(layer, clip, localTimeSeconds, canvasSize, frame);
 
     const composition::LayerTransform& transform = layer.transform;
     QImage canvas(canvasSize, QImage::Format_RGBA8888);
@@ -428,6 +403,12 @@ QImage RenderWorker::renderClip(const composition::Layer& layer, const compositi
         painter.scale(double(canvasSize.width()) / space.width(),
                       double(canvasSize.height()) / space.height());
         // Edges smoothed as a full frame reduced would have them.
+        painter.setRenderHint(QPainter::Antialiasing);
+    }
+    // Under its parent (AbstractLayer::ParentTransformationAtTime).
+    const QTransform parent = layerCanvasParentAt(m_composition.get(), layer, frame, QSizeF(space));
+    if (!parent.isIdentity()) {
+        painter.setTransform(parent, true);
         painter.setRenderHint(QPainter::Antialiasing);
     }
 
@@ -533,13 +514,9 @@ QImage RenderWorker::renderClip(const composition::Layer& layer, const compositi
         if (style.text.isEmpty()) {
             return canvas; // nothing to draw, and no placeholder over the layers below
         }
+        composition::TextStyle unused;
         QVector<const composition::Effect*> geometryEffects;
-        for (const composition::Effect& fx : clip.effects) {
-            if (fx.enabled && plugin::nativeGeometryRenderingVerified(fx.pluginId)) {
-                geometryEffects.append(&fx);
-            }
-        }
-        if (!geometryEffects.isEmpty()) {
+        if (textGeometryOf(clip, frame, &unused, &geometryEffects)) {
             painter.end();
             return renderTextGeometry(layer, clip, style, geometryEffects, canvasSize, frame);
         }
@@ -654,6 +631,403 @@ QImage RenderWorker::renderClip(const composition::Layer& layer, const compositi
     return canvas;
 }
 
+namespace {
+
+// A Behavior's parameters at `frame`, between frames too: numbers in between
+// their values at the frames either side, the rest as at the frame before.
+QStringList behaviorValuesAt(const composition::Effect& fx, double frame)
+{
+    const int whole = int(std::floor(frame));
+    const double t = frame - whole;
+    QStringList values = fx.parameterValues;
+    for (int parameter = 0; parameter < values.size(); ++parameter) {
+        const QVariant before = fx.parameterAt(parameter, whole);
+        values[parameter] = before.toString();
+        if (t <= 1e-9) continue;
+        bool a = false, b = false;
+        const double from = before.toString().toDouble(&a);
+        const double to = fx.parameterAt(parameter, whole + 1).toString().toDouble(&b);
+        if (a && b && from != to) values[parameter] = QString::number(from + (to - from) * t, 'g', 12);
+    }
+    return values;
+}
+
+// The Behaviors of `clip` at `frame` (between frames too, as the reference
+// runs them at the sub-frame's time): their matrices in the clip's order -
+// from the frame's centre, Y up - and their opacity together. Simulated
+// Behaviors give no matrix here (SimulateLayers moves the body).
+struct ClipBehaviors
+{
+    QVector<QMatrix4x4> matrices;
+    double opacity = 1.0;
+};
+
+ClipBehaviors clipBehaviorsAt(const composition::Composition& composition, const media::MediaManager* media,
+                              const composition::Layer& layer, const composition::Clip& clip, double frame,
+                              const QSize& scene)
+{
+    ClipBehaviors result;
+    const double rate = composition.framesPerSecond();
+    const int whole = int(std::floor(frame));
+    const double fraction = frame - whole;
+    const int localFrame = whole - int(std::lround(clip.startSeconds * rate));
+    const int durationFrames = qMax(1, qRound(clip.durationSeconds * rate));
+    const qsizetype clipIndex = &clip - layer.clips.constData();
+    for (qsizetype effectIndex = 0; effectIndex < clip.effects.size(); ++effectIndex) {
+        const composition::Effect& fx = clip.effects.at(effectIndex);
+        if (fx.enabled && plugin::nativeBehaviorUsesInstance(fx.pluginId)) {
+            // Matrices the module's own instance gave on the GUI thread, on
+            // the canvas from its centre, Y up (NativeInstanceHost::bake).
+            std::array<float, 16> matrix {};
+            if (clipIndex >= 0 && clipIndex < layer.clips.size()
+                && plugin::nativeInstanceTransformAt(nativeInstanceKey(layer.id, int(clipIndex), int(effectIndex)),
+                                                     frame, &matrix))
+                result.matrices.append(QMatrix4x4(matrix.data()).transposed());
+            continue;
+        }
+        if (!fx.enabled || !plugin::nativeBehaviorRenderingVerified(fx.pluginId)
+            || plugin::nativeBehaviorSubObjectRenderingVerified(fx.pluginId))
+            continue;
+        const QStringList values = behaviorValuesAt(fx, frame);
+        plugin::NativeBehaviorResult behavior;
+        if (!plugin::evaluateNativeBehaviorFrame(behavior, whole, localFrame, durationFrames, scene.width(),
+                                                 scene.height(), rate, fx.pluginId, values, &composition, layer.id,
+                                                 behaviorLayerAt(&composition, layer, clip, textEffectOfClip(clip), whole,
+                                                                 scene, media),
+                                                 fraction))
+            continue;
+        result.opacity *= behavior.opacity;
+        result.matrices.append(behavior.transformation);
+    }
+    return result;
+}
+
+const composition::Clip* clipShownAt(const composition::Composition& composition,
+                                     const composition::Layer& layer, int frame);
+
+// The Behaviors' matrices of the layer's clip at `frame`, in the clip's
+// order - from the frame's centre, Y up - whatever the layer's dimension.
+// The simulation its simulated Behaviors drive goes to `simulation` instead:
+// it is no Behavior matrix but where the simulated body is, which takes the
+// place of the layer's whole world (FUN_18036c010 after SimulateLayers).
+// While a motion blur sample of a sheet is drawn, they are read between
+// frames (behaviorFrameShift).
+QVector<QMatrix4x4> behaviorMatricesAt(const composition::Composition& composition,
+                                       const media::MediaManager* media,
+                                       const composition::Layer& layer, int frame,
+                                       QMatrix4x4* simulation = nullptr)
+{
+    if (simulation) simulation->setToIdentity();
+    const double at = frame + behaviorFrameShift();
+    const composition::Clip* clip = clipShownAt(composition, layer, int(std::floor(at)));
+    if (!clip) return {};
+    QVector<QMatrix4x4> total = clipBehaviorsAt(composition, media, layer, *clip, at, composition.displaySize()).matrices;
+    QVector3D offset;
+    if (simulation && simulationSuppressed() == 0
+        && layerSimulationOffsetAt(composition, media, layer, at, &offset))
+        simulation->translate(offset);
+    return total;
+}
+
+const composition::Clip* clipShownAt(const composition::Composition& composition,
+                                     const composition::Layer& layer, int frame)
+{
+    const double seconds = frame / composition.framesPerSecond();
+    const composition::Clip* clip = nullptr;
+    for (const composition::Clip& candidate : layer.clips)
+        if (seconds >= candidate.startSeconds && seconds < candidate.endSeconds()) clip = &candidate;
+    return clip;
+}
+
+} // namespace
+
+bool layerDrawnAsSheet(const composition::Layer& layer, const composition::Clip* clip)
+{
+    if (layer.dimension != composition::LayerDimension::ThreeD || layer.kind == composition::LayerKind::Model3D)
+        return false;
+    if (!clip || !textEffectOfClip(*clip)) return true;
+    return std::none_of(clip->effects.cbegin(), clip->effects.cend(), [](const composition::Effect& fx) {
+        return fx.enabled && plugin::nativeGeometryRenderingVerified(fx.pluginId);
+    });
+}
+
+QTransform layerBehaviorTransformAt(const composition::Composition& composition,
+                                    const media::MediaManager* media,
+                                    const composition::Layer& layer, int frame)
+{
+    QTransform total;
+    if (layer.dimension == composition::LayerDimension::ThreeD
+        && layerDrawnAsSheet(layer, clipShownAt(composition, layer, frame)))
+        return total;
+    // As applyClipBehaviors puts each one on the picture: about the canvas's
+    // centre, the module's Y-up matrix mirrored into rows.
+    const QSize scene = composition.displaySize();
+    const QPointF centre(scene.width() / 2.0, scene.height() / 2.0);
+    QMatrix4x4 simulation;
+    for (const QMatrix4x4& matrix : behaviorMatricesAt(composition, media, layer, frame, &simulation)) {
+        const float* m = matrix.constData();
+        const QTransform transform(double(m[0]), -double(m[1]), -double(m[4]), double(m[5]),
+                                   double(m[12]), -double(m[13]));
+        // B1 x B2 x ...: the last one acts first (applyClipBehaviors).
+        total = QTransform::fromTranslate(-centre.x(), -centre.y()) * transform
+                * QTransform::fromTranslate(centre.x(), centre.y()) * total;
+    }
+    // They act inside the parent (its world x the Behaviors x the layer's
+    // own): after the parent on the canvas, that is the parent undone, them,
+    // the parent again.
+    const QTransform parent = layerCanvasParentAt(&composition, layer, frame, QSizeF(scene));
+    bool invertible = true;
+    const QTransform unparent = parent.inverted(&invertible);
+    if (!parent.isIdentity() && invertible && !total.isIdentity()) total = unparent * total * parent;
+    // The simulated body is moved in the world, after all of that.
+    const float* s = simulation.constData();
+    if (!simulation.isIdentity()) total = total * QTransform::fromTranslate(double(s[12]), -double(s[13]));
+    return total;
+}
+
+QMatrix4x4 layerOwnBehaviorMatrixAt(const composition::Composition& composition,
+                                    const media::MediaManager* media,
+                                    const composition::Layer& layer, int frame, QMatrix4x4* simulation)
+{
+    if (simulation) simulation->setToIdentity();
+    QMatrix4x4 total;
+    for (const QMatrix4x4& matrix : behaviorMatricesAt(composition, media, layer, frame, simulation)) total *= matrix;
+    return total;
+}
+
+bool layerIsSimulatedBody(const composition::Layer& layer)
+{
+    for (const composition::Clip& clip : layer.clips)
+        for (const composition::Effect& fx : clip.effects)
+            if (fx.enabled && plugin::nativeBehaviorSimulationRenderingVerified(fx.pluginId)) return true;
+    return false;
+}
+
+namespace {
+
+// Runs kept by the state of the shot they were made for.
+QMutex g_simulationMutex;
+QHash<QByteArray, plugin::NativeSimulationTrack> g_simulationTracks;
+QList<QByteArray> g_simulationOrder;
+
+QByteArray simulationKeyOf(const composition::Composition& composition)
+{
+    QByteArray state = composition::layerState(composition.layers());
+    state += QByteArray::number(composition.framesPerSecond(), 'g', 12);
+    state += QByteArray::number(composition.durationSeconds(), 'g', 12);
+    state += QByteArray::number(composition.displaySize().width()) + 'x'
+             + QByteArray::number(composition.displaySize().height());
+    return QCryptographicHash::hash(state, QCryptographicHash::Sha1);
+}
+
+} // namespace
+
+bool layerSimulationOffsetAt(const composition::Composition& composition, const media::MediaManager* media,
+                             const composition::Layer& layer, double frame, QVector3D* offset)
+{
+    if (!offset || simulationSuppressed() > 0) return false;
+    const QVector<composition::Layer>& layers = composition.layers();
+    int source = -1;
+    for (int i = 0; i < layers.size(); ++i)
+        if (layers.at(i).id == layer.id) source = i;
+    if (source < 0) return false;
+    // Quick refusal: no simulated Behavior on it.
+    if (!layerIsSimulatedBody(layer)) return false;
+    const double rate = composition.framesPerSecond();
+    const int whole = int(std::ceil(frame - 1e-9));
+    const auto clipOf = [&](int index, int at) { return clipShownAt(composition, layers.at(index), at); };
+    // A layer's range: its clip's, or its span (StartFrame .. EndFrame).
+    const auto firstClipOf = [&](int index) -> const composition::Clip* {
+        const composition::Layer& candidate = layers.at(index);
+        const composition::Clip* clip = clipOf(index, whole);
+        if (!clip && !candidate.clips.isEmpty()) clip = &candidate.clips.first();
+        return clip;
+    };
+    plugin::NativeSimulationScene scene;
+    scene.layerCount = layers.size();
+    scene.worldAt = [&](int index, int at) {
+        return layerWorldWithoutSimulationAt(&composition, layers.at(index), at);
+    };
+    scene.behaviorsAt = [&](int index, int at) {
+        QVector<plugin::NativeBehaviorRequest> requests;
+        const composition::Clip* clip = clipOf(index, at);
+        if (!clip) clip = firstClipOf(index);
+        if (!clip) return requests;
+        for (const composition::Effect& fx : clip->effects) {
+            if (!fx.enabled || !plugin::nativeBehaviorSimulationRenderingVerified(fx.pluginId)) continue;
+            QStringList values = fx.parameterValues;
+            for (int parameter = 0; parameter < values.size(); ++parameter)
+                values[parameter] = fx.parameterAt(parameter, at).toString();
+            requests.push_back({fx.pluginId, values});
+        }
+        return requests;
+    };
+    scene.activeAt = [&](int index, int at) {
+        const composition::Layer& candidate = layers.at(index);
+        if (composition::layerHasSpan(candidate)) return composition::layerSpanCovers(candidate, at, rate);
+        return clipOf(index, at) != nullptr;
+    };
+    scene.startFrame = [&](int index) {
+        const composition::Layer& candidate = layers.at(index);
+        if (composition::layerHasSpan(candidate)) return int(std::lround(candidate.spanStartSeconds * rate));
+        const composition::Clip* clip = firstClipOf(index);
+        return clip ? int(std::lround(clip->startSeconds * rate)) : 0;
+    };
+    scene.endFrame = [&](int index) {
+        const composition::Layer& candidate = layers.at(index);
+        if (composition::layerHasSpan(candidate))
+            return int(std::lround(composition::layerSpanEnd(candidate, composition.durationSeconds()) * rate));
+        const composition::Clip* clip = firstClipOf(index);
+        return clip ? int(std::lround(clip->endSeconds() * rate)) : 0;
+    };
+    scene.parentOf = [&](int index) {
+        const core::Identifier parent = layers.at(index).parentLayerId;
+        if (!parent.isValid()) return -1;
+        for (int i = 0; i < layers.size(); ++i)
+            if (layers.at(i).id == parent) return i;
+        return -1;
+    };
+    scene.flatAt = [&](int index) { return layers.at(index).dimension == composition::LayerDimension::TwoD; };
+    // FUN_18036c710: footage its asset's size, a grade (and a plane, a
+    // frame-sized asset) the frame's, text its box.
+    scene.sizeOf = [&](int index) {
+        const composition::Layer& candidate = layers.at(index);
+        const composition::Clip* clip = firstClipOf(index);
+        if (candidate.kind == composition::LayerKind::Grade || candidate.kind == composition::LayerKind::Plane)
+            return composition.displaySize();
+        if (!clip) return QSize();
+        if (const composition::Effect* text = textEffectOfClip(*clip)) {
+            QStringList values = text->parameterValues;
+            for (int p = 0; p < values.size(); ++p) values[p] = text->parameterAt(p, whole).toString();
+            const composition::TextStyle style = composition::textStyleFromParameters(values);
+            if (style.textMode == composition::TextStyle::TextMode::Paragraph) return style.paragraphSize.toSize();
+            return QSize();
+        }
+        if (clip->nestedComposition) return clip->nestedComposition->displaySize();
+        if (media && clip->mediaId.isValid()) return media->assetById(clip->mediaId).frameSize();
+        return QSize();
+    };
+    // The run so far for this state of the shot, gone on from where it
+    // stopped when it does not reach the frame yet.
+    const QByteArray key = simulationKeyOf(composition);
+    plugin::NativeSimulationTrack track;
+    {
+        QMutexLocker lock(&g_simulationMutex);
+        track = g_simulationTracks.value(key);
+    }
+    if (!track.reaches(whole)) {
+        const QSize canvas = composition.displaySize();
+        if (!plugin::simulateNativeBehaviorScene(track, whole, canvas.width(), canvas.height(), rate, scene,
+                                                 &composition))
+            return false;
+        QMutexLocker lock(&g_simulationMutex);
+        if (!g_simulationTracks.contains(key)) {
+            g_simulationOrder.append(key);
+            while (g_simulationOrder.size() > 8) g_simulationTracks.remove(g_simulationOrder.takeFirst());
+        }
+        if (!g_simulationTracks.value(key).reaches(track.last())) g_simulationTracks.insert(key, track);
+    }
+    const int body = int(track.bodies.indexOf(source));
+    if (body < 0) return false;
+    if (whole < track.first) {
+        *offset = QVector3D();
+        return true;
+    }
+    const int at = qMin(whole, track.last()) - track.first;
+    QVector3D position = track.positions.at(at).at(body);
+    QVector3D point = track.points.at(at).at(body);
+    const double back = double(whole) - frame;
+    if (back > 1e-6 && at > 0) {
+        // Taken back along its velocity; the world's point in between.
+        position -= track.velocities.at(at).at(body) * float(back / rate);
+        const QVector3D before = track.points.at(at - 1).at(body);
+        point = before + (point - before) * float(1.0 - back);
+    }
+    *offset = position - point;
+    return true;
+}
+
+QMatrix4x4 layerBehaviorMatrixAt(const composition::Composition& composition,
+                                 const media::MediaManager* media,
+                                 const composition::Layer& layer, int frame, QMatrix4x4* simulation)
+{
+    if (simulation) simulation->setToIdentity();
+    QMatrix4x4 total;
+    if (!layerDrawnAsSheet(layer, clipShownAt(composition, layer, frame))) return total;
+    for (const QMatrix4x4& matrix : behaviorMatricesAt(composition, media, layer, frame, simulation)) total *= matrix;
+    return total;
+}
+
+std::array<float, 16> nativeLayerWorld(const composition::Composition* composition,
+                                       const composition::Layer& layer, int frame)
+{
+    const composition::LayerTransform& t = layer.transform;
+    const QPointF position = t.positionAt(frame);
+    const QPointF scale = t.scaleAt(frame);
+    // Under its parent (WorldTransformationAtTime: the parent's
+    // ParentingWorldTransformationAtTime first).
+    QMatrix4x4 world = layerParentMatrixAt(composition, layer, frame);
+    world.translate(float(position.x()), float(position.y()), float(t.positionZAt(frame)));
+    world.translate(float(t.anchorPoint.x()), float(t.anchorPoint.y()));
+    world.rotate(float(-t.rotationAt(frame)), 0.0f, 0.0f, 1.0f);
+    world.translate(float(-t.anchorPoint.x()), float(-t.anchorPoint.y()));
+    world.scale(float(scale.x() / 100.0), float(scale.y() / 100.0), 1.0f);
+    std::array<float, 16> result {};
+    std::copy(world.constData(), world.constData() + 16, result.begin());
+    return result;
+}
+
+plugin::NativeAssetInfo nativeFootageInfo(const composition::Clip& clip,
+                                          const media::MediaManager* media, double shotRate)
+{
+    plugin::NativeAssetInfo info;
+    if (clip.nestedComposition) {
+        // A composite shot (tagBiffAssetInfo type 3): its frames at the
+        // shot's rate, from where the clip starts in it.
+        const double rate = shotRate > 0.0 ? shotRate : 30.0;
+        info.valid = true;
+        info.type = 3;
+        info.frameRate = rate;
+        info.frameCount = qMax(1, int(std::floor(clip.nestedComposition->durationSeconds() * rate)));
+        info.startFrame = qMax(0, int(std::lround(clip.sourceStartSeconds * rate)));
+        info.endFrame = info.startFrame + qMax(1, int(std::lround(clip.durationSeconds * rate))) - 1;
+        info.key = QStringLiteral("composition:") + clip.nestedComposition->id().value();
+        return info;
+    }
+    if (!media || !clip.mediaId.isValid()) return info;
+    const media::MediaAsset asset = media->assetById(clip.mediaId);
+    if (!asset.isValid()) return info;
+    const double rate = shotRate > 0.0 ? shotRate : 30.0;
+    if (asset.isImageSequence()) {
+        info.frameCount = int(asset.sequenceFiles().size());
+        info.frameRate = asset.sequenceFrameRate() > 0.0 ? asset.sequenceFrameRate() : rate;
+    } else if (asset.kind() == media::MediaKind::Video) {
+        info.frameRate = rate;
+        info.frameCount = qMax(1, int(std::floor(asset.durationSeconds() * info.frameRate)));
+    } else {
+        return info;
+    }
+    info.valid = true;
+    info.type = 0;
+    info.startFrame = qMax(0, int(std::lround(clip.sourceStartSeconds * info.frameRate)));
+    info.endFrame = info.startFrame + qMax(1, int(std::lround(clip.durationSeconds * info.frameRate))) - 1;
+    info.key = asset.id().value();
+    return info;
+}
+
+QImage renderCompositionFrame(const std::shared_ptr<composition::Composition>& shot,
+                              const std::shared_ptr<media::MediaManager>& media, double seconds,
+                              const QString& preRenderDirectory)
+{
+    if (!shot) return QImage();
+    return RenderWorker::renderComposition(shot, media, seconds, preRenderDirectory);
+}
+
+QString nativeInstanceKey(const core::Identifier& layerId, int clip, int effect)
+{
+    return QStringLiteral("%1/%2/%3").arg(layerId.value()).arg(clip).arg(effect);
+}
+
 // Runs the clip's enabled effects over the rendered picture. Parameters are
 // resolved through Effect::parameterAt so a keyframed parameter uses its curve
 // at this frame rather than the static default. Unknown ids (the "text" effect
@@ -672,7 +1046,23 @@ void RenderWorker::applyClipEffects(QImage& image, const composition::Clip& clip
     time.layerFrame = frame - frameForTime(clip.startSeconds);
     time.layerFrames = qMax(1, int(std::lround(clip.durationSeconds * time.frameRate)));
     time.renderScale = float(m_renderScale);
-    for (const composition::Effect& fx : clip.effects) {
+    // The layer and clip this is, for effects that live on an instance of
+    // their own (AutomaticStabilizer, MotionLock): the clip is one of the
+    // shot's own.
+    const composition::Layer* owner = nullptr;
+    int clipIndex = -1;
+    if (m_composition) {
+        for (const composition::Layer& layer : m_composition->layers()) {
+            const qsizetype at = &clip - layer.clips.constData();
+            if (at >= 0 && at < layer.clips.size()) {
+                owner = &layer;
+                clipIndex = int(at);
+                break;
+            }
+        }
+    }
+    for (qsizetype effectIndex = 0; effectIndex < clip.effects.size(); ++effectIndex) {
+        const composition::Effect& fx = clip.effects.at(effectIndex);
         // Transitions act on the clip's edges, in renderFrameImage.
         if (!fx.enabled || fx.isTransition()) {
             continue;
@@ -698,8 +1088,76 @@ void RenderWorker::applyClipEffects(QImage& image, const composition::Clip& clip
             && !resolved.isEmpty()) {
             resolved[0] = QString::number(resolved.first().toDouble() * m_renderScale);
         }
-        plugin::applyEffectToImage(image, fx.pluginId, resolved, time);
+        // A module blurring motion reads its keyframed values between frames.
+        plugin::NativeFrameTime at = time;
+        at.valueAt = [&fx](int index, double when) { return fx.parameterAtTime(index, when).toString(); };
+        if (owner && plugin::nativeEffectAnalysesOwnLayer(fx.pluginId)) {
+            // Drawn from the instance's data (NativeInstanceHost keeps it in
+            // the effect); without any yet, the module draws the frame as it is.
+            plugin::NativeFrameTime own = at;
+            own.instanceKey = nativeInstanceKey(owner->id, clipIndex, int(effectIndex));
+            own.instanceData = fx.instanceData;
+            own.layerId = owner->id.value();
+            own.layerAsset = nativeFootageInfo(clip, m_mediaManager.get(), time.frameRate);
+            plugin::applyEffectToImage(image, fx.pluginId, resolved, own);
+            continue;
+        }
+        plugin::applyEffectToImage(image, fx.pluginId, resolved, at);
     }
+}
+
+QTransform RenderWorker::clipBehaviorTransform(const composition::Layer& layer, const composition::Clip& clip,
+                                               double frame, const QSize& imageSize, const QSize& canvasSize,
+                                               double* opacity) const
+{
+    if (opacity) *opacity = 1.0;
+    if (!m_composition) return QTransform();
+    // A 3D sheet took its Behaviors' matrices into its place in the scene
+    // (layerSheetMatrixAt); only their opacity is left for the picture.
+    const bool sheet = layerDrawnAsSheet(layer, &clip);
+    // The modules see the shot at full size, also in a reduced preview; what
+    // they move is moved by as much of the reduced picture.
+    const QSize scene = sceneCanvas(canvasSize);
+    const ClipBehaviors behaviors = clipBehaviorsAt(*m_composition, m_mediaManager.get(), layer, clip, frame, scene);
+    if (opacity) *opacity = qBound(0.0, behaviors.opacity, 1.0);
+    if (sheet) return QTransform();
+    const QTransform toScene = QTransform::fromScale(double(scene.width()) / qMax(1, imageSize.width()),
+                                                     double(scene.height()) / qMax(1, imageSize.height()));
+    // The picture is already under the layer's parent; the Behaviors act
+    // inside it (ParentTransformationAtTime: the parent's world x the
+    // Behaviors), so each is taken through the parent undone and redone -
+    // about the frame's centre, as the matrices are.
+    QTransform intoParent, outOfParent;
+    const QTransform parent = layerCanvasParentAt(m_composition.get(), layer, int(std::floor(frame)), QSizeF(scene));
+    bool invertible = true;
+    const QTransform unparent = parent.inverted(&invertible);
+    if (!parent.isIdentity() && invertible) {
+        const QTransform toCentre = QTransform::fromTranslate(-scene.width() / 2.0, -scene.height() / 2.0);
+        const QTransform fromCentre = QTransform::fromTranslate(scene.width() / 2.0, scene.height() / 2.0);
+        intoParent = fromCentre * unparent * toCentre;
+        outOfParent = fromCentre * parent * toCentre;
+    }
+    // Behavior matrices are in composition space - from the frame's centre,
+    // Y up (Drop lifts a layer's lower edge to +height/2, the top) - so the
+    // whole matrix is mirrored into the image's rows, rotation and shear
+    // included: a module's clockwise turn stays clockwise on screen.
+    // Gathered in the reference's order - B1 x B2 x ..., the last one
+    // nearest the layer, so it acts first.
+    QTransform combined;
+    for (const QMatrix4x4& matrix : behaviors.matrices) {
+        const float* m = matrix.constData();
+        combined = toScene * intoParent
+                   * QTransform(double(m[0]), -double(m[1]), -double(m[4]), double(m[5]),
+                                double(m[12]), -double(m[13]))
+                   * outOfParent * toScene.inverted() * combined;
+    }
+    // The simulated body takes the place of the layer's world
+    // (FUN_18036c010): its move is in the world, after the parent.
+    QVector3D simulated;
+    if (layerSimulationOffsetAt(*m_composition, m_mediaManager.get(), layer, frame, &simulated))
+        combined = combined * toScene * QTransform::fromTranslate(double(simulated.x()), -double(simulated.y()))
+                   * toScene.inverted();
+    return combined;
 }
 
 double RenderWorker::applyClipBehaviors(QImage& image,
@@ -708,92 +1166,11 @@ double RenderWorker::applyClipBehaviors(QImage& image,
                                         int frame, int localFrame,
                                         const QSize& canvasSize) const
 {
+    Q_UNUSED(localFrame);
     double opacity = 1.0;
-    const double frameRate = m_composition
-        ? double(m_composition->fpsNumerator())
-              / qMax(1, m_composition->fpsDenominator())
-        : 30.0;
-    const int durationFrames = m_composition
-        ? qMax(1, qRound(clip.durationSeconds
-                         * frameRate))
-        : 1;
-    QVector<plugin::NativeBehaviorRequest> simulationBehaviors;
-    // The modules see the shot at full size, also in a reduced preview; what
-    // they move is moved by as much of the reduced picture.
-    const QSize scene = sceneCanvas(canvasSize);
-    const QTransform toScene = QTransform::fromScale(double(scene.width()) / qMax(1, image.width()),
-                                                     double(scene.height()) / qMax(1, image.height()));
-    // Behavior matrices are in composition space - from the frame's centre,
-    // Y up (Drop lifts a layer's lower edge to +height/2, the top) - so the
-    // whole matrix is mirrored into the image's rows, rotation and shear
-    // included: a module's clockwise turn stays clockwise on screen.
-    const auto applyTransformation = [&image, &toScene](const QMatrix4x4& matrix) {
-        const float* m = matrix.constData();
-        const QTransform transform = toScene
-            * QTransform(double(m[0]), -double(m[1]), -double(m[4]), double(m[5]),
-                         double(m[12]), -double(m[13]))
-            * toScene.inverted();
-        if (transform.isIdentity()) return;
-        if (transform.type() == QTransform::TxTranslate) {
-            image = translatedSubpixel(image, transform.dx(), transform.dy());
-            return;
-        }
-        QImage transformed(image.size(), QImage::Format_RGBA8888);
-        transformed.fill(Qt::transparent);
-        QPainter painter(&transformed);
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        const QPointF centre(image.width() / 2.0, image.height() / 2.0);
-        painter.translate(centre);
-        painter.setTransform(transform, true);
-        painter.translate(-centre);
-        painter.drawImage(QPoint(0, 0), image);
-        image = std::move(transformed);
-    };
-    const qsizetype clipIndex = &clip - layer.clips.constData();
-    for (qsizetype effectIndex = 0; effectIndex < clip.effects.size(); ++effectIndex) {
-        const composition::Effect& fx = clip.effects.at(effectIndex);
-        if (fx.enabled && plugin::nativeBehaviorUsesInstance(fx.pluginId)
-            && clipIndex >= 0 && clipIndex < layer.clips.size()) {
-            // Matrices the module's own instance gave on the GUI thread, on
-            // the canvas from its centre, Y up (NativeInstanceHost::bake).
-            std::array<float, 16> matrix {};
-            const QString key = QStringLiteral("%1/%2/%3").arg(layer.id.value()).arg(clipIndex)
-                                    .arg(effectIndex);
-            if (plugin::nativeInstanceTransformAt(key, frame, &matrix))
-                applyTransformation(QMatrix4x4(matrix.data()).transposed());
-            continue;
-        }
-        if (!fx.enabled || !plugin::nativeBehaviorRenderingVerified(fx.pluginId)
-            || plugin::nativeBehaviorSubObjectRenderingVerified(fx.pluginId)) {
-            continue;
-        }
-        QStringList values = fx.parameterValues;
-        for (int parameter = 0; parameter < values.size(); ++parameter) {
-            values[parameter] = fx.parameterAt(parameter, frame).toString();
-        }
-        if (plugin::nativeBehaviorSimulationRenderingVerified(fx.pluginId)) {
-            simulationBehaviors.push_back({fx.pluginId, values});
-        }
-        plugin::NativeBehaviorResult behavior;
-        if (!plugin::evaluateNativeBehaviorFrame(
-                behavior, frame, localFrame, durationFrames,
-                scene.width(), scene.height(), frameRate,
-                fx.pluginId, values, m_composition.get(), layer.id,
-                behaviorLayerAt(layer, clip, textEffectOf(clip), frame, scene,
-                                m_mediaManager.get()))) {
-            continue;
-        }
-        opacity *= behavior.opacity;
-        applyTransformation(behavior.transformation);
-    }
-    plugin::NativeBehaviorResult simulation;
-    if (plugin::simulateNativeBehaviorStack(
-            simulation, frame, localFrame, durationFrames,
-            scene.width(), scene.height(), frameRate,
-            simulationBehaviors, m_composition.get(), layer.id)) {
-        applyTransformation(simulation.transformation);
-    }
-    return qBound(0.0, opacity, 1.0);
+    const QTransform transform = clipBehaviorTransform(layer, clip, frame, image.size(), canvasSize, &opacity);
+    if (!transform.isIdentity()) image = movedAboutCentre(image, transform);
+    return opacity;
 }
 
 void RenderWorker::applyLayerMasks(QImage& image, const composition::Layer& layer) const
@@ -872,6 +1249,7 @@ QMatrix4x4 RenderWorker::layerModelMatrix(const composition::LayerTransform& tra
 
 model3d::Camera RenderWorker::sceneCamera(const QSize& canvasSize, int frame) const
 {
+    if (m_reflectionCamera) return *m_reflectionCamera;
     if (m_viewCamera) return *m_viewCamera;
     return sceneCameraOf(m_composition.get(), canvasSize, frame);
 }
@@ -925,18 +1303,49 @@ QVector<std::shared_ptr<const model3d::ShadowMap>> RenderWorker::sceneShadowMaps
     if (std::none_of(lights.cbegin(), lights.cend(), [](const model3d::Light& light) { return light.castShadows; }))
         return {};
     QVector<model3d::ShadowCaster> casters;
+    // A sheet as triangles in cells, so one passing beside a light loses
+    // only the cells behind it, not the whole of itself.
+    const auto sheetCaster = [](const SheetPicture& picture, const QMatrix4x4& model) {
+        constexpr int kCells = 16;
+        model3d::ShadowCaster caster;
+        caster.picture = picture.content;
+        const auto corner = [&](int column, int row) {
+            const double u = double(column) / kCells, v = double(row) / kCells;
+            caster.corners << model.map(QVector3D(float(u * picture.sheet.width() - picture.sheet.width() / 2.0),
+                                                  float(picture.sheet.height() / 2.0 - v * picture.sheet.height()),
+                                                  0.0f));
+            caster.uvs << QPointF(u, v);
+        };
+        for (int row = 0; row < kCells; ++row)
+            for (int column = 0; column < kCells; ++column) {
+                corner(column, row); corner(column + 1, row); corner(column + 1, row + 1);
+                corner(column, row); corner(column + 1, row + 1); corner(column, row + 1);
+            }
+        return caster;
+    };
+    // Billboarded Shadows: a sheet that turns to the camera turns to each
+    // light for its shadow instead (the reference draws it with the light's
+    // camera in the shadow pass) - made per light below.
+    struct FacingLight
+    {
+        SheetPicture picture;
+        const composition::Layer* layer = nullptr;
+    };
+    QVector<FacingLight> facingLights;
     for (const composition::Layer& layer : m_composition->layers()) {
         // Cast Shadows If Visibility Is Off: a hidden layer that still
         // casts (castShadowsIfLayerDisabled).
         if (!inScene(layer) || !layer.surface.castShadows) continue;
         if (!layer.visible && !layer.surface.castShadowsIfInvisible) continue;
         if (layer.kind == composition::LayerKind::Model3D) {
-            if (!m_mediaManager || !layer.modelAssetId.isValid()) continue;
+            if (!m_mediaManager || !layer.modelAssetId.isValid()
+                || !composition::layerSpanCovers(layer, frame, m_composition->framesPerSecond()))
+                continue;
             model3d::Mesh mesh = m_mediaManager->modelMesh(layer.modelAssetId);
             if (mesh.isEmpty()) continue;
             const double fps = double(m_composition->fpsNumerator()) / qMax(1, m_composition->fpsDenominator());
             mesh = posedModelMesh(layer, mesh, frame, fps, m_mediaManager->assetById(layer.modelAssetId).sourcePath());
-            const QMatrix4x4 model = layerModelMatrix(layer.transform, frame);
+            const QMatrix4x4 model = layerModelPlacementAt(m_composition.get(), layer, frame);
             model3d::ShadowCaster caster;
             caster.corners.reserve(mesh.triangles.size() * 3);
             for (const model3d::Triangle& triangle : mesh.triangles)
@@ -946,32 +1355,33 @@ QVector<std::shared_ptr<const model3d::ShadowMap>> RenderWorker::sceneShadowMaps
         }
         for (const composition::Clip& clip : layer.clips) {
             if (timeSeconds < clip.startSeconds || timeSeconds > clip.startSeconds + clip.durationSeconds) continue;
+            composition::TextStyle style;
+            QVector<const composition::Effect*> geometryEffects;
+            if (layer.kind == composition::LayerKind::Text && textGeometryOf(clip, frame, &style, &geometryEffects)) {
+                // Text with Geometry casts with its mesh, walls and all, as a
+                // model does - not as the flat picture of it.
+                const model3d::Mesh mesh = textGeometryMesh(layer, clip, style, geometryEffects, canvasSize, frame);
+                const QMatrix4x4 placement = textGeometryPlacement(layer, frame);
+                model3d::ShadowCaster caster;
+                caster.corners.reserve(mesh.triangles.size() * 3);
+                for (const model3d::Triangle& triangle : mesh.triangles)
+                    for (int c = 0; c < 3; ++c) caster.corners << placement.map(mesh.positions.at(triangle.position[c]));
+                if (!caster.corners.isEmpty()) casters << caster;
+                continue;
+            }
             const double speed = clip.speed > 0.0 ? clip.speed : 1.0;
             const double local = clip.sourceStartSeconds + (timeSeconds - clip.startSeconds) * speed;
             const SheetPicture picture = sheetPicture(layer, clip, qMax(0.0, local), canvasSize, frame);
             if (picture.content.isNull()) continue;
-            // In cells, so a sheet passing beside a light loses only the
-            // cells behind it, not the whole of itself.
-            constexpr int kCells = 16;
-            model3d::ShadowCaster caster;
-            caster.picture = picture.content;
-            const auto corner = [&](int column, int row) {
-                const double u = double(column) / kCells, v = double(row) / kCells;
-                caster.corners << picture.model.map(QVector3D(float(u * picture.sheet.width() - picture.sheet.width() / 2.0),
-                                                              float(picture.sheet.height() / 2.0 - v * picture.sheet.height()),
-                                                              0.0f));
-                caster.uvs << QPointF(u, v);
-            };
-            for (int row = 0; row < kCells; ++row)
-                for (int column = 0; column < kCells; ++column) {
-                    corner(column, row); corner(column + 1, row); corner(column + 1, row + 1);
-                    corner(column, row); corner(column + 1, row + 1); corner(column, row + 1);
-                }
-            casters << caster;
+            if (layer.autoOrient == composition::AutoOrient::TowardsActiveCamera && layer.surface.billboardedShadows) {
+                facingLights.append({picture, &layer});
+                continue;
+            }
+            casters << sheetCaster(picture, picture.model);
         }
     }
     QVector<std::shared_ptr<const model3d::ShadowMap>> maps(lights.size());
-    if (casters.isEmpty()) return maps;
+    if (casters.isEmpty() && facingLights.isEmpty()) return maps;
     // Project Settings "Shadow Map Size", fewer texels for a reduced preview;
     // a point light's six at most 1024 each.
     const int asked = qMax(1, m_composition->projectSettings().shadowMapSize);
@@ -980,15 +1390,18 @@ QVector<std::shared_ptr<const model3d::ShadowMap>> RenderWorker::sceneShadowMaps
         const model3d::Light& light = lights.at(i);
         const bool cube = light.type == model3d::Light::Type::Point
             || (light.type == model3d::Light::Type::Spot && light.spotOuterCosine <= 0.867);
-        maps[i] = model3d::makeShadowMap(light, casters, cube ? qMin(size, 1024) : size);
+        QVector<model3d::ShadowCaster> lit = casters;
+        for (const FacingLight& sheet : facingLights) {
+            // Its front to the light: against a spot's or a directional
+            // light's direction, away from a point light (decision of the
+            // port; the reference turns it as the light's shadow camera).
+            const QVector3D at = sheet.picture.model.map(QVector3D());
+            const QVector3D away = light.type == model3d::Light::Type::Point ? at - light.position : light.direction;
+            lit << sheetCaster(sheet.picture, layerPlaneMatrixAt(sheet.layer->transform, frame, aimAlong(away)));
+        }
+        maps[i] = model3d::makeShadowMap(light, lit, cube ? qMin(size, 1024) : size);
     }
     return maps;
-}
-
-QMatrix4x4 RenderWorker::layerPlaneMatrix(const composition::LayerTransform& t, int frame)
-{
-    // Shared with the Layout panel's boxes (render/LayerGeometry).
-    return layerPlaneMatrixAt(t, frame);
 }
 
 bool RenderWorker::inScene(const composition::Layer& layer)
@@ -998,6 +1411,32 @@ bool RenderWorker::inScene(const composition::Layer& layer)
            && (layer.kind == composition::LayerKind::Media || layer.kind == composition::LayerKind::Plane
                || layer.kind == composition::LayerKind::Text);
 }
+
+namespace {
+
+// A model or Geometry text is a body, drawn as a mesh; any other scene layer
+// a sheet.
+bool sceneBody(const composition::Layer& layer)
+{
+    return layer.kind == composition::LayerKind::Model3D
+           || (layer.kind == composition::LayerKind::Text && !layer.clips.isEmpty()
+               && std::any_of(layer.clips.first().effects.cbegin(), layer.clips.first().effects.cend(),
+                              [](const composition::Effect& fx) {
+                                  return fx.enabled && plugin::nativeGeometryRenderingVerified(fx.pluginId);
+                              }));
+}
+
+// The camera seen in a mirror through `origin` square to `normal`.
+model3d::Camera mirroredCamera(model3d::Camera camera, const QVector3D& origin, const QVector3D& normal)
+{
+    const auto point = [&](const QVector3D& p) { return p - 2.0f * QVector3D::dotProduct(p - origin, normal) * normal; };
+    camera.position = point(camera.position);
+    camera.target = point(camera.target);
+    camera.up = camera.up - 2.0f * QVector3D::dotProduct(camera.up, normal) * normal;
+    return camera;
+}
+
+} // namespace
 
 QVector<float> RenderWorker::sceneDistances(const composition::Layer& layer, const QImage& image,
                                             int frame) const
@@ -1010,18 +1449,17 @@ QVector<float> RenderWorker::sceneDistances(const composition::Layer& layer, con
     bool invertible = false;
     const QMatrix4x4 unproject = viewProjection.inverted(&invertible);
     const QVector3D eye = camera.position;
-    // A model or Geometry text is a body, not a sheet: it is placed in depth
-    // by where the layer stands. A sheet is met pixel by pixel.
-    const bool sheet = layer.kind != composition::LayerKind::Model3D
-        && !(layer.kind == composition::LayerKind::Text && !layer.clips.isEmpty()
-             && std::any_of(layer.clips.first().effects.cbegin(), layer.clips.first().effects.cend(),
-                            [](const composition::Effect& fx) {
-                                return fx.enabled && plugin::nativeGeometryRenderingVerified(fx.pluginId);
-                            }));
-    const QMatrix4x4 model = sheet ? layerPlaneMatrix(layer.transform, frame) : QMatrix4x4();
+    // A body is met where its drawn surface lies (its mesh's pixels, noted
+    // as it was drawn), else by where the layer stands. A sheet is met pixel
+    // by pixel on its plane.
+    const bool sheet = !sceneBody(layer);
+    const auto drawn = sheet ? m_meshSurfaces.constEnd() : m_meshSurfaces.constFind(layer.id.value());
+    const model3d::SurfaceBuffer* surface =
+        drawn != m_meshSurfaces.constEnd() && drawn->size == size ? &drawn.value() : nullptr;
+    const QMatrix4x4 model = sheet ? layerSheetMatrixAt(m_composition.get(), layer, frame, m_mediaManager.get())
+                                   : QMatrix4x4();
     const QVector3D origin = sheet ? model.map(QVector3D(0.0f, 0.0f, 0.0f))
-        : QVector3D(float(layer.transform.positionAt(frame).x()), float(layer.transform.positionAt(frame).y()),
-                    float(layer.transform.positionZAt(frame)));
+                                   : layerPositionAt(m_composition.get(), layer, frame);
     const float bodyDistance = (origin - eye).length();
     const QVector3D normal = QVector3D::crossProduct(model.mapVector(QVector3D(1.0f, 0.0f, 0.0f)),
                                                      model.mapVector(QVector3D(0.0f, 1.0f, 0.0f)));
@@ -1033,6 +1471,8 @@ QVector<float> RenderWorker::sceneDistances(const composition::Layer& layer, con
         for (int x = 0; x < size.width(); ++x) {
             if (row[x * 4 + 3] == 0) continue;
             float distance = bodyDistance;
+            if (surface && surface->has(y * size.width() + x))
+                distance = (surface->positions.at(y * size.width() + x) - eye).length();
             if (sheet && invertible) {
                 const double ndcX = 2.0 * (x + 0.5) / width - 1.0;
                 const QVector3D ray = unproject.map(QVector3D(float(ndcX), float(ndcY), 1.0f)) - eye;
@@ -1045,12 +1485,286 @@ QVector<float> RenderWorker::sceneDistances(const composition::Layer& layer, con
     return distances;
 }
 
+model3d::SurfaceBuffer RenderWorker::sceneSurfaces(const composition::Layer& layer, const QImage& image,
+                                                   int frame, int leastAlpha) const
+{
+    model3d::SurfaceBuffer buffer;
+    const QSize size = image.size();
+    if (size.isEmpty()) return buffer;
+    if (sceneBody(layer)) {
+        const auto drawn = m_meshSurfaces.constFind(layer.id.value());
+        if (drawn == m_meshSurfaces.constEnd() || drawn->size != size) return buffer;
+        buffer = *drawn;
+        for (int y = 0; y < size.height(); ++y) {
+            const uchar* row = image.constScanLine(y);
+            for (int x = 0; x < size.width(); ++x)
+                if (row[x * 4 + 3] < leastAlpha)
+                    buffer.depths[y * size.width() + x] = std::numeric_limits<float>::infinity();
+        }
+        return buffer;
+    }
+    buffer.reset(size);
+    const model3d::Camera camera = sceneCamera(sceneCanvas(size), frame);
+    bool invertible = false;
+    const QMatrix4x4 unproject = camera.viewProjection(size).inverted(&invertible);
+    if (!invertible) return buffer;
+    const QMatrix4x4 model = layerSheetMatrixAt(m_composition.get(), layer, frame, m_mediaManager.get());
+    const QVector3D origin = model.map(QVector3D(0.0f, 0.0f, 0.0f));
+    const QVector3D normal = QVector3D::crossProduct(model.mapVector(QVector3D(1.0f, 0.0f, 0.0f)),
+                                                     model.mapVector(QVector3D(0.0f, 1.0f, 0.0f))).normalized();
+    if (normal.isNull()) return buffer;
+    const double width = size.width(), height = size.height();
+    for (int y = 0; y < size.height(); ++y) {
+        const uchar* row = image.constScanLine(y);
+        const float ndcY = float(1.0 - 2.0 * (y + 0.5) / height);
+        for (int x = 0; x < size.width(); ++x) {
+            if (row[x * 4 + 3] < leastAlpha || row[x * 4 + 3] == 0) continue;
+            // The pixel's ray from the near plane to the far one (parallel
+            // rays for an axis view).
+            const float ndcX = float(2.0 * (x + 0.5) / width - 1.0);
+            const QVector3D start = unproject.map(QVector3D(ndcX, ndcY, -1.0f));
+            const QVector3D ray = unproject.map(QVector3D(ndcX, ndcY, 1.0f)) - start;
+            const float along = QVector3D::dotProduct(ray, normal);
+            if (qFuzzyIsNull(along)) continue;
+            const float t = QVector3D::dotProduct(origin - start, normal) / along;
+            if (t < 0.0f) continue;
+            const int at = y * size.width() + x;
+            const QVector3D point = start + ray * t;
+            buffer.positions[at] = point;
+            buffer.normals[at] = QVector3D::dotProduct(normal, ray) > 0.0f ? -normal : normal;
+            buffer.alphas[at] = row[x * 4 + 3] / 255.0f;
+            buffer.depths[at] = t;
+        }
+    }
+    return buffer;
+}
+
+QImage RenderWorker::mirroredScene(const QVector<const composition::Layer*>& casters, const QVector<QImage>& images,
+                                   const QVector3D& origin, const QVector3D& normal, int frame) const
+{
+    const QImage straight = reflectionComposite(casters, images, frame, true, origin, normal);
+    if (straight.isNull()) return straight;
+    const QSize size = straight.size();
+    QImage turned(size, QImage::Format_RGBA8888);
+    for (int y = 0; y < size.height(); ++y) {
+        const quint32* from = reinterpret_cast<const quint32*>(straight.constScanLine(y));
+        quint32* to = reinterpret_cast<quint32*>(turned.scanLine(y));
+        for (int x = 0; x < size.width(); ++x) to[x] = from[size.width() - 1 - x];
+    }
+    return turned;
+}
+
+QImage RenderWorker::latLongFromCube(const QVector<QImage>& faces, const QVector<model3d::Camera>& cameras,
+                                     const QVector3D& centre, int height)
+{
+    if (faces.isEmpty() || faces.size() != cameras.size() || height <= 0) return QImage();
+    const QSize size = faces.first().size();
+    QVector<QMatrix4x4> projections;
+    QVector<QVector3D> forwards;
+    for (const model3d::Camera& camera : cameras) {
+        projections.append(camera.viewProjection(size));
+        forwards.append((camera.target - camera.position).normalized());
+    }
+    const int width = 2 * height;
+    QImage latLong(width, height, QImage::Format_RGBA8888);
+    latLong.fill(Qt::transparent);
+    constexpr double kPi = 3.14159265358979323846;
+    for (int y = 0; y < height; ++y) {
+        uchar* row = latLong.scanLine(y);
+        const double phi = (y + 0.5) / height * kPi;
+        for (int x = 0; x < width; ++x) {
+            const double theta = ((x + 0.5) / width - 0.5) * 2.0 * kPi;
+            const QVector3D direction(float(std::sin(phi) * std::sin(theta)), float(std::cos(phi)),
+                                      float(std::sin(phi) * std::cos(theta)));
+            int face = 0;
+            for (int f = 1; f < forwards.size(); ++f)
+                if (QVector3D::dotProduct(direction, forwards.at(f)) > QVector3D::dotProduct(direction, forwards.at(face)))
+                    face = f;
+            const QVector4D clip = projections.at(face) * QVector4D(centre + direction * 10.0f, 1.0f);
+            if (clip.w() <= 0.0f) continue;
+            const double px = (clip.x() / clip.w() * 0.5 + 0.5) * size.width() - 0.5;
+            const double py = (1.0 - (clip.y() / clip.w() * 0.5 + 0.5)) * size.height() - 0.5;
+            const QImage& image = faces.at(face);
+            const int x0 = qBound(0, int(std::floor(px)), size.width() - 1), x1 = qMin(x0 + 1, size.width() - 1);
+            const int y0 = qBound(0, int(std::floor(py)), size.height() - 1), y1 = qMin(y0 + 1, size.height() - 1);
+            const double tx = qBound(0.0, px - std::floor(px), 1.0), ty = qBound(0.0, py - std::floor(py), 1.0);
+            const uchar* top = image.constScanLine(y0);
+            const uchar* bottom = image.constScanLine(y1);
+            for (int c = 0; c < 4; ++c)
+                row[x * 4 + c] = uchar(std::lround((top[x0 * 4 + c] * (1.0 - tx) + top[x1 * 4 + c] * tx) * (1.0 - ty)
+                                                   + (bottom[x0 * 4 + c] * (1.0 - tx) + bottom[x1 * 4 + c] * tx) * ty));
+        }
+    }
+    return latLong;
+}
+
+QImage RenderWorker::reflectionComposite(const QVector<const composition::Layer*>& casters, const QVector<QImage>& images,
+                                         int frame, bool clipped, const QVector3D& origin, const QVector3D& normal) const
+{
+    if (casters.isEmpty() || images.size() != casters.size() || images.first().isNull()) return QImage();
+    const QSize size = images.first().size();
+    const QVector3D eye = sceneCamera(sceneCanvas(size), frame).position;
+    QVector<model3d::SurfaceBuffer> shown;
+    QVector<QImage> premultiplied;
+    for (int i = 0; i < casters.size(); ++i) {
+        shown.append(sceneSurfaces(*casters.at(i), images.at(i), frame, 1));
+        premultiplied.append(images.at(i).convertToFormat(QImage::Format_RGBA8888_Premultiplied));
+    }
+    QImage merged(size, QImage::Format_RGBA8888_Premultiplied);
+    merged.fill(Qt::transparent);
+    QVarLengthArray<std::pair<float, int>, 16> order;
+    for (int y = 0; y < size.height(); ++y) {
+        uchar* target = merged.scanLine(y);
+        for (int x = 0; x < size.width(); ++x) {
+            const int at = y * size.width() + x;
+            order.clear();
+            for (int i = 0; i < shown.size(); ++i) {
+                const model3d::SurfaceBuffer& buffer = shown.at(i);
+                if (buffer.size != size || !buffer.has(at)) continue;
+                const QVector3D point = buffer.positions.at(at);
+                if (clipped && QVector3D::dotProduct(normal, point - origin) < -1e-3f) continue;   // behind the mirror
+                order.append({(point - eye).length(), i});
+            }
+            if (order.isEmpty()) continue;
+            std::stable_sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+            uchar* pixel = target + x * 4;
+            for (const auto& entry : order) {
+                const uchar* source = premultiplied.at(entry.second).constScanLine(y) + x * 4;
+                const int keep = 255 - source[3];
+                for (int c = 0; c < 4; ++c) pixel[c] = uchar(qMin(255, source[c] + (pixel[c] * keep + 127) / 255));
+            }
+        }
+    }
+    return merged.convertToFormat(QImage::Format_RGBA8888);
+}
+
+void RenderWorker::addPlanarReflection(QImage& image, const QImage& mirror, double amount)
+{
+    if (mirror.size() != image.size() || amount <= 0.0) return;
+    for (int y = 0; y < image.height(); ++y) {
+        uchar* row = image.scanLine(y);
+        const uchar* reflected = mirror.constScanLine(y);
+        for (int x = 0; x < image.width(); ++x) {
+            if (row[x * 4 + 3] == 0 || reflected[x * 4 + 3] == 0) continue;
+            const double scale = reflected[x * 4 + 3] / 255.0 * amount * amount;
+            for (int c = 0; c < 3; ++c)
+                row[x * 4 + c] = uchar(qMin(255L, row[x * 4 + c] + std::lround(reflected[x * 4 + c] * scale)));
+        }
+    }
+}
+
+void RenderWorker::addEnvironment(QImage& image, const composition::Layer& layer, const QImage& environment,
+                                  int frame) const
+{
+    const double specular = layer.surface.specularReflectivityAt(frame) / 100.0;
+    const double diffuse = layer.surface.diffuseReflectivityAt(frame) / 100.0;
+    if (image.isNull() || environment.isNull() || (specular <= 0.0 && diffuse <= 0.0)) return;
+    const QImage latLong = environment.convertToFormat(QImage::Format_RGBA8888);
+    const model3d::SurfaceBuffer shown = sceneSurfaces(layer, image, frame, 1);
+    if (shown.size != image.size()) return;
+    const QVector3D eye = sceneCamera(sceneCanvas(image.size()), frame).position;
+    const model3d::Irradiance irradiance = diffuse > 0.0 ? model3d::irradianceOf(latLong) : model3d::Irradiance();
+    for (int y = 0; y < image.height(); ++y) {
+        uchar* row = image.scanLine(y);
+        for (int x = 0; x < image.width(); ++x) {
+            const int at = y * image.width() + x;
+            if (!shown.has(at)) continue;
+            const QVector3D normal = shown.normals.at(at);
+            const QVector3D view = (shown.positions.at(at) - eye).normalized();
+            const QVector3D reflected = view - 2.0f * QVector3D::dotProduct(view, normal) * normal;
+            const float alpha = row[x * 4 + 3] / 255.0f;
+            const QVector3D colour(row[x * 4] / 255.0f, row[x * 4 + 1] / 255.0f, row[x * 4 + 2] / 255.0f);
+            QVector3D out = colour;
+            if (specular > 0.0) out += model3d::environmentColor(latLong, reflected) * alpha * float(specular);
+            if (diffuse > 0.0) out += irradiance.at(normal) * colour * alpha * float(diffuse);
+            row[x * 4] = uchar(qBound(0, int(std::lround(out.x() * 255.0f)), 255));
+            row[x * 4 + 1] = uchar(qBound(0, int(std::lround(out.y() * 255.0f)), 255));
+            row[x * 4 + 2] = uchar(qBound(0, int(std::lround(out.z() * 255.0f)), 255));
+        }
+    }
+}
+
+void RenderWorker::occludeScene(const QVector<const composition::Layer*>& layers, QVector<QImage>& images,
+                                int frame) const
+{
+    if (layers.isEmpty() || images.size() != layers.size()) return;
+    const QSize size = images.first().size();
+    if (size.isEmpty()
+        || std::none_of(layers.cbegin(), layers.cend(), [](const composition::Layer* layer) {
+               return layer->surface.receiveAmbientOcclusion;
+           }))
+        return;
+    const model3d::Camera camera = sceneCamera(sceneCanvas(size), frame);
+    QMatrix4x4 view;
+    view.lookAt(camera.position, camera.target, camera.up);
+    QVector<model3d::SurfaceBuffer> shown(layers.size());
+    for (int i = 0; i < layers.size(); ++i) {
+        const composition::SurfaceShading& surface = layers.at(i)->surface;
+        if (surface.receiveAmbientOcclusion || surface.castAmbientOcclusion)
+            shown[i] = sceneSurfaces(*layers.at(i), images.at(i), frame);
+    }
+    const int count = size.width() * size.height();
+    for (int r = 0; r < layers.size(); ++r) {
+        const composition::Layer& receiver = *layers.at(r);
+        if (!receiver.surface.receiveAmbientOcclusion || shown.at(r).size != size) continue;
+        // Its G-buffer: itself and the layers casting occlusion, the nearest
+        // at each pixel, in eye space - a model leaving out what is not
+        // opaque unless it includes semi-transparent triangles.
+        QVector<QVector3D> positions(count), normals(count);
+        QVector<float> weights(count, 0.0f);
+        QVector<float> nearest(count, std::numeric_limits<float>::infinity());
+        for (int i = 0; i < layers.size(); ++i) {
+            const composition::Layer& member = *layers.at(i);
+            if (i != r && !member.surface.castAmbientOcclusion) continue;
+            const model3d::SurfaceBuffer& buffer = shown.at(i);
+            if (buffer.size != size) continue;
+            const bool opaqueOnly = member.kind == composition::LayerKind::Model3D
+                                    && !member.surface.includeSemiTransparentTriangles;
+            for (int at = 0; at < count; ++at) {
+                if (!buffer.has(at) || (opaqueOnly && buffer.alphas.at(at) < 1.0f)) continue;
+                const QVector3D eye = view.map(buffer.positions.at(at));
+                if (-eye.z() >= nearest.at(at)) continue;
+                nearest[at] = -eye.z();
+                positions[at] = eye;
+                normals[at] = view.mapVector(buffer.normals.at(at));
+                weights[at] = buffer.alphas.at(at);
+            }
+        }
+        const composition::SurfaceShading& surface = receiver.surface;
+        model3d::AmbientOcclusion settings;
+        settings.samples = surface.aoSamples;
+        settings.sampleRadius = surface.aoSampleRadius;
+        settings.intensity = surface.aoIntensity / 100.0;
+        settings.depthScale = surface.aoDepthScale / 100.0;
+        settings.bias = surface.aoBias;
+        // Blur Radius is in pixels of the picture: fewer in a reduced
+        // preview, so it looks as the full frame does.
+        settings.blurRadius = int(std::lround(surface.aoBlurRadius * qMin(1.0, m_renderScale)));
+        settings.depthFalloff = surface.aoDepthFalloff / 100.0;
+        const QVector<float> open = model3d::ambientOcclusionMap(size, positions, normals, weights, settings);
+        const model3d::SurfaceBuffer& own = shown.at(r);
+        const bool body = sceneBody(receiver);
+        QImage& image = images[r];
+        for (int y = 0; y < size.height(); ++y) {
+            uchar* row = image.scanLine(y);
+            for (int x = 0; x < size.width(); ++x) {
+                const int at = y * size.width() + x;
+                if (row[x * 4 + 3] == 0 || !own.has(at) || (body && own.alphas.at(at) < 1.0f)) continue;
+                const float keep = open.at(at);
+                for (int c = 0; c < 3; ++c) row[x * 4 + c] = uchar(std::lround(row[x * 4 + c] * keep));
+            }
+        }
+    }
+}
+
 model3d::DepthOfField RenderWorker::sceneDepthOfField(int frame) const
 {
     model3d::DepthOfField dof;
     if (!m_composition || m_viewCamera) return dof;
     for (const composition::Layer& layer : m_composition->layers()) {
-        if (layer.kind != composition::LayerKind::Camera || !layer.visible) continue;
+        if (layer.kind != composition::LayerKind::Camera || !layer.visible
+            || !composition::layerSpanCovers(layer, frame, m_composition->framesPerSecond()))
+            continue;
         const composition::CameraSettings& camera = layer.camera;
         if (!camera.depthOfField || camera.blurAt(frame) <= 0.0) return dof;
         const double width = qMax(1, m_composition->displaySize().width());
@@ -1088,8 +1802,9 @@ int RenderWorker::sceneSamples() const
 model3d::Fog RenderWorker::sceneFog() const
 {
     model3d::Fog fog;
-    // A view with its own camera looks from far off: no fog there.
-    if (!m_composition || m_viewCamera) return fog;
+    // A view with its own camera looks from far off: no fog there. Nor in
+    // a reflection (Flux turns it off for the planar map).
+    if (!m_composition || m_viewCamera || m_reflectionCamera) return fog;
     const composition::CompositionRenderSettings& s = m_composition->renderSettings();
     fog.enabled = s.fogEnabled;
     fog.nearDistance = s.fogNearDistance;
@@ -1128,13 +1843,14 @@ RenderWorker::SheetPicture RenderWorker::sheetPicture(const composition::Layer& 
     composition::Layer flat = layer;
     flat.dimension = composition::LayerDimension::TwoD;
     flat.transform = composition::LayerTransform();
+    flat.parentLayerId = core::Identifier();
     const QSize drawn = scene == canvasSize
         ? plane
         : QSize(qMax(1, int(std::lround(plane.width() * double(canvasSize.width()) / scene.width()))),
                 qMax(1, int(std::lround(plane.height() * double(canvasSize.height()) / scene.height()))));
     picture.content = renderClip(flat, clip, localTimeSeconds, drawn, frame, plane);
     picture.sheet = plane;
-    picture.model = layerPlaneMatrix(layer.transform, frame);
+    picture.model = layerSheetMatrixAt(m_composition.get(), layer, frame, m_mediaManager.get());
     return picture;
 }
 
@@ -1278,6 +1994,7 @@ QImage RenderWorker::layerTexture(const core::Identifier& layerId,
         composition::Layer flat = *source;
         flat.dimension = composition::LayerDimension::TwoD;
         flat.transform = composition::LayerTransform();
+        flat.parentLayerId = core::Identifier();
         const double speed = clip.speed > 0.0 ? clip.speed : 1.0;
         const double local = clip.sourceStartSeconds + (seconds - clip.startSeconds) * speed;
         const double scale = m_renderScale;
@@ -1290,20 +2007,57 @@ QImage RenderWorker::layerTexture(const core::Identifier& layerId,
     return QImage();
 }
 
-QImage RenderWorker::renderModelLayer(const composition::Layer& layer, const QSize& canvasSize,
-                                      int frame) const
+QImage RenderWorker::assetTexture(const core::Identifier& assetId, int frame) const
 {
-    if (!m_mediaManager || !layer.modelAssetId.isValid()) {
-        return QImage();
+    if (!m_composition || !m_mediaManager || !assetId.isValid()) return QImage();
+    const media::MediaAsset asset = m_mediaManager->assetById(assetId);
+    if (!asset.isValid() || !asset.frameSize().isValid()) return QImage();
+    const double fps = m_composition->fpsDenominator() > 0
+        ? double(m_composition->fpsNumerator()) / m_composition->fpsDenominator() : 30.0;
+    const QSize plane(int(std::ceil(asset.frameSize().width() * asset.pixelAspectValue())), asset.frameSize().height());
+    composition::Layer flat;
+    flat.kind = composition::LayerKind::Media;
+    composition::Clip clip;
+    clip.mediaId = assetId;
+    clip.durationSeconds = qMax(1.0, m_composition->durationSeconds());
+    const double scale = m_renderScale;
+    m_renderScale = 1.0;
+    QImage picture = renderClip(flat, clip, qMax(0.0, frame / qMax(1.0, fps)), plane, frame, plane);
+    m_renderScale = scale;
+    return picture.isNull() ? picture : picture.convertToFormat(QImage::Format_RGBA8888);
+}
+
+QImage RenderWorker::environmentOf(const composition::SurfaceShading& surface, const QImage& composite,
+                                   const core::Identifier& forLayer, int frame) const
+{
+    using Environment = composition::SurfaceShading::EnvironmentMap;
+    switch (surface.environmentMap) {
+    case Environment::CompositeShot: return composite;
+    case Environment::Layer: return layerTexture(surface.environmentMapLayer, forLayer, frame);
+    case Environment::Asset: return assetTexture(surface.environmentMapLayer, frame);
+    case Environment::None: break;
     }
-    model3d::Mesh mesh = m_mediaManager->modelMesh(layer.modelAssetId);
-    if (mesh.isEmpty()) {
-        return QImage();
-    }
+    return QImage();
+}
+
+model3d::Mesh RenderWorker::posedModel(const composition::Layer& layer, int frame) const
+{
+    if (!m_mediaManager || !layer.modelAssetId.isValid()) return model3d::Mesh();
+    const model3d::Mesh mesh = m_mediaManager->modelMesh(layer.modelAssetId);
+    if (mesh.isEmpty()) return mesh;
     // The animations playing on the layer, then its nodes' own transforms.
     const double fps = m_composition
         ? double(m_composition->fpsNumerator()) / qMax(1, m_composition->fpsDenominator()) : 30.0;
-    mesh = posedModelMesh(layer, mesh, frame, fps, m_mediaManager->assetById(layer.modelAssetId).sourcePath());
+    return posedModelMesh(layer, mesh, frame, fps, m_mediaManager->assetById(layer.modelAssetId).sourcePath());
+}
+
+QImage RenderWorker::renderModelLayer(const composition::Layer& layer, const QSize& canvasSize,
+                                      int frame) const
+{
+    model3d::Mesh mesh = posedModel(layer, frame);
+    if (mesh.isEmpty()) {
+        return QImage();
+    }
     // Override Materials: a map left out, or taken from a layer.
     using Override = composition::ModelMaterialOverride;
     for (const Override& entry : layer.materialOverrides) {
@@ -1347,10 +2101,50 @@ QImage RenderWorker::renderModelLayer(const composition::Layer& layer, const QSi
             }
         }
     }
-    return model3d::renderMesh(mesh, layerModelMatrix(layer.transform, frame),
+    model3d::Lighting lighting = sceneLighting(layer, frame);
+    lighting.reflections = m_modelReflections.value(layer.id.value());
+    return model3d::renderMesh(mesh, layerModelPlacementAt(m_composition.get(), layer, frame),
                                sceneCamera(sceneCanvas(canvasSize), frame), canvasSize,
-                               sceneLighting(layer, frame), model3d::ShadingMode::Shaded, 1.0, sceneFog(),
-                               sceneSamples());
+                               lighting, model3d::ShadingMode::Shaded, 1.0, sceneFog(),
+                               sceneSamples(), m_collectSurfaces ? &m_meshSurfaces[layer.id.value()] : nullptr);
+}
+
+bool RenderWorker::layerHasTextGeometry(const composition::Layer& layer, int frame) const
+{
+    if (layer.kind != composition::LayerKind::Text || !m_composition) return false;
+    const double fps = m_composition->fpsDenominator() > 0
+        ? double(m_composition->fpsNumerator()) / m_composition->fpsDenominator() : 30.0;
+    const double seconds = frame / qMax(1.0, fps);
+    for (const composition::Clip& clip : layer.clips) {
+        if (seconds < clip.startSeconds || seconds >= clip.endSeconds()) continue;
+        composition::TextStyle style;
+        QVector<const composition::Effect*> effects;
+        return textGeometryOf(clip, frame, &style, &effects);
+    }
+    return false;
+}
+
+bool RenderWorker::textGeometryOf(const composition::Clip& clip, int frame, composition::TextStyle* style,
+                                  QVector<const composition::Effect*>* effects)
+{
+    const composition::Effect* text = textEffectOf(clip);
+    if (!text) return false;
+    effects->clear();
+    for (const composition::Effect& fx : clip.effects)
+        if (fx.enabled && plugin::nativeGeometryRenderingVerified(fx.pluginId)) effects->append(&fx);
+    if (effects->isEmpty()) return false;
+    QStringList values = text->parameterValues;
+    for (int p = 0; p < values.size(); ++p) values[p] = text->parameterAt(p, frame).toString();
+    *style = composition::textStyleFromParameters(values);
+    return !style->text.isEmpty();
+}
+
+QMatrix4x4 RenderWorker::textGeometryPlacement(const composition::Layer& layer, int frame) const
+{
+    // Its turn in the scene, made its own under its parent's.
+    const QMatrix4x4 parent = layerParentMatrixAt(m_composition.get(), layer, frame);
+    const QMatrix4x4 local = turnOf(parent).transposed() * layerTurnAt(m_composition.get(), layer, frame);
+    return parent * layerModelMatrixAt(layer.transform, frame, local);
 }
 
 QImage RenderWorker::renderTextGeometry(const composition::Layer& layer,
@@ -1358,6 +2152,43 @@ QImage RenderWorker::renderTextGeometry(const composition::Layer& layer,
                                         const composition::TextStyle& style,
                                         const QVector<const composition::Effect*>& effects,
                                         const QSize& canvasSize, int frame) const
+{
+    const QSize scene = sceneCanvas(canvasSize);
+    const model3d::Mesh mesh = textGeometryMesh(layer, clip, style, effects, canvasSize, frame);
+
+    // A 3D layer is placed and seen like a model; a 2D one keeps the 2D text
+    // placement under the camera that shows the z = 0 plane at frame size.
+    QMatrix4x4 placement;
+    model3d::Camera camera;
+    if (layer.dimension == composition::LayerDimension::ThreeD) {
+        placement = textGeometryPlacement(layer, frame);
+        camera = sceneCamera(scene, frame);
+    } else {
+        const QPointF position = layer.transform.positionAt(frame);
+        const QPointF scale = layer.transform.scaleAt(frame);
+        placement.translate(float(position.x()), float(position.y()), 0.0f);
+        placement.rotate(float(-layerAngleAt(layer, frame)), 0.0f, 0.0f, 1.0f);
+        placement.scale(float(scale.x() / 100.0), float(scale.y() / 100.0), 1.0f);
+        placement = layerParentMatrixAt(m_composition.get(), layer, frame) * placement;
+        camera = model3d::defaultCameraForCanvas(scene);
+    }
+    // Multisampled as the rest of the 3D scene, which keeps glyph edges close
+    // to the 2D text's. Fog and the lights reach the 3D layer only; a 2D one
+    // is not in the scene.
+    const bool inSpace = layer.dimension == composition::LayerDimension::ThreeD;
+    const model3d::Fog fog = inSpace ? sceneFog() : model3d::Fog();
+    model3d::Lighting lighting = inSpace ? sceneLighting(layer, frame) : model3d::Lighting();
+    // Its Environment Map, as a model's: through the mesh's own normals.
+    if (inSpace) lighting.reflections = m_modelReflections.value(layer.id.value());
+    return model3d::renderMesh(mesh, placement, camera, canvasSize, lighting,
+                               model3d::ShadingMode::Shaded, 1.0, fog, sceneSamples(),
+                               m_collectSurfaces && inSpace ? &m_meshSurfaces[layer.id.value()] : nullptr);
+}
+
+model3d::Mesh RenderWorker::textGeometryMesh(const composition::Layer& layer, const composition::Clip& clip,
+                                             const composition::TextStyle& style,
+                                             const QVector<const composition::Effect*>& effects,
+                                             const QSize& canvasSize, int frame) const
 {
     // Flux builds this geometry for a TextBox with enabled Geometry effects
     // (FUN_1804d94e0) and runs the effects over it in order, each one
@@ -1390,44 +2221,11 @@ QImage RenderWorker::renderTextGeometry(const composition::Layer& layer,
                                               float(style.fontColor.blueF() * specularShare));
     material.shininess = layer.surface.shininessAt(frame) / 100.0;
     material.opacity = style.fontColor.alphaF();
-    const model3d::Mesh mesh = meshFromGeometry(geometry, {material});
-
-    // A 3D layer is placed and seen like a model; a 2D one keeps the 2D text
-    // placement under the camera that shows the z = 0 plane at frame size.
-    QMatrix4x4 placement;
-    model3d::Camera camera;
-    if (layer.dimension == composition::LayerDimension::ThreeD) {
-        placement = layerModelMatrix(layer.transform, frame);
-        camera = sceneCamera(scene, frame);
-    } else {
-        const QPointF position = layer.transform.positionAt(frame);
-        const QPointF scale = layer.transform.scaleAt(frame);
-        placement.translate(float(position.x()), float(position.y()), 0.0f);
-        placement.rotate(float(-layer.transform.rotationAt(frame)), 0.0f, 0.0f, 1.0f);
-        placement.scale(float(scale.x() / 100.0), float(scale.y() / 100.0), 1.0f);
-        camera = model3d::defaultCameraForCanvas(scene);
-    }
-    // Multisampled as the rest of the 3D scene, which keeps glyph edges close
-    // to the 2D text's. Fog and the lights reach the 3D layer only; a 2D one
-    // is not in the scene.
-    const bool inSpace = layer.dimension == composition::LayerDimension::ThreeD;
-    const model3d::Fog fog = inSpace ? sceneFog() : model3d::Fog();
-    const model3d::Lighting lighting = inSpace ? sceneLighting(layer, frame) : model3d::Lighting();
-    return model3d::renderMesh(mesh, placement, camera, canvasSize, lighting,
-                               model3d::ShadingMode::Shaded, 1.0, fog, sceneSamples());
-}
-
-bool RenderWorker::frameScalesDown() const
-{
-    if (!m_composition) return false;
-    for (const composition::Layer& layer : m_composition->layers()) {
-        if (layer.kind == composition::LayerKind::Grade) {
-            for (const composition::Clip& clip : layer.clips) {
-                if (!clipScalesDown(clip)) return false;
-            }
-        }
-    }
-    return true;
+    // What the environment gives it: the text's Specular and Diffuse
+    // Reflectivity.
+    material.specularReflectivity = qMax(0.0, layer.surface.specularReflectivityAt(frame) / 100.0);
+    material.diffuseReflectivity = qMax(0.0, layer.surface.diffuseReflectivityAt(frame) / 100.0);
+    return meshFromGeometry(geometry, {material});
 }
 
 QImage RenderWorker::renderShotImage(double timeSeconds, double scale, bool withEffects,
@@ -1440,10 +2238,6 @@ QImage RenderWorker::renderShotImage(double timeSeconds, double scale, bool with
     }
     const QSize reduced(qMax(1, int(std::lround(full.width() * scale))),
                         qMax(1, int(std::lround(full.height() * scale))));
-    if (!frameScalesDown()) {
-        return reducedTo(renderFrameImage(timeSeconds, full, withEffects, transparentBackground),
-                         reduced);
-    }
     const double previous = m_renderScale;
     m_renderScale = scale;
     QImage image = renderFrameImage(timeSeconds, reduced, withEffects, transparentBackground);
@@ -1478,6 +2272,8 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
         // rasterised over the whole canvas and composited like any other layer.
         if (layer.kind == composition::LayerKind::Model3D) {
             const int frameNo = frameForTime(timeSeconds);
+            // Drawn only within its span.
+            if (!composition::layerSpanCovers(layer, frameNo, m_composition->framesPerSecond())) return;
             QImage modelImage = renderModelLayer(layer, size, frameNo);
             if (modelImage.isNull()) {
                 return;
@@ -1546,11 +2342,17 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
                 values.append(effect.parameterAt(i, frameNo).toString());
             }
             const float progress = float(window.progressAt(timeSeconds));
+            plugin::NativeFrameTime transitionTime;
+            transitionTime.frameRate = fps;
+            transitionTime.transitionSeconds = window.end - window.start;
+            transitionTime.transitionCut = window.end > window.start
+                ? float((window.cut - window.start) / (window.end - window.start)) : 0.0f;
             QImage mixed;
             if (!withEffects
                 || !plugin::nativeVideoTransitionRenderingVerified(effect.pluginId)
                 || !plugin::applyNativeVideoTransition(mixed, from, to, progress,
-                                                       effect.pluginId, values)) {
+                                                       effect.pluginId, values,
+                                                       transitionTime)) {
                 // Effects disabled by the quality profile, or a module this
                 // build cannot run: keep the cut soft with a plain dissolve.
                 mixed = dissolveImages(from, to, progress);
@@ -1574,8 +2376,199 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
     // says, and a 2D layer - or a Grade - between them starts a new one.
     struct SceneLayer { const composition::Layer* layer; QImage image; };
     QVector<SceneLayer> scene;
+    // Whether a scene layer receives ambient occlusion: then the meshes note
+    // what they show as they are drawn.
+    const bool occlusion = std::any_of(layers.cbegin(), layers.cend(), [](const composition::Layer& layer) {
+        return layer.visible && inScene(layer) && layer.surface.receiveAmbientOcclusion;
+    });
+    // With more than one layer in the space, a body (a model, a text made
+    // solid) notes where its pixels lie, so what is nearer covers what is
+    // further pixel by pixel - a word on a cube's far face stays behind it.
+    const bool sharedSpace = std::count_if(layers.cbegin(), layers.cend(), [](const composition::Layer& layer) {
+        return layer.visible && inScene(layer);
+    }) > 1;
+    m_meshSurfaces.clear();
+    m_modelReflections.clear();
+    // Whether a scene sheet receives reflections or a 3D text has an
+    // environment map.
+    const auto reflects = [](const composition::Layer& layer) {
+        return layer.visible && inScene(layer) && !sceneBody(layer)
+               && (layer.surface.receiveReflections
+                   || (layer.kind == composition::LayerKind::Text
+                       && layer.surface.environmentMap != composition::SurfaceShading::EnvironmentMap::None));
+    };
+    const bool reflecting = std::any_of(layers.cbegin(), layers.cend(), reflects);
+    // A receiving sheet's planar reflection map: the scene's layers that
+    // cast reflections - those up to the 2D layers or Grades on either
+    // side, hidden ones too with Cast Reflections If Visibility Is Off -
+    // drawn through the camera mirrored in its plane.
+    const auto closesScene = [&](const composition::Layer& layer) {
+        return layer.visible && !inScene(layer) && !m_viewCamera && layer.kind != composition::LayerKind::Point
+               && layer.kind != composition::LayerKind::Light && layer.kind != composition::LayerKind::Camera;
+    };
+    const auto castersNear = [&](const composition::Layer& receiver) {
+        const int index = int(&receiver - layers.constData());
+        int first = index, last = index;
+        while (first > 0 && !closesScene(layers.at(first - 1))) --first;
+        while (last + 1 < layers.size() && !closesScene(layers.at(last + 1))) ++last;
+        QVector<const composition::Layer*> casters;
+        for (int i = qMax(0, first); i <= last; ++i) {
+            const composition::Layer& layer = layers.at(i);
+            if (&layer != &receiver && inScene(layer) && layer.surface.castReflections
+                && (layer.visible || layer.surface.castReflectionsIfInvisible))
+                casters.append(&layer);
+        }
+        return casters;
+    };
+    // The casters drawn through `view` (fogless, their meshes noting what
+    // they show), then made into one picture by `compose`.
+    const auto throughCamera = [&](const model3d::Camera& view, const QVector<const composition::Layer*>& casters,
+                                   const std::function<QImage(const QVector<QImage>&)>& compose) {
+        QHash<QString, model3d::SurfaceBuffer> drawn;
+        drawn.swap(m_meshSurfaces);
+        const bool collecting = m_collectSurfaces;
+        const std::optional<model3d::Camera> kept = m_reflectionCamera;
+        m_reflectionCamera = view;
+        m_collectSurfaces = true;
+        QVector<QImage> images;
+        for (const composition::Layer* caster : casters) {
+            QImage image(size, QImage::Format_RGBA8888);
+            image.fill(Qt::transparent);
+            paintLayer(*caster, image, QPainter::CompositionMode_SourceOver);
+            images.append(image);
+        }
+        m_collectSurfaces = false;
+        const QImage result = compose(images);
+        m_reflectionCamera = kept;
+        m_meshSurfaces.swap(drawn);
+        m_collectSurfaces = collecting;
+        return result;
+    };
+    // A planar reflection map for a plane through `origin` facing `normal`.
+    const auto mirrorIn = [&](const composition::Layer& receiver, const QVector3D& origin, QVector3D normal,
+                              int frameNo) -> QImage {
+        const QVector<const composition::Layer*> casters = castersNear(receiver);
+        if (casters.isEmpty() || normal.isNull()) return QImage();
+        const model3d::Camera camera = sceneCamera(sceneCanvas(size), frameNo);
+        if (QVector3D::dotProduct(normal, camera.position - origin) < 0.0f) normal = -normal;
+        return throughCamera(mirroredCamera(camera, origin, normal), casters, [&](const QVector<QImage>& images) {
+            return mirroredScene(casters, images, origin, normal, frameNo);
+        });
+    };
+    const auto reflectionOf = [&](const composition::Layer& receiver, int frameNo) -> QImage {
+        const QMatrix4x4 sheet = layerSheetMatrixAt(m_composition.get(), receiver, frameNo, m_mediaManager.get());
+        return mirrorIn(receiver, sheet.map(QVector3D(0.0f, 0.0f, 0.0f)),
+                        QVector3D::crossProduct(sheet.mapVector(QVector3D(1.0f, 0.0f, 0.0f)),
+                                                sheet.mapVector(QVector3D(0.0f, 1.0f, 0.0f))).normalized(),
+                        frameNo);
+    };
+    // What a model reflects (model3d::Reflections): receiving reflections,
+    // the scene round its middle (the mean of its corners) as Flux's
+    // DynamicReflectionsCubeMap draws it (Flux.dll 0x18043d630: six faces,
+    // fogless, Reflection Map Size texels), and for each Planar material the
+    // scene mirrored in its plane (its triangles' area-weighted middle and
+    // normal); without a cube - nothing casting reflections, or not
+    // receiving them - its Environment Map. (Which of the cube and the
+    // environment Flux takes when it has both is not recovered: here the
+    // cube.)
+    const auto modelReflectionsOf = [&](const composition::Layer& model, int frameNo)
+        -> std::shared_ptr<const model3d::Reflections> {
+        auto reflections = std::make_shared<model3d::Reflections>();
+        const model3d::Mesh mesh = posedModel(model, frameNo);
+        if (mesh.isEmpty()) return nullptr;
+        const QMatrix4x4 placement = layerModelPlacementAt(m_composition.get(), model, frameNo);
+        if (model.surface.receiveReflections) {
+            const QVector<const composition::Layer*> casters = castersNear(model);
+            if (!casters.isEmpty()) {
+                QVector3D centre;
+                for (const QVector3D& corner : mesh.positions) centre += placement.map(corner);
+                centre /= float(qMax(1, int(mesh.positions.size())));
+                const QVector3D directions[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+                QVector<model3d::Camera> cameras;
+                QVector<QImage> faces;
+                const double aspect = size.height() > 0 ? double(size.width()) / size.height() : 1.0;
+                for (const QVector3D& direction : directions) {
+                    model3d::Camera face;
+                    face.position = centre;
+                    face.target = centre + direction;
+                    face.up = std::abs(direction.y()) > 0.5f ? QVector3D(0.0f, 0.0f, 1.0f) : QVector3D(0.0f, 1.0f, 0.0f);
+                    // At least 90 degrees across and up.
+                    face.fieldOfViewDegrees = aspect >= 1.0 ? 90.0 : qRadiansToDegrees(2.0 * std::atan(1.0 / aspect));
+                    face.nearPlane = 1.0;
+                    cameras.append(face);
+                    faces.append(throughCamera(face, casters, [&](const QVector<QImage>& images) {
+                        return reflectionComposite(casters, images, frameNo, false, QVector3D(), QVector3D());
+                    }));
+                }
+                const int asked = m_composition ? m_composition->projectSettings().reflectionMapSize : 512;
+                const int height = qBound(16, int(std::lround(asked * qMin(1.0, m_renderScale))), 2048);
+                *reflections = model3d::Reflections::fromLatLong(latLongFromCube(faces, cameras, centre, height));
+            }
+            for (int m = 0; m < mesh.materials.size(); ++m) {
+                if (mesh.materials.at(m).reflectionMode != model3d::ReflectionMode::Planar) continue;
+                QVector3D middle, normal;
+                double weight = 0.0;
+                for (const model3d::Triangle& triangle : mesh.triangles) {
+                    if (triangle.material != m) continue;
+                    const QVector3D a = placement.map(mesh.positions.at(triangle.position[0]));
+                    const QVector3D b = placement.map(mesh.positions.at(triangle.position[1]));
+                    const QVector3D c = placement.map(mesh.positions.at(triangle.position[2]));
+                    const QVector3D cross = QVector3D::crossProduct(b - a, c - a);
+                    const double area = cross.length();
+                    normal += cross;
+                    middle += (a + b + c) / 3.0f * float(area);
+                    weight += area;
+                }
+                if (weight <= 0.0) continue;
+                const QImage map = mirrorIn(model, middle / float(weight), normal.normalized(), frameNo);
+                if (!map.isNull()) reflections->planar.insert(m, map);
+            }
+        }
+        using Environment = composition::SurfaceShading::EnvironmentMap;
+        if (reflections->levels.isEmpty() && model.surface.environmentMap != Environment::None) {
+            const QImage environment = environmentOf(model.surface, out, model.id, frameNo);
+            if (!environment.isNull()) {
+                const QHash<int, QImage> planar = reflections->planar;
+                *reflections = model3d::Reflections::fromLatLong(environment);
+                reflections->planar = planar;
+            }
+        }
+        if (reflections->levels.isEmpty() && reflections->planar.isEmpty()) return nullptr;
+        return reflections;
+    };
     const auto closeScene = [&] {
         if (scene.isEmpty()) return;
+        if (reflecting) {
+            // Reflections: a sheet's planar map, then a text's environment
+            // ("Use Composite Shot": the shot beneath the scene).
+            const int frameNo = frameForTime(timeSeconds);
+            for (SceneLayer& member : scene) {
+                const composition::Layer& layer = *member.layer;
+                if (!reflects(layer)) continue;
+                const composition::SurfaceShading& surface = layer.surface;
+                if (surface.receiveReflections) {
+                    const QImage mirror = reflectionOf(layer, frameNo);
+                    if (!mirror.isNull())
+                        addPlanarReflection(member.image, mirror, surface.specularReflectivityAt(frameNo) / 100.0);
+                }
+                using Environment = composition::SurfaceShading::EnvironmentMap;
+                if (layer.kind == composition::LayerKind::Text && surface.environmentMap != Environment::None
+                    && !layerHasTextGeometry(layer, frameNo)) {
+                    const QImage environment = environmentOf(surface, out, layer.id, frameNo);
+                    if (!environment.isNull()) addEnvironment(member.image, layer, environment, frameNo);
+                }
+            }
+        }
+        if (occlusion) {
+            QVector<const composition::Layer*> members;
+            QVector<QImage> images;
+            for (const SceneLayer& member : scene) {
+                members.append(member.layer);
+                images.append(member.image);
+            }
+            occludeScene(members, images, frameForTime(timeSeconds));
+            for (int i = 0; i < scene.size(); ++i) scene[i].image = images.at(i);
+        }
         const model3d::DepthOfField dof = sceneDepthOfField(frameForTime(timeSeconds));
         if (dof.enabled) {
             // The scene on its own, near over far, its depth kept, blurred
@@ -1684,9 +2677,26 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
         if (m_viewCamera && !inScene(layer)) continue;
 
         if (inScene(layer)) {
+            using Environment = composition::SurfaceShading::EnvironmentMap;
+            if (layer.kind == composition::LayerKind::Model3D
+                && (layer.surface.receiveReflections || layer.surface.environmentMap != Environment::None)) {
+                const auto reflections = modelReflectionsOf(layer, frameForTime(timeSeconds));
+                if (reflections) m_modelReflections.insert(layer.id.value(), reflections);
+            }
+            // Text drawn with Geometry takes its Environment Map on its mesh.
+            if (layer.surface.environmentMap != Environment::None
+                && layerHasTextGeometry(layer, frameForTime(timeSeconds))) {
+                const int frameNo = frameForTime(timeSeconds);
+                const QImage environment = environmentOf(layer.surface, out, layer.id, frameNo);
+                if (!environment.isNull())
+                    m_modelReflections.insert(layer.id.value(), std::make_shared<model3d::Reflections>(
+                                                                    model3d::Reflections::fromLatLong(environment)));
+            }
             QImage image(size, QImage::Format_RGBA8888);
             image.fill(Qt::transparent);
+            m_collectSurfaces = occlusion || (sharedSpace && sceneBody(layer));
             paintLayer(layer, image, QPainter::CompositionMode_SourceOver);
+            m_collectSurfaces = false;
             scene.append({&layer, image});
             continue;
         }
@@ -1720,6 +2730,8 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
     }
     closeScene();
     m_shadowMaps.clear();
+    m_meshSurfaces.clear();
+    m_modelReflections.clear();
 
     return out;
 }
@@ -1732,15 +2744,14 @@ QImage RenderWorker::renderLayerClipImage(const composition::Layer& layer,
         && !contributesVideo(clip.mediaId)) {
         return QImage();
     }
-    if (m_renderScale < 1.0 && m_composition && !clipScalesDown(clip)) {
-        // Native modules see the frame at full size; the finished clip is
-        // reduced for the preview.
-        const double scale = m_renderScale;
-        m_renderScale = 1.0;
-        const QImage full = renderLayerClipImage(layer, clip, timeSeconds,
-                                                 m_composition->displaySize(), withEffects);
-        m_renderScale = scale;
-        return reducedTo(full, size);
+    if (layer.dimension == composition::LayerDimension::TwoD
+        && layer.autoOrient == composition::AutoOrient::AlongMotionPath) {
+        // Along Motion Path in the plane: drawn at the angle its motion gives.
+        composition::Layer aligned = layer;
+        aligned.transform.rotationDegrees = layerAngleAt(layer, frameForTime(timeSeconds));
+        aligned.transform.rotationCurve.clear();
+        aligned.autoOrient = composition::AutoOrient::None;
+        return renderLayerClipImage(aligned, clip, timeSeconds, size, withEffects);
     }
     // Time inside the clip's own material, not just inside the clip: the Slip
     // tool moves the source in-point and Rate Stretch changes the speed, and
@@ -1753,10 +2764,21 @@ QImage RenderWorker::renderLayerClipImage(const composition::Layer& layer,
     const composition::CompositionRenderSettings& shutter = m_composition->renderSettings();
     // The travel in the pixels drawn: a reduced preview needs fewer samples
     // for the same smear.
-    const QVector<double> offsets = withEffects && layer.motionBlur && shutter.motionBlurEnabled
-            && shutter.shutterAngle > 0.0 && hasMotion(layer)
-        ? shutterOffsets(shutter, framePixelTravel(layer, frameNo, sceneCanvas(size))
-                                      * qMin(1.0, m_renderScale))
+    // What moves the layer over the frame besides its keys - its Behaviors,
+    // a simulated body, its parent - shows in its box: the farthest a
+    // corner of it goes counts as well.
+    const bool blurring = withEffects && layer.motionBlur && shutter.motionBlurEnabled && shutter.shutterAngle > 0.0;
+    double boxTravel = 0.0;
+    if (blurring && m_composition) {
+        const LayerGeometry now = layerGeometry(*m_composition, layer, m_mediaManager.get(), frameNo);
+        const LayerGeometry next = layerGeometry(*m_composition, layer, m_mediaManager.get(), frameNo + 1);
+        if (now.valid && next.valid && now.quad.size() == next.quad.size())
+            for (int corner = 0; corner < now.quad.size(); ++corner)
+                boxTravel = qMax(boxTravel, QLineF(now.quad.at(corner), next.quad.at(corner)).length());
+    }
+    const double travel = qMax(framePixelTravel(layer, frameNo, sceneCanvas(size)), boxTravel);
+    const QVector<double> offsets = blurring && (hasMotion(layer) || boxTravel > 0.01)
+        ? shutterOffsets(shutter, travel * qMin(1.0, m_renderScale))
         : QVector<double>();
     if (offsets.size() < 2) {
         clipImage = renderClip(offsets.isEmpty() ? layer : layerAtSubFrame(layer, frameNo + offsets[0]),
@@ -1766,10 +2788,43 @@ QImage RenderWorker::renderLayerClipImage(const composition::Layer& layer,
         // instead of picking up the colour of transparent pixels.
         std::vector<float> sum;
         QSize sampleSize;
+        // Each sample's Behaviors at its own time, as the reference runs them
+        // at the sub-frame's (simulated bodies taken back between frames):
+        // a sheet takes them in its matrix while the sample is drawn, a 2D
+        // picture is moved by how its Behaviors there differ from the
+        // frame's (applyClipBehaviors puts the frame's on after), and faded
+        // by how their opacity does.
+        const bool sheet = layerDrawnAsSheet(layer, &clip);
+        double opacityAtFrame = 1.0;
+        const QTransform atFrameMove = withEffects
+            ? clipBehaviorTransform(layer, clip, frameNo, size, size, &opacityAtFrame) : QTransform();
+        bool invertible = true;
+        const QTransform undoFrame = atFrameMove.inverted(&invertible);
         for (double offset : offsets) {
-            const QImage sample = renderClip(layerAtSubFrame(layer, frameNo + offset), clip,
-                                             qMax(0.0, localTime), size, frameNo)
-                                      .convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+            if (withEffects && sheet) behaviorFrameShift() = offset;
+            QImage sample = renderClip(layerAtSubFrame(layer, frameNo + offset), clip,
+                                       qMax(0.0, localTime), size, frameNo)
+                                .convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+            behaviorFrameShift() = 0.0;
+            if (withEffects) {
+                double opacityThen = 1.0;
+                const QTransform then = clipBehaviorTransform(layer, clip, frameNo + offset, sample.size(), size,
+                                                              &opacityThen);
+                if (!sheet && invertible) {
+                    const QTransform difference = then * undoFrame;
+                    if (!difference.isIdentity())
+                        sample = movedAboutCentre(sample.convertToFormat(QImage::Format_RGBA8888), difference)
+                                     .convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+                }
+                if (opacityAtFrame > 1e-6 && std::abs(opacityThen - opacityAtFrame) > 1e-6) {
+                    const float ratio = float(opacityThen / opacityAtFrame);
+                    for (int y = 0; y < sample.height(); ++y) {
+                        uchar* row = sample.scanLine(y);
+                        for (int x = 0; x < sample.width() * 4; ++x)
+                            row[x] = uchar(qBound(0, int(std::lround(row[x] * ratio)), 255));
+                    }
+                }
+            }
             if (sum.empty()) {
                 sampleSize = sample.size();
                 sum.assign(size_t(sampleSize.width()) * size_t(sampleSize.height()) * 4, 0.0f);
@@ -1830,8 +2885,8 @@ void RenderWorker::renderFrame(const FrameRequest& request, QByteArray mediaByte
     // a Half/Quarter preview or the Layer panel's 960x540 one no longer gets
     // full-scale content cropped into the smaller frame.
     // A preview smaller than the shot (Half, Quarter, the Layer panel) is
-    // drawn at that size rather than drawn full and thrown away; what cannot
-    // be (see frameScalesDown, clipScalesDown) is drawn full and reduced.
+    // drawn at that size rather than drawn full and thrown away - native 2D
+    // effects too, on the reduced canvas, as Flux's effect pass draws them.
     const QSize native = m_composition ? m_composition->displaySize() : QSize();
     const double scale = native.isEmpty() || request.size.isEmpty()
         ? 1.0 : qMin(1.0, double(request.size.height()) / native.height());
@@ -2031,8 +3086,11 @@ QString renderStateKey(const composition::Composition& composition,
             });
         });
         // Behaviors and Geometry modules are drawn reduced in Half and
-        // Quarter since October 2026.
-        if (native) stream << QStringLiteral("native-time-1") << QStringLiteral("reduced-moves-1");
+        // Quarter since October 2026; video transitions are told their side
+        // of the edit point since 19 October 2026 (Fade to Color drew none).
+        if (native)
+            stream << QStringLiteral("native-time-1") << QStringLiteral("reduced-moves-1")
+                   << QStringLiteral("transition-side-1");
         for (const composition::Layer& layer : shot.layers()) {
             // A model as it was read and its materials as they were edited.
             if (layer.kind == composition::LayerKind::Model3D && media && media->hasModel(layer.modelAssetId)) {
@@ -2047,7 +3105,8 @@ QString renderStateKey(const composition::Composition& composition,
                            << m.cookTorranceRoughness << m.cookTorranceSpecularReflectance << m.cookTorranceFresnel
                            << m.glossiness << int(m.alphaMode) << m.alphaCutOff << m.occlusionStrength
                            << m.bumpScale << m.diffuseReflectivity << m.specularReflectivity
-                           << m.indexOfRefraction << m.refractionAmount << m.clearCoat << m.clearCoatRoughness;
+                           << m.indexOfRefraction << m.refractionAmount << m.clearCoat << m.clearCoatRoughness
+                           << int(m.reflectionMode);
             }
             // An animation read from a file of its own changes with it.
             for (const composition::ModelAnimationInstance& animation : layer.modelAnimations) {
@@ -2088,6 +3147,45 @@ QString preRenderFolder(const QString& projectPreRenderDirectory,
     QString name = composition.id().value();
     name.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_.-]")), QStringLiteral("_"));
     return QDir(projectPreRenderDirectory).filePath(name);
+}
+
+QImage RenderWorker::renderComposition(const std::shared_ptr<composition::Composition>& shot,
+                                       const std::shared_ptr<media::MediaManager>& media, double seconds,
+                                       const QString& preRenderDirectory)
+{
+    const QSize size(qMax(1, shot->width()), qMax(1, shot->height()));
+    RenderWorker worker;
+    worker.setComposition(shot);
+    worker.setMediaManager(media);
+    worker.m_preRenderDirectory = preRenderDirectory;
+    QImage picture = worker.loadPreRenderedFrame(*shot, seconds, size);
+    if (picture.isNull()) picture = worker.renderShotImage(seconds, 1.0, true, true);
+    if (!picture.isNull() && picture.size() != shot->displaySize() && !shot->displaySize().isEmpty())
+        picture = picture.convertToFormat(QImage::Format_RGBA8888_Premultiplied)
+                      .scaled(shot->displaySize(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                      .convertToFormat(QImage::Format_RGBA8888);
+    return picture;
+}
+
+QString preRenderAudioPath(const QString& projectPreRenderDirectory,
+                           const composition::Composition& composition, const media::MediaManager* media)
+{
+    const QString folder = preRenderFolder(projectPreRenderDirectory, composition);
+    if (folder.isEmpty()) return {};
+    const QString state = renderStateKey(composition, media, 0.0,
+                                         QSize(qMax(1, composition.width()), qMax(1, composition.height())), true,
+                                         true);
+    const QString key = QString::fromLatin1(
+        QCryptographicHash::hash(state.toUtf8(), QCryptographicHash::Sha1).toHex().left(16));
+    return QDir(folder).filePath(QStringLiteral("audio-%1.wav").arg(key));
+}
+
+QString preRenderedAudio(const QString& projectPreRenderDirectory,
+                         const composition::Composition& composition, const media::MediaManager* media)
+{
+    if (projectPreRenderDirectory.isEmpty()) return {};
+    const QString path = preRenderAudioPath(projectPreRenderDirectory, composition, media);
+    return !path.isEmpty() && QFileInfo(path).isFile() && QFileInfo(path).size() > 44 ? path : QString();
 }
 
 QImage RenderWorker::loadPreRenderedFrame(const composition::Composition& shot,

@@ -17,6 +17,7 @@
 #include <QOpenGLFramebufferObject>
 #include <QSurfaceFormat>
 #include <QThread>
+#include <QUuid>
 
 #include <array>
 #include <cmath>
@@ -257,12 +258,28 @@ struct RenderInvocation
         0.0f, 0.0f, 0.0f, 1.0f
     };
     QHash<int, QString> valueOverrides;
+    // The footage of the layer being drawn, for GetAssetInfo off the GUI
+    // thread (NativeFrameTime::layerAsset), and that layer's ID.
+    NativeAssetInfo layerAsset;
+    QString layerId;
     // A reduced preview's scale and the NativeReducedValues it applies to.
     float valueScale = 1.0f;
     int reducedValues = NativeReducesNothing;
+    // NativeFrameTime::layerImage.
+    QImage layerImage;
+    // NativeFrameTime::valueAt, when the module blurs motion, and where this
+    // render is: the layer's milliseconds the module asks for its values at
+    // now, a frame's milliseconds and the shot frame of the layer's frame 0.
+    std::function<QString(int, double)> valueAt;
+    qint32 layerMs = 0;
+    double msPerFrame = 1000.0 / 30.0;
+    double frameOffset = 0.0;
 };
 
 thread_local RenderInvocation* g_renderInvocation = nullptr;
+// Set by an audio render whose module asked for dry frames of its layer
+// after those it was given (nativeAudioWantedLaterSamples).
+thread_local bool g_audioWantedLater = false;
 
 // Modules that read the render scale in their context and reduce their own
 // pixel values with it (the SDK's blur helpers): the host reduces only their
@@ -276,12 +293,35 @@ const QSet<QString>& ownPixelScaleModules()
     return names;
 }
 
-// What the host reduces for a module in a reduced preview: its px values and
-// its points, both in the layer's pixels.
+const QSet<QString>& reducedPreviewModules();
+
+// What the host reduces for a module in a reduced preview: for those seen to
+// draw it as the full picture reduced (reducedPreviewModules), their px
+// values and points, both in the layer's pixels; for the rest nothing - the
+// reference's value services (FloatValue = AngleValue 0x180377400,
+// PointValue, IntValue) give every module its values as they are, and only
+// the scale fields (+0x2c/+0x30) say the canvas is reduced.
 int reducedValuesOf(const ModuleRecord& record)
 {
-    return ownPixelScaleModules().contains(QFileInfo(record.filePath).completeBaseName())
+    const QString name = QFileInfo(record.filePath).completeBaseName();
+    if (!reducedPreviewModules().contains(name)) return NativeReducesNothing;
+    return ownPixelScaleModules().contains(name)
         ? int(NativeReducesPoints) : int(NativeReducesPixels | NativeReducesPoints);
+}
+
+// Whether the module has Motion Blur on: a motionBlurMode other than Off
+// (stored as its index or its name), so it reads its values at sub-sample
+// times.
+bool blursMotion(const ModuleRecord& record, const QStringList& values)
+{
+    for (int i = 0; i < record.parameters.size(); ++i) {
+        if (record.parameters.at(i).name != QLatin1String("motionBlurMode")) continue;
+        QString mode = values.value(i).trimmed();
+        if (mode.isEmpty()) mode = record.parameters.at(i).defaultValue.trimmed();
+        return !mode.isEmpty() && mode != QLatin1String("0")
+               && mode.compare(QLatin1String("Off"), Qt::CaseInsensitive) != 0;
+    }
+    return false;
 }
 
 int parameterIndex(const char* key)
@@ -299,7 +339,9 @@ int parameterIndex(const char* key)
     return -1;
 }
 
-QString parameterValue(const char* key)
+// `layerMs`: the time the module asks at, in its layer's milliseconds; the
+// value there when it is not the render's own time (RenderInvocation::valueAt).
+QString parameterValue(const char* key, qint64 layerMs = -1)
 {
     const int index = parameterIndex(key);
     if (index < 0) {
@@ -308,6 +350,11 @@ QString parameterValue(const char* key)
     const auto overridden = g_renderInvocation->valueOverrides.constFind(index);
     if (overridden != g_renderInvocation->valueOverrides.constEnd()) {
         return overridden.value();
+    }
+    if (layerMs >= 0 && layerMs != g_renderInvocation->layerMs && g_renderInvocation->valueAt) {
+        const double frame = layerMs / g_renderInvocation->msPerFrame + g_renderInvocation->frameOffset;
+        const QString value = g_renderInvocation->valueAt(index, frame);
+        if (!value.isEmpty()) return value;
     }
     const QStringList& values = *g_renderInvocation->values;
     if (index < values.size() && !values.at(index).isEmpty()) {
@@ -361,10 +408,10 @@ float pointValueScale()
         ? qMin(1.0f, g_renderInvocation->valueScale) : 1.0f;
 }
 
-float scalarParameter(quint64, const char* key, quint32)
+float scalarParameter(quint64, const char* key, quint32 time)
 {
     bool ok = false;
-    const float value = parameterValue(key).toFloat(&ok) * pixelValueScale(key);
+    const float value = parameterValue(key, time).toFloat(&ok) * pixelValueScale(key);
     if (qEnvironmentVariableIsSet("OPENVEGAS_HFPL_RENDER_TRACE")) {
         std::fprintf(stderr, "[hfpl-render] scalar %s=%g ok=%d\n",
                      key ? key : "<null>", double(value), ok ? 1 : 0);
@@ -373,10 +420,10 @@ float scalarParameter(quint64, const char* key, quint32)
     return ok ? value : 0.0f;
 }
 
-void colorParameter(quint64, const char* key, quint32,
+void colorParameter(quint64, const char* key, quint32 time,
                     float* red, float* green, float* blue)
 {
-    const QColor color(parameterValue(key));
+    const QColor color(parameterValue(key, time));
     if (red) {
         *red = color.isValid() ? color.redF() : 0.0f;
     }
@@ -388,9 +435,9 @@ void colorParameter(quint64, const char* key, quint32,
     }
 }
 
-QVector<float> vectorParameter(const char* key, int componentCount)
+QVector<float> vectorParameter(const char* key, int componentCount, qint64 layerMs = -1)
 {
-    const QStringList parts = parameterValue(key).split(QLatin1Char(','));
+    const QStringList parts = parameterValue(key, layerMs).split(QLatin1Char(','));
     QVector<float> result(componentCount, 0.0f);
     for (int i = 0; i < componentCount && i < parts.size(); ++i) {
         bool ok = false;
@@ -402,18 +449,18 @@ QVector<float> vectorParameter(const char* key, int componentCount)
     return result;
 }
 
-void point2dParameter(quint64, const char* key, quint32, float* x, float* y)
+void point2dParameter(quint64, const char* key, quint32 time, float* x, float* y)
 {
-    const QVector<float> value = vectorParameter(key, 2);
+    const QVector<float> value = vectorParameter(key, 2, time);
     const float scale = pointValueScale();
     if (x) *x = value.at(0) * scale;
     if (y) *y = value.at(1) * scale;
 }
 
-void point3dParameter(quint64, const char* key, quint32,
+void point3dParameter(quint64, const char* key, quint32 time,
                       float* x, float* y, float* z)
 {
-    const QVector<float> value = vectorParameter(key, 3);
+    const QVector<float> value = vectorParameter(key, 3, time);
     const float scale = pointValueScale();
     if (x) *x = value.at(0) * scale;
     if (y) *y = value.at(1) * scale;
@@ -433,13 +480,24 @@ void layerIdParameter(quint64, const char* key, quint32, char* layerId)
     std::memcpy(layerId, value.constData(), size_t(qMin(value.size(), 0x27)));
 }
 
-int layerInfo(quint64, const char*, quint32, void* info)
+bool servesLayerImage(const char* layerId);
+
+int layerInfo(quint64, const char* layerId, quint32, void* info)
 {
     // tagLayerInfo is 0x54 bytes. Tannen clears it before resolving the layer
     // and returns -5 when no project/layer is available. Native image renders
     // currently have no secondary layer graph, so expose that exact safe state.
     if (info) {
         std::memset(info, 0, 0x54);
+    }
+    // NativeFrameTime::layerImage: a visible picture layer (ID, +0x28 type
+    // 0, +0x34 length, +0x41 visible - tagBiffLayerInfo's first fields).
+    if (info && servesLayerImage(layerId)) {
+        if (layerId) std::memcpy(info, layerId, qstrnlen(layerId, 0x27));
+        const qint32 duration = qMax(1, g_renderInvocation->layerDurationFrames);
+        std::memcpy(static_cast<char*>(info) + 0x34, &duration, sizeof(duration));
+        static_cast<char*>(info)[0x41] = 1;
+        return 0;
     }
     return -5;
 }
@@ -785,16 +843,32 @@ int copySourceTexture(void* renderContext, void* texture)
     return 0;
 }
 
-int layerTexture(quint64, void* renderContext, const char*, void* texture)
+int uploadScratchTexture(const QImage& image, void* texture);
+
+// NativeFrameTime::layerImage, for a layer other than the module's own (a
+// render without a layer of its own has the null ID).
+bool servesLayerImage(const char* layerId)
 {
+    if (!g_renderInvocation || g_renderInvocation->layerImage.isNull() || !layerId
+        || !QOpenGLContext::currentContext() || !g_renderInvocation->scratchPool) {
+        return false;
+    }
+    const QString id = QString::fromLatin1(layerId);
+    return !id.isEmpty() && !QUuid::fromString(id).isNull() && id != g_renderInvocation->layerId;
+}
+
+int layerTexture(quint64, void* renderContext, const char* layerId, void* texture)
+{
+    if (servesLayerImage(layerId)) return uploadScratchTexture(g_renderInvocation->layerImage, texture);
     // The isolated renderer has one source layer. Layer pickers that resolve
     // to it use the same texture as GetSourceTexture.
     return copySourceTexture(renderContext, texture);
 }
 
-int layerTextureV2(quint64, void* renderContext, const char*, qint32,
+int layerTextureV2(quint64, void* renderContext, const char* layerId, qint32,
                    void* texture)
 {
+    if (servesLayerImage(layerId)) return uploadScratchTexture(g_renderInvocation->layerImage, texture);
     return copySourceTexture(renderContext, texture);
 }
 
@@ -928,13 +1002,13 @@ int timelineInfo(quint64, void* info)
     return 0;
 }
 
-int integerParameter(quint64, const char* key, quint32)
+int integerParameter(quint64, const char* key, quint32 time)
 {
     const int index = parameterIndex(key);
     if (index < 0) {
         return 0;
     }
-    const QString value = parameterValue(key);
+    const QString value = parameterValue(key, time);
     bool ok = false;
     const int numeric = value.toInt(&ok);
     if (ok) {
@@ -950,9 +1024,9 @@ int integerParameter(quint64, const char* key, quint32)
     return 0;
 }
 
-int booleanParameter(quint64, const char* key, quint32)
+int booleanParameter(quint64, const char* key, quint32 time)
 {
-    const QString value = parameterValue(key).trimmed();
+    const QString value = parameterValue(key, time).trimmed();
     return value.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0
            || value == QLatin1String("1") ? 1 : 0;
 }
@@ -1011,6 +1085,9 @@ struct CustomUiCallState
     int backgroundDelayMs = 0;
     QHash<QString, bool> enabled;
     QByteArray* serialized = nullptr;   // SerializeInstanceBytes target (Notify 5)
+    QVector<NativeLayerRequest> layerRequests;
+    QString transaction;
+    int effectIndex = 0;
 };
 thread_local CustomUiCallState* g_customUiCall = nullptr;
 
@@ -1078,7 +1155,13 @@ NativeAssetInfo hostAssetInfo(const char* layerId)
         QMutexLocker lock(&g_sourceHostMutex);
         provider = g_sourceHost.assetInfo;
     }
-    return provider && layerId ? provider(QString::fromLatin1(layerId)) : NativeAssetInfo();
+    NativeAssetInfo info = provider && layerId ? provider(QString::fromLatin1(layerId)) : NativeAssetInfo();
+    // A render thread draws a layer whose footage the renderer described.
+    if (!info.valid && layerId && g_renderInvocation && g_renderInvocation->layerAsset.valid
+        && g_renderInvocation->layerId == QLatin1String(layerId)) {
+        info = g_renderInvocation->layerAsset;
+    }
+    return info;
 }
 
 // GetLayerInfoV2 for the calls made on a module's own instance (custom UI,
@@ -1086,10 +1169,19 @@ NativeAssetInfo hostAssetInfo(const char* layerId)
 // Rendering keeps the isolated answer of layerInfo().
 int instanceLayerInfo(quint64 host, const char* layerId, quint32 frame, void* info)
 {
-    if (!g_customUiCall) return layerInfo(host, layerId, frame, info);
+    if (!g_customUiCall && !servesLayerImage(layerId)) return layerInfo(host, layerId, frame, info);
     if (!info) return -10;
     std::memset(info, 0, 0xf0);
-    const NativeLayerInfo layer = hostLayerInfo(layerId);
+    NativeLayerInfo layer;
+    if (g_customUiCall) {
+        layer = hostLayerInfo(layerId);
+    } else {
+        // NativeFrameTime::layerImage: a visible picture layer of its size.
+        layer.valid = true;
+        layer.type = 0;
+        layer.durationFrames = qMax(1, g_renderInvocation->layerDurationFrames);
+        layer.size = g_renderInvocation->layerImage.size();
+    }
     if (!layer.valid) return -5;
     // tagBiffLayerInfo: ID, +0x28 type, +0x2c start frame, +0x34 length,
     // +0x41 visible, +0x6c/+0x70 source size, +0x74 the world matrix.
@@ -1118,10 +1210,12 @@ void* assetInfoService(void* result, quint64, const char* layerId)
     const qint32 frameCount = asset.valid ? asset.frameCount : -1;
     const double frameRate = asset.valid ? asset.frameRate : 0.0;
     const qint32 start = asset.valid ? asset.startFrame : 0;
+    const qint32 end = asset.valid ? asset.endFrame : 0;
     const qint32 type = asset.valid ? asset.type : 5;
     std::memcpy(static_cast<char*>(result) + 0x00, &frameCount, sizeof(frameCount));
     std::memcpy(static_cast<char*>(result) + 0x08, &frameRate, sizeof(frameRate));
     std::memcpy(static_cast<char*>(result) + 0x10, &start, sizeof(start));
+    std::memcpy(static_cast<char*>(result) + 0x14, &end, sizeof(end));
     std::memcpy(static_cast<char*>(result) + 0x18, &type, sizeof(type));
     return result;
 }
@@ -1143,7 +1237,18 @@ int assetTextureService(quint64, void*, const char* layerId, qint32 frame, void*
     // layer pixels run downwards, matching the viewer's pointer positions
     // (checked with a still top half and a moving bottom half - a lasso
     // around the top tracks nothing only this way round).
-    const QImage rgba = frameImage.convertToFormat(QImage::Format_RGBA8888);
+    return uploadScratchTexture(frameImage, texture);
+}
+
+// A texture of the render's scratch pool holding `image`, described in
+// `texture` (a tagBiffTexture) as GetAssetTexture describes its own.
+int uploadScratchTexture(const QImage& image, void* texture)
+{
+    if (!texture) return -10;
+    std::memset(texture, 0, 0x34);
+    QOpenGLContext* context = QOpenGLContext::currentContext();
+    if (!context || !g_renderInvocation || !g_renderInvocation->scratchPool) return -4;
+    const QImage rgba = image.convertToFormat(QImage::Format_RGBA8888);
     auto* gl = context->extraFunctions();
     GLuint id = 0;
     gl->glGenTextures(1, &id);
@@ -1155,10 +1260,10 @@ int assetTextureService(quint64, void*, const char* layerId, qint32 frame, void*
     gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    // Rows as they are stored (top first), as the source textures of the
-    // effect path are uploaded.
-    gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, rgba.width(), rgba.height(), 0, GL_RGBA,
-                     GL_UNSIGNED_BYTE, rgba.constBits());
+    // Rows bottom first, as the effect path uploads its source.
+    const QImage rows = rgba.flipped(Qt::Vertical);
+    gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, rows.width(), rows.height(), 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, rows.constBits());
     // In the scratch pool: ClearReservedTexture (+0x120) gives it back.
     g_renderInvocation->scratchPool->textures.append(
         {id, rgba.width(), rgba.height(), GL_RGBA8, GL_RGBA, 0, true});
@@ -1251,6 +1356,144 @@ int setIntegerParameter(quint64, const char* key, qint32, qint32 value, qint32)
     if (!items.isEmpty() && value >= 0 && value < items.size()) text = items.at(value);
     g_renderInvocation->valueOverrides.insert(index, text);
     return 0;
+}
+
+// SetLayerID (+0x1d0: host, key, frame, ID): a layer picker the module sets -
+// AutomaticStabilizer points "Apply To" at the point layer it just created.
+int setLayerIdParameter(quint64, const char* key, qint32, const char* layerId)
+{
+    const int index = parameterIndex(key);
+    if (index < 0) return -5;
+    g_renderInvocation->valueOverrides.insert(index, layerId ? QString::fromLatin1(layerId) : QString());
+    return 0;
+}
+
+// SetFloatValue/SetAngleValue (+0x198/+0x1c0: host, key, frame, value,
+// mode) - AutomaticStabilizer narrows "cropWindow" to what its motion needs.
+int setScalarParameter(quint64, const char* key, qint32, float value, qint32)
+{
+    const int index = parameterIndex(key);
+    if (index < 0) return -5;
+    g_renderInvocation->valueOverrides.insert(index, QString::number(double(value)));
+    return 0;
+}
+
+// GetEffectIndex (+0x3d8).
+int effectIndexService(quint64)
+{
+    return g_customUiCall ? g_customUiCall->effectIndex : 0;
+}
+
+// BeginTransaction (+0x1d8, a name) / EndTransaction (+0x1e0): the edits in
+// between are one undo step of that name.
+int beginTransaction(quint64, const char* name)
+{
+    if (g_customUiCall && name) g_customUiCall->transaction = QString::fromUtf8(name);
+    return 0;
+}
+
+int endTransaction(quint64)
+{
+    return 0;
+}
+
+QVector<NativeLayerTransform> layerTransforms(const unsigned char* data, qint32 count)
+{
+    QVector<NativeLayerTransform> transforms;
+    if (!data || count <= 0) return transforms;
+    transforms.reserve(count);
+    for (qint32 i = 0; i < count; ++i) {
+        const unsigned char* entry = data + 0x14 * i;
+        NativeLayerTransform t;
+        std::memcpy(&t.timeMs, entry + 0x00, sizeof(t.timeMs));
+        std::memcpy(&t.x, entry + 0x04, sizeof(float));
+        std::memcpy(&t.y, entry + 0x08, sizeof(float));
+        std::memcpy(&t.rotation, entry + 0x0c, sizeof(float));
+        std::memcpy(&t.scale, entry + 0x10, sizeof(float));
+        transforms.append(t);
+    }
+    return transforms;
+}
+
+// CreatePointLayer (+0x3a0: host, source layer, name, count, transforms, the
+// new layer's ID out - 0x28 bytes). Nothing is made without the source layer.
+void createPointLayer(quint64, const char* layerId, const char* name, qint32 count,
+                      const unsigned char* transforms, char* createdId)
+{
+    if (!g_customUiCall || !layerId || !hostLayerInfo(layerId).valid) return;
+    NativeLayerRequest request;
+    request.kind = NativeLayerRequest::Kind::CreatePointLayer;
+    request.sourceLayerId = QString::fromLatin1(layerId);
+    request.targetLayerId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    request.name = name ? QString::fromUtf8(name) : QString();
+    request.transforms = layerTransforms(transforms, count);
+    if (createdId) {
+        const QByteArray id = request.targetLayerId.toLatin1();
+        std::memset(createdId, 0, 0x28);
+        std::memcpy(createdId, id.constData(), size_t(qMin(int(id.size()), 0x27)));
+    }
+    g_customUiCall->layerRequests.append(request);
+}
+
+// ApplyTransformToLayer (+0x3a8: host, source layer, target layer, count,
+// transforms).
+void applyTransformToLayer(quint64, const char* layerId, const char* targetId, qint32 count,
+                           const unsigned char* transforms)
+{
+    if (!g_customUiCall || !layerId || !targetId || count <= 0) return;
+    NativeLayerRequest request;
+    request.kind = NativeLayerRequest::Kind::ApplyTransform;
+    request.sourceLayerId = QString::fromLatin1(layerId);
+    request.targetLayerId = QString::fromLatin1(targetId);
+    request.transforms = layerTransforms(transforms, count);
+    g_customUiCall->layerRequests.append(request);
+}
+
+// GetNumberOfLayers/GetLayerID (+0x360/+0x368) on an instance: the shot's
+// layers as the host lists them (a render has its composition instead).
+QVector<NativeLayerEntry> hostLayers()
+{
+    std::function<QVector<NativeLayerEntry>()> provider;
+    {
+        QMutexLocker lock(&g_sourceHostMutex);
+        provider = g_sourceHost.layers;
+    }
+    return provider ? provider() : QVector<NativeLayerEntry>();
+}
+
+int instanceNumberOfLayers(quint64 host)
+{
+    if (!g_customUiCall) return numberOfBehaviorLayers(host);
+    return int(hostLayers().size());
+}
+
+void instanceLayerId(quint64 host, qint32 index, char* id, char* name, qint32 nameCapacity,
+                     qint32* kind)
+{
+    if (!g_customUiCall) {
+        behaviorLayerId(host, index, id, name, nameCapacity, kind);
+        return;
+    }
+    static constexpr char nullId[] = "00000000-0000-0000-0000-000000000000";
+    if (id) {
+        std::memset(id, 0, 0x28);
+        std::memcpy(id, nullId, sizeof(nullId));
+    }
+    if (name && nameCapacity > 0) name[0] = '\0';
+    if (kind) *kind = 0;
+    const QVector<NativeLayerEntry> layers = hostLayers();
+    if (index < 0 || index >= layers.size()) return;
+    if (id) {
+        const QByteArray encoded = layers.at(index).id.toLatin1();
+        std::memset(id, 0, 0x28);
+        std::memcpy(id, encoded.constData(), size_t(qMin(int(encoded.size()), 0x27)));
+    }
+    if (name && nameCapacity > 0) {
+        const QByteArray encoded = layers.at(index).name.toUtf8();
+        const int length = qMin(int(encoded.size()), nameCapacity - 1);
+        std::memcpy(name, encoded.constData(), size_t(length));
+        name[length] = '\0';
+    }
 }
 
 // TranslateString/TranslateStringN/StringArgI/StringArgF (+0x3e0..+0x3f8):
@@ -1656,6 +1899,7 @@ public:
             || samples.size() % channels != 0) {
             return false;
         }
+        g_audioWantedLater = false;
         NativePluginRuntime* runtime = runtimeFor(id, record);
         if (!runtime) return false;
 
@@ -1731,6 +1975,15 @@ public:
         if (rangesResult != 1 || inputFrames <= 0) {
             ranges = {{startSample, startSample + frameCount}};
             inputFrames = frameCount;
+        }
+        {
+            // Frames of the layer after the source given: silence here.
+            const qint64 sourceEnd = sourceStartSample + invocation.audioFrameCount;
+            const qint64 layerEnd = layer.durationSamples > 0 ? layer.durationSamples
+                                                              : std::numeric_limits<qint64>::max();
+            for (const auto& range : std::as_const(ranges)) {
+                if (qMin(range.second, layerEnd) > qMax(range.first, sourceEnd)) g_audioWantedLater = true;
+            }
         }
         // A corrupt request must not turn into an unbounded allocation.
         constexpr qint64 maximumInputFrames = qint64(1) << 25;
@@ -2258,9 +2511,10 @@ public:
                   const QStringList& parameterValues,
                   const composition::Composition* composition,
                   const core::Identifier& sourceLayerId,
-                  const NativeBehaviorLayer& layer)
+                  const NativeBehaviorLayer& layer, double frameFraction = 0.0)
     {
 #ifndef Q_OS_WIN
+        Q_UNUSED(frameFraction);
         Q_UNUSED(layer);
         Q_UNUSED(result);
         Q_UNUSED(timelineFrame);
@@ -2316,9 +2570,9 @@ public:
         // has them: with frames the reveal/conceal modules ran 1000/fps
         // times too slow (FlyInFlyOut grew from 0.5 to 0.57 over a 120-frame
         // layer instead of reaching 1.0 at its 25 % mark, frame 30).
-        const auto milliseconds = [&invocation](int frame) {
+        const auto milliseconds = [&invocation, frameFraction](int frame) {
             return qint32(qBound<qint64>(
-                qint64(0), qRound64(double(frame) * 1000.0 / invocation.frameRate),
+                qint64(0), qRound64((double(frame) + frameFraction) * 1000.0 / invocation.frameRate),
                 qint64(std::numeric_limits<qint32>::max())));
         };
         const qint32 timeField = milliseconds(timelineFrame);
@@ -2504,140 +2758,256 @@ public:
 #endif
     }
 
-    bool simulateStack(NativeBehaviorResult& result, int timelineFrame,
-                       int localFrame, int layerDurationFrames,
-                       int canvasWidth, int canvasHeight, double frameRate,
-                       const QVector<BehaviorStackEntry>& entries,
-                       const composition::Composition* composition,
-                       const core::Identifier& sourceLayerId)
+    // CompositionAsset::SimulateLayers over every body of the shot, frame by
+    // frame from the first body's start (records of 0xb4 bytes per body:
+    // +0x00 velocity V, +0x0c the animation's velocity A, +0x18 its change
+    // and the forces' D, +0x24 damping, +0x28 the world's point P, +0x34 the
+    // body's matrix, +0x74 the world W):
+    //   A = (P - P') / dt, D = A - A', body matrix T(body' - P) x W;
+    //   the modules see the layers (FUN_18036cc80: a body its V, D and
+    //   matrix; any other layer the world's moves in a frame and W);
+    //   each body within its range adds what its simulated Behaviors give
+    //   (Notify 103; the callbacks take only what is meant for that body:
+    //   accelerations summed, forces averaged, damping multiplied), and so
+    //   does every body under it: D += a dt + f / n dt, k *= damping^dt;
+    //   V = k V' + D, body = body' + V dt, matrix T(body - P) x W.
+    bool simulateScene(NativeSimulationTrack& track, int toFrame, int canvasWidth, int canvasHeight,
+                       double frameRate, const NativeSimulationScene& scene,
+                       const composition::Composition* composition)
     {
 #ifndef Q_OS_WIN
-        Q_UNUSED(result);
-        Q_UNUSED(timelineFrame);
-        Q_UNUSED(localFrame);
-        Q_UNUSED(layerDurationFrames);
-        Q_UNUSED(canvasWidth);
-        Q_UNUSED(canvasHeight);
-        Q_UNUSED(frameRate);
-        Q_UNUSED(entries);
-        Q_UNUSED(composition);
-        Q_UNUSED(sourceLayerId);
+        Q_UNUSED(track); Q_UNUSED(toFrame); Q_UNUSED(canvasWidth); Q_UNUSED(canvasHeight);
+        Q_UNUSED(frameRate); Q_UNUSED(scene); Q_UNUSED(composition);
         return false;
 #else
         struct SimulationAccumulator {
+            int target = -1;
             float acceleration[3] {0.0f, 0.0f, 0.0f};
             float force[3] {0.0f, 0.0f, 0.0f};
             float forceWeight = 0.0f;
             float damping = 1.0f;
         } simulation;
-        const auto forceCallback = +[](void* opaque, int, float x, float y,
-                                       float z, int mode) {
+        // FUN_180381180 / FUN_180381080: an object index that is not the
+        // body being simulated is left alone.
+        const auto forceCallback = +[](void* opaque, int index, float x, float y, float z, int mode) {
             auto* value = static_cast<SimulationAccumulator*>(opaque);
-            if (!value) return;
+            if (!value || index != value->target) return;
             float* destination = mode == 1 ? value->force : value->acceleration;
+            if (mode != 0 && mode != 1) return;
             destination[0] += x;
             destination[1] += y;
             destination[2] += z;
             if (mode == 1) value->forceWeight += 1.0f;
         };
-        const auto dampingCallback = +[](void* opaque, int, float damping) {
+        const auto dampingCallback = +[](void* opaque, int index, float damping) {
             auto* value = static_cast<SimulationAccumulator*>(opaque);
-            if (value) value->damping *= damping;
+            if (value && index == value->target) value->damping *= damping;
         };
-
-        if (entries.isEmpty() || localFrame <= 0) return false;
+        const int count = scene.layerCount;
+        if (count <= 0 || !scene.worldAt || !scene.behaviorsAt) return false;
+        const auto entriesOf = [&](int layer, int frame) {
+            QVector<BehaviorStackEntry> entries;
+            // Asked before the registry is locked: the host's answer looks
+            // modules up in it too.
+            const QVector<NativeBehaviorRequest> requests = scene.behaviorsAt(layer, frame);
+            QMutexLocker lock(&g_registryMutex);
+            for (const NativeBehaviorRequest& behavior : requests) {
+                const auto it = g_registry.constFind(behavior.id.value());
+                if (it == g_registry.constEnd() || !isVerifiedSimulationBehavior(it.value())) continue;
+                entries.push_back({behavior.id.value(), it.value(), behavior.parameterValues});
+            }
+            return entries;
+        };
+        const auto startOf = [&](int layer) { return scene.startFrame ? scene.startFrame(layer) : 0; };
+        const auto endOf = [&](int layer) { return scene.endFrame ? scene.endFrame(layer) : toFrame; };
         const double safeFrameRate = qMax(0.001, frameRate);
         const double timeStep = 1.0 / safeFrameRate;
-        std::array<float, 3> velocity {0.0f, 0.0f, 0.0f};
-        std::array<float, 3> position {0.0f, 0.0f, 0.0f};
-        QSet<QString> rejected;
-        bool anySimulation = false;
-        RenderInvocation* previousInvocation = g_renderInvocation;
+        const float dt = float(timeStep);
+        QHash<qint64, QMatrix4x4> worlds;
+        const auto worldOf = [&](int layer, int frame) {
+            const qint64 key = (qint64(layer) << 32) | quint32(frame);
+            const auto it = worlds.constFind(key);
+            if (it != worlds.constEnd()) return it.value();
+            const QMatrix4x4 world = scene.worldAt(layer, frame);
+            worlds.insert(key, world);
+            return world;
+        };
+        const auto pointOf = [&](int layer, int frame) { return worldOf(layer, frame).map(QVector3D()); };
 
-        for (int simulationFrame = 0; simulationFrame < localFrame;
-             ++simulationFrame) {
-            simulation = {};
-            const int objectIndex = simulationSourceIndex(composition, sourceLayerId);
-            SimulationLayerStates layerSimulationState = simulationLayerStates(
-                composition, timelineFrame - localFrame + simulationFrame + 1,
-                double(layerDurationFrames) / safeFrameRate, objectIndex,
-                velocity, position);
-            void* layerSimulationStatePointer = layerSimulationState.records.data();
-
-            for (const BehaviorStackEntry& entry : entries) {
-                if (rejected.contains(entry.id)) continue;
-                RenderInvocation invocation;
-                invocation.module = &entry.module;
-                invocation.values = &entry.values;
-                invocation.width = qMax(1, canvasWidth);
-                invocation.height = qMax(1, canvasHeight);
-                invocation.timelineFrame = timelineFrame;
-                invocation.layerDurationFrames = qMax(1, layerDurationFrames);
-                invocation.frameRate = safeFrameRate;
-                invocation.composition = composition;
-                invocation.sourceLayerId = sourceLayerId;
-                g_renderInvocation = &invocation;
-                NativePluginRuntime* runtime = runtimeFor(entry.id, entry.module);
-                if (!runtime) {
-                    rejected.insert(entry.id);
-                    continue;
-                }
-
-                QByteArray context(0x80, '\0');
-                const double currentTime = double(simulationFrame) * timeStep;
-                std::memcpy(context.data() + 0x00, &objectIndex,
-                            sizeof(objectIndex));
-                std::memcpy(context.data() + 0x18, &currentTime,
-                            sizeof(currentTime));
-                std::memcpy(context.data() + 0x20, &timeStep,
-                            sizeof(timeStep));
-                void* simulationState = &simulation;
-                std::memcpy(context.data() + 0x28, &simulationState,
-                            sizeof(simulationState));
-                std::memcpy(context.data() + 0x30, &layerSimulationStatePointer,
-                            sizeof(layerSimulationStatePointer));
-                std::memcpy(context.data() + 0x38, &layerSimulationState.count,
-                            sizeof(layerSimulationState.count));
-                const auto force = forceCallback;
-                const auto drag = dampingCallback;
-                std::memcpy(context.data() + 0x40, &force, sizeof(force));
-                std::memcpy(context.data() + 0x48, &drag, sizeof(drag));
-                void* contextPointer = context.data();
-                std::memcpy(runtime->apiBlock().data() + 0x20, &contextPointer,
-                            sizeof(contextPointer));
-                const qint32 simulationCapability = 9;
-                std::memcpy(runtime->apiBlock().data() + 0x498,
-                            &simulationCapability, sizeof(simulationCapability));
-                const int simulationResult = runtime->notify(103);
-                if (simulationResult == 1 && runtime->lastFaultCode() == 0) {
-                    anySimulation = true;
-                } else {
-                    rejected.insert(entry.id);
-                }
-            }
-
-            const float dampingFactor = float(std::pow(
-                double(simulation.damping), timeStep));
-            for (int component = 0; component < 3; ++component) {
-                float acceleration = simulation.acceleration[component];
-                if (simulation.forceWeight > 0.0f) {
-                    acceleration += simulation.force[component]
-                                    / simulation.forceWeight;
-                }
-                velocity[component] = velocity[component] * dampingFactor
-                                      + acceleration * float(timeStep);
-                position[component] += velocity[component] * float(timeStep);
+        if (track.bodies.isEmpty()) {
+            // The bodies: the layers with simulated Behaviors, from the
+            // first one's start.
+            for (int layer = 0; layer < count; ++layer)
+                if (!entriesOf(layer, toFrame).isEmpty()) track.bodies.append(layer);
+            if (track.bodies.isEmpty()) return false;
+            track.first = toFrame;
+            for (int body : track.bodies) track.first = qMin(track.first, startOf(body));
+            QVector<QVector3D> points;
+            for (int body : track.bodies) points.append(pointOf(body, track.first));
+            track.positions = {points};
+            track.points = {points};
+            track.velocities = {QVector<QVector3D>(track.bodies.size())};
+            track.animation = QVector<QVector3D>(track.bodies.size());
+        }
+        const QVector<int>& bodies = track.bodies;
+        const int bodyCount = int(bodies.size());
+        // The bodies under each body (its descendants), by body.
+        QVector<QVector<int>> under(bodyCount);
+        for (int c = 0; c < bodyCount; ++c) {
+            int ancestor = scene.parentOf ? scene.parentOf(bodies[c]) : -1;
+            for (int guard = 0; ancestor >= 0 && guard < 64; ++guard) {
+                const int b = int(bodies.indexOf(ancestor));
+                if (b >= 0) under[b].append(c);
+                ancestor = scene.parentOf(ancestor);
             }
         }
-        g_renderInvocation = previousInvocation;
-        if (!anySimulation) return false;
+        // The layers' records the modules read (SC+0x30, 0x80 bytes each).
+        QVector<QByteArray> ids;
+        ids.reserve(count);
+        for (int layer = 0; layer < count; ++layer)
+            ids.append(composition && layer < composition->layers().size()
+                           ? composition->layers().at(layer).id.value().toLatin1()
+                           : QByteArrayLiteral("00000000-0000-0000-0000-000000000000"));
+        QByteArray records(count * 0x80, '\0');
+        QSet<QString> rejected;
+        RenderInvocation* previousInvocation = g_renderInvocation;
 
-        result.transformation.setToIdentity();
-        float* matrix = result.transformation.data();
-        matrix[12] = position[0];
-        matrix[13] = position[1];
-        matrix[14] = position[2];
-        result.opacity = 1.0f;
+        for (int frame = track.last() + 1; frame <= toFrame; ++frame) {
+            const QVector<QVector3D>& position = track.positions.last();
+            const QVector<QVector3D>& velocity = track.velocities.last();
+            const QVector<QVector3D>& point = track.points.last();
+            // The bodies at the frame: the animation's velocity carried in,
+            // each where it was.
+            QVector<QVector3D> change(bodyCount), newPoint(bodyCount), newAnimation(bodyCount);
+            QVector<float> damping(bodyCount, 1.0f);
+            for (int b = 0; b < bodyCount; ++b) {
+                newPoint[b] = pointOf(bodies[b], frame);
+                newAnimation[b] = (newPoint[b] - point[b]) / dt;
+                change[b] = newAnimation[b] - track.animation[b];
+            }
+            for (int layer = 0; layer < count; ++layer) {
+                char* record = records.data() + layer * 0x80;
+                std::memset(record, 0, 0x80);
+                const char* id = ids.at(layer).constData();
+                std::memcpy(record, &id, sizeof(id));
+                record[0x08] = char(scene.flatAt && scene.flatAt(layer) ? 1 : 0);
+                const QSize size = scene.sizeOf ? scene.sizeOf(layer) : QSize();
+                const qint32 width = qMax(0, size.width()), height = qMax(0, size.height());
+                std::memcpy(record + 0x0c, &width, sizeof(width));
+                std::memcpy(record + 0x10, &height, sizeof(height));
+                const double startTime = double(startOf(layer)) * timeStep;
+                const double endTime = double(endOf(layer)) * timeStep;
+                std::memcpy(record + 0x18, &startTime, sizeof(startTime));
+                std::memcpy(record + 0x20, &endTime, sizeof(endTime));
+                QVector3D moving, accelerating;
+                QMatrix4x4 matrix;
+                const int b = int(bodies.indexOf(layer));
+                if (b >= 0) {
+                    moving = velocity[b] + change[b];
+                    accelerating = change[b];
+                    QMatrix4x4 shift;
+                    shift.translate(position[b] - newPoint[b]);
+                    matrix = shift * worldOf(layer, frame);
+                } else {
+                    const QVector3D before = pointOf(layer, frame - 1), now = pointOf(layer, frame),
+                                    after = pointOf(layer, frame + 1);
+                    moving = after - now;
+                    accelerating = (after - now) - (now - before);
+                    matrix = worldOf(layer, frame);
+                }
+                const float v[3] {moving.x(), moving.y(), moving.z()};
+                const float a[3] {accelerating.x(), accelerating.y(), accelerating.z()};
+                std::memcpy(record + 0x28, v, sizeof(v));
+                std::memcpy(record + 0x34, a, sizeof(a));
+                std::memcpy(record + 0x40, matrix.constData(), sizeof(float) * 16);
+            }
+            void* recordsPointer = records.data();
+            // What each body's simulated Behaviors give within its range.
+            QVector<QVector3D> added(bodyCount);
+            QVector<float> factor(bodyCount, 1.0f);
+            QVector<bool> acted(bodyCount, false);
+            for (int b = 0; b < bodyCount; ++b) {
+                const int layer = bodies[b];
+                if (scene.activeAt && !scene.activeAt(layer, frame)) continue;
+                simulation = {};
+                simulation.target = layer;
+                bool any = false;
+                for (const BehaviorStackEntry& entry : entriesOf(layer, frame)) {
+                    if (rejected.contains(entry.id)) continue;
+                    RenderInvocation invocation;
+                    invocation.module = &entry.module;
+                    invocation.values = &entry.values;
+                    invocation.width = qMax(1, canvasWidth);
+                    invocation.height = qMax(1, canvasHeight);
+                    invocation.timelineFrame = frame;
+                    invocation.layerDurationFrames = qMax(1, endOf(layer) - startOf(layer));
+                    invocation.frameRate = safeFrameRate;
+                    invocation.composition = composition;
+                    invocation.sourceLayerId = composition && layer < composition->layers().size()
+                        ? composition->layers().at(layer).id : core::Identifier();
+                    g_renderInvocation = &invocation;
+                    NativePluginRuntime* runtime = runtimeFor(entry.id, entry.module);
+                    if (!runtime) {
+                        rejected.insert(entry.id);
+                        continue;
+                    }
+                    QByteArray context(0x80, '\0');
+                    const int objectIndex = layer;
+                    // Throw's impulse comes at the body's first step, t = 0.
+                    const double currentTime =
+                        double(qMax(0, frame - qMax(track.first, startOf(layer)) - 1)) * timeStep;
+                    std::memcpy(context.data() + 0x00, &objectIndex, sizeof(objectIndex));
+                    std::memcpy(context.data() + 0x18, &currentTime, sizeof(currentTime));
+                    std::memcpy(context.data() + 0x20, &timeStep, sizeof(timeStep));
+                    void* simulationState = &simulation;
+                    std::memcpy(context.data() + 0x28, &simulationState, sizeof(simulationState));
+                    std::memcpy(context.data() + 0x30, &recordsPointer, sizeof(recordsPointer));
+                    std::memcpy(context.data() + 0x38, &count, sizeof(count));
+                    const auto force = forceCallback;
+                    const auto drag = dampingCallback;
+                    std::memcpy(context.data() + 0x40, &force, sizeof(force));
+                    std::memcpy(context.data() + 0x48, &drag, sizeof(drag));
+                    void* contextPointer = context.data();
+                    std::memcpy(runtime->apiBlock().data() + 0x20, &contextPointer, sizeof(contextPointer));
+                    const qint32 simulationCapability = 9;
+                    std::memcpy(runtime->apiBlock().data() + 0x498, &simulationCapability,
+                                sizeof(simulationCapability));
+                    const int simulationResult = runtime->notify(103);
+                    if (simulationResult == 1 && runtime->lastFaultCode() == 0) any = true;
+                    else rejected.insert(entry.id);
+                }
+                if (!any) continue;
+                QVector3D sum(simulation.acceleration[0], simulation.acceleration[1], simulation.acceleration[2]);
+                if (simulation.forceWeight > 0.0f)
+                    sum += QVector3D(simulation.force[0], simulation.force[1], simulation.force[2])
+                           / simulation.forceWeight;
+                added[b] = sum * dt;
+                factor[b] = float(std::pow(double(simulation.damping), timeStep));
+                acted[b] = true;
+            }
+            for (int b = 0; b < bodyCount; ++b) {
+                if (!acted[b]) continue;
+                change[b] += added[b];
+                damping[b] *= factor[b];
+                // And the bodies under it, within their ranges.
+                for (int c : under[b]) {
+                    if (scene.activeAt && !scene.activeAt(bodies[c], frame)) continue;
+                    change[c] += added[b];
+                    damping[c] *= factor[b];
+                }
+            }
+            // Integrated.
+            QVector<QVector3D> nextVelocity(bodyCount), nextPosition(bodyCount);
+            for (int b = 0; b < bodyCount; ++b) {
+                nextVelocity[b] = damping[b] * velocity[b] + change[b];
+                nextPosition[b] = position[b] + dt * nextVelocity[b];
+            }
+            track.velocities.append(nextVelocity);
+            track.positions.append(nextPosition);
+            track.points.append(newPoint);
+            track.animation = newAnimation;
+        }
+        g_renderInvocation = previousInvocation;
         return true;
 #endif
     }
@@ -2760,7 +3130,12 @@ public:
                                  << record.filePath;
             return false;
         }
-        NativePluginRuntime* runtime = runtimeFor(id, record);
+        // An effect that keeps its state on an instance is drawn by an
+        // instance of its own on this thread (not the one analysing on the
+        // GUI thread).
+        const bool ownInstance = !transition && !time.instanceKey.isEmpty();
+        NativePluginRuntime* runtime = runtimeFor(
+            ownInstance ? id + QStringLiteral(":render:") + time.instanceKey : id, record);
         if (trace) {
             std::fprintf(stderr, "[hfpl-render] runtime=%p\n", static_cast<void*>(runtime));
             std::fflush(stderr);
@@ -2774,6 +3149,77 @@ public:
         auto* gl = m_context.extraFunctions();
         const int width = image.width();
         const int height = image.height();
+        // An effect (one on its own instance after getting its data back) is
+        // asked how far its picture reaches past the layer's frame - GetRenderGrowth
+        // (PluginFile::GetRenderGrowth, Tannen 0x18035aa90, Notify 9), as
+        // Flux asks before each Render: the render context with +0x78..+0x90
+        // pointing at four values, the left, right and the two vertical
+        // margins (MotionLock: its picture spans [-left, w + right] and
+        // [-[+0x90], h + [+0x88]], and it keeps the frame size it is told).
+        // It draws into a target grown by them; the layer's frame is cut back
+        // out of it.
+        std::array<qint32, 4> growth {0, 0, 0, 0};
+        const QByteArray ownLayerId = time.layerId.toLatin1();
+        if (!transition) {
+            RenderInvocation early {&record, &parameterValues, &m_scratchPool, &m_scratchVboPool,
+                                    &m_scratchRenderbufferPool, width, height};
+            early.frameRate = time.frameRate;
+            early.timelineFrame = time.frame;
+            early.layerAsset = time.layerAsset;
+            early.layerId = time.layerId;
+            // Its values as the Render reads them (a reduced preview's too).
+            early.valueScale = qBound(0.01f, time.renderScale, 1.0f);
+            early.reducedValues = time.reducedValues >= 0 ? time.reducedValues : reducedValuesOf(record);
+            RenderInvocation* previous = g_renderInvocation;
+            g_renderInvocation = &early;
+            if (ownInstance) restoreInstanceData(*runtime, time.instanceData);
+            QByteArray growthBlock(0x400, '\0');
+            static constexpr char kNullLayer[] = "00000000-0000-0000-0000-000000000000";
+            const char* layerPointer = ownLayerId.isEmpty() ? kNullLayer : ownLayerId.constData();
+            std::memcpy(growthBlock.data() + 0x08, &layerPointer, sizeof(layerPointer));
+            // +0x24 the normalisation factor, 1 as in the Render's context:
+            // without it Drop Shadow works its margins out as none.
+            const float normalization = 1.0f;
+            std::memcpy(growthBlock.data() + 0x24, &normalization, sizeof(normalization));
+            const float scale = qBound(0.01f, time.renderScale, 1.0f);
+            std::memcpy(growthBlock.data() + 0x2c, &scale, sizeof(scale));
+            std::memcpy(growthBlock.data() + 0x30, &scale, sizeof(scale));
+            const qint32 w = width, h = height;
+            std::memcpy(growthBlock.data() + 0x60, &w, sizeof(w));
+            std::memcpy(growthBlock.data() + 0x64, &h, sizeof(h));
+            const double msPerFrame = 1000.0 / qMax(0.001, time.frameRate);
+            const qint32 length = qMax(1, time.layerFrames);
+            const qint32 layerFrame = qBound(0, time.layerFrame, length - 1);
+            const qint32 frame = time.frame + (layerFrame - time.layerFrame);
+            const qint32 timeMs = qint32(qRound64(frame * msPerFrame));
+            const qint32 layerMs = qint32(qRound64(layerFrame * msPerFrame));
+            std::memcpy(growthBlock.data() + 0x6c, &timeMs, sizeof(timeMs));
+            std::memcpy(growthBlock.data() + 0x70, &layerMs, sizeof(layerMs));
+            for (int i = 0; i < 4; ++i) {
+                qint32* value = &growth[i];
+                std::memcpy(growthBlock.data() + 0x78 + 8 * i, &value, sizeof(value));
+            }
+            std::memcpy(growthBlock.data() + 0x98, &frame, sizeof(frame));
+            std::memcpy(growthBlock.data() + 0x9c, &layerFrame, sizeof(layerFrame));
+            std::memcpy(growthBlock.data() + 0xa0, &length, sizeof(length));
+            void* growthPointer = growthBlock.data();
+            std::memcpy(runtime->apiBlock().data() + 0x20, &growthPointer, sizeof(growthPointer));
+            const int growthResult = runtime->notify(9);
+            void* none = nullptr;
+            std::memcpy(runtime->apiBlock().data() + 0x20, &none, sizeof(none));
+            g_renderInvocation = previous;
+            // A module that does not answer leaves its frame as it is.
+            if (growthResult != 1 || runtime->lastFaultCode() != 0
+                || width + growth[0] + growth[1] < 1 || height + growth[2] + growth[3] < 1)
+                growth = {0, 0, 0, 0};
+            if (trace) {
+                std::fprintf(stderr, "[hfpl-render] growth %d %d %d %d result=%d\n", growth[0], growth[1],
+                             growth[2], growth[3], growthResult);
+                std::fflush(stderr);
+            }
+        }
+        const int canvasWidth = width + growth[0] + growth[1];
+        const int canvasHeight = height + growth[2] + growth[3];
         QOpenGLFramebufferObjectFormat outputFormat;
         // Tannen hands effects a colour target without an implicit depth/stencil
         // attachment. 3D-style modules (for example Wireframe) attach their own
@@ -2782,13 +3228,13 @@ public:
         outputFormat.setAttachment(QOpenGLFramebufferObject::NoAttachment);
         outputFormat.setTextureTarget(GL_TEXTURE_2D);
         outputFormat.setInternalTextureFormat(GL_RGBA32F);
-        QOpenGLFramebufferObject output(QSize(width, height), outputFormat);
+        QOpenGLFramebufferObject output(QSize(canvasWidth, canvasHeight), outputFormat);
         if (!output.isValid() || !output.bind()) {
             qWarning().noquote() << "Native HFPL framebuffer creation failed for"
                                  << record.filePath;
             return false;
         }
-        gl->glViewport(0, 0, width, height);
+        gl->glViewport(0, 0, canvasWidth, canvasHeight);
         gl->glDisable(GL_SCISSOR_TEST);
         gl->glDisable(GL_DEPTH_TEST);
         gl->glDisable(GL_CULL_FACE);
@@ -2806,10 +3252,15 @@ public:
         gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        // Rows bottom first, as GL keeps them and as Flux's layer textures
+        // reach the modules: their Y runs up, so a point at +y is above the
+        // centre (4PointRamp's, Drop Shadow's angle) and EnvironmentMapViewer
+        // turns to the top at X +90 - uploaded top first, every picture came
+        // out mirrored. The result is read back the same way (below).
         const QImage rgbaInput = image.convertToFormat(QImage::Format_RGBA8888);
         QVector<float> inputPixels(width * height * 4);
         for (int y = 0; y < height; ++y) {
-            const uchar* source = rgbaInput.constScanLine(y);
+            const uchar* source = rgbaInput.constScanLine(height - 1 - y);
             float* destination = inputPixels.data() + y * width * 4;
             for (int x = 0; x < width * 4; ++x) {
                 destination[x] = float(source[x]) / 255.0f;
@@ -2832,7 +3283,7 @@ public:
                                           .convertToFormat(QImage::Format_RGBA8888);
             QVector<float> secondPixels(width * height * 4);
             for (int y = 0; y < height; ++y) {
-                const uchar* source = rgbaSecond.constScanLine(y);
+                const uchar* source = rgbaSecond.constScanLine(height - 1 - y);
                 float* destination = secondPixels.data() + y * width * 4;
                 for (int x = 0; x < width * 4; ++x) {
                     destination[x] = float(source[x]) / 255.0f;
@@ -2921,12 +3372,23 @@ public:
                     sizeof(textureScale));
         std::memcpy(outputTextureBlock.data() + 0x30, &textureScale,
                     sizeof(textureScale));
+        if (canvasWidth != width || canvasHeight != height) {
+            const qint32 grownWidth = canvasWidth, grownHeight = canvasHeight;
+            std::memcpy(outputTextureBlock.data() + 0x0c, &grownWidth, sizeof(grownWidth));
+            std::memcpy(outputTextureBlock.data() + 0x10, &grownHeight, sizeof(grownHeight));
+            std::memcpy(outputTextureBlock.data() + 0x14, &grownWidth, sizeof(grownWidth));
+            std::memcpy(outputTextureBlock.data() + 0x18, &grownHeight, sizeof(grownHeight));
+        }
 
+        // The target's pixels across it: on a grown target the module places
+        // the layer at its margins itself (Drop Shadow), so the projection
+        // spans the grown canvas - over the layer's size it would squeeze
+        // the canvas into the frame.
         const std::array<float, 16> projection {
-            2.0f / width, 0.0f,          0.0f, 0.0f,
-            0.0f,         2.0f / height, 0.0f, 0.0f,
-            0.0f,         0.0f,         -1.0f, 0.0f,
-           -1.0f,        -1.0f,          0.0f, 1.0f
+            2.0f / canvasWidth, 0.0f,                0.0f, 0.0f,
+            0.0f,               2.0f / canvasHeight, 0.0f, 0.0f,
+            0.0f,               0.0f,               -1.0f, 0.0f,
+           -1.0f,              -1.0f,                0.0f, 1.0f
         };
         const std::array<float, 16> modelView {
             1.0f, 0.0f, 0.0f, 0.0f,
@@ -2946,7 +3408,11 @@ public:
         static constexpr char kNullSourceUuid[] =
             "00000000-0000-0000-0000-000000000000";
         const char* sourceUuid = kNullSourceUuid;
-        std::memcpy(frameBlock.data() + 0x08, &sourceUuid, sizeof(sourceUuid));
+        // An effect on its own instance is told its layer: AutomaticStabilizer
+        // describes that layer's footage with it (GetAssetInfo).
+        if (ownInstance && !ownLayerId.isEmpty()) sourceUuid = ownLayerId.constData();
+        if (!transition)
+            std::memcpy(frameBlock.data() + 0x08, &sourceUuid, sizeof(sourceUuid));
         void* inputPointer = inputTextureBlock.data();
         std::memcpy(frameBlock.data() + 0x10, &inputPointer, sizeof(inputPointer));
         void* outputPointer = outputTextureBlock.data();
@@ -2981,11 +3447,17 @@ public:
         const qint32 frameWidth = width;
         const qint32 frameHeight = height;
         if (transition) {
-            // PluginVideoTransition::Render builds a different context: three
-            // textures at +0x10/+0x18/+0x20, two matrices at +0x38/+0x40,
-            // output dimensions at +0x48/+0x4c and sample/start/end at
-            // +0x54/+0x58/+0x60. Native modules derive their normalized
-            // progress from those integer positions.
+            // PluginVideoTransition::Render builds a different context: the
+            // side at +0x08, three textures at +0x10/+0x18/+0x20, two
+            // matrices at +0x38/+0x40, output dimensions at +0x48/+0x4c and
+            // position/start/edit point/end at +0x54/+0x58/+0x5c/+0x60 in
+            // milliseconds. Most modules take (position - start) / (end -
+            // start). Fade to Color draws only the texture of its side (2
+            // the outgoing +0x10, 1 the incoming +0x18; nothing for any
+            // other) - into its colour before the edit point and out of it
+            // after - and with the edit point at the start fades the incoming
+            // one in over the whole window less a frame (1000 / the frame
+            // rate GetTimelineInfo gives).
             std::memcpy(frameBlock.data() + 0x38, &modelViewPointer,
                         sizeof(modelViewPointer));
             std::memcpy(frameBlock.data() + 0x40, &projectionPointer,
@@ -2993,17 +3465,22 @@ public:
             std::memcpy(frameBlock.data() + 0x48, &frameWidth, sizeof(frameWidth));
             std::memcpy(frameBlock.data() + 0x4c, &frameHeight, sizeof(frameHeight));
             constexpr qint32 transitionStart = 0;
-            constexpr qint32 transitionEnd = 1000000;
+            const qint32 transitionEnd = qMax(1, qRound(time.transitionSeconds * 1000.0));
             const qint32 transitionFrame = qBound(
                 transitionStart,
                 qRound(qBound(0.0f, transitionProgress, 1.0f) * transitionEnd),
                 transitionEnd);
+            const qint32 transitionCut = time.transitionCut < 0.0f
+                ? transitionEnd / 2
+                : qBound(transitionStart, qRound(time.transitionCut * transitionEnd), transitionEnd);
+            const qint32 side = transitionFrame < transitionCut ? 2 : 1;
+            std::memcpy(frameBlock.data() + 0x08, &side, sizeof(side));
             std::memcpy(frameBlock.data() + 0x54, &transitionFrame,
                         sizeof(transitionFrame));
             std::memcpy(frameBlock.data() + 0x58, &transitionStart,
                         sizeof(transitionStart));
-            std::memcpy(frameBlock.data() + 0x5c, &transitionEnd,
-                        sizeof(transitionEnd));
+            std::memcpy(frameBlock.data() + 0x5c, &transitionCut,
+                        sizeof(transitionCut));
             std::memcpy(frameBlock.data() + 0x60, &transitionEnd,
                         sizeof(transitionEnd));
         } else {
@@ -3047,8 +3524,23 @@ public:
         invocation.valueScale = textureScale;
         invocation.reducedValues = transition ? int(NativeReducesNothing)
             : time.reducedValues >= 0 ? time.reducedValues : reducedValuesOf(record);
+        invocation.frameRate = time.frameRate;
+        invocation.timelineFrame = time.frame;
+        invocation.layerAsset = time.layerAsset;
+        invocation.layerId = time.layerId;
+        invocation.layerImage = time.layerImage;
+        if (time.valueAt && blursMotion(record, parameterValues)) {
+            // As the RenderContext has it: the layer frame held inside the
+            // layer, its milliseconds, and the shot moved by the same amount.
+            invocation.valueAt = time.valueAt;
+            invocation.msPerFrame = 1000.0 / qMax(0.001, time.frameRate);
+            const qint32 layerFrame = qBound(0, time.layerFrame, qMax(1, time.layerFrames) - 1);
+            invocation.layerMs = qint32(qRound64(layerFrame * invocation.msPerFrame));
+            invocation.frameOffset = double(time.frame) - time.layerFrame;
+        }
         RenderInvocation* previousInvocation = g_renderInvocation;
         g_renderInvocation = &invocation;
+
         if (qEnvironmentVariableIsSet("OPENVEGAS_HFPL_RENDER_DIAGNOSTIC_STUBS")) {
             resetNativePluginDiagnosticServiceOffset();
         }
@@ -3094,13 +3586,13 @@ public:
             }
         }
         if (ok) {
-            QImage rendered(image.size(), QImage::Format_RGBA8888);
+            QImage rendered(QSize(canvasWidth, canvasHeight), QImage::Format_RGBA8888);
             gl->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
             gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
             gl->glPixelStorei(GL_PACK_ROW_LENGTH, 0);
             gl->glPixelStorei(GL_PACK_SKIP_ROWS, 0);
             gl->glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
-            gl->glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE,
+            gl->glReadPixels(0, 0, canvasWidth, canvasHeight, GL_RGBA, GL_UNSIGNED_BYTE,
                              rendered.bits());
             ok = gl->glGetError() == GL_NO_ERROR;
             if (!ok) {
@@ -3108,7 +3600,12 @@ public:
                                      << record.filePath;
             }
             if (ok) {
-                image = rendered;
+                // GL rows run bottom first; the picture top first. On a
+                // grown target the layer's frame starts `left` across and
+                // [+0x90] up from the bottom - [+0x88] down from the top.
+                rendered = rendered.flipped(Qt::Vertical);
+                image = canvasWidth == width && canvasHeight == height
+                    ? rendered : rendered.copy(QRect(growth[0], growth[2], width, height));
             }
         }
         // Multi-pass plugins can leave work for scratch targets queued after
@@ -3271,11 +3768,13 @@ public:
         RenderInvocation invocation {&record, &values, &m_scratchPool, &m_scratchVboPool,
                                      &m_scratchRenderbufferPool, width, height};
         invocation.timelineFrame = view.frame;
+        invocation.frameRate = view.frameRate;
         invocation.sourceLayerId = view.layerId;
         RenderInvocation* previousInvocation = g_renderInvocation;
         g_renderInvocation = &invocation;
         CustomUiCallState state;
         state.serialized = serialized;
+        state.effectIndex = view.effectIndex;
         CustomUiCallState* previousCall = g_customUiCall;
         g_customUiCall = &state;
         const int notifyResult = runtime->notify(message);
@@ -3302,6 +3801,8 @@ public:
         result.backgroundDelayMs = state.backgroundDelayMs;
         result.enabled = state.enabled;
         result.values = invocation.valueOverrides;
+        result.layerRequests = state.layerRequests;
+        result.transaction = state.transaction;
         if (overlay && clean && m_context.makeCurrent(m_surface.data()) && target->bind()) {
             QImage drawn(targetWidth, targetHeight, QImage::Format_RGBA8888);
             gl->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -3450,6 +3951,18 @@ private:
         putService(runtime->apiBlock(), 0x3c0, reinterpret_cast<void*>(&trackingData));
         putService(runtime->apiBlock(), 0x3c8, reinterpret_cast<void*>(&assetInfoService));
         putService(runtime->apiBlock(), 0x3d0, reinterpret_cast<void*>(&assetTextureService));
+        // The project edits AutomaticStabilizer and MotionLock make from
+        // their buttons (CreateAPI slots 0x3a..0x3c, 0x6c/0x6d, 0x74/0x75).
+        putService(runtime->apiBlock(), 0x198, reinterpret_cast<void*>(&setScalarParameter));
+        putService(runtime->apiBlock(), 0x1c0, reinterpret_cast<void*>(&setScalarParameter));
+        putService(runtime->apiBlock(), 0x3d8, reinterpret_cast<void*>(&effectIndexService));
+        putService(runtime->apiBlock(), 0x1d0, reinterpret_cast<void*>(&setLayerIdParameter));
+        putService(runtime->apiBlock(), 0x1d8, reinterpret_cast<void*>(&beginTransaction));
+        putService(runtime->apiBlock(), 0x1e0, reinterpret_cast<void*>(&endTransaction));
+        putService(runtime->apiBlock(), 0x360, reinterpret_cast<void*>(&instanceNumberOfLayers));
+        putService(runtime->apiBlock(), 0x368, reinterpret_cast<void*>(&instanceLayerId));
+        putService(runtime->apiBlock(), 0x3a0, reinterpret_cast<void*>(&createPointLayer));
+        putService(runtime->apiBlock(), 0x3a8, reinterpret_cast<void*>(&applyTransformToLayer));
         // The behaviour transform getters, for TransformationAtTime on the
         // instance (MotionTrack composes with them).
         putService(runtime->apiBlock(), 0x300, reinterpret_cast<void*>(&preBehaviorTransformation));
@@ -3559,11 +4072,46 @@ private:
         return result;
     }
 
+    // DeserializeInstanceData (Notify 6, the bytes at api+0x30, their size at
+    // +0x38) into a render instance, whenever it last had other data.
+    void restoreInstanceData(NativePluginRuntime& runtime, const QByteArray& data)
+    {
+        const size_t hash = qHash(data);
+        const auto known = m_restoredData.constFind(&runtime);
+        if (known != m_restoredData.constEnd() && *known == hash) return;
+        m_restoredData.insert(&runtime, hash);
+        if (data.isEmpty()) return;
+        QByteArray bytes = data;
+        char* api = runtime.apiBlock().data();
+        void* pointer = bytes.data();
+        const qint32 size = qint32(bytes.size());
+        void* previousEvent = nullptr;
+        void* previousContext = nullptr;
+        qint32 previousCapability = 0;
+        std::memcpy(&previousEvent, api + 0x18, sizeof(previousEvent));
+        std::memcpy(&previousContext, api + 0x20, sizeof(previousContext));
+        std::memcpy(&previousCapability, api + 0x498, sizeof(previousCapability));
+        void* none = nullptr;
+        const qint32 noCapability = 0;
+        std::memcpy(api + 0x18, &none, sizeof(none));
+        std::memcpy(api + 0x20, &none, sizeof(none));
+        std::memcpy(api + 0x498, &noCapability, sizeof(noCapability));
+        std::memcpy(api + 0x30, &pointer, sizeof(pointer));
+        std::memcpy(api + 0x38, &size, sizeof(size));
+        runtime.notify(6);
+        std::memcpy(api + 0x30, &none, sizeof(none));
+        std::memcpy(api + 0x18, &previousEvent, sizeof(previousEvent));
+        std::memcpy(api + 0x20, &previousContext, sizeof(previousContext));
+        std::memcpy(api + 0x498, &previousCapability, sizeof(previousCapability));
+    }
+
     QOpenGLContext m_context;
     QPointer<QOffscreenSurface> m_surface;
     QHash<QString, std::shared_ptr<NativePluginRuntime>> m_runtimes;
     QSet<NativePluginRuntime*> m_pluginInstances;
     QHash<NativePluginRuntime*, std::shared_ptr<QByteArray>> m_fallbackInstanceStates;
+    // What each render instance was last given with Notify(6).
+    QHash<NativePluginRuntime*, size_t> m_restoredData;
     ScratchTexturePool m_scratchPool;
     ScratchVboPool m_scratchVboPool;
     ScratchRenderbufferPool m_scratchRenderbufferPool;
@@ -3672,7 +4220,11 @@ namespace {
 // module changed; seven more once their values in pixels registered without
 // the unit are reduced too (unmarkedPixelValues). The others - noise,
 // distortions, effects that depend on the pixel grid, ones that need other
-// frames - are drawn full and reduced.
+// frames - are drawn reduced as the reference draws them: Flux's effect pass
+// (Flux.dll FUN_180345bf0, bit 0x4 of a layer material's render) puts every
+// effect on a canvas of the layer's size times the preview's scale
+// (DAT_1807897b8[downsample]), with that scale in the textures, and the
+// module gets its values as they are (reducedValuesOf).
 const QSet<QString>& reducedPreviewModules()
 {
     static const QSet<QString> names {
@@ -3740,7 +4292,9 @@ namespace {
 bool customUiRecord(const core::Identifier& id, ModuleRecord* record)
 {
     static const QSet<QString> modules {QStringLiteral("motiontrack"),
-                                        QStringLiteral("bendgeometry")};
+                                        QStringLiteral("bendgeometry"),
+                                        QStringLiteral("automaticstabilizer"),
+                                        QStringLiteral("motionlock")};
     QMutexLocker lock(&g_registryMutex);
     const auto it = g_registry.constFind(id.value());
     if (it == g_registry.constEnd()
@@ -3999,11 +4553,9 @@ bool nativeInstanceTransformation(const core::Identifier& id, const QStringList&
     const bool ok = runInstanceCall(102, id, values, at, {}, ThreadRenderer::Context::Transformation,
                                     {}, nullptr, result.data()).handled;
     if (!ok) return false;
-    // The module works in its layer pixels, Y down; the port's layer space
-    // has Y up. Flip, apply, flip back: a move down comes out as -Y.
-    QMatrix4x4 flip;
-    flip.scale(1.0f, -1.0f, 1.0f);
-    const QMatrix4x4 converted = flip * QMatrix4x4(result.data()).transposed() * flip;
+    // In its layer pixels with Y up, as the port's layer space: its footage
+    // reaches it bottom row first (assetTextureService), as Flux's does.
+    const QMatrix4x4 converted = QMatrix4x4(result.data()).transposed();
     std::copy(converted.constData(), converted.constData() + 16, matrix->begin());
     return true;
 }
@@ -4017,11 +4569,39 @@ bool nativeBehaviorUsesInstance(const core::Identifier& id)
                                                         Qt::CaseInsensitive) == 0;
 }
 
+bool nativeEffectAnalysesOwnLayer(const core::Identifier& id)
+{
+    static const QSet<QString> modules {QStringLiteral("automaticstabilizer"),
+                                        QStringLiteral("motionlock")};
+    QMutexLocker lock(&g_registryMutex);
+    const auto it = g_registry.constFind(id.value());
+    return it != g_registry.constEnd()
+           && modules.contains(QFileInfo(it->filePath).baseName().toLower());
+}
+
+bool nativeEffectUsesInstance(const core::Identifier& id)
+{
+    return nativeBehaviorUsesInstance(id) || nativeEffectAnalysesOwnLayer(id);
+}
+
 QVector<EffectParameterSpec> nativeParameters(const core::Identifier& id)
 {
     QMutexLocker lock(&g_registryMutex);
     const auto it = g_registry.constFind(id.value());
     return it == g_registry.constEnd() ? QVector<EffectParameterSpec>() : it->parameters;
+}
+
+core::Identifier nativeModuleNamed(const QString& baseName)
+{
+    QMutexLocker lock(&g_registryMutex);
+    QString found;
+    for (auto it = g_registry.constBegin(); it != g_registry.constEnd(); ++it) {
+        if (QFileInfo(it->filePath).baseName().compare(baseName, Qt::CaseInsensitive) == 0
+            && (found.isEmpty() || it.key() < found)) {
+            found = it.key();
+        }
+    }
+    return core::Identifier(found);
 }
 
 namespace {
@@ -4050,6 +4630,20 @@ bool nativeInstanceTransformAt(const QString& instanceKey, int frame,
     // Before or after the clip the layer keeps its first or last placement.
     const int index = qBound(0, frame - it->firstFrame, int(it->matrices.size()) - 1);
     *matrix = it->matrices.at(index);
+    return true;
+}
+
+bool nativeInstanceTransformAt(const QString& instanceKey, double frame, std::array<float, 16>* matrix)
+{
+    const int whole = int(std::floor(frame));
+    const float t = float(frame - whole);
+    std::array<float, 16> before {}, after {};
+    if (!nativeInstanceTransformAt(instanceKey, whole, &before)) return false;
+    if (t <= 0.0f || !nativeInstanceTransformAt(instanceKey, whole + 1, &after)) {
+        *matrix = before;
+        return true;
+    }
+    for (int i = 0; i < 16; ++i) (*matrix)[i] = before[i] + (after[i] - before[i]) * t;
     return true;
 }
 
@@ -4286,7 +4880,7 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
                                  const QStringList& parameterValues,
                                  const composition::Composition* composition,
                                  const core::Identifier& sourceLayerId,
-                                 const NativeBehaviorLayer& layer)
+                                 const NativeBehaviorLayer& layer, double frameFraction)
 {
     ModuleRecord record;
     {
@@ -4303,7 +4897,7 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
     return g_behaviorThreadRenderer->evaluate(
         result, timelineFrame, localFrame, layerDurationFrames,
         canvasWidth, canvasHeight, frameRate, false, id.value(), record,
-        parameterValues, composition, sourceLayerId, layer);
+        parameterValues, composition, sourceLayerId, layer, frameFraction);
 }
 
 bool evaluateNativeSubObjectBehavior(
@@ -4330,34 +4924,15 @@ bool evaluateNativeSubObjectBehavior(
         id.value(), record, parameterValues, sourceLayerId);
 }
 
-bool simulateNativeBehaviorStack(
-    NativeBehaviorResult& result, int timelineFrame, int localFrame,
-    int layerDurationFrames, int canvasWidth, int canvasHeight, double frameRate,
-    const QVector<NativeBehaviorRequest>& behaviors,
-    const composition::Composition* composition,
-    const core::Identifier& sourceLayerId)
+bool simulateNativeBehaviorScene(NativeSimulationTrack& track, int toFrame, int canvasWidth, int canvasHeight,
+                                 double frameRate, const NativeSimulationScene& scene,
+                                 const composition::Composition* composition)
 {
-    QVector<BehaviorStackEntry> entries;
-    {
-        QMutexLocker lock(&g_registryMutex);
-        entries.reserve(behaviors.size());
-        for (const NativeBehaviorRequest& behavior : behaviors) {
-            const auto it = g_registry.constFind(behavior.id.value());
-            if (it == g_registry.constEnd()
-                || !isVerifiedSimulationBehavior(it.value())) {
-                continue;
-            }
-            entries.push_back({behavior.id.value(), it.value(),
-                               behavior.parameterValues});
-        }
-    }
-    if (entries.isEmpty()) return false;
     if (!g_behaviorThreadRenderer) {
         g_behaviorThreadRenderer = std::make_unique<BehaviorThreadRenderer>();
     }
-    return g_behaviorThreadRenderer->simulateStack(
-        result, timelineFrame, localFrame, layerDurationFrames,
-        canvasWidth, canvasHeight, frameRate, entries, composition, sourceLayerId);
+    return g_behaviorThreadRenderer->simulateScene(track, toFrame, canvasWidth, canvasHeight, frameRate, scene,
+                                                   composition);
 }
 
 bool applyNativeEffectToImage(QImage& image, const core::Identifier& id,
@@ -4383,7 +4958,8 @@ bool applyNativeEffectToImage(QImage& image, const core::Identifier& id,
 
 bool applyNativeVideoTransition(QImage& output, const QImage& from, const QImage& to,
                                 float progress, const core::Identifier& id,
-                                const QStringList& parameterValues)
+                                const QStringList& parameterValues,
+                                const NativeFrameTime& time)
 {
     ModuleRecord record;
     {
@@ -4405,7 +4981,7 @@ bool applyNativeVideoTransition(QImage& output, const QImage& from, const QImage
         g_threadRenderer = std::make_unique<ThreadRenderer>();
     }
     return g_threadRenderer->render(output, id.value(), record, parameterValues,
-                                    &to, progress);
+                                    &to, progress, time);
 }
 
 bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,
@@ -4431,6 +5007,11 @@ bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,
         interleavedSamples, channels, sampleRate, startSample,
         instanceKey.isEmpty() ? id.value() : id.value() + QLatin1Char(':') + instanceKey,
         record, parameterValues, sourceSamples, sourceStartSample, layer);
+}
+
+bool nativeAudioWantedLaterSamples()
+{
+    return g_audioWantedLater;
 }
 
 bool applyNativeAudioEffectBlocks(

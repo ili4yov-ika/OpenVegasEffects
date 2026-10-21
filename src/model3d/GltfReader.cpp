@@ -265,12 +265,12 @@ void addPrimitive(const Document& document, const QJsonObject& primitive, const 
     QVector<TargetData> targets;
     if (morph >= 0 && morph < mesh->morphs.size()) {
         for (const QJsonValue target : primitive.value(QLatin1String("targets")).toArray()) {
-            const QJsonObject attributes = target.toObject();
+            const QJsonObject targetAttributes = target.toObject();
             TargetData data;
-            if (attributes.contains(QLatin1String("POSITION")))
-                data.positions = document.floats(attributes.value(QLatin1String("POSITION")).toInt(), 3);
-            if (attributes.contains(QLatin1String("NORMAL")))
-                data.normals = document.floats(attributes.value(QLatin1String("NORMAL")).toInt(), 3);
+            if (targetAttributes.contains(QLatin1String("POSITION")))
+                data.positions = document.floats(targetAttributes.value(QLatin1String("POSITION")).toInt(), 3);
+            if (targetAttributes.contains(QLatin1String("NORMAL")))
+                data.normals = document.floats(targetAttributes.value(QLatin1String("NORMAL")).toInt(), 3);
             if (data.positions.size() != vertexCount * 3) data.positions.clear();
             if (data.normals.size() != vertexCount * 3) data.normals.clear();
             targets.append(data);
@@ -524,12 +524,12 @@ LoadResult loadGltf(const QString& filePath)
         json = data;
     }
     QJsonParseError error;
-    const QJsonDocument parsed = QJsonDocument::fromJson(json, &error);
-    if (!parsed.isObject()) {
+    const QJsonDocument parsedJson = QJsonDocument::fromJson(json, &error);
+    if (!parsedJson.isObject()) {
         result.message = failure(filePath, error.errorString());
         return result;
     }
-    document.root = parsed.object();
+    document.root = parsedJson.object();
     const QString version = document.root.value(QLatin1String("asset")).toObject()
                                 .value(QLatin1String("version")).toString();
     if (!version.startsWith(QLatin1Char('2'))) {

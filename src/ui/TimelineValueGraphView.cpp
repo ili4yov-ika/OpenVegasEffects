@@ -1,5 +1,6 @@
 #include "ui/TimelineValueGraphView.h"
 
+#include <QFontMetrics>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -21,8 +22,15 @@ constexpr double kMinPixelsPerSecond = 1.0;
 constexpr int kNodeRadius = 4;
 constexpr int kHandleRadius = 3;
 constexpr int kHitSlop = 6;
-// Air left above and below the curves when Auto Zoom fits the value axis.
-constexpr double kAutoZoomMargin = 0.12;
+// Air left above and below the curves when Auto Zoom fits the value axis:
+// a tenth of the range on either side (ControlPanelValueGraphGraphicsView,
+// VegasEffects.exe 1403f4700 / 1403f4960 with 0.1; an empty graph shows
+// 0..100 as -10..110).
+constexpr double kAutoZoomMargin = 0.1;
+// ValueGraphGridGraphicsItem's colours (1404a8c10): the lines and the
+// value labels.
+const QColor kGridLine(0x16, 0x16, 0x16);
+const QColor kGridLabel(0x92, 0x92, 0x92);
 
 bool numericValue(const QVariant& value, double* out)
 {
@@ -34,7 +42,73 @@ bool numericValue(const QVariant& value, double* out)
     return ok;
 }
 
+// The steps of the time grid in frames, as the timeline's ruler has them
+// (TimebarRulerItem, FUN_1404ab100 - in scene units of 40 a frame: 200, then
+// the rate times 40, 200, 600, 2400, 12000, 36000, 144000): five frames, then
+// 1 s, 5 s, 15 s, 1 min, 5 min, 15 min and 1 h.
+QVector<int> gridStepsFor(double fps)
+{
+    const int f = qMax(1, int(std::lround(fps)));
+    return {5, f, 5 * f, 15 * f, 60 * f, 300 * f, 900 * f, 3600 * f};
+}
+
+// The first step more than 90 px apart (else the widest), and how many
+// parts it is divided in (FUN_1404a8900 / FUN_1404ab1b0): five for the
+// five-frame step and for a rate that is a multiple of five, else four when
+// the rate is one or two past a multiple of five, six otherwise.
+void chooseTimeStep(double fps, double pixelsPerFrame, int* step, int* parts)
+{
+    const QVector<int> steps = gridStepsFor(fps);
+    *step = steps.last();
+    for (int candidate : steps) {
+        if (candidate * pixelsPerFrame > 90.0) {
+            *step = candidate;
+            break;
+        }
+    }
+    *parts = 5;
+    if (*step != steps.first()) {
+        const int rate = qMax(1, int(std::lround(fps)));
+        if (rate % 5 != 0) *parts = rate % 5 > 2 ? 6 : 4;
+    }
+}
+
+// The value step (1404a8c10 fills 0.05, 0.1, 0.5, 1, 5, 10, ... - from 0.01
+// times five, then two, and on): the first whose lines are 40 px apart or
+// more (FUN_1404a8590).
+double valueStepFor(double pixelsPerUnit)
+{
+    double step = 0.01;
+    for (int i = 0; i < 64; ++i) {
+        step *= (i % 2 == 0) ? 5.0 : 2.0;
+        if (std::lround(step * pixelsPerUnit) >= 40) return step;
+    }
+    return step;
+}
+
+// A curve's colour by its place among the property's channels
+// (FloatGraphEditor white; Point2D/3D, Scale3D, Orientation3D red, green,
+// blue for X, Y, Z).
+QColor colorOfChannel(int channel, int channels)
+{
+    if (channels <= 1) return Qt::white;
+    switch (channel) {
+    case 0: return Qt::red;
+    case 1: return Qt::green;
+    case 2: return Qt::blue;
+    default: return Qt::white;
+    }
+}
+
 } // namespace
+
+QVector<int> TimelineValueGraphView::timeGridSteps(double fps) { return gridStepsFor(fps); }
+void TimelineValueGraphView::timeGridStep(double fps, double pixelsPerFrame, int* step, int* parts)
+{
+    chooseTimeStep(fps, pixelsPerFrame, step, parts);
+}
+double TimelineValueGraphView::valueGridStep(double pixelsPerUnit) { return valueStepFor(pixelsPerUnit); }
+QColor TimelineValueGraphView::channelColor(int channel, int channels) { return colorOfChannel(channel, channels); }
 
 TimelineValueGraphView::TimelineValueGraphView(QWidget* parent)
     : QWidget(parent)
@@ -229,22 +303,26 @@ void TimelineValueGraphView::refreshValueRange()
     bool have = false;
     double lo = 0.0;
     double hi = 0.0;
-    if (const composition::KeyFrameList* curve = activeCurve()) {
-        const QVector<composition::KeyFrame> keys = curve->all();
-        for (const composition::KeyFrame& key : keys) {
-            double v = 0.0;
-            if (!numericValue(key.value, &v)) {
-                continue;
+    const int lane = activeLane();
+    if (lane >= 0 && m_comp) {
+        // Every channel of the property, as the graph shows them all.
+        for (const composition::KeyFrameList* curve : graphCurves(m_comp.get(), m_lanes.at(lane))) {
+            if (!curve) continue;
+            for (const composition::KeyFrame& key : curve->all()) {
+                double v = 0.0;
+                if (!numericValue(key.value, &v)) {
+                    continue;
+                }
+                lo = have ? qMin(lo, v) : v;
+                hi = have ? qMax(hi, v) : v;
+                have = true;
             }
-            lo = have ? qMin(lo, v) : v;
-            hi = have ? qMax(hi, v) : v;
-            have = true;
         }
     }
     if (!have) {
-        m_valueLow = 0.0;
-        m_valueHigh = 100.0;
-        return;
+        // The view's own range when it is made: 0..100.
+        lo = 0.0;
+        hi = 100.0;
     }
     if (qFuzzyCompare(lo + 1.0, hi + 1.0)) {
         // A property held at one value still needs a finite axis to sit on.
@@ -344,57 +422,78 @@ TimelineValueGraphView::Grab TimelineValueGraphView::hitTest(const QPoint& pos, 
 void TimelineValueGraphView::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(24, 24, 28));
+    // The track canvas's ground, so the two pages read as one.
+    painter.fillRect(rect(), QColor(39, 39, 39));
 
     const QRect plot = plotRect();
     const double fps = frameRate();
+    const double pixelsPerFrame = m_pixelsPerSecond / fps;
+    int timeStep = 0;
+    int timeParts = 5;
+    chooseTimeStep(fps, pixelsPerFrame, &timeStep, &timeParts);
 
     // ---- time ruler, the same one the track canvas draws ------------------
     painter.setPen(QColor(60, 60, 66));
     painter.drawLine(0, kTimelineRulerHeight, width(), kTimelineRulerHeight);
-    {
-        // A tick every whole second that survives the current zoom.
-        double step = 1.0;
-        while (step * m_pixelsPerSecond < 60.0) {
-            step *= 2.0;
-        }
-        painter.setPen(QColor(130, 130, 140));
-        const double firstTime = m_hOffset / m_pixelsPerSecond;
-        for (double t = std::floor(firstTime / step) * step;
-             t * m_pixelsPerSecond - m_hOffset < width(); t += step) {
-            const int x = static_cast<int>(t * m_pixelsPerSecond) - m_hOffset;
-            if (x < 0) {
-                continue;
-            }
-            painter.drawLine(x, kTimelineRulerHeight - 6, x, kTimelineRulerHeight);
-            painter.drawText(x + 3, kTimelineRulerHeight - 9,
-                             QStringLiteral("%1s").arg(t, 0, 'f', step < 1.0 ? 1 : 0));
-        }
+    // The ticks of the ruler's own step (TimebarRulerItem).
+    const int firstStep = int(std::floor((m_hOffset / pixelsPerFrame) / timeStep));
+    const int lastStep = int(std::ceil(((m_hOffset + width()) / pixelsPerFrame) / timeStep));
+    painter.setPen(QColor(130, 130, 140));
+    for (int n = qMax(0, firstStep); n <= lastStep; ++n) {
+        const int frame = n * timeStep;
+        const int x = static_cast<int>(frame * pixelsPerFrame) - m_hOffset;
+        painter.drawLine(x, kTimelineRulerHeight - 6, x, kTimelineRulerHeight);
+        const double t = frame / fps;
+        painter.drawText(x + 3, kTimelineRulerHeight - 9,
+                         QStringLiteral("%1s").arg(t, 0, 'f', timeStep < std::lround(fps) ? 2 : 0));
     }
 
-    // ---- value axis: gridlines with their numbers --------------------------
+    // ---- the grid (ValueGraphGridGraphicsItem::paint, 1404a8f60) -----------
     if (plot.height() > 0) {
-        const int lines = 5;
-        painter.setPen(QColor(44, 44, 50));
-        for (int i = 0; i <= lines; ++i) {
-            const int y = plot.top() + i * plot.height() / lines;
-            painter.drawLine(0, y, width(), y);
+        painter.save();
+        painter.setClipRect(plot);
+        // Time: a line every step and its parts at half strength.
+        painter.setPen(QPen(kGridLine, 1));
+        for (int n = firstStep; n <= lastStep; ++n) {
+            const double x0 = n * timeStep * pixelsPerFrame - m_hOffset;
+            painter.drawLine(QPointF(x0, plot.top()), QPointF(x0, plot.bottom()));
+            if (n < lastStep) {
+                painter.save();
+                painter.setOpacity(0.5);
+                for (int part = 1; part < timeParts; ++part) {
+                    const double x = x0 + part * (timeStep * pixelsPerFrame / timeParts);
+                    painter.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
+                }
+                painter.restore();
+            }
         }
-        painter.setPen(QColor(120, 120, 130));
-        for (int i = 0; i <= lines; ++i) {
-            const int y = plot.top() + i * plot.height() / lines;
-            const double value = valueAtY(y);
-            // Labels ride inside the plot so the time axis keeps starting at
-            // x = 0 and stays aligned with the track page.
-            painter.drawText(4, qBound(plot.top() + 10, y - 3, plot.bottom() - 2),
-                             QString::number(value, 'f', 2));
+        // Value: a line every step, the zero line twice as wide, each with its
+        // number just above it 15 px in - two decimals for a step up to one.
+        const double span = m_valueHigh - m_valueLow;
+        if (span > 0.0) {
+            const double step = valueStepFor(plot.height() / span);
+            const int decimals = step <= 1.0 ? 2 : 0;
+            const QFontMetrics metrics = painter.fontMetrics();
+            for (long long n = static_cast<long long>(std::floor(m_valueLow / step));
+                 n <= static_cast<long long>(std::ceil(m_valueHigh / step)); ++n) {
+                const double value = n * step;
+                const double y = yForValue(value);
+                painter.setPen(QPen(kGridLine, n == 0 ? 2 : 1));
+                painter.drawLine(QPointF(0, y), QPointF(width(), y));
+                const QString label = QString::number(value, 'f', decimals);
+                painter.setPen(kGridLabel);
+                painter.drawText(QRectF(15.0, y - metrics.height(), metrics.horizontalAdvance(label),
+                                        metrics.height()),
+                                 Qt::AlignCenter, label);
+            }
         }
+        painter.restore();
     }
 
     const composition::KeyFrameList* active = activeCurve();
 
     // ---- every animated curve, faintly, then the active one on top --------
-    const auto drawCurve = [&](const composition::KeyFrameList* curve, bool isActive) {
+    const auto drawCurve = [&](const composition::KeyFrameList* curve, const QColor& color) {
         if (!curve || curve->isEmpty()) {
             return;
         }
@@ -424,28 +523,23 @@ void TimelineValueGraphView::paintEvent(QPaintEvent*)
             return;
         }
         painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(isActive ? QColor(18, 176, 255) : QColor(90, 100, 115),
-                            isActive ? 1.8 : 1.0));
+        // ValueGraphCurveGraphicsItem (14049fc20): the channel's colour, then
+        // the same path a pixel lower in half-transparent black.
+        painter.setPen(QPen(color, 1.0));
         painter.drawPolyline(polyline);
+        painter.setPen(QPen(QColor(0, 0, 0, 0x80), 1.0));
+        painter.drawPolyline(polyline.translated(0.0, 1.0));
     };
 
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setClipRect(plot);
 
-    if (m_comp) {
-        auto* comp = m_comp.get();
-        const QVector<int> animated = animatedLanes();
-        for (int laneIndex : animated) {
-            const QVector<composition::KeyFrameList*> curves =
-                graphCurves(comp, m_lanes.at(laneIndex));
-            for (const composition::KeyFrameList* curve : curves) {
-                if (curve != active) {
-                    drawCurve(curve, false);
-                }
-            }
-        }
+    // The chosen property's curves, every channel (the reference shows the
+    // properties chosen in the tree, not every animated one).
+    if (m_comp && activeLane() >= 0) {
+        const QVector<composition::KeyFrameList*> curves = graphCurves(m_comp.get(), m_lanes.at(activeLane()));
+        for (int c = 0; c < curves.size(); ++c) drawCurve(curves.at(c), colorOfChannel(c, int(curves.size())));
     }
-    drawCurve(active, true);
 
     // ---- nodes and their bezier manipulators on the active curve ----------
     if (active) {

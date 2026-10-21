@@ -252,6 +252,7 @@
         <file alias="copy.svg">icons/toolbar/copy.svg</file>
         <file alias="cut.svg">icons/toolbar/cut.svg</file>
         <file alias="new.svg">icons/toolbar/new.svg</file>
+        <file alias="project-file.svg">icons/iconfile.svg</file>
         <file alias="open.svg">icons/toolbar/open.svg</file>
         <file alias="paste.svg">icons/toolbar/paste.svg</file>
         <file alias="redo.svg">icons/toolbar/redo.svg</file>

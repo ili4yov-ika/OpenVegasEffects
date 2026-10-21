@@ -9,6 +9,9 @@
 
 #include <memory>
 
+class QDomDocument;
+class QDomElement;
+
 #include "composition/Composition.h"
 #include "core/Result.h"
 #include "media/MediaManager.h"
@@ -75,6 +78,14 @@ public:
                                           const composition::Composition& shot,
                                           const media::MediaManager& media,
                                           const ProjectSaveOptions& options = {});
+
+    // The <Instance> children of an effect list (a layer's Effects, a
+    // preset's EffectsPreset) as effects, and back: native effects as the
+    // reference's EffectInstance writes them, unknown ones kept verbatim.
+    // Key times are relative to the layer, at `fps`.
+    static QVector<composition::Effect> effectsFromInstances(const QDomElement& list, double fps);
+    static void appendEffectInstances(QDomDocument& doc, QDomElement& list,
+                                      const QVector<composition::Effect>& effects, double fps);
 };
 
 } // namespace project

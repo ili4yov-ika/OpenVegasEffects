@@ -298,6 +298,12 @@ private:
         Right,
     };
     bool clipAt(const QPoint& pos, int* layerIndex, int* clipIndex, ClipEdge* edge) const;
+    // The bar of a layer without clips (its span, Layer::spanStartSeconds)
+    // under a point, and whether the pointer is on one of its ends.
+    bool spanAt(const QPoint& pos, int* layerIndex, ClipEdge* edge) const;
+    // Moves the dragged span (its body grabbed) or trims it (an end) by
+    // `deltaSeconds` from where the drag started.
+    bool applySpanDrag(double deltaSeconds);
     // Screen x of a time, and the time at a screen x - one place, so painting,
     // hit-testing and the tools cannot drift apart.
     double timeAtX(int widgetX) const;
@@ -313,6 +319,10 @@ private:
     void beginClipDrag(int layerIndex, int clipIndex, ClipEdge edge, double pressTime);
     // Cuts the clip under the pointer in two at the time clicked.
     bool sliceClipAt(const QPoint& pos);
+    // Slice on a layer without clips: the reference's Slice Layer
+    // (FUN_14059e770) - a copy of the layer from the cut on, the layer
+    // itself ending there, the keys of both where they were.
+    bool sliceSpanAt(const QPoint& pos);
     // Track Select Forwards: picks the first clip at or after the click.
     void selectFromHere(const QPoint& pos);
     void updateToolCursor(const QPoint& pos);
@@ -368,6 +378,15 @@ private:
     ClipEdge m_dragEdge = ClipEdge::None;
     double m_dragStartTime = 0.0;
     double m_dragOriginalStart = 0.0;
+    // Frames the dragged layer's keys have been moved by so far.
+    int m_dragKeyShift = 0;
+    // Span drag in progress: the layer, the end grabbed, and the span as it
+    // was at the press (its end resolved, and whether it ran to the shot's).
+    int m_dragSpanLayer = -1;
+    ClipEdge m_dragSpanEdge = ClipEdge::None;
+    double m_dragSpanStart = 0.0;
+    double m_dragSpanEnd = 0.0;
+    bool m_dragSpanOpen = false;
     double m_dragOriginalDuration = 0.0;
     double m_dragOriginalSource = 0.0;
     double m_dragOriginalSpeed = 1.0;
@@ -512,6 +531,10 @@ signals:
     void timeScrubbed(double timeSeconds);
     void clipSelected(int layerIndex, int clipIndex);
     void layersSelected(const QVector<int>& layerIndices);
+    // An effect dropped from the Effects panel was added to a clip.
+    void effectAdded(const QString& pluginId);
+    // A preset dropped on a clip could not be used (the reference's words).
+    void presetFailed(const QString& message);
     // A row of a model node (or one of its Transform rows) became current:
     // that node's path; empty for any other row.
     void modelNodeSelected(int layerIndex, const QString& path);
@@ -543,6 +566,10 @@ public:
     // transition lands on the clip edge nearer `seconds`. Returns the new
     // effect's index, or -1 when the clip is missing or its layer locked.
     int addEffect(int layerIndex, int clipIndex, const plugin::EffectSpec& spec, double seconds);
+    // An effect preset's effects (.hfpr, keys from the layer's start) added
+    // to a clip as one undoable edit; their keys move to the clip's start.
+    // The number added, -1 when the clip is missing or its layer locked.
+    int addPreset(int layerIndex, int clipIndex, const QString& presetPath, QString* error = nullptr);
     // Insert 3D Model Animation Instance: animation `index` of `filePath`
     // (empty: the model's own file) playing on a model layer, as one
     // undoable edit. False when there is no such animation or the layer is
@@ -562,6 +589,9 @@ private:
     void addSurfaceRows(int layerIndex, QTreeWidgetItem* parent);
     // A camera layer's Lens group (CameraLayerGroupFactory).
     void addCameraRows(int layerIndex, QTreeWidgetItem* parent);
+    // The Transform group's Alignment, and - as it asks for them - its
+    // Alignment Axis or Alignment Layer.
+    void addAlignmentRows(int layerIndex, QTreeWidgetItem* parent);
     void addPropertyRows(int layerIndex, QTreeWidgetItem* parent, const QVector<TimelinePropertyRow>& rows,
                          const QString& objectNamePrefix);
     // Animations of a model layer: each instance's Strength, Loop, Custom

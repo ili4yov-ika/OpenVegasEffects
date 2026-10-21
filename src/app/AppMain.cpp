@@ -1,8 +1,11 @@
 #include "app/AppMain.h"
+#include "app/FileAssociation.h"
 #include "app/GpuDriver.h"
+#include "app/PluginFolders.h"
 
 #include "media/AudioWaveform.h"
 #include "media/DecodedFrameCache.h"
+#include "media/ConformedAudio.h"
 #include "app/ProjectDefaults.h"
 
 #include <QFileInfo>
@@ -14,6 +17,7 @@
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
 #include <QOpenGLFunctions>
+#include <QPointer>
 #include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
@@ -111,6 +115,8 @@ int AppMain::run(QApplication* application, const QString& projectToOpen)
     initializeFolders();
     splash.setStatus(tr("Loading settings..."));
     initializeSettings();
+    // Project files show their own icon once the program opens them.
+    FileAssociation::registerForCurrentUser();
     splash.setStatus(tr("Opening media cache..."));
     initializeCache();
     splash.setStatus(tr("Checking license..."));
@@ -240,6 +246,11 @@ void AppMain::initializeCache()
     media::DecodedFrameStore frames;
     frames.directory = QDir(cacheFilesDir).filePath(QStringLiteral("Frames"));
     media::DecodedFrameCache::setDefaultStore(frames);
+    // Conformed audio - the media's audio decoded once at the project's rate,
+    // which playback reads (the reference's ConformedAudioFile).
+    media::ConformedAudioStore conformed;
+    conformed.directory = QDir(cacheFilesDir).filePath(QStringLiteral("Conformed"));
+    media::ConformedAudioCache::setDefaultStore(conformed);
 
     const core::Result r = m_cacheDB->open(cachePath);
     if (r.isFailure()) {
@@ -269,6 +280,15 @@ void AppMain::initializeCache()
                         QDateTime::currentDateTimeUtc().toMSecsSinceEpoch());
     };
     media::DecodedFrameCache::setDefaultStore(frames);
+    conformed.stored = [database](const QString& key, const QString& file) {
+        recordMediaCacheFile(database, QStringLiteral("conformed:") + key, file, QFileInfo(file).size());
+        database->pruneToBytes(kMediaCacheMaxBytes);
+    };
+    conformed.used = [database](const QString& key) {
+        database->touch(QStringLiteral("conformed:") + key,
+                        QDateTime::currentDateTimeUtc().toMSecsSinceEpoch());
+    };
+    media::ConformedAudioCache::setDefaultStore(conformed);
     OV_LOG_INFO(QStringLiteral("Cache DB opened at %1 (%2 entries), files in %3")
                     .arg(cachePath)
                     .arg(m_cacheDB->entryCount())
@@ -304,24 +324,42 @@ void AppMain::initializeLicense()
                     .arg(static_cast<int>(license::toHostEdition(Settings::productEdition()))));
 }
 
-void AppMain::initializePlugins()
+QVector<QString> AppMain::pluginSearchFolders() const
 {
-    m_pluginManager = plugin::createPluginManager();
-
     QVector<QString> pluginDirs;
-    const QString pluginsFolder = m_paths.pathFor(UserDataFolder::Plugins);
-    const QString presetsFolder = m_paths.pathFor(UserDataFolder::PluginPresets);
-    pluginDirs.push_back(pluginsFolder);
-    pluginDirs.push_back(presetsFolder);
+    const auto add = [&pluginDirs](const QString& folder) {
+        const QString path = QDir::cleanPath(folder);
+        for (const QString& existing : std::as_const(pluginDirs))
+            if (QDir::cleanPath(existing).compare(path, Qt::CaseInsensitive) == 0) return;
+        pluginDirs.push_back(folder);
+    };
+    add(m_paths.pathFor(UserDataFolder::Plugins));
+    add(m_paths.pathFor(UserDataFolder::PluginPresets));
+    // The VEGAS Effects installation's plugin tree and the folders chosen in
+    // Options > Plugins (another FXhome program's among them).
+    for (const QString& folder : PluginFolders::scannedFolders()) add(folder);
     // The reference ships its plugin tree beside the executable, so an
     // installed build finds them without anything being copied to user data.
     const QString bundled =
         QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("Plugins"));
-    if (QFileInfo::exists(bundled)) {
-        pluginDirs.push_back(bundled);
-    }
+    if (QFileInfo::exists(bundled)) add(bundled);
+    return pluginDirs;
+}
 
-    m_pluginManager->setPluginDirs(pluginDirs);
+void AppMain::rescanPlugins()
+{
+    if (!m_pluginManager) return;
+    m_pluginManager->setPluginDirs(pluginSearchFolders());
+    const core::Result r = m_pluginManager->scan();
+    if (r.isFailure()) OV_LOG_WARN(QStringLiteral("Plugin scan failed: %1").arg(r.message()));
+    if (m_mainWindow) m_mainWindow->regenerateEffects(m_pluginManager.get());
+}
+
+void AppMain::initializePlugins()
+{
+    m_pluginManager = plugin::createPluginManager();
+    const QString pluginsFolder = m_paths.pathFor(UserDataFolder::Plugins);
+    m_pluginManager->setPluginDirs(pluginSearchFolders());
 
     plugin::Callbacks callbacks;
     callbacks.resolveUserFolder = [this](int folderIndex) -> QString {
@@ -357,7 +395,22 @@ void AppMain::initializeUi()
     m_mainWindow = new ui::MainWindow(this);
     m_mainWindow->bindModel(m_composition, m_mediaManager, m_renderManager.get());
     m_mainWindow->regenerateEffects(m_pluginManager.get());
+    m_mainWindow->setPluginRescan([this] { rescanPlugins(); });
     m_mainWindow->show();
+    // No plugin anywhere it looks - VEGAS Effects not installed where the
+    // reference puts itself: Options opens on its Plugins page, once.
+    int found = 0;
+    const QString presets = m_paths.pathFor(UserDataFolder::PluginPresets);
+    for (const QString& folder : pluginSearchFolders())
+        if (QDir::cleanPath(folder).compare(QDir::cleanPath(presets), Qt::CaseInsensitive) != 0)
+            found += PluginFolders::pluginCount(folder);
+    if (found == 0 && !PluginFolders::promptShown()) {
+        PluginFolders::setPromptShown(true);
+        QPointer<ui::MainWindow> window = m_mainWindow;
+        QTimer::singleShot(0, m_mainWindow, [window] {
+            if (window) window->showPluginOptions();
+        });
+    }
 }
 
 void AppMain::logPluginStatus() const

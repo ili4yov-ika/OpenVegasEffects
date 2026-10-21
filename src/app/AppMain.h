@@ -43,6 +43,12 @@ private:
     void initializeCache();
     void initializeLicense();
     void initializePlugins();
+    // The folders plugins are looked for in, scanned again, and the effects
+    // the menus offer rebuilt (Options > Plugins changed them).
+    void rescanPlugins();
+    // The folders scanned: the user's own, the plugin presets, the VEGAS
+    // Effects installation's and those chosen in Options, the bundled ones.
+    QVector<QString> pluginSearchFolders() const;
     void initializeProject();
     void initializeUi();
 

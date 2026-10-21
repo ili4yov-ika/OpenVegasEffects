@@ -40,6 +40,11 @@ QVector3D positionOf(const composition::LayerTransform& t, int frame)
 }
 
 // A value written at `frame`: into the property's keys when it is animated.
+QVector3D targetOf(const composition::LayerTransform& t, int frame)
+{
+    return QVector3D(float(t.targetAt(frame, 0)), float(t.targetAt(frame, 1)), float(t.targetAt(frame, 2)));
+}
+
 void writeAtFrame(composition::KeyFrameList& curve, int frame, double value, double* staticValue)
 {
     if (curve.isEmpty()) {
@@ -100,9 +105,16 @@ struct Projector
 
 QImage handleIcon(bool light, bool checked, bool hovered)
 {
+    if (!light) {
+        // OriginControl (type 0) and SpotLightTargetControl draw texture 0,
+        // crosshairs.png, and texture 1, crosshairs-hover.png, while hovered
+        // or selected (VegasEffects.exe 0x1409ebf80, 0x140a17880; the textures
+        // 0x14091d4c0) - crosshairs-checked.png is the mask origin's.
+        return QImage(checked || hovered ? QStringLiteral(":/icons/viewer/crosshairs-hover@2x.png")
+                                         : QStringLiteral(":/icons/viewer/crosshairs@2x.png"));
+    }
     const QString state = checked ? QStringLiteral("-checked") : hovered ? QStringLiteral("-hover") : QString();
-    return QImage(QStringLiteral(":/icons/viewer/%1%2@2x.png")
-                      .arg(light ? QStringLiteral("light") : QStringLiteral("crosshairs"), state));
+    return QImage(QStringLiteral(":/icons/viewer/light%1@2x.png").arg(state));
 }
 
 } // namespace
@@ -157,8 +169,10 @@ SceneObjectOverlay::Drawing SceneObjectOverlay::drawing(int view) const
         const composition::Layer& layer = layers.at(i);
         if (!layer.visible || !isSceneObject(layer)) continue;
         const composition::LayerTransform& t = layer.transform;
-        const QVector3D at = positionOf(t, frame);
-        const QMatrix4x4 turn = render::layerRotationAt(t, frame);
+        // Where it stands in the scene, under its parent.
+        const QMatrix4x4 parent = render::layerParentMatrixAt(scene.composition, layer, frame);
+        const QVector3D at = parent.map(positionOf(t, frame));
+        const QMatrix4x4 turn = render::layerTurnAt(scene.composition, layer, frame);
         if (layer.kind == composition::LayerKind::Camera) {
             // The view through the shot's camera does not show that camera.
             if (viewCamera->shotCamera && !shotCameraSkipped) {
@@ -210,20 +224,34 @@ SceneObjectOverlay::Drawing SceneObjectOverlay::drawing(int view) const
         QPointF handle;
         if (projector.point(at, &handle))
             result.handles.append({i, handle, layer.kind == composition::LayerKind::Light});
+        if (layer.autoOrient == composition::AutoOrient::TowardsTargetPosition) {
+            // Its Target: a line there and a handle of its own.
+            const QVector3D aim = parent.map(targetOf(t, frame));
+            projector.line(at, aim, &result.lines);
+            QPointF targetHandle;
+            if (projector.point(aim, &targetHandle)) result.handles.append({i, targetHandle, false, true});
+        }
     }
     return result;
 }
 
-int SceneObjectOverlay::layerAt(int view, const QPointF& canvasPos, double pixelsPerCanvas) const
+std::optional<SceneObjectOverlay::Handle> SceneObjectOverlay::handleAt(int view, const QPointF& canvasPos,
+                                                                      double pixelsPerCanvas) const
 {
     const Drawing shown = drawing(view);
     const double reach = kHandleReach / qMax(1e-6, pixelsPerCanvas);
     // The topmost handle: the last drawn.
     for (int i = shown.handles.size() - 1; i >= 0; --i) {
         const QPointF d = shown.handles.at(i).position - canvasPos;
-        if (std::abs(d.x()) <= reach && std::abs(d.y()) <= reach) return shown.handles.at(i).layer;
+        if (std::abs(d.x()) <= reach && std::abs(d.y()) <= reach) return shown.handles.at(i);
     }
-    return -1;
+    return std::nullopt;
+}
+
+int SceneObjectOverlay::layerAt(int view, const QPointF& canvasPos, double pixelsPerCanvas) const
+{
+    const std::optional<Handle> handle = handleAt(view, canvasPos, pixelsPerCanvas);
+    return handle ? handle->layer : -1;
 }
 
 void SceneObjectOverlay::paint(QPainter& painter, const ViewerMapping& mapping)
@@ -252,8 +280,9 @@ bool SceneObjectOverlay::mousePress(ViewerPointerEvent& event)
     if (!scene.composition || !m_camera) return false;
     const double scale = event.mapping.canvasSize.width() > 0.0
         ? event.mapping.imageRect.width() / event.mapping.canvasSize.width() : 1.0;
-    const int layer = layerAt(event.mapping.view, event.canvasPos, scale);
-    if (layer < 0) return false;
+    const std::optional<Handle> pressed = handleAt(event.mapping.view, event.canvasPos, scale);
+    if (!pressed) return false;
+    const int layer = pressed->layer;
     const std::optional<ViewCamera> viewCamera = m_camera(event.mapping.view);
     if (!viewCamera) return false;
     if (m_picked) m_picked(layer);
@@ -262,7 +291,11 @@ bool SceneObjectOverlay::mousePress(ViewerPointerEvent& event)
     m_canvas = QSizeF(picked.composition->displaySize());
     m_viewProjection = viewCamera->camera.viewProjection(m_canvas.toSize());
     m_before = picked.composition->layers().at(layer).transform;
-    const QVector4D clip = m_viewProjection * QVector4D(positionOf(m_before, picked.frame), 1.0f);
+    m_dragParent = render::layerParentMatrixAt(picked.composition, picked.composition->layers().at(layer), picked.frame);
+    m_dragTarget = pressed->target;
+    const QVector3D grabbed =
+        m_dragParent.map(m_dragTarget ? targetOf(m_before, picked.frame) : positionOf(m_before, picked.frame));
+    const QVector4D clip = m_viewProjection * QVector4D(grabbed, 1.0f);
     if (clip.w() <= 1e-4f) return true;
     m_depth = double(clip.z()) / clip.w();
     m_dragLayer = layer;
@@ -281,7 +314,7 @@ void SceneObjectOverlay::mouseMove(ViewerPointerEvent& event)
     const Scene scene = m_scene ? m_scene() : Scene();
     if (!scene.composition || m_dragLayer >= scene.composition->layers().size() || m_canvas.isEmpty()) return;
     const int frame = scene.frame;
-    const QVector3D start = positionOf(m_before, frame);
+    const QVector3D start = m_dragParent.map(m_dragTarget ? targetOf(m_before, frame) : positionOf(m_before, frame));
     const QVector4D clip = m_viewProjection * QVector4D(start, 1.0f);
     if (clip.w() <= 1e-4f) return;
     const QPointF delta = event.canvasPos - m_pressCanvas;
@@ -293,9 +326,35 @@ void SceneObjectOverlay::mouseMove(ViewerPointerEvent& event)
     QVector4D moved = back * QVector4D(float(ndcX), float(ndcY), float(m_depth), 1.0f);
     if (std::abs(moved.w()) < 1e-9f) return;
     moved /= moved.w();
+    // Back under the parent.
+    moved = QVector4D(m_dragParent.inverted().map(moved.toVector3D()), 1.0f);
     if (!m_moved && m_began) m_began();
     composition::LayerTransform& transform = scene.composition->layerRef(m_dragLayer).transform;
     transform = m_before;
+    if (m_dragTarget) {
+        // The Target's three axes animate together once any does.
+        const bool keyed = !transform.targetXCurve.isEmpty() || !transform.targetYCurve.isEmpty()
+                           || !transform.targetZCurve.isEmpty();
+        composition::KeyFrameList* curves[3] = {&transform.targetXCurve, &transform.targetYCurve,
+                                                &transform.targetZCurve};
+        double* values[3] = {&transform.targetX, &transform.targetY, &transform.targetZ};
+        const double to[3] = {moved.x(), moved.y(), moved.z()};
+        for (int axis = 0; axis < 3; ++axis) {
+            if (keyed && curves[axis]->isEmpty()) curves[axis]->setDefaultValue(*values[axis]);
+            if (keyed) {
+                const composition::KeyFrame* key = curves[axis]->at(frame);
+                curves[axis]->set(frame, to[axis], key ? key->temporal : composition::TemporalType::Linear);
+            } else {
+                *values[axis] = to[axis];
+            }
+        }
+        m_moved = true;
+        if (m_changed) m_changed();
+        event.setsCursor = true;
+        event.cursor = Qt::SizeAllCursor;
+        requestRepaint();
+        return;
+    }
     // x and y animate together once either does, as moving a layer does.
     if (transform.positionXCurve.isEmpty() && transform.positionYCurve.isEmpty()) {
         transform.position = QPointF(moved.x(), moved.y());
@@ -322,6 +381,7 @@ void SceneObjectOverlay::mouseRelease(ViewerPointerEvent& event)
     if (m_moved && m_finished) m_finished();
     m_moved = false;
     m_dragLayer = -1;
+    m_dragTarget = false;
     requestRepaint();
 }
 

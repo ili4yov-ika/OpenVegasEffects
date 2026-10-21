@@ -407,7 +407,38 @@ Tannen переводит в контексте плагина, как и под
 около 50 — дальше (`Letterbox`, `CineStyle`, `EnvironmentMapViewer`, `FindEdges`, `Glow`, …).
 Видимо, поля описывают отношение текстуры к слою вместе с размерами `+0x0c..+0x18` и `+0x60/+0x64`,
 и их смысл надо восстанавливать по Tannen/Flux; поэтому уменьшенное превью рисует клипы с
-нативными модулями в полном размере (`NativeFrameTime::renderScale` остаётся 1 в рендере).
+нативными модулями в полном размере (`NativeFrameTime::renderScale` остаётся 1 в рендере). С 19 октября 2026 это не так: см. «Кто рисует 2D-эффекты и в каком размере».
+
+**Кто рисует 2D-эффекты и в каком размере (19 октября 2026).** Вызывающий
+`Plugin2DEffect::Render` найден не по слоту vtable, а через панель Layer: Flux
+рисует слой материалом (`VideoLayerMaterial`, `ImageLayerMaterial`,
+`SolidLayerMaterial`…, `FUN_1802c8be0`), и бит 0x4 флагов рендера запускает проход
+эффектов `FUN_180345bf0` (Flux.dll): он перебирает `EffectInstance` слоя
+(`EffectInstance::Enabled`), берёт масштаб превью из таблицы `DAT_1807897b8` по
+индексу downsample и ставит каждому эффекту холст «размер слоя × масштаб»,
+копируя масштаб текстуры (`+0x2c/+0x30`) в блок эффекта. Полноразмерного
+рендера с последующим уменьшением у эталона нет. Значения модуль получает
+сервисами `FloatValue`/`IntValue`/`PointValue` (слоты 0xb8/0xb0/0xd0 в `CreateAPI`)
+как есть; `RegisterScaleBasedProperty`/`IsScaleBasedProperty` (список
+`PluginFile` +0x218, пополняемый `CreateFloatSliderWithDisplayRange`) нужны только
+`SetPreset` — пересчёт значений пресета под размер слоя, — а не рендеру.
+
+Порт с этого дня рисует уменьшенное превью всех нативных 2D-эффектов на
+уменьшенном холсте (прежний путь «полный размер и уменьшение» снят). У 132
+модулей `reducedPreviewModules` хост, как и раньше, уменьшает px-значения и точки
+— их картинка совпадает с уменьшенной полной. Остальным 109 (шумы, искажения,
+эффекты сетки пикселей, световые мечи и 40 модулей, не менявших картинку в
+проходах зонда) значения отдаются как есть, как сервисы эталона, а масштаб — в
+полях `+0x2c/+0x30`.
+
+**Ориентация текстур (19 октября 2026).** Flux отдаёт модулям GL-текстуры слоёв, где первая строка —
+нижняя, и модули считают Y вверх: точки — смещения от центра с Y вверх, углы против часовой. Хост порта
+загружал кадр верхней строкой вперёд, и всё, что у модуля «вверх», выходило внизу: точка 4PointRamp с
+y = +54 красила низ кадра, EnvironmentMapViewer при X +90° (Top эталона) смотрел вниз. Теперь исходник,
+второй кадр перехода и кадры слоёв (`uploadScratchTexture`) идут снизу вверх, результат читается и
+переворачивается обратно; на выросшем холсте рамка слоя — `[+0x90]` снизу, `[+0x88]` сверху. MotionTrack
+отдаёт движение в тех же пикселях с Y вверх: матрица берётся без переворота, мир снимается как
+`W⁻¹·результат`. Тест `nativeEffectsSeeYUp`.
 
 **Время 2D-эффектов (3 октября 2026).** `Plugin2DEffect::Render` (Tannen `0x180333890`) кладёт в
 RenderContext (0xc8 байт) кроме текстур, матриц и размера ещё `+0x6c/+0x70` — время и время слоя
@@ -424,10 +455,10 @@ RenderContext (0xc8 байт) кроме текстур, матриц и раз�
 `RainOnGlass`, `Shake`, `Shatter`, `SmokeDistortion`, `TimeDisplace`, `TimeWarp`, `TVDamage`,
 `WaterCaustics`, `WitnessProtection`. Режим `render` по-прежнему 241/241. Ключ кэша кадров шотов
 с нативными модулями получил метку `native-time-1`, чтобы старые неподвижные кадры не
-показывались. Тест `nativeEffectsMoveWithTime` (OpenGL). Не сделано: время в контексте
+показывались. Тест `nativeEffectsMoveWithTime` (OpenGL). Время в контексте
 видеопереходов: `PluginVideoTransition::Render` (Tannen `0x1803c9380`) кладёт в `+0x08/+0x0c`
-два целых (`param_6/param_7`), но ни один из 15 модулей их не читает — зонд `transition` даёт
-одинаковый результат с 0/0 и 5000/2500; позиция перехода — `+0x54..+0x60`. У 2D-эффектов `+0x08` —
+два целых (`param_6/param_7`); позиция перехода — `+0x54..+0x60` (см. «Сторона и точка монтажа
+видеоперехода» ниже: `+0x08` читает `FadeTransition`). У 2D-эффектов `+0x08` —
 по-прежнему нулевой UUID слоя.
 
 Значения ищутся по переданному модулем ASCII-ключу (`threshold`, `color1`, `source`, …), поэтому
@@ -502,6 +533,22 @@ output target занимают отдельные слоты. По `Tannen::Plug
 `+0x48/+0x4c` (размер) и `+0x54/+0x58/+0x60` (sample/start/end). Новый двухвходовый зонд
 подтвердил 15/15 переходов в основном и отдельном render-thread; ранее падавшие `ClockWipe`,
 `LightLeakTransition` и `RadialWipe` теперь завершают `Notify(10)` и readback.
+
+**Сторона и точка монтажа видеоперехода (19 октября 2026).** `FadeTransition`
+(`com.FXHOME.HitFilm.FadeToColor`) на таймлайне давал прозрачный кадр на всём окне. Его
+`Notify(10)` (`FUN_18000a2f0` модуля) читает контекст как аудиопереход: `+0x08` — сторона
+(`FUN_180015640` привязывает текстуру `+0x10` при 2, `+0x18` при 1 и не привязывает ничего при
+другой — тогда шейдер `tex·(1−p) + vec4(colour·tex.a, tex.a)·p` читает пустой юнит),
+`+0x54/+0x58/+0x5c/+0x60` — позиция, начало, точка монтажа и конец **в миллисекундах**. До точки
+монтажа `p = (s−start)/(cut−start)` (уходящий клип уходит в цвет), после неё
+`p = 1 − (s−cut)/(end−cut)` (входящий выходит из цвета); при `start == cut` (появление из пустоты)
+`p = (s−start)/((end−start) − 1000/fps)`, при стороне 1 перевёрнутый, а fps — `GetTimelineInfo`
+(`+0x108`, double `+0x18`; константа модуля `1000.0`). Хост раньше писал в `+0x08` указатель
+нулевого UUID слоя (как у 2D-эффектов), а в `+0x5c` — конец в условных единицах 0..10⁶. Теперь
+`+0x08` = 2 до точки монтажа и 1 после, позиции — в мс длины окна, `+0x5c` — точка монтажа окна
+(`TransitionWindow::cut`: стык соседних клипов, начало у появления, конец у исчезновения).
+Остальные 14 переходов дают одинаковую картинку при любой стороне и точке монтажа (зонд по
+трём точкам монтажа и пяти позициям). Тест `fadeToColorDrawsItsSide`.
 
 Для `Audio` восстановлен отдельный CPU-контекст `PluginAudioEffect::Render`: число каналов
 находится в `+0x10`, sample rate в `+0x14`, interleaved PCM16-буфер в `+0x20`, число sample
@@ -696,7 +743,8 @@ BendGeometry проходит ту же последовательность. Т
 - Когда модуль больше не просит фоновой работы (или свойство изменено без неё), хост берёт
   `Notify(5)` в `Effect::instanceData` (`<InstanceBytes>` base64, как
   `EffectInstance::SerializeInstanceDataBytes`) и считает `Notify(102)` для каждого кадра клипа.
-  Движение модуля — в пикселях footage, Y вниз; на холсте это `P⁻¹·R·P` (P — размещение footage),
+  Движение модуля — в пикселях footage, Y вверх (с 19 октября 2026, когда footage идёт к модулю снизу
+  вверх; прежде Y был вниз и хост переворачивал матрицу); на холсте это `P⁻¹·R·P` (P — размещение footage),
   в рендер оно идёт в терминах слоя (пиксели отображения от центра, Y вверх) через
   `setNativeInstanceTransforms`; `RenderWorker::applyClipBehaviors` отражает всю матрицу в строки
   изображения (включая поворот — у остальных Behavior знак поворота ещё не проверен).
@@ -711,8 +759,87 @@ BendGeometry проходит ту же последовательность. Т
   `nativeControlShown`) и скрывает в инспекторе строку выключенного контрола
   (`EffectInspector::applyControlStates`); состояния, пришедшие из `Notify(6)`, тоже учитываются.
 
-Не сделано: footage — вложенный шот, мировые матрицы слоёв, `CreatePointLayer/ApplyTransformToLayer`,
-скорость клипа footage.
+**MotionTrack: вложенный шот, мировые матрицы, неоткрытые шоты (18 октября 2026).**
+
+- Мировая матрица `GetLayerInfoV2 +0x74`. Зонд `hfpl_runtime_probe MotionTrack.hfpl deps track`
+  с `OPENVEGAS_PROBE_WORLD=tx,ty,s[,угол]` (мир слоя footage) и `OPENVEGAS_PROBE_WORLD_OWN` (мир
+  собственного слоя) показал: мир собственного слоя на ответ не влияет, а ответ модуля — мир слоя
+  footage, умноженный на движение footage. В терминах `nativeInstanceTransformation` (Y вверх) это
+  `F·W·F·R`, F — отражение по Y. Замеры: сдвиг (100,0) → (158,−29); (0,40) → (58,−69); масштаб 2 →
+  (116,−58) и масштаб 2; поворот 90° → (−29,−58); (100,40) с поворотом 30° → (135.7,−94.1).
+  Хост теперь отдаёт настоящий мир слоя на кадре запроса (`render::nativeLayerWorld`: родитель,
+  позиция, поворот вокруг anchor point, масштаб, как `NativeBehaviorLayer::world`) и снимает его с
+  ответа: `R = F·W⁻¹·F·m` (`NativeInstanceHost::withoutWorld`). Мир отдаётся только пока
+  считается `Notify(102)` для кадра; во время анализа остаётся единичным.
+- Вложенный шот как footage: `GetAssetInfo` — тип 3, частота шота, число кадров = длительность
+  вложенного шота × частота, `+0x10/+0x14` — по `sourceStart`/длительности клипа, ключ признаков
+  `composition:<id>`. `GetAssetTexture` рендерит кадр вложенного шота
+  (`render::renderCompositionFrame`: его pre-render, если он совпадает, иначе
+  `RenderWorker::renderShotImage`) в размере отображения шота; последние 48 кадров кэшируются по
+  состоянию шота.
+- Эффекты MotionTrack во вложенных, не открытых шотах: эталон держит экземпляры по проекту, поэтому
+  хост открытого шота обходит всё дерево вложенных шотов (`instancesInTree`) в `restoreAll()` и
+  `sync()` и считает матрицы их экземпляров; ключ экземпляра — по ID слоя, рендер вложенного шота
+  находит их так же.
+
+Скорость клипа footage, как в эталоне: `GetAssetInfo` её не передаёт (см. CHECKLIST).
+
+**AutomaticStabilizer и MotionLock (17 октября 2026).** Это 2D-эффекты на собственном экземпляре: анализ
+видео своего слоя (KLT в модуле, `SaveTrackingData`, общие с MotionTrack признаки ассета), фоновая
+обработка `Notify(18)`, custom UI (лассо), кнопки, данные экземпляра `Notify(5/6)` (AutomaticStabilizer —
+магия «BATS», 0x04; MotionLock — «KLTM»).
+
+- Запуск: `Plugin2DEffect::NotifySetParent` (Tannen 0x1803398b0) → `PluginFile::NotifyPropertyChanged`
+  с ключом `Effect_Parent_Layer`, причиной 0 и render context поведения (0xc8: `+0x00` рендерер,
+  `+0x08` ID слоя). Модуль берёт `GetLayerInfoV2`/`GetAssetInfo` своего слоя и, если данные не
+  покрывают слой, ставит «Pending» и `RequestBackgroundProcessing(0)`.
+- `GetEffectIndex +0x3d8` (Tannen 0x18038bbe0): индекс эффекта в списке слоя; AutomaticStabilizer
+  читает footage сам только при индексе 0 (`+100` экземпляра), иначе модуль не анализирует кадры.
+- Сглаживание (AutomaticStabilizer `FUN_18001fa10` → `FUN_18002d870`, асинхронная задача): по
+  покадровым аффинным `+0x80` строит сдвиги `+0x138`, повороты `+0x150`, масштабы `+0x168`, по
+  готовности они меняются местами с `+0xb0/+0xc8/+0xe0`, состояние `+0x110` = 7, `analysisStatus`
+  скрывается (`SetPropertyState`, текст «Stabilizing» остаётся), `stabilizeID` = `rand()`
+  (`SetIntValue +0x190`), `cropWindow` подстраивается `SetAngleValue +0x198`. Если все покадровые
+  сдвиги почти одинаковы (`|t_i − t_0|² ≤ 5`, `DAT_1801b7870`), вместо решателя берётся «панорама»:
+  сдвиг X = −Σ(tx + ty), Y = −0 — ошибка модуля, видна только на равномерном синтетическом движении.
+- Render (Notify 10, `FUN_18002d240` / MotionLock `FUN_180023040`) рисует исходную текстуру
+  четырёхугольником, углы которого переведены обратным сглаженным преобразованием кадра
+  (`FUN_180027720`: сдвиг·s, поворот·s, масштаб·s + (1 − s), s = smoothness/100) относительно центра.
+  `Notify(19)` (`Plugin2DEffect::GetPixelDataTransform`, Tannen 0x1803340f0) отдаёт ту же матрицу в
+  `+0xb0` контекста. MotionLock до Render ждёт `GetRenderGrowth` (Notify 9, `FUN_18001f560`): запоминает
+  размер кадра (`+0x198/+0x19c` экземпляра) и рост (`+0x1a0` слева, `+0x1a4` справа, `+0x1a8`, `+0x1ac`
+  по вертикали), отдаёт их по указателям `+0x78/+0x80/+0x88/+0x90` контекста и рисует в проекции
+  `[−left, w + right] × [−[+0x1ac], h + [+0x1a8]]`.
+- Кнопки (AutomaticStabilizer `FUN_18002a100` / MotionLock `FUN_180021860`, Notify 7): массив
+  `tagBiffLayerTransform` (20 байт: время в мс `round(i·1000/fps)`, x, y, поворот в градусах,
+  масштаб в %) по кадрам; «Create Point Layer» — `BeginTransaction("Create Point Layer")`,
+  `CreatePointLayer(host, свой слой, "Point Layer", n, массив, ID[0x28])`, при непустом ID
+  `SetLayerID("applyToLayer", 0, ID)`, `EndTransaction`; «Apply Transform» — ID из `applyToLayer`
+  (`LayerID +0xe8`), `BeginTransaction("Transform Layer")`, `ApplyTransformToLayer(host, свой слой,
+  цель, n, массив)`, `EndTransaction`. MotionLock передаёт целью свой слой (сдвиги — его движение,
+  поворот со знаком минус, масштаб — 100, если «Scale» выключен).
+- Tannen: `CreatePointLayer` (0x180388b30) — `PointLayer::Create(имя)`, `SetStartFrame/SetEndFrame`
+  исходного слоя, при n = 1 `SetStaticValue` для `position` (тип 9, x, y, 0), `rotationZ` (тип 2),
+  `scale` (тип 5, s, s, s), иначе `KeyFrameList::Set` в момент каждого элемента без сдвига; слой
+  добавляется через хост (`+0x88`, команда отмены VegasEffects 0x140376f40 вставляет его индексом 0 —
+  вверх стека), ID пишется `strcpy_s(…, 0x28)`. `ApplyTransformToLayer` (0x180389210) — слой
+  композиции (или визуальный объект редактора: `position` — тип 8, x, y) по ID, сдвиг
+  `StartTime(цель) − StartTime(источник)` (миллисекунды, `AbstractLayer::StartTime`), значения через
+  `+0x40` хоста (сигнал Qt) с флагом «ключ» при n > 1.
+
+Порт: `nativeEffectUsesInstance`/`nativeEffectAnalysesOwnLayer`, сервисы в `NativeEffectRender`
+(`setScalarParameter`, `effectIndexService`, `setLayerIdParameter`, `beginTransaction`,
+`instanceNumberOfLayers`/`instanceLayerId`, `createPointLayer`, `applyTransformToLayer`; запросы —
+`NativeCustomUiResult::layerRequests`, имя шага — `transaction`). `NativeInstanceHost`: собственный
+слой как footage (`footagePlacement`, `assetInfo` через `render::nativeFootageInfo`), `effectIndex`
+вида, `Effect_Parent_Layer` один раз на экземпляр, `applyLayerRequests`/`applyLayerTransforms`
+(ключи в кадрах шота: начало слоя + время; точка без клипа), сигнал `layersEdited` → шаг отмены в
+`MainWindow`. Рендер (`RenderWorker::applyClipEffects`): `NativeFrameTime::instanceKey/instanceData/
+layerId/layerAsset`; `ThreadRenderer::render` даёт такому эффекту отдельный экземпляр
+(`id:render:<ключ>`), `Notify(6)` при смене данных, `Notify(9)` с полями роста, выходной холст
+расширяется на рост и кадр слоя вырезается; `GetTimelineInfo` теперь отдаёт частоту шота
+(раньше 30). Зонд `stabilize` и тест `stabilizersSteadyTheirOwnLayer`: на тряске до 6 px
+AutomaticStabilizer оставляет 29 px суммарной покадровой дрожи из 228, MotionLock — 0.
 
 **Видимость контролов (5 октября 2026).** Флаги `Create*` (`int` после ключа; у слайдеров после
 единицы) хранятся как `AbstractPluginUITreeNode::Options()`. Построитель панели Controls

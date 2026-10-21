@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <numeric>
 #include <thread>
@@ -780,6 +781,7 @@ struct Face
     QVector3D normal;
     double invArea = 0.0;
     const Material* material = nullptr;
+    int materialIndex = -1;
     // Whether every corner has a UV, so the material's maps apply.
     bool mapped = false;
     // The UVs' directions on the face, in world space, for the normal and
@@ -877,9 +879,106 @@ void applyMaps(const Material& material, const Face& face, const QVector2D& uv, 
     surface->normal = n;
 }
 
+// FresnelSchlickRoughness.
+QVector3D fresnelRoughness(double cosine, const QVector3D& f0, double roughness)
+{
+    const float r = float(1.0 - roughness);
+    const QVector3D top(qMax(r, f0.x()), qMax(r, f0.y()), qMax(r, f0.z()));
+    return f0 + (top - f0) * float(std::pow(qBound(0.0, 1.0 - cosine, 1.0), 5.0));
+}
+
+// What a model's material takes from its reflection maps (Reflections),
+// for the pixel (x, y); `reflecting` tells whether it had a map.
+QVector3D reflectionTerms(const Reflections& reflections, const Material& material, int materialIndex,
+                          const Surface& surface, double alpha, const QVector3D& world, const QVector3D& eye,
+                          int x, int y, bool* reflecting)
+{
+    const auto planar = reflections.planar.constFind(materialIndex);
+    const bool mirrored = material.reflectionMode == ReflectionMode::Planar && planar != reflections.planar.constEnd()
+                          && !planar->isNull();
+    const bool round = !reflections.levels.isEmpty();
+    *reflecting = mirrored || round;
+    if (!*reflecting) return QVector3D();
+    QVector3D n = surface.normal.normalized();
+    QVector3D toEye = (eye - world).normalized();
+    if (n.isNull() || toEye.isNull()) return QVector3D();
+    if (QVector3D::dotProduct(n, toEye) < 0.0f) n = -n;
+    const double nDotV = qMax(double(QVector3D::dotProduct(n, toEye)), 0.00001);
+    const auto rgb = [](const QColor& c) { return QVector3D(float(c.redF()), float(c.greenF()), float(c.blueF())); };
+    // modelDiffuseColor and modelSpecularColor as Illuminant leaves them.
+    QVector3D diffuse = rgb(surface.diffuse);
+    QVector3D specular = rgb(surface.specular);
+    double roughness = 1.0;
+    const IlluminationModel model = material.illuminationModel;
+    if (model == IlluminationModel::MetallicRoughness) {
+        const float metallic = float(qBound(0.0, surface.metallic, 1.0));
+        roughness = qBound(0.0, surface.roughness, 1.0);
+        const QVector3D f0 = QVector3D(0.04f, 0.04f, 0.04f) * (1.0f - metallic) + diffuse * metallic;
+        diffuse *= float((1.0 - 0.04) * (1.0 - metallic));
+        specular = fresnelRoughness(nDotV, f0, roughness);
+        // The clear coat (mrClearCoatFactor and mrClearCoatRoughnessFactor:
+        // the lacquer and its roughness / 100): the specular the maps take is
+        // laid under an untinted coat - matColorSpecular * (1 - coat *
+        // F(N.V, 0, 0)) + coat * F(N.V, 0, coat roughness).
+        const double coat = qBound(0.0, material.clearCoat, 1.0);
+        if (coat > 0.0) {
+            const QVector3D under = fresnelRoughness(nDotV, QVector3D(), 0.0);
+            const QVector3D over = fresnelRoughness(nDotV, QVector3D(), qBound(0.0, material.clearCoatRoughness, 1.0));
+            specular = specular * (QVector3D(1.0f, 1.0f, 1.0f) - under * float(coat)) + over * float(coat);
+        }
+    } else if (model == IlluminationModel::SpecularGlossiness) {
+        roughness = qBound(0.0, surface.roughness, 1.0);
+        diffuse *= 1.0f - qMax(specular.x(), qMax(specular.y(), specular.z()));
+        specular = fresnelRoughness(nDotV, specular, roughness);
+    }
+    const bool physical = model == IlluminationModel::MetallicRoughness || model == IlluminationModel::SpecularGlossiness;
+    const float a = float(alpha);
+    QVector3D out;
+    if (material.diffuseReflectivity > 0.0 && round) {
+        const QVector3D light = reflections.irradiance.at(n);
+        out += QVector3D(qMax(0.0f, light.x()), qMax(0.0f, light.y()), qMax(0.0f, light.z())) * diffuse * a
+               * float(material.diffuseReflectivity);
+    }
+    if (mirrored) {
+        const QImage& map = *planar;
+        if (x >= 0 && y >= 0 && x < map.width() && y < map.height()) {
+            const uchar* texel = map.constScanLine(y) + x * 4;
+            const float coverage = texel[3] / 255.0f;
+            out += specular * QVector3D(texel[0], texel[1], texel[2]) / 255.0f * coverage * a
+                   * float(material.specularReflectivity);
+        }
+    } else if (material.specularReflectivity > 0.0) {
+        const QVector3D reflected = -toEye - 2.0f * QVector3D::dotProduct(n, -toEye) * n;
+        if (physical) {
+            // EnvBRDFApprox for the split sum's scale and bias.
+            const float c0[4] = {-1.0f, -0.0275f, -0.572f, 0.022f};
+            const float c1[4] = {1.0f, 0.0425f, 1.04f, -0.04f};
+            float r[4];
+            for (int k = 0; k < 4; ++k) r[k] = float(roughness) * c0[k] + c1[k];
+            const float a004 = qMin(r[0] * r[0], float(std::exp2(-9.28 * nDotV))) * r[0] + r[1];
+            const float scale = -1.04f * a004 + r[2], bias = 1.04f * a004 + r[3];
+            out += reflections.at(reflected, roughness * 4.0) * (specular * scale + QVector3D(bias, bias, bias)) * a
+                   * float(material.specularReflectivity);
+        } else {
+            out += reflections.at(reflected, 0.0) * specular * a * float(material.specularReflectivity);
+        }
+    }
+    if (material.refractionAmount > 0.0 && round) {
+        const float eta = float(1.0 / qMax(0.0001, material.indexOfRefraction));
+        const float cosine = QVector3D::dotProduct(n, toEye);
+        const float k = 1.0f - eta * eta * (1.0f - cosine * cosine);
+        if (k >= 0.0f) {
+            const QVector3D through = eta * toEye - (eta * cosine + std::sqrt(k)) * n;
+            out += reflections.at(through, model == IlluminationModel::Phong ? 0.0 : roughness * 4.0) * a
+                   * float(material.refractionAmount);
+        }
+    }
+    return out;
+}
+
 void fillTile(const QVector<Face>& faces, const QVector<int>& order, const QRect& tile,
               const QVector<QPointF>& offsets, const Camera& camera, const Lighting& lighting,
-              const Fog& fog, uchar* bits, qsizetype bytesPerLine)
+              const Fog& fog, uchar* bits, qsizetype bytesPerLine, SurfaceBuffer* surfaces)
 {
     const int count = offsets.size();
     const int tileWidth = tile.width();
@@ -976,6 +1075,21 @@ void fillTile(const QVector<Face>& faces, const QVector<int>& order, const QRect
                     }
                     alpha = face.alpha;   // and wholly there above it
                 }
+                if (surfaces) {
+                    // The G-buffer: the nearest surface the pixel shows,
+                    // its normal to the eye.
+                    const int at = y * surfaces->size.width() + x;
+                    const float depth = float(w[0] * screen[0].depth + w[1] * screen[1].depth
+                                              + w[2] * screen[2].depth);
+                    if (depth < surfaces->depths[at]) {
+                        QVector3D facing = normal.normalized();
+                        if (QVector3D::dotProduct(facing, camera.position - world) < 0.0f) facing = -facing;
+                        surfaces->depths[at] = depth;
+                        surfaces->positions[at] = world;
+                        surfaces->normals[at] = facing;
+                        surfaces->alphas[at] = float(alpha);
+                    }
+                }
                 // Flux's model shader: the ambient colour times the diffuse
                 // map too; the material's own illumination model, with its
                 // Shininess as the exponent and its specular colour whole.
@@ -995,6 +1109,20 @@ void fillTile(const QVector<Face>& faces, const QVector<int>& order, const QRect
                               float(emissive.greenF() + lighting.surface.emissive.greenF()),
                               float(emissive.blueF() + lighting.surface.emissive.blueF())),
                     world, surface.normal, camera.position, &reflectance);
+                if (lighting.reflections) {
+                    bool reflecting = false;
+                    const QVector3D added = reflectionTerms(*lighting.reflections, material, face.materialIndex,
+                                                            surface, alpha, world, camera.position, x, y,
+                                                            &reflecting);
+                    if (reflecting) {
+                        const bool physical = material.illuminationModel == IlluminationModel::MetallicRoughness
+                                              || material.illuminationModel == IlluminationModel::SpecularGlossiness;
+                        // useEnvMap: a physically based material's unlit
+                        // colour gives way to what it reflects.
+                        if (physical && lighting.lights.isEmpty()) lit = QVector4D(0.0f, 0.0f, 0.0f, lit.w());
+                        lit = QVector4D(lit.toVector3D() + added, lit.w());
+                    }
+                }
                 // OcclusionTerm: the occlusion map darkens the result by
                 // Occlusion Strength.
                 if (surface.occlusion < 1.0) {
@@ -1047,12 +1175,29 @@ void fillTile(const QVector<Face>& faces, const QVector<int>& order, const QRect
 
 } // namespace
 
+void SurfaceBuffer::reset(const QSize& canvas)
+{
+    size = canvas;
+    const int count = canvas.isEmpty() ? 0 : canvas.width() * canvas.height();
+    positions = QVector<QVector3D>(count);
+    normals = QVector<QVector3D>(count);
+    alphas = QVector<float>(count, 0.0f);
+    depths = QVector<float>(count, std::numeric_limits<float>::infinity());
+}
+
+bool SurfaceBuffer::has(int index) const
+{
+    return index >= 0 && index < depths.size() && std::isfinite(depths.at(index));
+}
+
 QImage renderMesh(const Mesh& mesh, const QMatrix4x4& modelMatrix, const Camera& camera,
                   const QSize& canvas, const Lighting& lighting, ShadingMode mode, double opacity,
-                  const Fog& fog, int samples)
+                  const Fog& fog, int samples, SurfaceBuffer* surfaces)
 {
     QImage image(canvas, QImage::Format_RGBA8888);
     image.fill(Qt::transparent);
+    if (surfaces && surfaces->size != canvas) surfaces->reset(canvas);
+    if (mode == ShadingMode::Wireframe) surfaces = nullptr;
     if (mesh.isEmpty() || canvas.isEmpty()) {
         return image;
     }
@@ -1159,6 +1304,7 @@ QImage renderMesh(const Mesh& mesh, const QMatrix4x4& modelMatrix, const Camera&
         }
 
         face.material = &materialFor(mesh, tri.material, defaultMaterial);
+        face.materialIndex = tri.material;
         face.mapped = hasUvs;
         if (hasUvs) {
             // The directions u and v grow in on the face (Lengyel's tangent
@@ -1211,7 +1357,7 @@ QImage renderMesh(const Mesh& mesh, const QMatrix4x4& modelMatrix, const Camera&
             const int t = busy.at(k);
             const QRect tile = QRect((t % tilesX) * kTile, (t / tilesX) * kTile, kTile, kTile)
                                    .intersected(QRect(0, 0, width, height));
-            fillTile(faces, bins.at(t), tile, offsets, camera, lighting, fog, bits, bytesPerLine);
+            fillTile(faces, bins.at(t), tile, offsets, camera, lighting, fog, bits, bytesPerLine, surfaces);
         }
     };
     const int threads = qBound(1, int(std::thread::hardware_concurrency()),
@@ -1221,6 +1367,212 @@ QImage renderMesh(const Mesh& mesh, const QMatrix4x4& modelMatrix, const Camera&
     work();
     for (std::thread& helper : helpers) helper.join();
     return image;
+}
+
+namespace {
+
+// Runs `row` for each of `rows` rows on the machine's threads.
+void forEachRow(int rows, const std::function<void(int)>& row)
+{
+    std::atomic<int> next{0};
+    const auto work = [&] {
+        for (int y = next.fetch_add(1); y < rows; y = next.fetch_add(1)) row(y);
+    };
+    const int threads = qBound(1, int(std::thread::hardware_concurrency()), qMin(rows, 16));
+    std::vector<std::thread> helpers;
+    for (int i = 1; i < threads; ++i) helpers.emplace_back(work);
+    work();
+    for (std::thread& helper : helpers) helper.join();
+}
+
+float fraction(float value) { return value - std::floor(value); }
+
+} // namespace
+
+QVector2D latLongOf(const QVector3D& direction)
+{
+    const float r = direction.length();
+    if (r <= 0.0f) return QVector2D(0.5f, 0.5f);
+    const float theta = direction.z() != 0.0f && direction.x() != 0.0f ? std::atan2(direction.x(), direction.z()) : 0.0f;
+    const float ratio = direction.y() / r;
+    const float phi = std::abs(ratio) <= 1.0f ? std::acos(ratio) : 0.0f;
+    constexpr float kPi = 3.14159265358979f;
+    return QVector2D(theta / kPi * 0.5f + 0.5f, 1.0f - phi / kPi);
+}
+
+QVector3D environmentColor(const QImage& latLong, const QVector3D& direction)
+{
+    if (latLong.isNull()) return QVector3D();
+    const QColor texel = sampleTexture(latLong, latLongOf(direction));
+    return QVector3D(float(texel.redF()), float(texel.greenF()), float(texel.blueF()));
+}
+
+QVector3D Reflections::at(const QVector3D& direction, double lod) const
+{
+    if (levels.isEmpty()) return QVector3D();
+    const double level = qBound(0.0, lod, double(levels.size() - 1));
+    const int first = int(std::floor(level));
+    const int second = qMin(first + 1, int(levels.size()) - 1);
+    const float t = float(level - first);
+    const QVector3D a = environmentColor(levels.at(first), direction);
+    return t > 0.0f ? a * (1.0f - t) + environmentColor(levels.at(second), direction) * t : a;
+}
+
+Reflections Reflections::fromLatLong(const QImage& latLong)
+{
+    Reflections reflections;
+    if (latLong.isNull()) return reflections;
+    reflections.levels.append(latLong.convertToFormat(QImage::Format_RGBA8888));
+    for (int level = 1; level <= 4; ++level) {
+        const QImage& last = reflections.levels.last();
+        if (last.width() <= 1 && last.height() <= 1) break;
+        reflections.levels.append(last.scaled(qMax(1, last.width() / 2), qMax(1, last.height() / 2),
+                                              Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+    }
+    reflections.irradiance = irradianceOf(reflections.levels.first());
+    return reflections;
+}
+
+QVector3D Irradiance::at(const QVector3D& normal) const
+{
+    const QVector4D n(normal, 1.0f);
+    return QVector3D(QVector4D::dotProduct(n, red * n), QVector4D::dotProduct(n, green * n),
+                     QVector4D::dotProduct(n, blue * n));
+}
+
+Irradiance irradianceOf(const QImage& latLong)
+{
+    Irradiance irradiance;
+    for (QMatrix4x4* m : {&irradiance.red, &irradiance.green, &irradiance.blue}) m->fill(0.0f);
+    if (latLong.isNull()) return irradiance;
+    // A small copy is plenty for nine coefficients.
+    const QImage small = latLong.convertToFormat(QImage::Format_RGBA8888)
+                             .scaled(64, 32, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    double coefficients[3][9] = {};
+    constexpr double kPi = 3.14159265358979323846;
+    double total = 0.0;
+    for (int y = 0; y < small.height(); ++y) {
+        const uchar* row = small.constScanLine(y);
+        // The row's polar angle from +Y, and its share of the sphere.
+        const double phi = (y + 0.5) / small.height() * kPi;
+        const double weight = std::sin(phi) * (kPi / small.height()) * (2.0 * kPi / small.width());
+        for (int x = 0; x < small.width(); ++x) {
+            const double theta = ((x + 0.5) / small.width() - 0.5) * 2.0 * kPi;
+            const double dx = std::sin(phi) * std::sin(theta), dy = std::cos(phi), dz = std::sin(phi) * std::cos(theta);
+            const double basis[9] = {0.282095, 0.488603 * dy, 0.488603 * dz, 0.488603 * dx, 1.092548 * dx * dy,
+                                     1.092548 * dy * dz, 0.315392 * (3.0 * dz * dz - 1.0), 1.092548 * dx * dz,
+                                     0.546274 * (dx * dx - dy * dy)};
+            for (int c = 0; c < 3; ++c) {
+                const double value = row[x * 4 + c] / 255.0 * weight;
+                for (int k = 0; k < 9; ++k) coefficients[c][k] += value * basis[k];
+            }
+            total += weight;
+        }
+    }
+    // The samples cover the sphere (4 pi) whatever the picture's size.
+    const double scale = total > 0.0 ? 4.0 * kPi / total : 0.0;
+    constexpr float c1 = 0.429043f, c2 = 0.511664f, c3 = 0.743125f, c4 = 0.886227f, c5 = 0.247708f;
+    QMatrix4x4* matrices[3] = {&irradiance.red, &irradiance.green, &irradiance.blue};
+    for (int c = 0; c < 3; ++c) {
+        double L[9];
+        for (int k = 0; k < 9; ++k) L[k] = coefficients[c][k] * scale;
+        const float m[16] = {c1 * float(L[8]), c1 * float(L[4]), c1 * float(L[7]), c2 * float(L[3]),
+                             c1 * float(L[4]), -c1 * float(L[8]), c1 * float(L[5]), c2 * float(L[1]),
+                             c1 * float(L[7]), c1 * float(L[5]), c3 * float(L[6]), c2 * float(L[2]),
+                             c2 * float(L[3]), c2 * float(L[1]), c2 * float(L[2]), c4 * float(L[0]) - c5 * float(L[6])};
+        *matrices[c] = QMatrix4x4(m);   // symmetric: rows or columns alike
+    }
+    return irradiance;
+}
+
+QVector<float> ambientOcclusionMap(const QSize& size, const QVector<QVector3D>& positions,
+                                   const QVector<QVector3D>& normals, const QVector<float>& weights,
+                                   const AmbientOcclusion& settings)
+{
+    const int width = size.width(), height = size.height();
+    const int count = size.isEmpty() ? 0 : width * height;
+    QVector<float> open(count, 1.0f);
+    if (count == 0 || positions.size() != count || normals.size() != count || weights.size() != count)
+        return open;
+    const int samples = qBound(0, settings.samples, 10);
+    // A point's pixel from texture coordinates (Y up), clamped to the edge.
+    const auto texel = [&](float u, float v) {
+        const int x = qBound(0, int(std::floor(u * width)), width - 1);
+        const int y = qBound(0, int(std::floor(v * height)), height - 1);
+        return (height - 1 - y) * width + x;
+    };
+    const auto shows = [&](int at, float least) {
+        return weights.at(at) >= least && !positions.at(at).isNull();
+    };
+    // The SSAO pass.
+    static const QVector2D kDirections[10] = {{1.0f, 0.0f},  {-1.0f, 0.0f}, {0.0f, 1.0f},   {0.0f, -1.0f},
+                                              {1.0f, 1.0f},  {-1.0f, 1.0f}, {-1.0f, -1.0f}, {1.0f, -1.0f},
+                                              {0.7f, 0.7f},  {-0.7f, -0.65f}};
+    const float bias = float(settings.bias), depthScale = float(settings.depthScale);
+    const float strength = float(settings.intensity) * 10.0f;
+    forEachRow(height, [&](int y) {
+        for (int x = 0; x < width; ++x) {
+            const int at = y * width + x;
+            const QVector3D p = positions.at(at);
+            if (!shows(at, 0.9f) || p.z() == 0.0f || samples == 0) continue;
+            const QVector3D n = normals.at(at).normalized();
+            const QVector2D uv((x + 0.5f) / width, 1.0f - (y + 0.5f) / height);
+            // Random(): a unit vector from the pixel's coordinates.
+            const float seed = uv.x() * 12.9898f + uv.y() * 78.233f;
+            QVector2D random(fraction(std::sin(seed) * 43758.5453f), fraction(std::sin(seed * 2.0f) * 43758.5453f));
+            random = random.isNull() ? QVector2D(1.0f, 0.0f) : random.normalized();
+            const auto tap = [&](const QVector2D& offset) {
+                const int there = texel(uv.x() + offset.x(), uv.y() + offset.y());
+                if (!shows(there, 0.8f)) return 0.0f;
+                const QVector3D difference = positions.at(there) - p;
+                const float length = difference.length();
+                if (length <= 0.0f) return 0.0f;
+                return qMax(0.0f, QVector3D::dotProduct(n, difference / length) - bias)
+                       / (1.0f + length * depthScale) * strength;
+            };
+            const float radius = float(settings.sampleRadius) / p.z();
+            float occlusion = 0.0f;
+            for (int k = 0; k < samples; ++k) {
+                const QVector2D& d = kDirections[k];
+                const QVector2D first = (d - 2.0f * QVector2D::dotProduct(random, d) * random) * radius;
+                const QVector2D turned(first.x() * 0.707f - first.y() * 0.707f, first.x() * 0.707f + first.y() * 0.707f);
+                occlusion += tap(first * 0.25f) + tap(turned * 0.5f) + tap(first * 0.75f) + tap(turned);
+            }
+            occlusion /= float(samples * samples);
+            open[at] = qBound(0.0f, 1.0f - occlusion, 1.0f);
+        }
+    });
+    // The blur, kept to surfaces near in depth.
+    const int reach = qMax(0, settings.blurRadius);
+    if (reach == 0) return open;
+    const double sigma = (reach * 2.0 + 1.0) / 3.0;
+    QVector<float> gauss((2 * reach + 1) * (2 * reach + 1));
+    for (int j = -reach; j <= reach; ++j)
+        for (int i = -reach; i <= reach; ++i)
+            gauss[(j + reach) * (2 * reach + 1) + i + reach] = float(std::exp(-(i * i + j * j) / (2.0 * sigma * sigma)));
+    const float falloff = float(settings.depthFalloff);
+    QVector<float> blurred(count, 1.0f);
+    forEachRow(height, [&](int y) {
+        for (int x = 0; x < width; ++x) {
+            const int at = y * width + x;
+            if (!shows(at, 0.8f)) continue;
+            const float z = positions.at(at).z();
+            float sum = 0.0f, value = 0.0f;
+            for (int j = -reach; j <= reach; ++j) {
+                const int row = qBound(0, y + j, height - 1) * width;
+                for (int i = -reach; i <= reach; ++i) {
+                    const int there = row + qBound(0, x + i, width - 1);
+                    const float apart = falloff + std::abs(z - positions.at(there).z());
+                    const float weight = gauss.at((j + reach) * (2 * reach + 1) + i + reach)
+                                         * (apart > 0.0f ? 1.0f / apart : 1000.0f);
+                    sum += weight;
+                    value += weight * open.at(there);
+                }
+            }
+            blurred[at] = sum > 0.0f ? value / sum : open.at(at);
+        }
+    });
+    return blurred;
 }
 
 } // namespace model3d

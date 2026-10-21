@@ -213,6 +213,10 @@ add_executable(OpenVegasEffects WIN32
     src/app/OptionValues.h
     src/app/ProjectDefaults.h
     src/app/Settings.cpp
+    src/app/PluginFolders.h
+    src/app/PluginFolders.cpp
+    src/app/FileAssociation.h
+    src/app/FileAssociation.cpp
     src/app/Translations.h
     src/app/Translations.cpp
     src/app/AppMain.h
@@ -245,6 +249,7 @@ add_executable(OpenVegasEffects WIN32
     src/media/AudioPlayer.h
     src/media/AudioFormat.h
     src/media/AudioWaveform.h
+    src/media/ConformedAudio.h
     src/media/DecodedFrameCache.h
     src/media/ProxyMedia.h
     src/media/MediaManager.h
@@ -253,6 +258,7 @@ add_executable(OpenVegasEffects WIN32
     src/media/AudioCapture.cpp
     src/media/AudioPlayer.cpp
     src/media/AudioWaveform.cpp
+    src/media/ConformedAudio.cpp
     src/media/DecodedFrameCache.cpp
     src/media/ProxyMedia.cpp
     src/media/ExrImage.cpp
@@ -275,6 +281,9 @@ add_executable(OpenVegasEffects WIN32
     src/composition/MotionTracker.cpp
     src/cache/CacheDB.h
     src/cache/CacheDB.cpp
+    src/project/EffectPresets.h
+    src/project/EffectPresets.cpp
+    src/project/NativeEffectCatalog.h
     src/project/VegfxSerializer.h
     src/project/VegfxSerializer.cpp
     src/project/VegfxMerge.h
@@ -297,6 +306,8 @@ add_executable(OpenVegasEffects WIN32
     src/model3d/ThreeDsReader.h
     src/render/PreRenderManager.h
     src/render/PreRenderManager.cpp
+    src/render/NestedAudioMix.h
+    src/render/NestedAudioMix.cpp
     src/model3d/FbxReader.cpp
     src/model3d/GltfReader.cpp
     src/model3d/LwoReader.cpp
@@ -347,6 +358,8 @@ src/ui/OptionsDialog.cpp
     src/ui/TextureWarning.h
     src/ui/Theme.h
     src/ui/Theme.cpp
+    src/ui/EffectsFavorites.h
+    src/ui/EffectsFavorites.cpp
     src/ui/EffectsPanel.h
     src/ui/EffectsPanel.cpp
     src/ui/MediaPanel.h
@@ -395,6 +408,8 @@ src/ui/OptionsDialog.cpp
     src/ui/LayoutPanel.h
     src/ui/LayoutTransformCommand.h
     src/ui/LayoutPanel.cpp
+    src/ui/ScrubberSpinBox.h
+    src/ui/ScrubberSpinBox.cpp
     src/ui/LearnSidebar.h
     src/ui/LearnSidebar.cpp
     resources/icons.qrc

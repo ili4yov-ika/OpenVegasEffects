@@ -641,10 +641,10 @@
     </message>
     <message>
         <location filename="../src/media/MediaManager.cpp" line="117"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2692"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4739"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2798"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4891"/>
         <location filename="../src/ui/ModelAnimationDialog.cpp" line="142"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="892"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1077"/>
         <source>The animation could not be imported.</source>
         <translation>无法导入动画。</translation>
     </message>
@@ -657,70 +657,191 @@
 <context>
     <name>AssetLayerGroupFactory</name>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="429"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="773"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="430"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="958"/>
         <source>Material</source>
         <translation>素材</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="664"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="678"/>
         <source>Illuminated</source>
         <translation>受光照</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="667"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="681"/>
         <source>Casts Shadows</source>
         <translation>投射阴影</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="665"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="679"/>
         <source>Receives Shadows</source>
         <translation>接收阴影</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="668"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="682"/>
         <source>Cast Shadows If Visibility Is Off</source>
         <translation>如果可见性关闭，则投射阴影</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="672"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="686"/>
         <source>Self Shadow Bias</source>
         <translation>自身阴影偏差</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="681"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="694"/>
+        <source>Receives Reflections</source>
+        <translation>接收反射</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="696"/>
+        <source>Casts Reflections</source>
+        <translation>投射反射</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="698"/>
+        <source>Cast Reflections If Visibility Is Off</source>
+        <translation>如果可见性关闭，则投射反射</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="702"/>
+        <source>Environment Map</source>
+        <translation>环境地图</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="703"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="720"/>
+        <source>None</source>
+        <translation>无</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="704"/>
+        <source>Use Composite Shot</source>
+        <translation>使用复合镜头</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="706"/>
+        <source>Use Layer</source>
+        <translation>使用图层</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="728"/>
+        <source>Layer</source>
+        <translation>图层</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="736"/>
+        <source>Receives Ambient Occlusion</source>
+        <translation>接收环境光遮挡</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="738"/>
+        <source>Casts Ambient Occlusion</source>
+        <translation>投放环境光遮挡</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="762"/>
+        <source>Samples</source>
+        <translation>样本</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="763"/>
+        <source>Sample Radius</source>
+        <translation>样本半径</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="765"/>
+        <source>Intensity</source>
+        <translation>强度</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="767"/>
+        <source>Depth Scale</source>
+        <translation>深度比例</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="769"/>
+        <source>Bias</source>
+        <translation>偏差</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="770"/>
+        <source>Blur Radius</source>
+        <translation>模糊半径</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="771"/>
+        <source>Depth Falloff</source>
+        <translation>深度衰减</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="775"/>
+        <source>Include Semi Transparent Triangles</source>
+        <translation>包括半透明三角形</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="778"/>
+        <source>Ambient Occlusion</source>
+        <translation>环境光遮挡</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="783"/>
         <source>Billboarded Lights</source>
         <translation>广告牌光照</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="683"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="785"/>
         <source>Billboarded Shadows</source>
         <translation>广告牌阴影</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="687"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="789"/>
         <source>Ambient</source>
         <translation>环境</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="689"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="791"/>
         <source>Diffuse</source>
         <translation>漫射</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="691"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="793"/>
         <source>Specular</source>
         <translation>镜面</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="693"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="795"/>
         <source>Shininess</source>
         <translation>亮度</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="695"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="797"/>
         <source>Emissive</source>
         <translation>发射</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="799"/>
+        <source>Specular Reflectivity</source>
+        <translation>镜面反射率</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="803"/>
+        <source>Diffuse Reflectivity</source>
+        <translation>漫反射率</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="842"/>
+        <source>Alignment</source>
+        <translation>对齐</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="854"/>
+        <source>Alignment Axis</source>
+        <translation>对齐轴</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="873"/>
+        <source>Alignment Layer</source>
+        <translation>对齐层</translation>
     </message>
 </context>
 <context>
@@ -754,32 +875,32 @@
 <context>
     <name>AutoSaveSettingsWidget</name>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1146"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1265"/>
         <source>Enable Project Auto Saving</source>
         <translation>启用项目自动保存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1156"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1275"/>
         <source> minute(s)</source>
         <translation> 分钟</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1157"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1276"/>
         <source>Auto Save Frequency:</source>
         <translation>自动保存频率：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1164"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1283"/>
         <source>Select Folder...</source>
         <translation>选择文件夹...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1168"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1287"/>
         <source>Auto Save Project Path:</source>
         <translation>自动保存项目路径：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1171"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1290"/>
         <source>Choose auto save projects path</source>
         <translation>选择自动保存项目路径</translation>
     </message>
@@ -800,27 +921,27 @@
 <context>
     <name>CameraLayerGroupFactory</name>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="418"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="419"/>
         <source>Lens</source>
         <translation>镜头</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="637"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="646"/>
         <source>Zoom</source>
         <translation>缩放</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="639"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="648"/>
         <source>Focus Distance</source>
         <translation>焦距</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="641"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="650"/>
         <source>Aperture</source>
         <translation>光圈</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="643"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="652"/>
         <source>Blur</source>
         <translation>模糊</translation>
     </message>
@@ -841,9 +962,38 @@
 <context>
     <name>CompositionFactory</name>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="632"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="641"/>
         <source>Depth of Field</source>
         <translation>景深</translation>
+    </message>
+</context>
+<context>
+    <name>CompositionModel</name>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="824"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="866"/>
+        <source>None</source>
+        <translation>无</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="826"/>
+        <source>Along Motion Path</source>
+        <translation>沿运动路径</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="828"/>
+        <source>Towards Active Camera</source>
+        <translation>朝向活动相机</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="831"/>
+        <source>Towards Target Position</source>
+        <translation>朝向目标位置</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="834"/>
+        <source>Towards Layer</source>
+        <translation>朝向图层</translation>
     </message>
 </context>
 <context>
@@ -1178,13 +1328,13 @@ Do you want to continue?</source>
     <message>
         <location filename="../src/ui/EffectInspector.cpp" line="424"/>
         <location filename="../src/ui/LayerPanel.cpp" line="158"/>
-        <location filename="../src/ui/TimelineEditing.cpp" line="130"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="160"/>
         <source>Set Layer Dimension(s)</source>
         <translation>设置图层尺寸</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3489"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3497"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3630"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3638"/>
         <source>Remove Layer(s)</source>
         <translation>删除图层</translation>
     </message>
@@ -1232,24 +1382,136 @@ Do you want to continue?</source>
         <translation>设置媒体硬件加速</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="591"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="600"/>
         <source>Set Light Layer Type</source>
         <translation>设置光层类型</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="636"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="645"/>
         <source>Set Camera Layer Depth of Field</source>
         <translation>设置相机层景深</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="776"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="845"/>
+        <source>Set Layer Alignment</source>
+        <translation>设置图层对齐</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="860"/>
+        <source>Set Layer Alignment Axis</source>
+        <translation>设置图层对齐轴</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="879"/>
+        <source>Set Layer Alignment Layer</source>
+        <translation>设置图层对齐图层</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="961"/>
         <source>Set 3D Model Material Override</source>
         <translation>设置3D模型材质替代</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="910"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1095"/>
         <source>3D Model Animation Instance</source>
         <translation>3D模型动画实例</translation>
+    </message>
+</context>
+<context>
+    <name>EffectsActions</name>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="502"/>
+        <source>Reload All Presets</source>
+        <translation>重新加载所有预设</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="504"/>
+        <source>Import Presets...</source>
+        <translation>导入预设...</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="519"/>
+        <source>Export Presets...</source>
+        <translation>导出预设...</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="534"/>
+        <source>Add to Favorites</source>
+        <translation>添加至收藏夹</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="536"/>
+        <source>Remove from Favorites</source>
+        <translation>从收藏夹中删除</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="538"/>
+        <source>Clear Recents</source>
+        <translation>清除最近的消息</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="542"/>
+        <source>About...</source>
+        <translation>关于...</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="552"/>
+        <location filename="../src/ui/EffectsPanel.cpp" line="554"/>
+        <source>Rename</source>
+        <translation>重命名</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="560"/>
+        <source>Remove</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="569"/>
+        <source>Open File Location...</source>
+        <translation>打开文件所在位置...</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="575"/>
+        <source>Collapse All</source>
+        <translation>全部收缩</translation>
+    </message>
+</context>
+<context>
+    <name>EffectsPanel</name>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="510"/>
+        <source>Import Presets</source>
+        <translation>导入预设</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="516"/>
+        <source>One or more presets failed to import.</source>
+        <translation>一个或多个预设导入失败。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="525"/>
+        <source>Choose a folder to export chosen presets into</source>
+        <translation>选择一个文件夹以将所选预设导出到</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="530"/>
+        <source>One or more presets failed to export.</source>
+        <translation>一个或多个预设导出失败。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="562"/>
+        <source>Are you sure you want to delete this preset? You cannot undo this action.</source>
+        <translation>您确定要删除此预设吗？您无法撤消此操作。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="564"/>
+        <source>Are you sure you want to delete these presets? You cannot undo this action.</source>
+        <translation>您确定要删除这些预设吗？您无法撤消此操作。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="1189"/>
+        <source>Create Preset...</source>
+        <translation>创建预设...</translation>
     </message>
 </context>
 <context>
@@ -1819,42 +2081,42 @@ This cannot be undone.</source>
 <context>
     <name>LayerKind</name>
     <message>
-        <location filename="../src/composition/Layer.h" line="689"/>
+        <location filename="../src/composition/Layer.h" line="760"/>
         <source>Media</source>
         <translation>媒体</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="690"/>
+        <location filename="../src/composition/Layer.h" line="761"/>
         <source>Text</source>
         <translation>文字</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="691"/>
+        <location filename="../src/composition/Layer.h" line="762"/>
         <source>Point</source>
         <translation>点</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="692"/>
+        <location filename="../src/composition/Layer.h" line="763"/>
         <source>Grade</source>
         <translation>等级</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="693"/>
+        <location filename="../src/composition/Layer.h" line="764"/>
         <source>Light</source>
         <translation>轻度</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="694"/>
+        <location filename="../src/composition/Layer.h" line="765"/>
         <source>Camera</source>
         <translation>相机</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="695"/>
+        <location filename="../src/composition/Layer.h" line="766"/>
         <source>Plane</source>
         <translation>平面</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="698"/>
+        <location filename="../src/composition/Layer.h" line="769"/>
         <source>Model</source>
         <translation>模型</translation>
     </message>
@@ -1862,103 +2124,103 @@ This cannot be undone.</source>
 <context>
     <name>LightLayerGroupFactory</name>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="422"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="423"/>
         <source>Light</source>
         <translation>灯光</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="584"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="593"/>
         <source>Type</source>
         <translation>类型</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="585"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="594"/>
         <source>Ambient</source>
         <translation>环境光</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="586"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="595"/>
         <source>Point</source>
         <translation>点</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="587"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="596"/>
         <source>Spot</source>
         <translation>聚光灯</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="588"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="597"/>
         <source>Directional</source>
         <translation>定向</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="592"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="601"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="593"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="602"/>
         <source>Intensity</source>
         <translation>强度</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="595"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="604"/>
         <source>Cast Shadows</source>
         <translation>投射阴影</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="598"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="607"/>
         <source>Falloff</source>
         <translation>衰减</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="599"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="608"/>
         <source>None</source>
         <translation>无</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="600"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="609"/>
         <source>Linear</source>
         <translation>线性</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="601"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="610"/>
         <source>Curve</source>
         <translation>曲线</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="604"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="613"/>
         <source>Reach</source>
         <translation>照射距离</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="605"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="628"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="614"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="637"/>
         <source>px</source>
         <translation>px</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="606"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="615"/>
         <source>Cone Angle</source>
         <translation>锥角</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="608"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="617"/>
         <source>Feather</source>
         <translation>羽化</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="610"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="619"/>
         <source>Shadow Opacity</source>
         <translation>阴影不透明度</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="612"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="621"/>
         <source>Shadow Diffusion</source>
         <translation>阴影扩散</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="614"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="623"/>
         <source>Shadow Color</source>
         <translation>阴影颜色</translation>
     </message>
@@ -2666,7 +2928,7 @@ This cannot be undone.</source>
     <message>
         <location filename="../src/model3d/FbxReader.cpp" line="1150"/>
         <location filename="../src/model3d/GltfReader.cpp" line="504"/>
-        <location filename="../src/model3d/LwoReader.cpp" line="585"/>
+        <location filename="../src/model3d/LwoReader.cpp" line="789"/>
         <location filename="../src/model3d/ThreeDsReader.cpp" line="440"/>
         <source>the file could not be opened</source>
         <translation>无法打开文件</translation>
@@ -2694,18 +2956,18 @@ This cannot be undone.</source>
     <message>
         <location filename="../src/model3d/FbxReader.cpp" line="1179"/>
         <location filename="../src/model3d/GltfReader.cpp" line="637"/>
-        <location filename="../src/model3d/LwoReader.cpp" line="595"/>
+        <location filename="../src/model3d/LwoReader.cpp" line="799"/>
         <location filename="../src/model3d/ThreeDsReader.cpp" line="450"/>
         <source>it has no triangles</source>
         <translation>其中没有三角形</translation>
     </message>
     <message>
-        <location filename="../src/model3d/LwoReader.cpp" line="20"/>
+        <location filename="../src/model3d/LwoReader.cpp" line="22"/>
         <source>The LightWave model %1 could not be read: %2</source>
         <translation>无法读取 LightWave 模型 %1：%2</translation>
     </message>
     <message>
-        <location filename="../src/model3d/LwoReader.cpp" line="591"/>
+        <location filename="../src/model3d/LwoReader.cpp" line="795"/>
         <source>it is not a LightWave object</source>
         <translation>不是 LightWave 对象</translation>
     </message>
@@ -2723,7 +2985,7 @@ This cannot be undone.</source>
 <context>
     <name>Model3DAnimationAssetTreeWidget</name>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="916"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1101"/>
         <source>Show Properties</source>
         <translation>显示属性</translation>
     </message>
@@ -2731,143 +2993,143 @@ This cannot be undone.</source>
 <context>
     <name>Model3DFactory</name>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="464"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="465"/>
         <source>Override Materials</source>
         <translation>覆盖材料</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="466"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="467"/>
         <source>Animations</source>
         <translation>动画</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="751"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="936"/>
         <source>Diffuse Map Source</source>
         <translation>漫反射源</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="753"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="938"/>
         <source>Specular Map Source</source>
         <translation>高光贴图源</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="754"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="939"/>
         <source>Specular Map Layer</source>
         <translation>高光贴图图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="755"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="940"/>
         <source>Normal Map Source</source>
         <translation>普通地图来源</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="756"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="941"/>
         <source>Normal Map Layer</source>
         <translation>普通地图图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="757"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="942"/>
         <source>Bump Map Source</source>
         <translation>凹凸地图来源</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="758"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="943"/>
         <source>Bump Map Layer</source>
         <translation>凹凸地图图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="759"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="944"/>
         <source>Emissive Map Source</source>
         <translation>发射映射源</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="760"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="945"/>
         <source>Emissive Map Layer</source>
         <translation>发射映射层</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="761"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="946"/>
         <source>Occlusion Map Source</source>
         <translation>遮挡映射来源</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="762"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="947"/>
         <source>Occlusion Map Layer</source>
         <translation>遮挡映射层</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="763"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="948"/>
         <source>Metallic Map Source</source>
         <translation>金属映射源</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="764"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="949"/>
         <source>Metallic Map Layer</source>
         <translation>金属映射层</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="765"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="950"/>
         <source>Roughness Map Source</source>
         <translation>粗糙度映射来源</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="766"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="951"/>
         <source>Roughness Map Layer</source>
         <translation>粗糙度映射层</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="767"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="952"/>
         <source>Specular-Glossiness Map Source</source>
         <translation>镜面-光泽度贴图来源</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="768"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="953"/>
         <source>Specular-Glossiness Map Layer</source>
         <translation>镜面-光泽度贴图图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="796"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="813"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="981"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="998"/>
         <source>None</source>
         <translation>无</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="797"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="982"/>
         <source>From File</source>
         <translation>从文件中</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="798"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="983"/>
         <source>Use Layer</source>
         <translation>使用图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="828"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1013"/>
         <source>Bump Map Scale</source>
         <translation>凹凸地图比例</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="978"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1163"/>
         <source>Strength</source>
         <translation>强度</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="988"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1173"/>
         <source>Loop</source>
         <translation>循环</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="995"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1180"/>
         <source>Custom Playback</source>
         <translation>自定义播放</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1004"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1189"/>
         <source>Playback</source>
         <translation>播放</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="752"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="937"/>
         <source>Diffuse Map Layer</source>
         <translation>漫反射图层</translation>
     </message>
@@ -2887,22 +3149,22 @@ Do you want to add a camera?</source>
 <context>
     <name>PreRenderProgressLabel</name>
     <message>
-        <location filename="../src/render/PreRenderManager.cpp" line="224"/>
+        <location filename="../src/render/PreRenderManager.cpp" line="273"/>
         <source>The pre-render is in the queue.</source>
         <translation>预渲染在队列中。</translation>
     </message>
     <message>
-        <location filename="../src/render/PreRenderManager.cpp" line="226"/>
+        <location filename="../src/render/PreRenderManager.cpp" line="275"/>
         <source>The pre-render is being prepared.</source>
         <translation>正在准备预渲染。</translation>
     </message>
     <message>
-        <location filename="../src/render/PreRenderManager.cpp" line="228"/>
+        <location filename="../src/render/PreRenderManager.cpp" line="277"/>
         <source>Pre-rendering is in progress.</source>
         <translation>预渲染正在进行中。</translation>
     </message>
     <message>
-        <location filename="../src/render/PreRenderManager.cpp" line="230"/>
+        <location filename="../src/render/PreRenderManager.cpp" line="279"/>
         <source>The media has been pre-rendered.</source>
         <translation>媒体已预先渲染。</translation>
     </message>
@@ -2910,7 +3172,7 @@ Do you want to add a camera?</source>
 <context>
     <name>PreRenderTask</name>
     <message>
-        <location filename="../src/render/PreRenderManager.cpp" line="145"/>
+        <location filename="../src/render/PreRenderManager.cpp" line="186"/>
         <source>Could not create the pre-render directory.</source>
         <translation>无法创建预渲染目录。</translation>
     </message>
@@ -3095,23 +3357,23 @@ Do you want to add a camera?</source>
         <translation>设置搜索半径</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="863"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1048"/>
         <source>Insert 3D Model Animation Instance</source>
         <translation>插入3D模型动画实例</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="919"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="932"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1104"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1117"/>
         <source>Remove 3D Model Animation Instance</source>
         <translation>删除3D模型动画实例</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="930"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1115"/>
         <source>Set Property</source>
         <translation>设置属性</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="942"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1127"/>
         <source>Edit 3D Model Animation Asset</source>
         <translation>删除蒙版点编辑3D模型动画配置</translation>
     </message>
@@ -3152,7 +3414,7 @@ Do you want to add a camera?</source>
         <translation>反转蒙版</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="825"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="944"/>
         <source> px</source>
         <translation> 像素</translation>
     </message>
@@ -3162,14 +3424,14 @@ Do you want to add a camera?</source>
         <translation>设定文字格式</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineEditing.cpp" line="39"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="42"/>
         <source>Composition properties</source>
         <translation>合成属性</translation>
     </message>
     <message>
         <location filename="../src/ui/EffectInspector.cpp" line="448"/>
-        <location filename="../src/ui/TimelineEditing.cpp" line="518"/>
-        <location filename="../src/ui/TimelineEditing.cpp" line="530"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="557"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="569"/>
         <source>Mask %1</source>
         <translation>蒙版 %1</translation>
     </message>
@@ -3211,9 +3473,14 @@ Do you want to add a camera?</source>
         <translation>音频电平表</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3388"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3515"/>
         <source>Insert Layer</source>
         <translation>插入图层</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="5776"/>
+        <source>Save Preset</source>
+        <translation>保存预配置</translation>
     </message>
     <message>
         <location filename="../src/ui/TextTransformOverlay.cpp" line="131"/>
@@ -3231,8 +3498,8 @@ Do you want to add a camera?</source>
         <translation>缩放</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2638"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2650"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2790"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2802"/>
         <source>Toggle Property Animation</source>
         <translation>切换属性动画</translation>
     </message>
@@ -3276,60 +3543,101 @@ Do you want to add a camera?</source>
         <source>Exit</source>
         <translation>退出</translation>
     </message>
+    <message>
+        <location filename="../src/project/EffectPresets.cpp" line="56"/>
+        <source>Unable to open preset file.</source>
+        <translation>无法打开预设文件。</translation>
+    </message>
+    <message>
+        <location filename="../src/project/EffectPresets.cpp" line="58"/>
+        <source>Unable to write preset file.</source>
+        <translation>无法写入预设文件。</translation>
+    </message>
+    <message>
+        <location filename="../src/project/EffectPresets.cpp" line="60"/>
+        <source>Unable to read content from preset file.</source>
+        <translation>无法读取预设文件中的内容。</translation>
+    </message>
+    <message>
+        <location filename="../src/project/EffectPresets.cpp" line="62"/>
+        <source>Unable to retrieve the choosen path, the preset will not be saved.</source>
+        <translation>无法检索选择的路径，预设将不会保存。</translation>
+    </message>
+    <message>
+        <location filename="../src/project/EffectPresets.cpp" line="65"/>
+        <source>This preset cannot be used. It may have been saved using a newer version of %1.</source>
+        <translation>无法使用此预设。可能是使用%1的较新版本保存的。</translation>
+    </message>
+    <message>
+        <location filename="../src/project/EffectPresets.cpp" line="70"/>
+        <source>Error during preset creation.</source>
+        <translation>预设创建期间出错。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="409"/>
+        <source>, V%1.%2</source>
+        <translation>, V%1.%2</translation>
+    </message>
 </context>
 <context>
     <name>Transform</name>
     <message>
-        <location filename="../src/composition/Layer.h" line="182"/>
+        <location filename="../src/composition/Layer.h" line="187"/>
         <source>Opacity</source>
         <translation>不透明度</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="183"/>
+        <location filename="../src/composition/Layer.h" line="188"/>
         <source>Anchor Point</source>
         <translation>锚点</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="184"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2052"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2160"/>
+        <location filename="../src/composition/Layer.h" line="189"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2094"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2220"/>
         <source>Position</source>
         <translation>位置</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="185"/>
+        <location filename="../src/composition/Layer.h" line="190"/>
         <source>Scale</source>
         <translation>缩放</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="186"/>
+        <location filename="../src/composition/Layer.h" line="191"/>
         <source>Orientation</source>
         <translation>方向</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="187"/>
+        <location filename="../src/composition/Layer.h" line="192"/>
         <source>Rotation (X)</source>
         <translation>旋转（X）</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="188"/>
+        <location filename="../src/composition/Layer.h" line="193"/>
         <source>Rotation (Y)</source>
         <translation>旋转（Y）</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="191"/>
+        <location filename="../src/composition/Layer.h" line="196"/>
         <source>Rotation (Z)</source>
         <translation>旋转（Z）</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="192"/>
+        <location filename="../src/composition/Layer.h" line="197"/>
         <source>Rotation</source>
         <translation>旋转</translation>
     </message>
     <message>
-        <location filename="../src/composition/Layer.h" line="194"/>
+        <location filename="../src/composition/Layer.h" line="199"/>
         <source>Level</source>
         <translation>电平</translation>
+    </message>
+    <message>
+        <location filename="../src/composition/Layer.h" line="200"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2219"/>
+        <source>Target</source>
+        <translation>目标</translation>
     </message>
 </context>
 <context>
@@ -3378,7 +3686,7 @@ Do you want to add a camera?</source>
 <context>
     <name>WindowHeaderWidget</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1063"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1091"/>
         <source>Recover Projects...</source>
         <translation>恢复项目...</translation>
     </message>
@@ -3386,37 +3694,43 @@ Do you want to add a camera?</source>
 <context>
     <name>biff::ui::BiffFileFilter</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4238"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4390"/>
         <location filename="../src/ui/RecoveredProjectsDialog.cpp" line="108"/>
         <source>VEGAS Effects Projects (*.vegfx)</source>
         <translation>VEGAS Effects 项目 (*.vegfx)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4627"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4779"/>
         <source>Composite Shots (*.vegfxcs *.vegfx);;VEGAS Effects Composite Shots (*.vegfxcs);;VEGAS Effects Projects (*.vegfx)</source>
         <translation>组合镜头 (*.vegfxcs *.vegfx);;VEGAS Effects 组合镜头 (*.vegfxcs);;VEGAS Effects项目(*.vegfx)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4701"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4853"/>
         <source>VEGAS Effects Composite Shots (*.vegfxcs)</source>
         <translation>VEGAS Effects 组合镜头 (*.vegfxcs)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="512"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5778"/>
+        <source>Presets</source>
+        <translation>预设</translation>
     </message>
 </context>
 <context>
     <name>biff::ui::MainAppWindow</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3851"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4003"/>
         <source>The recovered project cannot be opened.</source>
         <translation>恢复的项目无法打开。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5077"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5229"/>
         <location filename="../src/ui/RecoveredProjectsDialog.cpp" line="83"/>
         <source>Recovered Untitled Project</source>
         <translation>恢复的无标题项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5078"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5230"/>
         <source> - Recovered</source>
         <translation> -恢复</translation>
     </message>
@@ -3511,7 +3825,7 @@ Do you want to add a camera?</source>
 <context>
     <name>biff::ui::common::AutoSaveRecoveryDialog</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1068"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1096"/>
         <location filename="../src/ui/RecoveredProjectsDialog.cpp" line="29"/>
         <source>Recovered Projects</source>
         <translation>恢复的项目</translation>
@@ -3665,12 +3979,27 @@ Do you want to add a camera?</source>
         <translation>镜面反射率</translation>
     </message>
     <message>
-        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="303"/>
+        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="305"/>
+        <source>Spherical</source>
+        <translation>球面</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="305"/>
+        <source>Planar</source>
+        <translation>平面</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="307"/>
+        <source>Reflection Mode</source>
+        <translation>反射模式</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="313"/>
         <source>Index of Refraction</source>
         <translation>折射率</translation>
     </message>
     <message>
-        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="305"/>
+        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="315"/>
         <source>Refraction Amount</source>
         <translation>屈光量</translation>
     </message>
@@ -3689,12 +4018,12 @@ Do you want to add a camera?</source>
         <translation>开始导出</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2371"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2476"/>
         <source>Starting...</source>
         <translation>正在开始...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2372"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2477"/>
         <source>Inactive</source>
         <translation>停用</translation>
     </message>
@@ -3813,7 +4142,7 @@ Do you want to add a camera?</source>
         <translation>无法加载导出项目快照。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4085"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4237"/>
         <source>The project snapshot could not be created.</source>
         <translation>无法创建项目快照。</translation>
     </message>
@@ -3935,14 +4264,14 @@ You can queue exports from multiple projects by opening each one in turn and add
     </message>
     <message>
         <location filename="../src/ui/MediaPanel.cpp" line="195"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="882"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1067"/>
         <source>3D Model Animation...</source>
         <translation>3D模型动画...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2675"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="885"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="890"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2781"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1070"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1075"/>
         <source>Import 3D Model Animation</source>
         <translation>导入3D模型动画</translation>
     </message>
@@ -4036,57 +4365,57 @@ You can queue exports from multiple projects by opening each one in turn and add
 <context>
     <name>openvegas::app::AppMain</name>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="110"/>
+        <location filename="../src/app/AppMain.cpp" line="114"/>
         <source>Preparing folders...</source>
         <translation>正在准备文件夹…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="112"/>
+        <location filename="../src/app/AppMain.cpp" line="116"/>
         <source>Loading settings...</source>
         <translation>正在加载设置…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="114"/>
+        <location filename="../src/app/AppMain.cpp" line="120"/>
         <source>Opening media cache...</source>
         <translation>正在打开媒体缓存…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="116"/>
+        <location filename="../src/app/AppMain.cpp" line="122"/>
         <source>Checking license...</source>
         <translation>正在检查许可证…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="118"/>
+        <location filename="../src/app/AppMain.cpp" line="124"/>
         <source>Loading plug-ins...</source>
         <translation>正在加载插件…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="120"/>
+        <location filename="../src/app/AppMain.cpp" line="126"/>
         <source>Creating project...</source>
         <translation>正在创建项目…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="125"/>
+        <location filename="../src/app/AppMain.cpp" line="131"/>
         <source>Building workspace...</source>
         <translation>正在准备工作区…</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="145"/>
+        <location filename="../src/app/AppMain.cpp" line="151"/>
         <source>%1 : Unsupported GPU</source>
         <translation>%1：不支持的GPU</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="146"/>
+        <location filename="../src/app/AppMain.cpp" line="152"/>
         <source>Your computer does not appear to support OpenGL 4.1, which %1 needs to run its native GPU effects and transitions.&lt;br&gt;&lt;br&gt;If you choose to continue, those effects will not render.&lt;br&gt;&lt;br&gt;If you think this is incorrect, please ensure that you have the latest GPU drivers installed and try again.&lt;br&gt;</source>
         <translation>您的计算机似乎不支持 %1 运行原生 GPU 效果和转场所需的 OpenGL 4.1。&lt;br&gt;&lt;br&gt;如果继续，这些效果将无法渲染。&lt;br&gt;&lt;br&gt;如果您认为有误，请确认已安装最新的 GPU 驱动程序后重试。&lt;br&gt;</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="154"/>
+        <location filename="../src/app/AppMain.cpp" line="160"/>
         <source>Continue</source>
         <translation>继续</translation>
     </message>
     <message>
-        <location filename="../src/app/AppMain.cpp" line="155"/>
+        <location filename="../src/app/AppMain.cpp" line="161"/>
         <source>Exit</source>
         <translation>退出</translation>
     </message>
@@ -4143,32 +4472,32 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>找不到FFmpeg；请选择图像序列预设</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="230"/>
+        <location filename="../src/render/ExportJob.cpp" line="231"/>
         <source>The shot has no audio to export</source>
         <translation>组合镜头中没有可导出的音频</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="287"/>
+        <location filename="../src/render/ExportJob.cpp" line="289"/>
         <source>Exported video to %1</source>
         <translation>已将视频导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="288"/>
+        <location filename="../src/render/ExportJob.cpp" line="290"/>
         <source>FFmpeg export failed</source>
         <translation>FFmpeg导出失败</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="293"/>
+        <location filename="../src/render/ExportJob.cpp" line="295"/>
         <source>Could not start FFmpeg: %1</source>
         <translation>无法启动FFmpeg：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="322"/>
+        <location filename="../src/render/ExportJob.cpp" line="324"/>
         <source>Image sequence export failed: %1</source>
         <translation>图像序列导出失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/ExportJob.cpp" line="326"/>
+        <location filename="../src/render/ExportJob.cpp" line="328"/>
         <source>Exported image sequence to %1</source>
         <translation>已将图像序列导出到 %1</translation>
     </message>
@@ -4176,7 +4505,7 @@ You can queue exports from multiple projects by opening each one in turn and add
 <context>
     <name>openvegas::render::RenderManager</name>
     <message>
-        <location filename="../src/render/RenderManager.cpp" line="2145"/>
+        <location filename="../src/render/RenderManager.cpp" line="3282"/>
         <source>Video decoding did not deliver the requested cache frame.</source>
         <translation>视频解码器未提供所请求的缓存帧。</translation>
     </message>
@@ -4684,22 +5013,37 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>显示全部</translation>
     </message>
     <message>
-        <location filename="../src/ui/EffectsPanel.cpp" line="239"/>
+        <location filename="../src/ui/EffectsPanel.cpp" line="271"/>
         <source>Remove from Favorites</source>
         <translation>从收藏夹中删除</translation>
     </message>
     <message>
-        <location filename="../src/ui/EffectsPanel.cpp" line="239"/>
+        <location filename="../src/ui/EffectsPanel.cpp" line="271"/>
         <source>Add to Favorites</source>
         <translation>添加至收藏夹</translation>
     </message>
     <message>
-        <location filename="../src/ui/EffectsPanel.cpp" line="253"/>
+        <location filename="../src/ui/EffectsPanel.cpp" line="302"/>
+        <source>3D Presets</source>
+        <translation>3D预设</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="302"/>
+        <source>2D Presets</source>
+        <translation>2D预设</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="340"/>
         <source>Favorites</source>
         <translation>收藏夹</translation>
     </message>
+    <message>
+        <location filename="../src/ui/EffectsPanel.cpp" line="341"/>
+        <source>Recents</source>
+        <translation>最近的</translation>
+    </message>
     <message numerus="yes">
-        <location filename="../src/ui/EffectsPanel.cpp" line="326"/>
+        <location filename="../src/ui/EffectsPanel.cpp" line="599"/>
         <source>%n item(s)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>
@@ -4965,7 +5309,7 @@ You can queue exports from multiple projects by opening each one in turn and add
     </message>
     <message>
         <location filename="../src/ui/LayerPanel.cpp" line="215"/>
-        <location filename="../src/ui/LayerPanel.cpp" line="371"/>
+        <location filename="../src/ui/LayerPanel.cpp" line="401"/>
         <source>Invalid Layer Type</source>
         <translation>无效的图层类型</translation>
     </message>
@@ -5029,117 +5373,117 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>X：</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="666"/>
+        <location filename="../ui/panels/Layout.ui" line="660"/>
         <source>Y:</source>
         <translation>Y：</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="701"/>
+        <location filename="../ui/panels/Layout.ui" line="689"/>
         <source>Width:</source>
         <translation>宽度：</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="736"/>
+        <location filename="../ui/panels/Layout.ui" line="718"/>
         <source>Height:</source>
         <translation>高度：</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="771"/>
+        <location filename="../ui/panels/Layout.ui" line="747"/>
         <source>Keep width and height in proportion</source>
         <translation>保持宽高比例</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="843"/>
+        <location filename="../ui/panels/Layout.ui" line="819"/>
         <source>Alignment</source>
         <translation>校准</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="859"/>
+        <location filename="../ui/panels/Layout.ui" line="835"/>
         <source>Align to:</source>
         <translation>对齐：</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="867"/>
+        <location filename="../ui/panels/Layout.ui" line="843"/>
         <source>Selection</source>
         <translation>选择</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="872"/>
+        <location filename="../ui/panels/Layout.ui" line="848"/>
         <source>Timeline</source>
         <translation>时间轴</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="898"/>
+        <location filename="../ui/panels/Layout.ui" line="874"/>
         <source>Align Horizontal Left</source>
         <translation>水平对齐左侧</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="932"/>
+        <location filename="../ui/panels/Layout.ui" line="908"/>
         <source>Align Horizontal Center</source>
         <translation>水平对齐中心</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="966"/>
+        <location filename="../ui/panels/Layout.ui" line="942"/>
         <source>Align Horizontal Right</source>
         <translation>水平对齐右侧</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="1016"/>
+        <location filename="../ui/panels/Layout.ui" line="992"/>
         <source>Align Vertical Top</source>
         <translation>垂直对齐顶部</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="1050"/>
+        <location filename="../ui/panels/Layout.ui" line="1026"/>
         <source>Align Vertical Middle</source>
         <translation>垂直对齐中间</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="1084"/>
+        <location filename="../ui/panels/Layout.ui" line="1060"/>
         <source>Align Vertical Bottom</source>
         <translation>垂直对齐底部</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="1136"/>
+        <location filename="../ui/panels/Layout.ui" line="1112"/>
         <source>Distribute Objects:</source>
         <translation>分布对象：</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="1149"/>
+        <location filename="../ui/panels/Layout.ui" line="1125"/>
         <source>Distribute Top</source>
         <translation>顶部分布</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="1183"/>
+        <location filename="../ui/panels/Layout.ui" line="1159"/>
         <source>Distribute Vertically</source>
         <translation>垂直分布</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="1217"/>
+        <location filename="../ui/panels/Layout.ui" line="1193"/>
         <source>Distribute Bottom</source>
         <translation>底部分布</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="1267"/>
+        <location filename="../ui/panels/Layout.ui" line="1243"/>
         <source>Distribute Left</source>
         <translation>左边分布</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="1301"/>
+        <location filename="../ui/panels/Layout.ui" line="1277"/>
         <source>Distribute Horizontally</source>
         <translation>水平分布</translation>
     </message>
     <message>
-        <location filename="../ui/panels/Layout.ui" line="1335"/>
+        <location filename="../ui/panels/Layout.ui" line="1311"/>
         <source>Distribute  Right</source>
         <translation>右边分布</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayoutPanel.cpp" line="378"/>
+        <location filename="../src/ui/LayoutPanel.cpp" line="385"/>
         <source>Select at least two objects.</source>
         <translation>请至少选择两个对象。</translation>
     </message>
     <message>
-        <location filename="../src/ui/LayoutPanel.cpp" line="384"/>
+        <location filename="../src/ui/LayoutPanel.cpp" line="391"/>
         <source>Select at least three objects.</source>
         <translation>请至少选择三个对象。</translation>
     </message>
@@ -5220,13 +5564,13 @@ You can queue exports from multiple projects by opening each one in turn and add
 <context>
     <name>openvegas::ui::MainWindow</name>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="818"/>
-        <location filename="../src/ui/MainWindow.cpp" line="869"/>
+        <location filename="../src/ui/MainWindow.cpp" line="838"/>
+        <location filename="../src/ui/MainWindow.cpp" line="897"/>
         <source>New Project</source>
         <translation>新建项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="960"/>
+        <location filename="../src/ui/MainWindow.cpp" line="988"/>
         <source>Ready</source>
         <translation>就绪</translation>
     </message>
@@ -5506,296 +5850,296 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>浏览效果库(&amp;B)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1303"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1340"/>
         <source>&amp;Window</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>窗口(&amp;W)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1309"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1346"/>
         <source>1-View Layout</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>单视图布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1314"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1351"/>
         <source>Row (2-View) Layout</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>并排（双视图）布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1318"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1355"/>
         <source>2+1 Layout</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>2+1 布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1322"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1359"/>
         <source>Four-View Layout</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>四视图布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1326"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1363"/>
         <source>Four-In-A-Row Layout</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>四视图并排</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1350"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1387"/>
         <source>Zoom to Fit</source>
         <translation>缩放到合适大小</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1353"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1390"/>
         <source>Zoom In</source>
         <translation>放大</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1356"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1393"/>
         <source>Zoom Out</source>
         <translation>缩小</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1360"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1397"/>
         <source>Checkerboard Background</source>
         <translation>查看版背景</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="877"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1378"/>
+        <location filename="../src/ui/MainWindow.cpp" line="905"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1415"/>
         <source>Trimmer</source>
         <translation>剪辑器</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="275"/>
+        <location filename="../src/ui/MainWindow.cpp" line="279"/>
         <source>All Supported Files (%1 %2)</source>
         <translation>所有支持的文件 (%1 %2)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="278"/>
+        <location filename="../src/ui/MainWindow.cpp" line="282"/>
         <source>Media Files (%1)</source>
         <translation>媒体文件 (%1)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="284"/>
+        <location filename="../src/ui/MainWindow.cpp" line="288"/>
         <source>All Files (*)</source>
         <translation>所有文件 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="576"/>
-        <location filename="../src/ui/MainWindow.cpp" line="583"/>
-        <location filename="../src/ui/MainWindow.cpp" line="612"/>
-        <location filename="../src/ui/MainWindow.cpp" line="634"/>
+        <location filename="../src/ui/MainWindow.cpp" line="592"/>
+        <location filename="../src/ui/MainWindow.cpp" line="599"/>
+        <location filename="../src/ui/MainWindow.cpp" line="628"/>
         <location filename="../src/ui/MainWindow.cpp" line="650"/>
-        <location filename="../src/ui/MainWindow.cpp" line="657"/>
         <location filename="../src/ui/MainWindow.cpp" line="666"/>
+        <location filename="../src/ui/MainWindow.cpp" line="673"/>
+        <location filename="../src/ui/MainWindow.cpp" line="682"/>
         <source>My Workspace</source>
         <translation>我的工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="594"/>
+        <location filename="../src/ui/MainWindow.cpp" line="610"/>
         <source>Save Workspace...</source>
         <translation>保存工作区...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="596"/>
+        <location filename="../src/ui/MainWindow.cpp" line="612"/>
         <source>Delete Workspace...</source>
         <translation>删除工作区...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="598"/>
+        <location filename="../src/ui/MainWindow.cpp" line="614"/>
         <source>Reset Workspace</source>
         <translation>重置工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="606"/>
+        <location filename="../src/ui/MainWindow.cpp" line="622"/>
         <source>Save Workspace</source>
         <translation>保存工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="607"/>
+        <location filename="../src/ui/MainWindow.cpp" line="623"/>
         <source>Workspace name:</source>
         <translation>工作区名称：</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="616"/>
+        <location filename="../src/ui/MainWindow.cpp" line="632"/>
         <source>You cannot replace the default workspaces. Please choose another name.</source>
         <translation>您不能替换默认工作空间。请选择其他名称。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="628"/>
+        <location filename="../src/ui/MainWindow.cpp" line="644"/>
         <source>Workspace saved: %1</source>
         <translation>已保存工作区：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="636"/>
+        <location filename="../src/ui/MainWindow.cpp" line="652"/>
         <source>My Workspace cannot be deleted; choose a saved workspace first</source>
         <translation>无法删除“我的工作区”；请先选择已保存的工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="640"/>
+        <location filename="../src/ui/MainWindow.cpp" line="656"/>
         <source>Delete Workspace</source>
         <translation>删除工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="641"/>
+        <location filename="../src/ui/MainWindow.cpp" line="657"/>
         <source>Are you sure you want to permanently remove this workspace?</source>
         <translation>确定要永久删除此工作区吗？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="652"/>
+        <location filename="../src/ui/MainWindow.cpp" line="668"/>
         <source>Workspace deleted: %1</source>
         <translation>已删除工作区：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="681"/>
+        <location filename="../src/ui/MainWindow.cpp" line="697"/>
         <source>Workspace: %1</source>
         <translation>工作区：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1056"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1084"/>
         <source>No recent projects</source>
         <translation>没有最近的项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1087"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1115"/>
         <source>Undo %1</source>
         <translation>撤销 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1090"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1118"/>
         <source>Redo %1</source>
         <translation>重做 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1160"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1194"/>
         <source>Favorites</source>
         <translation>收藏夹</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1162"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1196"/>
         <source>Recents</source>
         <translation>最近的</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1176"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1210"/>
         <source>None</source>
         <translation>无</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1217"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1251"/>
         <source>Render timings enabled</source>
         <translation>已启用渲染耗时显示</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1217"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1251"/>
         <source>Render timings disabled</source>
         <translation>已禁用渲染耗时显示</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1222"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1256"/>
         <source>Hardware decoding indicator enabled</source>
         <translation>已启用硬件解码指示器</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1223"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1257"/>
         <source>Hardware decoding indicator disabled</source>
         <translation>已禁用硬件解码指示器</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1235"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1239"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1272"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1276"/>
         <source>Export Font List</source>
         <translation>导出字体列表</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1235"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1272"/>
         <source>Text files (*.txt)</source>
         <translation>文本文件 (*.txt)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1244"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1281"/>
         <source>Exported font list to %1</source>
         <translation>已将字体列表导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1346"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1383"/>
         <source>Workspaces</source>
         <translation>工作区</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1381"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1418"/>
         <source>Export Panel</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>导出面板</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1396"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1433"/>
         <source>Toggle Learn Sidebar</source>
         <translation>切换学习侧边栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1404"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1441"/>
         <source>Open in Trimmer</source>
         <translation>在微调器中打开</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1438"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1475"/>
         <source>Loop playback: on</source>
         <translation>循环播放：开</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1438"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1475"/>
         <source>Loop playback: off</source>
         <translation>循环播放：关</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1388"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1679"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1425"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1716"/>
         <source>Start</source>
         <translation>开始</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2700"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2943"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2986"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2806"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3070"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3113"/>
         <source>Import</source>
         <translation>导入</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2715"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2821"/>
         <source>Orbit works on a 3D layer</source>
         <translation>环绕工具适用于3D图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2888"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2893"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3015"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3020"/>
         <source>Import 3D Model</source>
         <translation>导入3D模型</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2894"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3021"/>
         <source>The 3D model could not be imported.</source>
         <translation>无法导入3D模型。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2909"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3036"/>
         <source>Import 3D model &apos;%1&apos;</source>
         <translation>导入3D模型“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2918"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3045"/>
         <source>Imported %1</source>
         <translation>已导入 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2987"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3114"/>
         <source>The 3D model could not be imported: %1</source>
         <translation>无法导入3D模型：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3020"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3147"/>
         <source>Imported %1 media file(s) and %2 3D model(s)</source>
         <translation>已导入 %1 个媒体文件和 %2 个3D模型</translation>
     </message>
@@ -5846,118 +6190,120 @@ You can queue exports from multiple projects by opening each one in turn and add
         <translation>关于(&amp;A)...</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1743"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1781"/>
         <source>Unknown command: %1</source>
         <translation>未知命令：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="660"/>
+        <location filename="../src/ui/MainWindow.cpp" line="676"/>
         <source>Workspace reset</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>工作区已重置</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="717"/>
+        <location filename="../src/ui/MainWindow.cpp" line="733"/>
         <source>The Viewer is open in the 360 Viewer.</source>
         <translation>查看器已在 360°查看器中打开。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="720"/>
+        <location filename="../src/ui/MainWindow.cpp" line="736"/>
         <source>Show the Viewer Here</source>
         <translation>在此显示查看器</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1002"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1027"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1038"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1030"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1055"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1066"/>
         <source>Record Voiceover</source>
         <translation>录制旁白</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1005"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1033"/>
         <source>WAV audio (*.wav)</source>
         <translation>WAV音频 (*.wav)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1066"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1094"/>
         <source>No recoverable auto-saves were found.</source>
         <translation>未找到可恢复的自动保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1115"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1143"/>
         <source>Rename</source>
         <translation>重命名</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1123"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1151"/>
         <source>Rename Layer</source>
         <translation>重命名图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1123"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1151"/>
         <source>Name:</source>
         <translation>名称：</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1133"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1161"/>
         <source>Close Active Panel</source>
         <translation>关闭当前面板</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1873"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1911"/>
         <source>Value Graph shown</source>
         <translation>已显示数值图</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1873"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1911"/>
         <source>Value Graph hidden</source>
         <translation>已隐藏数值图</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2211"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2271"/>
         <source>Text Properties</source>
         <translation>文字属性</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2213"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3228"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2273"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3355"/>
         <source>Convert to Paragraph Text</source>
         <translation>转换为段落文字</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2213"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3228"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2273"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3355"/>
         <source>Convert to Point Text</source>
         <translation>转换为点文字</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2389"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2494"/>
         <source>Playback cache: %1 / %2 frames (256 MiB budget)</source>
         <translation>播放缓存：%1 / %2 帧（上限256 MiB）</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2392"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2497"/>
         <source>Playback cache ready: %1 frames</source>
         <translation>播放缓存已就绪：%1 帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2525"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2630"/>
         <source>Selected effect: %1 (%2)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已选效果：%1 (%2)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2536"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2641"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5735"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5763"/>
         <source>Select a clip on the timeline first</source>
         <translation>请先在时间线上选择剪辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2546"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2651"/>
         <source>Add %1?</source>
         <translation>添加 %1？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2547"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2652"/>
         <source>%1
 
 It can still be added to the clip and saved with the project, and it will come back when this build can run it. Add it now?</source>
@@ -5966,28 +6312,30 @@ It can still be added to the clip and saved with the project, and it will come b
 仍可将其添加到片段并随项目保存。当此版本支持运行它时即可生效。现在添加吗？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2552"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2657"/>
         <source>%1 was not added</source>
         <translation>未添加 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2563"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2668"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5741"/>
         <source>The layer is locked</source>
         <translation>图层已锁定</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2583"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2686"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5754"/>
         <source>Applied %1</source>
         <translation>已应用 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2661"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2767"/>
         <source>Render requested</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已请求渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2944"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3071"/>
         <source>It looks like some of the files to import are from image sequences.
 
 Do you want to import sequences as videos, or import individual images?</source>
@@ -5996,225 +6344,230 @@ Do you want to import sequences as videos, or import individual images?</source>
 您想将序列作为视频导入，还是导入单个图像？</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2947"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3074"/>
         <source>Import Sequence Videos</source>
         <translation>导入序列视频</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2948"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3075"/>
         <source>Import Images</source>
         <translation>导入图像</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3021"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3148"/>
         <source>Imported %1 media file(s)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已导入 %1 个媒体文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3065"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3097"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3192"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3224"/>
         <source>Add text layer &apos;%1&apos;</source>
         <translation>添加文本图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3066"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3098"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3193"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3225"/>
         <source>Added text layer &apos;%1&apos;</source>
         <translation>已添加文本图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3218"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3345"/>
         <source>Edit Text</source>
         <translation>编辑文字</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3329"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3456"/>
         <source>Layer %1</source>
         <translation>图层 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3330"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3457"/>
         <source>New %1 %2</source>
         <translation>新建 %1 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3353"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3370"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4762"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4794"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3480"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3497"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4914"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4946"/>
         <source>Add layer &apos;%1&apos;</source>
         <translation>添加图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3372"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4764"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4796"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3499"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4916"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4948"/>
         <source>Added layer &apos;%1&apos;</source>
         <translation>已添加图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3406"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3533"/>
         <source>Select one or more layers first</source>
         <translation>请先选择一个或多个图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3411"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4523"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4524"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3538"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4675"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4676"/>
         <source>Composite Shot %1</source>
         <translation>组合镜头%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3456"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3597"/>
         <source>Created %1 from %2 layer(s)</source>
         <translation>已从 %2 个图层创建 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3464"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3515"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3605"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3656"/>
         <source>Select a layer on the timeline first</source>
         <translation>请先在时间线上选择图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3470"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3611"/>
         <source>Unlock the layer before deleting it</source>
         <translation>请先解锁图层再删除</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3481"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3622"/>
         <source>Deleted selected clip</source>
         <translation>已删除所选片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3491"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3632"/>
         <source>Delete layer &apos;%1&apos;</source>
         <translation>删除图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3508"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3649"/>
         <source>Deleted layer &apos;%1&apos;</source>
         <translation>已删除图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3529"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3670"/>
         <source>Duplicated selected clip</source>
         <translation>已复制所选片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3534"/>
-        <location filename="../src/ui/MainWindow.cpp" line="3589"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3675"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3730"/>
         <source>%1 copy</source>
         <translation>%1 副本</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3535"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3676"/>
         <source>Duplicate layer &apos;%1&apos;</source>
         <translation>复制图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3539"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3680"/>
         <source>Duplicated layer &apos;%1&apos;</source>
         <translation>已复制图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3546"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3687"/>
         <source>Select a layer or clip first</source>
         <translation>请先选择图层或片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3554"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3695"/>
         <source>Copied selected clip</source>
         <translation>已复制所选片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3559"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3700"/>
         <source>Copied layer &apos;%1&apos;</source>
         <translation>已复制图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3582"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3723"/>
         <source>Pasted clip at playhead</source>
         <translation>已在播放头位置粘贴片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3590"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3731"/>
         <source>Paste layer &apos;%1&apos;</source>
         <translation>粘贴图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3594"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3735"/>
         <source>Pasted layer &apos;%1&apos;</source>
         <translation>已粘贴图层“%1”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3597"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3738"/>
         <source>Clipboard is empty</source>
         <translation>剪贴板为空</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3627"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3768"/>
         <source>No compatible attributes in the clipboard</source>
         <translation>剪贴板中没有兼容的属性</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3636"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3777"/>
         <source>Pasted attributes</source>
         <translation>已粘贴属性</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3657"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3798"/>
         <source>Removed attributes</source>
         <translation>已移除属性</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3673"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3814"/>
         <source>Removed effects</source>
         <translation>已移除效果</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3681"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3822"/>
         <source>Place the playhead inside the selected clip</source>
         <translation>请将播放头移到所选片段内</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3697"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3838"/>
         <source>Sliced selected clip</source>
         <translation>已分割所选片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3706"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3847"/>
         <source>Select a clip to ripple delete</source>
         <translation>请选择要波纹删除的片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3720"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3861"/>
         <source>Ripple deleted selected clip</source>
         <translation>已波纹删除所选片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3730"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3871"/>
         <source>Select a media asset first</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>请先选择媒体资源</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3835"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3891"/>
+        <source>Plugins looked for again</source>
+        <translation>已重新查找插件</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/MainWindow.cpp" line="3987"/>
         <source>Auto-saved %1</source>
         <translation>已自动保存 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3836"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3988"/>
         <source>Auto-save failed: %1</source>
         <translation>自动保存失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3929"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4081"/>
         <source>Composite Shot Settings</source>
         <translation>组合镜头设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3930"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4082"/>
         <source>The composite shot settings differ to this clip you are adding (%1 x %2).
 
 Do you want to change the composite shot&apos;s settings to match the clip?</source>
@@ -6223,153 +6576,153 @@ Do you want to change the composite shot&apos;s settings to match the clip?</sou
 是否更改组合镜头设置以匹配该剪辑?</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3937"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4089"/>
         <source>Composite shot resized to %1 x %2</source>
         <translation>组合镜头尺寸已改为 %1 x %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3951"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4722"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4923"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4103"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4874"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5075"/>
         <source>Could not open %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>无法打开 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3994"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4146"/>
         <source>Insert clip from %1</source>
         <translation>从 %1 插入剪辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3995"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4147"/>
         <source>Overlay clip from %1</source>
         <translation>叠加来自 %1 的片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3997"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4149"/>
         <source>Inserted clip from %1</source>
         <translation>已从 %1 插入剪辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3998"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4150"/>
         <source>Overlaid clip from %1</source>
         <translation>已叠加来自 %1 的片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4009"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4161"/>
         <source>No frame available to export</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>没有可导出的帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4018"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4170"/>
         <source>EXR export failed: %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>EXR 导出失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4023"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4175"/>
         <source>Export failed: %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>导出失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4026"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4178"/>
         <source>Exported frame to %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已将帧导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4028"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4180"/>
         <source>Export frame to %1</source>
         <translation>将帧导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4083"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4235"/>
         <source>Added %1 to the export queue</source>
         <translation>已将 %1 添加到导出队列</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4110"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4262"/>
         <source>Exporting frame %1 of %2</source>
         <translation>正在导出第 %1 帧，共 %2 帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4117"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4269"/>
         <source>Export contents to %1</source>
         <translation>将内容导出到 %1</translation>
     </message>
     <message>
-        <location filename="../src/render/AudioExport.cpp" line="151"/>
-        <location filename="../src/render/AudioExport.cpp" line="354"/>
+        <location filename="../src/render/AudioExport.cpp" line="160"/>
+        <location filename="../src/render/AudioExport.cpp" line="363"/>
         <source>Native audio decode failed: %1</source>
         <translation>原生插件音频解码失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/AudioExport.cpp" line="160"/>
-        <location filename="../src/render/AudioExport.cpp" line="360"/>
+        <location filename="../src/render/AudioExport.cpp" line="169"/>
+        <location filename="../src/render/AudioExport.cpp" line="369"/>
         <source>Could not read decoded audio: %1</source>
         <translation>无法读取解码后的音频：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/AudioExport.cpp" line="78"/>
+        <location filename="../src/render/AudioExport.cpp" line="85"/>
         <source>Native audio effect failed: %1</source>
         <translation>原生音频效果处理失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/render/AudioExport.cpp" line="479"/>
+        <location filename="../src/render/AudioExport.cpp" line="626"/>
         <source>Could not write processed audio: %1</source>
         <translation>无法写入处理后的音频：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4113"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4265"/>
         <source>Encoding video...</source>
         <translation>正在编码视频…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4133"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4285"/>
         <source>Cannot create the snapshot folder: %1</source>
         <translation>无法创建快照文件夹：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4153"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4305"/>
         <source>Snapshot folder is full: %1</source>
         <translation>快照文件夹已满：%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4164"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4316"/>
         <source>Applied %1 preset &apos;%2&apos;</source>
         <translation>已应用 %1 预设“%2”</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4166"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4318"/>
         <source>Apply %1: %2</source>
         <translation>应用 %1：%2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4293"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4445"/>
         <source>Saved %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已保存 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4556"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4708"/>
         <source>%1 is the project&apos;s only composite shot and cannot be deleted</source>
         <translation>%1 是项目唯一的组合镜头，无法删除</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4970"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5122"/>
         <source>Opened %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已打开 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4982"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5134"/>
         <source>Missing Media</source>
         <translation>媒体文件缺失</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4983"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5135"/>
         <source>These project files could not be found:
 %1
 
@@ -6380,81 +6733,81 @@ In the Media panel, right-click each missing file and choose Relink Media... to 
 请在“媒体”面板中右键单击每个缺失的文件，选择“重新链接媒体…”并指定位置。缺失文件中的音频无法播放。</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/MainWindow.cpp" line="5033"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5185"/>
         <source>%n plugin(s) used by this project are missing</source>
         <translation>
             <numerusform>此项目使用的 %n 个插件缺失</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3850"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4912"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4940"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5034"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5046"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4002"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5064"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5092"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5186"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5198"/>
         <source>Open Project</source>
         <translation>打开项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5035"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5187"/>
         <source>These plugins could not be found:</source>
         <translation>找不到以下插件：</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5037"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5189"/>
         <source>Effects that use them will have no result.</source>
         <translation>使用这些插件的效果将无法生效。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5093"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5245"/>
         <source>%1[*] - %2</source>
         <translation>%1[*] - %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5310"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5462"/>
         <source>Mirror Horizontal</source>
         <translation>水平镜像</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5310"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5462"/>
         <source>Mirror Vertical</source>
         <translation>垂直镜像</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5323"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5475"/>
         <source>Rotate 90 Degrees Clockwise</source>
         <translation>顺时针旋转90度</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5324"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5476"/>
         <source>Rotate 90 Degrees Counter Clockwise</source>
         <translation>逆时针旋转90度</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4251"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4271"/>
-        <location filename="../src/ui/MainWindow.cpp" line="5085"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4403"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4423"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5237"/>
         <source>Save Project</source>
         <translation>保存项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4530"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4541"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4682"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4693"/>
         <source>New Composite Shot</source>
         <translation>新组合镜头</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4545"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4697"/>
         <source>Created %1</source>
         <translation>已创建 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4568"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4720"/>
         <source>Delete Composite Shot</source>
         <translation>删除组合镜头</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/MainWindow.cpp" line="4569"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4721"/>
         <source>%1 is used by %n layer(s) in other composite shots. Deleting it removes those layers too.
 
 Continue?</source>
@@ -6465,222 +6818,222 @@ Continue?</source>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4592"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4744"/>
         <source>Remove Asset</source>
         <translation>移除配置</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4595"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4747"/>
         <source>Deleted %1</source>
         <translation>已删除 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4611"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4763"/>
         <source>Set Primary Composite Shot</source>
         <translation>设定主要组合镜头</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4626"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4641"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4645"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4663"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4674"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4778"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4793"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4797"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4815"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4826"/>
         <source>Import Composite Shot</source>
         <translation>导入合成镜头</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4646"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4798"/>
         <source>No composite shots can be imported from this file.</source>
         <translation>无法从该文件导入组合照片。</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/MainWindow.cpp" line="4678"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4830"/>
         <source>Imported %n composite shot(s) from %1</source>
         <translation>
             <numerusform>已从 %1 导入 %n 个组合镜头</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4691"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4699"/>
-        <location filename="../src/ui/MainWindow.cpp" line="4709"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4843"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4851"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4861"/>
         <source>Save Composite Shot</source>
         <translation>保存组合镜头</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4692"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4844"/>
         <source>This composite shot cannot be saved because it contains one or more embedded composite shots.</source>
         <translation>无法保存此组合镜头，因为它包含一个或多个嵌入式组合镜头。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4710"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4862"/>
         <source>The composite shot could not be saved to %1</source>
         <translation>组合镜头无法保存到%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4714"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4866"/>
         <source>Saved %1 to %2</source>
         <translation>已将 %1 保存到 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4727"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4879"/>
         <source>Use Import to place a 3D model</source>
         <translation>请使用导入来放置 3D 模型</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4735"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4887"/>
         <source>Drop a 3D model animation onto a 3D model layer</source>
         <translation>请将 3D 模型动画拖放到 3D 模型图层上</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="4781"/>
+        <location filename="../src/ui/MainWindow.cpp" line="4933"/>
         <source>%1 cannot be placed inside itself</source>
         <translation>%1 不能放入其自身之中</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5047"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5199"/>
         <source>The project file no longer exists:
 %1</source>
         <translation>项目文件已不存在:
 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5086"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5238"/>
         <source>Save Project (%1)</source>
         <translation>保存项目 (%1)</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5518"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5809"/>
         <source>Playing</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>正在播放</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5532"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5823"/>
         <source>Stopped</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已停止</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5544"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5835"/>
         <source>Paused</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>已暂停</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5659"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5950"/>
         <source>Proxy ready: %1</source>
         <translation>代理已就绪: %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5660"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5951"/>
         <source>Proxy failed for %1: %2</source>
         <translation>无法为 %1 创建代理: %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5677"/>
+        <location filename="../src/ui/MainWindow.cpp" line="5968"/>
         <source>The proxy is being prepared.</source>
         <translation>正在准备代理。</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5711"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6002"/>
         <source>Removed the pre-render of %1</source>
         <translation>已删除 %1 的预渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5850"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6141"/>
         <source>In point: %1s</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>入点：%1 秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5856"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6147"/>
         <source>Out point: %1s</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>出点：%1 秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5902"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6193"/>
         <source>Shuttle: paused</source>
         <translation>穿梭：已暂停</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="5907"/>
+        <location filename="../src/ui/MainWindow.cpp" line="6198"/>
         <source>Shuttle: x%1</source>
         <translation>穿梭：x%1</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="250"/>
+        <location filename="../src/ui/MainWindow.cpp" line="254"/>
         <source>Untitled Project</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>未命名项目</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="702"/>
+        <location filename="../src/ui/MainWindow.cpp" line="718"/>
         <source>Viewer</source>
         <translation>查看器</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="884"/>
+        <location filename="../src/ui/MainWindow.cpp" line="912"/>
         <source>Export</source>
         <translation>导出</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1087"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1708"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1115"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1746"/>
         <source>Undo</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>撤销</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="1090"/>
-        <location filename="../src/ui/MainWindow.cpp" line="1711"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1118"/>
+        <location filename="../src/ui/MainWindow.cpp" line="1749"/>
         <source>Redo</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>重做</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3119"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3246"/>
         <source>Motion tracking needs a video clip</source>
         <translation>运动跟踪需要视频剪辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3124"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3251"/>
         <source>Could not open the video for motion tracking</source>
         <translation>无法打开用于运动跟踪的视频</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3143"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3270"/>
         <source>Analyzing motion…</source>
         <translation>正在分析运动…</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3143"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3270"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3150"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3277"/>
         <source>Could not decode the first tracking frame</source>
         <translation>无法解码第一个跟踪帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3155"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3282"/>
         <source>Motion tracking cancelled</source>
         <translation>已取消运动跟踪</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3161"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3288"/>
         <source>Motion tracking stopped at frame %1</source>
         <translation>运动跟踪在第 %1 帧停止</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="3180"/>
+        <location filename="../src/ui/MainWindow.cpp" line="3307"/>
         <source>Motion track analyzed: %1 frames</source>
         <translation>运动跟踪分析完成：%1 帧</translation>
     </message>
     <message>
-        <location filename="../src/render/AudioExport.cpp" line="378"/>
+        <location filename="../src/render/AudioExport.cpp" line="518"/>
         <source>Cannot export audio: nested compositions contain a cycle.</source>
         <translation>无法导出音频：嵌套合成中存在循环引用。</translation>
     </message>
@@ -7046,7 +7399,7 @@ Continue?</source>
     </message>
     <message>
         <location filename="../src/ui/Model3DSettingsDialog.cpp" line="143"/>
-        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="315"/>
+        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="325"/>
         <source>Title</source>
         <translation>标题</translation>
     </message>
@@ -7056,16 +7409,30 @@ Continue?</source>
         <translation>&lt;未命名&gt;</translation>
     </message>
     <message>
-        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="377"/>
+        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="387"/>
         <source>Warning:</source>
         <translation>警告:</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="378"/>
+        <location filename="../src/ui/Model3DSettingsDialog.cpp" line="388"/>
         <source>%1: %n triangle(s), %2 material(s), %3 group(s).</source>
         <translation>
             <numerusform>%1：%n 个三角形、%2 个材质、%3 个组。</numerusform>
         </translation>
+    </message>
+</context>
+<context>
+    <name>openvegas::ui::NativeInstanceHost</name>
+    <message>
+        <location filename="../src/ui/NativeInstanceHost.cpp" line="23"/>
+        <source>Create Point Layer</source>
+        <translation>创建点图层</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/NativeInstanceHost.cpp" line="24"/>
+        <location filename="../src/ui/NativeInstanceHost.cpp" line="341"/>
+        <source>Transform Layer</source>
+        <translation>转换图层</translation>
     </message>
 </context>
 <context>
@@ -7076,648 +7443,648 @@ Continue?</source>
         <translation>选项</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="384"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="503"/>
         <source> levels</source>
         <translation> 水平</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="385"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="504"/>
         <source>Maximum Undo*:</source>
         <translation>最大撤消*：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="393"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="512"/>
         <source>Default Template:</source>
         <translation>默认模板：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="399"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="518"/>
         <source>Composite Shot Default Duration:</source>
         <translation>组合镜头默认时长：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="405"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="524"/>
         <source>Editor Default Duration:</source>
         <translation>编辑器默认时长：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="411"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="530"/>
         <source>Plane Default Duration:</source>
         <translation>平面默认时长：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="417"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="536"/>
         <source>RMS Amplitude</source>
         <translation>RMS振幅</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="418"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="626"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="537"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="637"/>
         <source>Peak Amplitude</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>峰值幅度</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="419"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="538"/>
         <source>Audio Waveforms:</source>
         <translation>音频波形：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="424"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="543"/>
         <source>Include screen layout when saving projects</source>
         <translation>保存项目时包括屏幕布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="427"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="546"/>
         <source>Use relative paths in saved projects</source>
         <translation>在保存的项目中使用相对路径</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="430"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="549"/>
         <source>Close all media files when application is not active</source>
         <translation>当应用程序不活动时，关闭所有媒体文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="433"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="552"/>
         <source>Play audio when scrubbing timeline</source>
         <translation>清理时间线时播放音频</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="436"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="555"/>
         <source>Use logarithmic waveform scaling</source>
         <translation>使用对数波形缩放</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="438"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="557"/>
         <source>Share anonymous usage analytics</source>
         <translation>分享匿名使用统计数据</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="474"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="593"/>
         <source>VEGAS Dark</source>
         <translation>VEGAS 深色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="475"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="594"/>
         <source>System</source>
         <translation>系统</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="476"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="595"/>
         <source>Theme:</source>
         <translation>主题：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="480"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="599"/>
         <source>Use native menu bar</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>使用系统菜单栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="483"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="602"/>
         <source>Use native color picker</source>
         <translation>使用系统颜色选择器</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="485"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="604"/>
         <source>Enable high-DPI scaling*</source>
         <translation>启用高DPI缩放*</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="488"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="607"/>
         <source>Show menu bar quick actions</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>在菜单栏显示快捷操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="491"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="610"/>
         <source>Enable mouse wheel scrolling in dropdown menus</source>
         <translation>在下拉菜单中启用鼠标滚轮滚动</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="494"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="613"/>
         <source>Hide panels while full-screen preview is active</source>
         <translation>全屏预览时隐藏面板</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="523"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="642"/>
         <source>Select Folder...</source>
         <translation>选择文件夹...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="531"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="650"/>
         <source>Default Export Directory:</source>
         <translation>默认导出目录：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="534"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="653"/>
         <source>Default Snapshot Directory:</source>
         <translation>默认快照目录：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="541"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="660"/>
         <source>Timecode</source>
         <translation>时间码</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="542"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="661"/>
         <source>Natural</source>
         <translation>自然</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="543"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="662"/>
         <source>Seconds</source>
         <translation>秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="544"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="663"/>
         <source>The format in which to display time durations (Elapsed and Remaining only).</source>
         <translation>显示持续时间的格式（仅已过去和剩余）。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="545"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="664"/>
         <source>Time Format:</source>
         <translation>时间格式：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="550"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="669"/>
         <source>Remove known file extensions from export names</source>
         <translation>从导出名称中删除已知的文件扩展名</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="553"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="672"/>
         <source>Beep speaker on completion</source>
         <translation>蜂鸣器完成</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="585"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="704"/>
         <source>Select File</source>
         <translation>选择文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="600"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="605"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="609"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="630"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="719"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="724"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="728"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="749"/>
         <source>Clear Cache</source>
         <translation>清除缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="601"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="720"/>
         <source>The selected path is not a safe cache location.</source>
         <translation>所选路径不能安全地用作缓存位置。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="606"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="725"/>
         <source>%1 is already empty.</source>
         <translation>%1 已为空。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="610"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="729"/>
         <source>Delete %1 at
 %2?</source>
         <translation>删除以下位置的 %1？
 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="631"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="750"/>
         <source>Some files in %1 could not be removed.</source>
         <translation>无法删除 %1 中的部分文件。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="645"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="764"/>
         <source>Media Cache</source>
         <translation>媒体缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="654"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="666"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="698"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="989"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="773"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="785"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="817"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1108"/>
         <source>...</source>
         <translation>...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="658"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="777"/>
         <source>Cache database (*.db);;All files (*)</source>
         <translation>缓存数据库 (*.db);;所有文件 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="660"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="779"/>
         <source>Media Cache Database*:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>媒体缓存数据库*：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="672"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="791"/>
         <source>Media Cache Files*:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>媒体缓存文件*：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="678"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="710"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="797"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="829"/>
         <source> day(s)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation> 天</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="679"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="709"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="798"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="828"/>
         <source>Keep forever</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>永久保留</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="680"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="799"/>
         <source>Days To Keep Media Cache Files:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>媒体缓存文件保留天数：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="682"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="801"/>
         <source>Delete Media Cache</source>
         <translation>删除媒体缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="685"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="804"/>
         <source>media cache files</source>
         <translation>媒体缓存文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="686"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="805"/>
         <source>media cache database</source>
         <translation>媒体缓存数据库</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="691"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="810"/>
         <source>Timeline Cache</source>
         <translation>时间线缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="704"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="823"/>
         <source>Timeline Cache:</source>
         <translation>时间线缓存：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="711"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="830"/>
         <source>Days To Keep Timeline Cache:</source>
         <translation>时间线缓存保留天数：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="713"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="832"/>
         <source>Use automatic render cache</source>
         <translation>使用自动渲染缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="719"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="967"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="838"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1086"/>
         <source> sec</source>
         <translation> 秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="720"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="839"/>
         <source>Automatic cache delay:</source>
         <translation>自动缓存延迟：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="724"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="843"/>
         <source>Delete Timeline Cache</source>
         <translation>删除时间轴缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="727"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="846"/>
         <source>timeline cache</source>
         <translation>时间线缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="746"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="865"/>
         <source> MB</source>
         <translation> MB</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="747"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="866"/>
         <source>Thumbnail cache size:</source>
         <translation>缩略图缓存大小：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="755"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="874"/>
         <source>Show checkerboard background for 2D Views</source>
         <translation>显示2D视图的背景</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="757"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="876"/>
         <source>Show mouse coordinates</source>
         <translation>显示鼠标坐标</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="759"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="878"/>
         <source>Update the viewer during playback</source>
         <translation>播放时更新查看器</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="761"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="880"/>
         <source>Show motion path</source>
         <translation>显示运动路径</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="763"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="882"/>
         <source>Show checkerboard background for 3D Views</source>
         <translation>显示3D视图的背景</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="765"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="884"/>
         <source>Show floor plane in 3D Views</source>
         <translation>在3D视图中显示地面</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="782"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="901"/>
         <source>Motion path key frames:</source>
         <translation>运动路径关键帧数：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="795"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="914"/>
         <source>Use turbo rendering where available</source>
         <translation>可用时使用加速渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="804"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="923"/>
         <source>Automatic (default)</source>
         <translation>自动（默认）</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="806"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="925"/>
         <source>%1 thread(s)</source>
         <translation>%1 个线程</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="808"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="927"/>
         <source>Render threads:</source>
         <translation>渲染线程数：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="810"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="929"/>
         <source>Use hardware video decoding</source>
         <translation>使用硬件视频解码</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="813"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="932"/>
         <source>Use hardware video encoding</source>
         <translation>使用硬件视频编码</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="816"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="935"/>
         <source>Limit video decoding to 8 bit</source>
         <translation>将视频解码限制为8位</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="831"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="950"/>
         <source>Maximum model texture size:</source>
         <translation>模型纹理最大尺寸：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="832"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="951"/>
         <source>Shadow map size:</source>
         <translation>阴影贴图大小：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="833"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="952"/>
         <source>Reflection map size:</source>
         <translation>反射贴图大小：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="840"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="959"/>
         <source>3D antialiasing:</source>
         <translation>3D抗锯齿：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="873"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="992"/>
         <source>Playback quality:</source>
         <translation>播放质量：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="874"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="993"/>
         <source>Playback resolution:</source>
         <translation>播放分辨率：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="875"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="994"/>
         <source>Paused quality:</source>
         <translation>暂停时质量：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="876"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="995"/>
         <source>Paused resolution:</source>
         <translation>暂停时分辨率：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="903"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1022"/>
         <source>Labels are available to timeline layers and media items. Edit a name or click its color.</source>
         <translation>标签可用于时间线图层和媒体项目。请编辑名称或单击颜色。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="907"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1026"/>
         <source>Label</source>
         <translation>标签</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="907"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1026"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="923"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1042"/>
         <source>Choose Label Color</source>
         <translation>选择标签颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="946"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1065"/>
         <source>System Default</source>
         <translation>系统默认</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="949"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1068"/>
         <source>Input device:</source>
         <translation>输入设备：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="953"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1072"/>
         <source>Mono</source>
         <translation>单声道</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="954"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1073"/>
         <source>Stereo</source>
         <translation>立体声</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="955"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1074"/>
         <source>Channels:</source>
         <translation>通道：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="960"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1079"/>
         <source>%1 Hz</source>
         <translation>%1 Hz</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="962"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1081"/>
         <source>Sample rate:</source>
         <translation>采样率：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="968"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1087"/>
         <source>Recording countdown:</source>
         <translation>录音倒计时：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="970"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1089"/>
         <source>Mute project audio while recording</source>
         <translation>录音时将项目音频静音</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="998"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1051"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1117"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1170"/>
         <source>Proxy</source>
         <translation>代理</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1001"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1120"/>
         <source>Proxy directory:</source>
         <translation>代理文件夹：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1006"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1125"/>
         <source>Low</source>
         <translation>低</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1007"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1126"/>
         <source>Medium</source>
         <translation>中等</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1008"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1127"/>
         <source>High</source>
         <translation>高</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1009"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1128"/>
         <source>Proxy quality:</source>
         <translation>代理质量：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1012"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1025"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1032"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1131"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1144"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1151"/>
         <source>Delete Project Proxies</source>
         <translation>删除项目代理文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1014"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1133"/>
         <source>Delete All Proxies</source>
         <translation>删除所有代理</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1020"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1139"/>
         <source>all proxy files</source>
         <translation>所有代理文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1026"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1145"/>
         <source>Choose a proxy directory first.</source>
         <translation>请先选择代理文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1033"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1077"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1152"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1196"/>
         <source>No saved project is currently selected.</source>
         <translation>当前未选择已保存的项目。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1037"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1156"/>
         <source>proxies for project &apos;%1&apos;</source>
         <translation>项目“%1”的代理文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1041"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1160"/>
         <source>Pre-Render</source>
         <translation>预渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1044"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1163"/>
         <source>Pre-render directory:</source>
         <translation>预渲染文件夹：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1050"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1169"/>
         <source>Auto</source>
         <translation>自动</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1052"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1171"/>
         <source>Full Resolution</source>
         <translation>完整分辨率</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1053"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1172"/>
         <source>Preview mode:</source>
         <translation>预览模式：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1055"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1069"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1076"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1174"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1188"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1195"/>
         <source>Delete Project Pre-Renders</source>
         <translation>删除项目预渲染文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1057"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1176"/>
         <source>Delete All Pre-Renders</source>
         <translation>删除所有预渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1064"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1183"/>
         <source>all pre-render files</source>
         <translation>所有预渲染文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1070"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1189"/>
         <source>Choose a pre-render directory first.</source>
         <translation>请先选择预渲染文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1082"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1201"/>
         <source>pre-renders for project &apos;%1&apos;</source>
         <translation>项目“%1”的预渲染文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1086"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1205"/>
         <source>Prefer integrated GPU for proxy generation</source>
         <translation>生成代理时优先使用集成GPU</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1101"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1220"/>
         <source>Search commands</source>
         <translation>搜索命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1107"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1226"/>
         <source>Command</source>
         <translation>命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1107"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1226"/>
         <source>Shortcut</source>
         <translation>快捷方式</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1299"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1421"/>
         <source>Shortcut Conflict</source>
         <translation>快捷键冲突</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1300"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1422"/>
         <source>The &quot;%1&quot; shortcut is already assigned to the &quot;%2&quot; command.</source>
         <translation>快捷键“%1”已分配给“%2”命令。</translation>
     </message>
@@ -7737,108 +8104,174 @@ Continue?</source>
         <translation>确定</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1551"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1686"/>
         <source>Restore &apos;%1&apos; Defaults</source>
         <translation>恢复&apos;%1&apos;默认值</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="466"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="585"/>
         <source>Follow system</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>跟随系统</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="122"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="123"/>
         <source>Prompt me on launch if my GPU is unsupported</source>
         <translation>如果不支持我的GPU，则在启动时提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="124"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="125"/>
         <source>Prompt me on launch if my GPU driver is unsupported or out of date</source>
         <translation>如果我的GPU驱动程序不受支持或过时，则在启动时提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="127"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="128"/>
         <source>Prompt me before using oversized particle textures</source>
         <translation>在使用超大粒子纹理之前提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="129"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="130"/>
         <source>Prompt me when importing an image from an image sequence</source>
         <translation>从图像序列中导入图像时提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="132"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="133"/>
         <source>Prompt me when the media doesn&apos;t match editor timeline</source>
         <translation>当媒体与编辑器时间轴不匹配时提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="135"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="136"/>
         <source>Prompt me on launch if QuickTime is installed but could not be loaded</source>
         <translation>如果安装了QuickTime但无法加载，则在启动时提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="138"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="139"/>
         <source>Prompt me before converting 2D composite shots to 3D</source>
         <translation>在将2D组合镜头转换为3D之前提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="140"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="141"/>
         <source>Prompt me before converting 3D composite shots to 2D</source>
         <translation>在将3D组合镜头转换为2D之前提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="142"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="143"/>
         <source>Prompt me before removing export tasks from the export queue</source>
         <translation>在从导出队列中删除导出任务之前提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="145"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="146"/>
         <source>Prompt me for the project settings to use before creating a new project</source>
         <translation>在创建新项目之前提示我输入要使用的项目设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="222"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="223"/>
         <source>Red</source>
         <translation>红色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="223"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="224"/>
         <source>Orange</source>
         <translation>橙色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="224"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="225"/>
         <source>Yellow</source>
         <translation>黄色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="225"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="226"/>
         <source>Green</source>
         <translation>绿色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="226"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="227"/>
         <source>Cyan</source>
         <translation>青色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="227"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="228"/>
         <source>Blue</source>
         <translation>蓝色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="228"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="229"/>
         <source>Purple</source>
         <translation>紫色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="229"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="230"/>
         <source>Pink</source>
         <translation>粉色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="470"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="392"/>
+        <source>VEGAS Effects installation</source>
+        <translation>VEGAS Effects 安装</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="400"/>
+        <source>Use the plugins of this installation</source>
+        <translation>使用此安装的插件</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="405"/>
+        <source>Plugin folders</source>
+        <translation>插件文件夹</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="408"/>
+        <source>Folders with .hfpl plugins - the Plugins folder of VEGAS Effects installed elsewhere, or of another FXhome program such as HitFilm or Imerge. Their category sub-folders are searched too.</source>
+        <translation>包含 .hfpl 插件的文件夹 - 安装在其他位置的 VEGAS Effects，或 HitFilm、Imerge 等其他 FXhome 程序的 Plugins 文件夹。也会搜索其类别子文件夹。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="418"/>
+        <source>Add Folder...</source>
+        <translation>添加文件夹...</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="420"/>
+        <source>Remove</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="422"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="453"/>
+        <source>Find FXhome Plugins</source>
+        <translation>查找 FXhome 插件</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="429"/>
+        <source>Plugins are looked for again when Options is closed with OK.</source>
+        <translation>使用&quot;确定&quot;关闭选项后将重新查找插件。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="436"/>
+        <source>Plugin Folder</source>
+        <translation>插件文件夹</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="454"/>
+        <source>No other FXhome program with plugins was found.</source>
+        <translation>未找到其他带有插件的 FXhome 程序。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="468"/>
+        <source>%1  (plugins: %2)</source>
+        <translation>%1  (插件: %2)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="481"/>
+        <source>Plugins found in %1: %2.</source>
+        <translation>%1 中的插件: %2。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="485"/>
+        <source>No plugins were found in %1. Add the folder with the plugins below - VEGAS Effects installed elsewhere, or another FXhome program.</source>
+        <translation>在 %1 中未找到插件。请在下方添加插件文件夹 - 安装在其他位置的 VEGAS Effects，或其他 FXhome 程序。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="589"/>
         <source>Language*:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>语言*：</translation>
@@ -7933,31 +8366,46 @@ Continue?</source>
     </message>
     <message>
         <location filename="../src/ui/Preview360VideoPanel.cpp" line="211"/>
+        <source>Use Fisheye Lens</source>
+        <translation>使用鱼眼镜头</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="218"/>
         <source>Yaw</source>
         <translation>偏航</translation>
     </message>
     <message>
-        <location filename="../src/ui/Preview360VideoPanel.cpp" line="212"/>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="219"/>
         <source>Pitch</source>
         <translation>变调</translation>
     </message>
     <message>
-        <location filename="../src/ui/Preview360VideoPanel.cpp" line="214"/>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="221"/>
         <source>Field of view</source>
         <translation>视野角度</translation>
     </message>
     <message>
-        <location filename="../src/ui/Preview360VideoPanel.cpp" line="213"/>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="220"/>
         <source>Roll</source>
         <translation>滚转</translation>
     </message>
     <message>
-        <location filename="../src/ui/Preview360VideoPanel.cpp" line="216"/>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="224"/>
+        <source>Scale</source>
+        <translation>缩放</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="225"/>
+        <source>Scale Ratio</source>
+        <translation>比例比</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="226"/>
         <source>Wrap X</source>
         <translation>X轴重复</translation>
     </message>
     <message>
-        <location filename="../src/ui/Preview360VideoPanel.cpp" line="217"/>
+        <location filename="../src/ui/Preview360VideoPanel.cpp" line="227"/>
         <source>Wrap Y</source>
         <translation>Y轴重复</translation>
     </message>
@@ -8444,17 +8892,17 @@ From Footage</source>
 <context>
     <name>openvegas::ui::TimelineCanvas</name>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="917"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="928"/>
         <source>Pre-Render</source>
         <translation>预渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="919"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="930"/>
         <source>Make Pre-Render(s)</source>
         <translation>进行预渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="920"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="931"/>
         <source>Remove Pre-Render(s)</source>
         <translation>移除预渲染</translation>
     </message>
@@ -8462,7 +8910,7 @@ From Footage</source>
 <context>
     <name>openvegas::ui::TimelineValueGraphView</name>
     <message>
-        <location filename="../src/ui/TimelineValueGraphView.cpp" line="498"/>
+        <location filename="../src/ui/TimelineValueGraphView.cpp" line="592"/>
         <source>Select an animated property to show its curve</source>
         <translation>请选择动画属性以显示其曲线</translation>
     </message>
@@ -8471,7 +8919,7 @@ From Footage</source>
     <name>openvegas::ui::TimelineWidget</name>
     <message>
         <location filename="../ui/panels/Timeline.ui" line="535"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="1813"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="1958"/>
         <source>Start</source>
         <translation>开始</translation>
     </message>
@@ -8486,93 +8934,93 @@ From Footage</source>
         <translation>在时间轴中搜索</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="1815"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="1960"/>
         <source>Composite Shot Properties...</source>
         <translation>合成镜头属性…</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="1818"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="1963"/>
         <source>Close Active Tab</source>
         <translation>关闭当前选项卡</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="1857"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2002"/>
         <source>New %1 Layer</source>
         <translation>新建 %1 图层</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="1929"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2277"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2074"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2429"/>
         <source>Slip edit (Y)</source>
         <translation>滑移编辑 (Y)</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="1930"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2279"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2075"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2431"/>
         <source>Slide edit (Shift+U)</source>
         <translation>滑动编辑 (Shift+U)</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="1931"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2281"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2076"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2433"/>
         <source>Ripple edit (R)</source>
         <translation>波纹编辑 (R)</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="1932"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2283"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2077"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2435"/>
         <source>Roll edit (E)</source>
         <translation>滚动编辑 (E)</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="1933"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2288"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2078"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2440"/>
         <source>Track select forwards (A)</source>
         <translation>向前选择轨道 (A)</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="1972"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2117"/>
         <source>Enable effect</source>
         <translation>启用效果</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2017"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2169"/>
         <source>Move keyframe</source>
         <translation>移动关键帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2019"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2171"/>
         <source>Edit clips</source>
         <translation>编辑片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2040"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2192"/>
         <source>Edit value graph</source>
         <translation>编辑数值图表</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2188"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2340"/>
         <source>Untitled</source>
         <translation>未知的</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2523"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2675"/>
         <source>Set keyframe interpolation</source>
         <translation>设置关键帧插值</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2673"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2696"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2825"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2848"/>
         <source>Toggle transform keyframe</source>
         <translation>添加或删除变换关键帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2712"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2864"/>
         <source>Toggle parameter keyframe</source>
         <translation>添加或删除参数关键帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2820"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2972"/>
         <source>%1:%2:%3:%4</source>
         <translation>%1:%2:%3:%4</translation>
     </message>
@@ -8619,13 +9067,13 @@ From Footage</source>
     </message>
     <message>
         <location filename="../ui/panels/Timeline.ui" line="86"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2285"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2437"/>
         <source>Rate stretch (S)</source>
         <translation>速率伸缩 (S)</translation>
     </message>
     <message>
         <location filename="../ui/panels/Timeline.ui" line="108"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2359"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2511"/>
         <source>Display properties for this composite shot.</source>
         <translation>显示此组合镜头的属性。</translation>
     </message>
@@ -8843,76 +9291,76 @@ Double-click to rename</source>
     </message>
     <message>
         <location filename="../src/ui/TimelineTreeRows.cpp" line="404"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="446"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="447"/>
         <source>Transform</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>变换</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="471"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="472"/>
         <source>Behaviors</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>行为</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1044"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1229"/>
         <source>Preset</source>
         <translation>预配置</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1044"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1229"/>
         <source>Reset to defaults</source>
         <translation>重置为默认值</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1050"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1235"/>
         <source>Save preset…</source>
         <translation>保存预设…</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1050"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1062"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1235"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1247"/>
         <source>Remove effect</source>
         <translation>移除效果</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1057"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1242"/>
         <source>Save preset</source>
         <translation>保存预设</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1062"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1247"/>
         <source>Apply preset</source>
         <translation>应用预设</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1088"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1273"/>
         <source>Parameter %1</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>参数 %1</translation>
     </message>
     <message>
         <location filename="../ui/panels/Timeline.ui" line="58"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2271"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2423"/>
         <source>Select (V)</source>
         <translation>选择 (V)</translation>
     </message>
     <message>
         <location filename="../ui/panels/Timeline.ui" line="67"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2273"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2425"/>
         <source>Hand / pan (H)</source>
         <translation>抓手 / 平移 (H)</translation>
     </message>
     <message>
         <location filename="../ui/panels/Timeline.ui" line="76"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2275"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2427"/>
         <source>Slice (C)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>切割 (C)</translation>
     </message>
     <message>
         <location filename="../ui/panels/Timeline.ui" line="116"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2340"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2492"/>
         <source>Snap (Shift+S)</source>
         <translation>吸附 (Shift+S)</translation>
     </message>
@@ -9005,56 +9453,57 @@ Double-click to rename</source>
         <translation>移除运动跟踪</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="434"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="435"/>
         <source>Models</source>
         <translation>模型</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="716"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1093"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="899"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1278"/>
         <source>Toggle keyframe at the playhead</source>
         <translation>添加或删除播放头位置的关键帧</translation>
     </message>
     <message>
-        <location filename="../src/ui/MainWindow.cpp" line="2051"/>
-        <location filename="../src/ui/MainWindow.cpp" line="2159"/>
-        <location filename="../src/ui/TimelineEditing.cpp" line="218"/>
-        <location filename="../src/ui/TimelineEditing.cpp" line="280"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2093"/>
+        <location filename="../src/ui/MainWindow.cpp" line="2217"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="248"/>
         <location filename="../src/ui/TimelineEditing.cpp" line="319"/>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="726"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="358"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="909"/>
         <source>Set %1</source>
         <translation>设置 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineEditing.cpp" line="100"/>
-        <location filename="../src/ui/TimelineEditing.cpp" line="428"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="103"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="131"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="467"/>
         <location filename="../src/ui/TimelineTreeRows.cpp" line="267"/>
-        <location filename="../src/ui/TimelineWidget.cpp" line="2009"/>
+        <location filename="../src/ui/TimelineWidget.cpp" line="2160"/>
         <source>Add %1</source>
         <translation>添加 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineEditing.cpp" line="434"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="473"/>
         <source>No compatible effects installed</source>
         <translation>未安装兼容的效果</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineTreeRows.cpp" line="1057"/>
+        <location filename="../src/ui/TimelineTreeRows.cpp" line="1242"/>
         <source>Name</source>
         <translation>名称</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineEditing.cpp" line="516"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="555"/>
         <source>Add mask</source>
         <translation>添加蒙版</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineEditing.cpp" line="528"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="567"/>
         <source>Add freehand mask</source>
         <translation>添加自由绘制蒙版</translation>
     </message>
     <message>
-        <location filename="../src/ui/TimelineEditing.cpp" line="542"/>
+        <location filename="../src/ui/TimelineEditing.cpp" line="581"/>
         <source>Analyze motion track</source>
         <translation>分析运动跟踪</translation>
     </message>
@@ -9333,192 +9782,202 @@ This may cause rendering performance to degrade.</source>
         <translation>自由绘制蒙版工具 (F)</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1102"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1105"/>
         <source>Orbit Tool (B)</source>
         <translation>环绕工具 (B)</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1127"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1114"/>
+        <source>Orbit Around Selected Layers</source>
+        <translation>围绕选定图层旋转</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1115"/>
+        <source>Orbit Around Clicked Point</source>
+        <translation>绕点击处旋转</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1155"/>
         <source>Freehand Path Tool</source>
         <translation>手绘路径工具</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1204"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1232"/>
         <source>%1 (R)</source>
         <translation>%1 (R)</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1206"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1234"/>
         <source>%1 (E)</source>
         <translation>%1 (E)</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1223"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1251"/>
         <source>View</source>
         <translation>视图</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1238"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1266"/>
         <source>1 View</source>
         <translation>1个视图</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1239"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1267"/>
         <source>2 Views</source>
         <translation>2个视图</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1240"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1268"/>
         <source>2 over 1</source>
         <translation>上2下1</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1241"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1269"/>
         <source>4 Views</source>
         <translation>4个视图</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1242"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1270"/>
         <source>4 in a Row</source>
         <translation>4个视图横排</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1290"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1318"/>
         <source>Options</source>
         <translation>选项</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1298"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1326"/>
         <source>Show Motion Path</source>
         <translation>显示运动路径</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1304"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1332"/>
         <source>Background Color</source>
         <translation>背景色</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1307"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1335"/>
         <source>Viewer Background Color</source>
         <translation>查看器背景颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1313"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1341"/>
         <source>Checkerboard Background</source>
         <translation>查看版背景</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1321"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1349"/>
         <source>Color Channels</source>
         <translation>色彩通道</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1330"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1358"/>
         <source>RGB</source>
         <translation>RGB</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1331"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1359"/>
         <source>RGB Straight</source>
         <translation>RGB直</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1332"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1360"/>
         <source>Red</source>
         <translation>红色</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1333"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1361"/>
         <source>Green</source>
         <translation>绿色</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1334"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1362"/>
         <source>Blue</source>
         <translation>蓝色</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1335"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1363"/>
         <source>Alpha</source>
         <translation>透明度</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1368"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1396"/>
         <source>Scale to Fit</source>
         <translation>缩放以适合</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1374"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1402"/>
         <source>Zoom In</source>
         <translation>放大</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1380"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1408"/>
         <source>Zoom Out</source>
         <translation>缩小</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1402"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1430"/>
         <source>Preview quality and resolution</source>
         <translation>预览质量与分辨率</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1412"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1440"/>
         <source>Final</source>
         <translation>最后</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1413"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1441"/>
         <source>Draft</source>
         <translation>草稿</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1414"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1442"/>
         <source>Quick</source>
         <translation>快</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1415"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1443"/>
         <source>Fastest</source>
         <translation>最快</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1423"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1451"/>
         <source>Antialiased</source>
         <translation>抗锯齿</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1424"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1452"/>
         <source>Full</source>
         <translation>完整</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1425"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1453"/>
         <source>1/2</source>
         <translation>1/2</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1426"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1454"/>
         <source>1/4</source>
         <translation>1/4</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1472"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1500"/>
         <source>Playback Quality</source>
         <translation>播放品质</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1473"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1501"/>
         <source>Playback Resolution</source>
         <translation>播放分辨率</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1475"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1503"/>
         <source>Paused Quality</source>
         <translation>暂停的质量</translation>
     </message>
     <message>
-        <location filename="../src/ui/ViewerWidget.cpp" line="1476"/>
+        <location filename="../src/ui/ViewerWidget.cpp" line="1504"/>
         <source>Paused Resolution</source>
         <translation>暂停的分辨率</translation>
     </message>

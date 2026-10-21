@@ -1,13 +1,39 @@
 ﻿# RE / Анализ VegasEffects.exe (VEGAS Effects, ex-HitFilm)
 
+> Навигация видов (11 октября 2026): `OpenGLView` mousePress (0x1408f52c0) выбирает временный режим
+> по кнопке (1 левая, 2 правая, 4 средняя) и модификаторам: без Ctrl/Alt — правая 0x3ea (Hand),
+> средняя 0x3f7 (Rotate Camera); Ctrl — левая 0x3f5 (Pan Camera), правая 0x3f8 (Zoom Camera); Alt —
+> левая 0x3f3 (Orbit Around Selected Layers), средняя 0x3f5, правая 0x3f6 (Dolly Camera). Фабрика
+> режимов `FUN_1409145c0` (0x3e9 Selection, 0x3ea Hand, 0x3f3/0x3f4 Orbit, 0x3f5…0x3f8 — Pan, Dolly,
+> Rotate, Zoom Camera). `CameraController::Navigate` (`FUN_140918a50`): режим → слот контроллера (1→12
+> наезд, 2→11 панорама, 3→13 зум протяжкой, 4→14 вращение на месте, 5→15 = 11, 6→16 колесо, 7→18 облёт
+> с опорной точкой). Опорная точка `OrbitToolMode` (`FUN_140955170`): 0x3f3 — среднее мировых позиций
+> выделенных слоёв (`FUN_140953ce0`), 0x3f4 — точка под щелчком (`FluxSelect::ClickIntersect`,
+> `FUN_140953ad0`; без попадания тоже (0, 0, 0)), иначе (0, 0, 0). Оба варианта Orbit — проверяемые
+> QAction одной группы инструментов (`FUN_1408d5580`): «Orbit Around Selected Layers» (data 0x3f3,
+> команда 0x1392) и «Orbit Around Clicked Point» (0x3f4); кнопка `toolButtonCameraOrbit` в
+> `FUN_140911470` — DelayedPopup со стрелкой, как `toolButtonMaskShape` и `toolButtonMaskPen`.
+> Константы: облёт 0.0052359878 рад/px, вращение 0.1°/px,
+> зум 0.001/px (минимум 0.0002).
+
+> Alignment в группе Transform (10 октября 2026): `FUN_14050fec0` строит списки — 2D-слой: None 0,
+> Along Motion Path 1, оси X 1, Y 2; 3D-слой: None, Along Motion Path, Towards Active Camera 2, Towards
+> Layer 5, оси X, Y, Z 3; камера и свет: None, Along Motion Path, Towards Target Position 4, Towards
+> Layer; точка: None, Towards Target Position, Towards Layer (строки контекста `CompositionModel`).
+> Подписи строк — `AssetLayerGroupFactory` «Alignment», «Alignment Axis», «Alignment Layer», «Target»;
+> правки — `DataUtilities` «Set Layer Alignment», «Set Layer Alignment Axis», «Set Layer Alignment
+> Layer». `FluxCamera::OrientateToCamera`/`AutoOrientMatrix` вызываются только контролами Вьювера
+> (`FUN_140941c90`, `FUN_1409cf360`, `FUN_1409cfb80`) и облётом камеры (`FUN_140918830`).
+
 > Группа Material таймлайна (10 октября 2026): `AssetLayerGroupFactory` `FUN_1405e0130` — строки по
 > `LayerType`: Illuminated (все), Receives Shadows (кроме Effect3D), Casts Shadows, Cast Shadows If
-> Visibility Is Off (все), Receives/Casts Reflections и Cast Reflections If Visibility Is Off
-> (Asset, Text, Model), Self Shadow Bias (только Model), Environment Map (None / Use Composite Shot /
-> Use Layer, Layer; Model и Text), Casts/Receives Ambient Occlusion и группа Ambient Occlusion
-> (Samples, Sample Radius, Intensity, Depth Scale, Bias, Blur Radius, Depth Falloff, Include Semi
-> Transparent Triangles), Billboarded Lights и Billboarded Shadows (кроме Text и Model), Ambient,
-> Diffuse, Specular, Shininess, Emissive (кроме Model), Specular/Diffuse Reflectivity (Asset, Text).
+> Visibility Is Off (все), Self Shadow Bias (только Model), Receives Reflections, Casts Reflections и
+> Cast Reflections If Visibility Is Off (Asset, Text, Model), Environment Map (None 1000 / Use Composite
+> Shot 1001 / Use Layer 1002, при Use Layer — строка «Layer» с `environmentMapLayerID`; Model и Text), Receives Ambient Occlusion, Casts Ambient Occlusion и группа
+> Ambient Occlusion (`materialAmbientOcclusion`: Samples, Sample Radius, Intensity %, Depth Scale %,
+> Bias, Blur Radius, Depth Falloff %, у Model ещё Include Semi Transparent Triangles) — у Asset, Text
+> и Model; у Effect3D — только Casts Ambient Occlusion; Billboarded Lights и Billboarded Shadows (кроме Text и Model), Ambient,
+> Diffuse, Specular, Shininess, Emissive (кроме Model), Specular Reflectivity (Asset, Text) и Diffuse Reflectivity (Text), обе в «%».
 
 > Контролы 3D-объектов Вьювера (10 октября 2026): `biff::ui::viewer::CameraLayerControl` (vtable
 > 0x141328af0; слот 16 `FUN_1409c07b0` — тело камеры `FUN_1409c1130` и рамка обзора
@@ -20,7 +46,10 @@
 > `PointLightReachControl` (0x14132a560; слот 16 `FUN_1409eef70` — кольцо из 100 точек радиусом
 > Reach на экране), `SpotLightControl` (0x14132a690; слот 16 `FUN_1409f0900` — кольца на 40 и 250
 > единицах (`UNK_141333258`, `UNK_1413332f0`) и образующие `FUN_1409f1900`),
-> `SpotLightTargetControl` (0x14132be60). Цвет — статический `BiffColor` 0x14155dd40 = (0.25, 0.5,
+> `SpotLightTargetControl` (0x14132be60; слот 16 `FUN_140a17880` — та же текстура, что у `OriginControl`
+> типа 0: 0 `:/images/images/crosshairs.png`, 1 `crosshairs-hover.png` при наведении/выделении, флаги
+> +0x4e/+0x4f; кэш текстур `FUN_14091d4c0` держит только эти две; `OriginControl` другого типа рисует
+> текстуру с номером своего типа, `MaskOriginControl` — `crosshairs.png`/`crosshairs-checked.png`). Цвет — статический `BiffColor` 0x14155dd40 = (0.25, 0.5,
 > 1, 1) (`FUN_140182d40`), толщина — масштаб интерфейса × 1.5 (`DAT_141333150`). Источник
 > «defaultLight» (`FUN_1404ec560`) — свет превью модели в `Model3DSettingsDialog`, не сцены.
 

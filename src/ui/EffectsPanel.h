@@ -8,6 +8,7 @@
 #include <QVector>
 
 #include "plugin/EffectSpec.h"
+#include "project/EffectPresets.h"
 
 class QLabel;
 class QLineEdit;
@@ -15,6 +16,8 @@ class QToolButton;
 
 namespace openvegas {
 namespace ui {
+
+class EffectsFavorites;
 
 // Mirrors the reference "Effects" panel (type 4). Layout follows the reference
 // screenshot: a "Search in Effects" field, a "Show All" row, a headerless
@@ -29,16 +32,43 @@ public:
     void setEffects(const QVector<plugin::EffectSpec>& effects);
     void showAll();
 
-    // Favourites are held in memory only; the reference persists them, but the
-    // screenshots show no storage detail to mirror.
+    // The favourite and recent effects, kept as the reference keeps them
+    // (EffectsFavorites); the tree shows them first, Favorites then Recents.
+    // Without one the favourites are only this panel's.
+    void setFavoritesManager(EffectsFavorites* favorites);
     QStringList favourites() const;
     void setFavourites(const QStringList& ids);
+    QStringList recents() const;
+
+    // Effect presets (.hfpr) from `directory` (Options/PresetsPath, the
+    // Presets folder of the user data), listed under 2D Presets and
+    // 3D Presets; reloadPresets() reads the folder again.
+    void setPresetsDirectory(const QString& directory);
+    QString presetsDirectory() const { return m_presetsDirectory; }
+    void reloadPresets();
+    QVector<project::EffectPreset> presets() const { return m_presets; }
+    // The EffectsActions preset entries without their dialogs: copies into
+    // the presets folder under a free name ("name (N).hfpr"), copies out to
+    // `directory`, a new file name in the same folder, deleted files. True
+    // when every file made it.
+    bool importPresetFiles(const QStringList& files);
+    bool exportPresetFiles(const QStringList& presetPaths, const QString& directory);
+    bool renamePreset(const QString& presetPath, const QString& name);
+    bool removePresets(const QStringList& presetPaths);
+    // A tree row's preset file, empty for any other row.
+    static QString presetPathOf(const QTreeWidgetItem* item);
+    // The text of About... (VegasEffects.exe 140673150): the plugin's name
+    // with ", V<major>.<minor>", then a blank line and its author and
+    // copyright when it has any.
+    static QString aboutText(const plugin::EffectSpec& spec);
 
 signals:
     // Browsing the tree - one click just previews the entry.
     void effectSelected(const plugin::EffectSpec& spec);
     // Committing to it: double-click applies the effect to the current clip.
     void effectActivated(const plugin::EffectSpec& spec);
+    // A preset row double-clicked: its effects go on the current clip.
+    void presetActivated(const QString& presetPath);
 
 protected:
     bool eventFilter(QObject* object, QEvent* event) override;
@@ -48,6 +78,10 @@ private:
     void applyFilter();
     void updateItemCount();
     void toggleFavourite(const QString& effectId);
+    // The reference's EffectsActions menu (VegasEffects.exe 140681870), the
+    // entries for effects: Add to / Remove from Favorites, Clear Recents,
+    // Collapse All. The preset entries need effect presets.
+    void showContextMenu(const QPoint& position);
     // Icon standing for the plugin family, as the reference marks its rows.
     static QIcon iconForKind(plugin::PluginKind kind);
     QTreeWidgetItem* addEffectRow(QTreeWidgetItem* parent, const plugin::EffectSpec& spec);
@@ -59,6 +93,9 @@ private:
     QLabel* m_itemCount = nullptr;
     QVector<plugin::EffectSpec> m_effects;
     QSet<QString> m_favourites;
+    EffectsFavorites* m_favoritesManager = nullptr;
+    QString m_presetsDirectory;
+    QVector<project::EffectPreset> m_presets;
     QPoint m_dragStart; // press position in the tree viewport
 };
 

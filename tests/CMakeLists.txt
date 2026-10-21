@@ -10,7 +10,7 @@ add_executable(textpanel_regression textpanel_regression.cpp
     ../src/ui/TextSettingsDialog.cpp ../src/ui/TextSettingsDialog.h
     ../src/composition/TextStyle.cpp ../src/render/TextRender.cpp
     ../src/composition/Composition.cpp ../src/composition/KeyFrame.cpp
-    ../src/project/VegfxSerializer.cpp ../src/project/VegfxMerge.cpp ../src/media/MediaManager.cpp ../src/media/MediaAsset.cpp
+    ../src/project/VegfxSerializer.cpp ../src/project/VegfxMerge.cpp ../src/project/EffectPresets.cpp ../src/media/MediaManager.cpp ../src/media/MediaAsset.cpp
     ../src/media/VideoProbe.cpp ../src/media/Vlc4Adapter.cpp ../src/media/VlcBackend.cpp ../src/core/Log.cpp
     ../src/model3d/ModelLoader.cpp ../src/model3d/ModelImportSettings.cpp
     ../src/model3d/AlembicReader.cpp ../src/model3d/FbxReader.cpp ../src/model3d/GltfReader.cpp ../src/model3d/LwoReader.cpp ../src/model3d/ThreeDsReader.cpp
@@ -47,6 +47,8 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/ui/Preview360VideoPanel.cpp
     ../src/ui/TrimmerPanel.cpp ../src/ui/TrimmerPanel.h
     ../src/ui/HistoryPanel.cpp ../src/ui/HistoryPanel.h
+    ../src/ui/EffectsFavorites.cpp ../src/ui/EffectsFavorites.h
+    ../src/ui/EffectsPanel.cpp ../src/ui/EffectsPanel.h ../ui/panels/Effects.ui
     ../src/ui/StartPanel.cpp ../src/ui/StartPanel.h
     ../src/ui/LibraryPanel.cpp ../src/ui/LibraryPanel.h
     ../src/ui/MediaPanel.cpp ../src/ui/MediaPanel.h
@@ -65,14 +67,18 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/ui/ViewerTransportBar.cpp ../src/ui/ViewerTransportBar.h
     ../src/ui/DockTitleBar.cpp ../src/ui/DockTitleBar.h
     ../src/ui/LayoutPanel.cpp ../src/ui/LayoutPanel.h
+    ../src/ui/ScrubberSpinBox.cpp ../src/ui/ScrubberSpinBox.h
     ../src/app/Settings.cpp ../src/app/Settings.h
+    ../src/app/FileAssociation.cpp ../src/app/FileAssociation.h
     ../src/render/RenderManager.cpp ../src/render/AudioExport.cpp ../src/model3d/Renderer3D.cpp
     ../src/render/PreRenderManager.cpp ../src/render/PreRenderManager.h
+    ../src/render/NestedAudioMix.cpp ../src/render/NestedAudioMix.h
     ../src/render/TextGeometry.cpp ../src/render/TextGeometry.h
     ../src/render/LayerGeometry.cpp ../src/render/LayerGeometry.h
     ../src/render/FrameDiskCache.cpp ../src/render/FrameDiskCache.h
     ../src/render/VideoEncoder.cpp ../src/render/VideoEncoder.h
     ../src/media/AudioWaveform.cpp ../src/media/AudioWaveform.h
+    ../src/media/ConformedAudio.cpp ../src/media/ConformedAudio.h
     ../src/media/DecodedFrameCache.cpp ../src/media/DecodedFrameCache.h
     ../src/media/ProxyMedia.cpp ../src/media/ProxyMedia.h
     ../src/ui/PromptMessage.cpp ../src/ui/PromptMessage.h
@@ -109,6 +115,7 @@ set_tests_properties(timeline_regression PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM
 add_executable(options_regression options_regression.cpp
     ../src/ui/OptionsDialog.cpp ../src/ui/OptionsDialog.h ../ui/OptionsDialog.ui
     ../src/ui/Theme.cpp ../src/app/Settings.cpp ../src/app/Translations.cpp
+    ../src/app/PluginFolders.cpp ../src/app/PluginFolders.h
     ../src/ui/PromptMessage.cpp ../src/ui/PromptMessage.h
     ../src/ui/AutoSave.cpp ../src/ui/AutoSave.h
     ../src/app/AVTemplates.cpp ../src/app/AVTemplates.h

@@ -26,11 +26,13 @@ class QTemporaryDir;
 #include "model3d/ModelImportSettings.h"
 #include "plugin/PluginManager.h"
 #include "render/PreRenderManager.h"
+#include "render/NestedAudioMix.h"
 #include "render/LayerGeometry.h"
 #include "render/RenderManager.h"
 #include "render/ExportJob.h"
 #include "ui/CameraRule.h"
 #include "ui/EffectInspector.h"
+#include "ui/EffectsFavorites.h"
 #include "ui/EffectsPanel.h"
 #include "ui/LayerPanel.h"
 #include "ui/TrackPanel.h"
@@ -52,6 +54,7 @@ class QTemporaryDir;
 namespace openvegas {
 namespace media {
 class ProxyGenerator;
+class ConformedAudioCache;
 }
 namespace app {
 class AppMain;
@@ -85,6 +88,11 @@ public:
                    render::RenderManager* renderManager);
 
     void regenerateEffects(plugin::PluginManager* pluginManager);
+    // What scans the plugin folders again once Options > Plugins changed
+    // them (AppMain::rescanPlugins).
+    void setPluginRescan(std::function<void()> rescan) { m_pluginRescan = std::move(rescan); }
+    // Options, opened on its Plugins page.
+    void showPluginOptions();
 
     // Opens a project file, as used for the command line / shell file
     // association. Returns false when the file cannot be loaded.
@@ -347,6 +355,9 @@ protected:
     render::RenderManager* m_renderManager = nullptr;
     std::array<render::RenderManager*, 4> m_viewRenderers{};
     std::array<render::ViewCameraState, 4> m_viewStates;
+    // What the orbit under way turns its view's camera about (chosen as it
+    // began: ViewerWidget::viewOrbitStarted).
+    QVector3D m_orbitPivot;
 
     EffectsPanel* m_effectsPanel = nullptr;
     MediaPanel* m_mediaPanel = nullptr;
@@ -390,6 +401,27 @@ protected:
     ViewerTransportBar* m_transportBar = nullptr;
     TimelineWidget* m_timeline = nullptr;
     OptionsDialog* m_optionsDialog = nullptr;
+    std::function<void()> m_pluginRescan;
+    // The media's audio conformed to the shot's rate, read by playback.
+    media::ConformedAudioCache* m_conformedAudio = nullptr;
+    // Mixes of nested shots whose composite clips process them.
+    render::NestedAudioMixCache* m_nestedMixes = nullptr;
+    // Clips whose native audio effects asked playback for more than it had
+    // (AudioPlayer::nativeEffectsNeedWholeClip), processed whole; and what
+    // each clip of the last prepareAudioSource would be processed from.
+    render::ProcessedClipAudioCache* m_processedAudio = nullptr;
+    QSet<QString> m_wholeClipAudio;
+    QHash<QString, render::ProcessedClipAudioCache::Request> m_clipProcessRequests;
+    // Plays the audio again from the playhead when playing (a processed
+    // clip has arrived).
+    void restartPlaybackAudio();
+    // Effect presets: the folder (Options/PresetsPath, else the Presets
+    // folder of the user data), applying one to the selected clip, and
+    // Create Preset (shown while Enable Effect Preset Creation is on).
+    QString effectPresetsDirectory() const;
+    void applyEffectPreset(const QString& presetPath);
+    void createEffectPreset();
+    QAction* m_createPresetAction = nullptr;
 
     double m_inPoint = -1.0;
     double m_outPoint = -1.0;
@@ -406,7 +438,8 @@ protected:
     composition::Clip m_clipClipboard;
     bool m_clipboardHasLayer = false;
     bool m_clipboardHasClip = false;
-    QStringList m_recentEffectIds;
+    // Favourite and recent effects (Effects panel, Effects menu).
+    EffectsFavorites* m_effectFavorites = nullptr;
 
     // Undo history for model edits. The Edit menu, the toolbar's undo/redo and
     // the History panel are all views onto this one stack.

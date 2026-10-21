@@ -13,7 +13,10 @@
 
 #include "composition/KeyFrame.h"
 #include "composition/TextStyle.h"
+#include "project/NativeEffectCatalog.h"
 #include "project/VegfxMerge.h"
+#include <QTextStream>
+#include <optional>
 #include <QFile>
 #include <QSaveFile>
 #include <QFileInfo>
@@ -768,7 +771,7 @@ QDomElement modelMaterialElement(QDomDocument& doc, const model3d::Material& mat
         element.appendChild(f);
     }
     number("CK_Roughness", material.cookTorranceRoughness * 100.0);
-    number("ReflectionType", 1);
+    number("ReflectionType", int(material.reflectionMode));
     number("OverrideMaterial", 0);
     text("EmissiveTextureFilename", material.emissiveMap);
     text("OcclusionTextureFilename", material.occlusionMap);
@@ -822,6 +825,8 @@ void readModelMaterial(const QDomElement& element, model3d::Material* material)
     material->opacity = qBound(0.0, number("Opacity", material->opacity * 100.0) / 100.0, 1.0);
     material->indexOfRefraction = number("RefractionIndex", material->indexOfRefraction);
     material->refractionAmount = number("RefractionAmount", material->refractionAmount * 100.0) / 100.0;
+    material->reflectionMode = int(number("ReflectionType", int(material->reflectionMode))) == 0
+        ? model3d::ReflectionMode::Planar : model3d::ReflectionMode::Spherical;
     material->cookTorranceSpecularReflectance =
         number("CK_SpecularReflectance", material->cookTorranceSpecularReflectance * 100.0) / 100.0;
     const QDomElement fresnel = element.firstChildElement(QStringLiteral("CK_Fresnel"));
@@ -870,6 +875,14 @@ composition::LayerTransform readTransform(const QDomElement& propertyManager, do
     // scalars rotationX/rotationY. A 2D layer simply carries zeros there.
     const QString Z = QStringLiteral("Z");
     t.positionZ = propAxis(propertyManager, QStringLiteral("position"), Z, 0.0);
+    // A camera's, a light's or a point layer's "target".
+    t.targetX = propAxis(propertyManager, QStringLiteral("target"), X, 0.0);
+    t.targetY = propAxis(propertyManager, QStringLiteral("target"), Y, 0.0);
+    t.targetZ = propAxis(propertyManager, QStringLiteral("target"), Z, 0.0);
+    const QDomElement target = propElement(propertyManager, QStringLiteral("target"));
+    t.targetXCurve = propAnimation(target, fps, X);
+    t.targetYCurve = propAnimation(target, fps, Y);
+    t.targetZCurve = propAnimation(target, fps, Z);
     t.positionZCurve = propAnimation(pos, fps, Z);
     t.anchorPointZ = propAxis(propertyManager, QStringLiteral("anchorPoint"), Z, 0.0);
     t.scaleZPercent = propAxis(propertyManager, QStringLiteral("scale"), Z, 100.0);
@@ -1401,10 +1414,11 @@ QVariant readVariant(const QDomElement& element)
     return variantFromText(element.text(), element.attribute(QStringLiteral("Type")));
 }
 
-// Effect instances and their parameter curves are kept in an ignorable
-// extension. The native PropertyManager schema is plugin-specific; writing a
-// guessed native block would make reference compatibility worse, while this
-// block makes an OpenVegas save/load lossless and is ignored by VEGAS Effects.
+// Effect instances and their parameter curves, every one of them - built-in
+// effects and transitions included - in an ignorable extension that makes an
+// OpenVegas save/load lossless and that VEGAS Effects ignores. Native effects
+// go into the reference's own lists as well (nativefx below), which is what
+// a file of the reference is read from.
 void appendEffectsExtension(QDomDocument& doc, QDomElement& wrapper,
                             const composition::Clip& clip)
 {
@@ -1526,6 +1540,391 @@ bool readEffectsExtension(const QDomElement& wrapper, composition::Clip* clip)
     }
     return true;
 }
+
+// The reference's own effect lists (EffectsHelper::SerializeEffects and
+// friends): each native effect an <Instance Version="8"> as
+// EffectInstance::Serialize writes it (Project.dll 0x1803f4310) - ID, Name,
+// PluginID, PluginName, PluginVersion (Ma/Mi/Re/Bu), ParentID,
+// ParentTimelineID, Enabled, CreatedInComp, InitializedUIState,
+// ParentLayerLastSize (X/Y), the PropertyManager of the keys the module
+// registered (a float slider or an angle <fl>, an int slider or a combo box
+// <i>, a check box or a button <b>, a colour <cl>, a point <p2>/<p3>, a layer
+// picker <id>, text <st> - PluginHostAPI::Create* in Tannen.dll), UIState,
+// then the module's own data (<InstanceBytes>, SerializeInstanceDataBytes).
+// The reader takes a property by its name (SynchronizeSourceWithDest), so
+// what the module did not register is left out.
+namespace nativefx {
+
+const QString kZeroId = QStringLiteral("00000000-0000-0000-0000-000000000000");
+
+QString containerName(project::NativeEffectEntry::Container container)
+{
+    switch (container) {
+    case project::NativeEffectEntry::Container::Effects: return QStringLiteral("Effects");
+    case project::NativeEffectEntry::Container::GeometryEffects: return QStringLiteral("GeometryEffects");
+    case project::NativeEffectEntry::Container::BehaviorEffects: return QStringLiteral("BehaviorEffects");
+    case project::NativeEffectEntry::Container::None: break;
+    }
+    return QString();
+}
+
+QString number(double value)
+{
+    return QString::number(value, 'g', 9);
+}
+
+bool isText(const QString& type)
+{
+    return type == QLatin1String("string") || type == QLatin1String("multiline")
+           || type == QLatin1String("save-file") || type == QLatin1String("open-file")
+           || type == QLatin1String("directory");
+}
+
+QDomElement prop(QDomDocument& doc, QDomElement& propertyManager, const QString& name, int type, bool spatial,
+                 bool interpolates)
+{
+    QDomElement element = doc.createElement(QStringLiteral("Prop"));
+    element.setAttribute(QStringLiteral("Type"), type);
+    element.setAttribute(QStringLiteral("Spatial"), spatial ? 1 : 0);
+    element.setAttribute(QStringLiteral("CanInterpT"), interpolates ? 1 : 0);
+    addText(doc, element, QStringLiteral("Name"), name);
+    propertyManager.appendChild(element);
+    return element;
+}
+
+QDomElement holder(QDomDocument& doc, QDomElement& parent)
+{
+    QDomElement element = doc.createElement(QStringLiteral("Static"));
+    element.setAttribute(QStringLiteral("V"), 4);
+    parent.appendChild(element);
+    return element;
+}
+
+QStringList components(const QString& value, int count)
+{
+    QStringList parts = value.split(QLatin1Char(','));
+    while (parts.size() < count) parts.append(QStringLiteral("0"));
+    for (QString& part : parts) part = part.trimmed();
+    return parts;
+}
+
+int choiceIndex(const QString& value, const QStringList& choices)
+{
+    bool ok = false;
+    const int numeric = value.trimmed().toInt(&ok);
+    if (ok) return numeric;
+    for (int i = 0; i < choices.size(); ++i)
+        if (choices.at(i).compare(value.trimmed(), Qt::CaseInsensitive) == 0) return i;
+    return 0;
+}
+
+bool isScalar(const QString& type)
+{
+    return type == QLatin1String("double") || type == QLatin1String("angle");
+}
+
+// A value of `p`'s type, as this port keeps it, into `parent`.
+void writeValue(QDomDocument& doc, QDomElement& parent, const project::NativeEffectEntry::Parameter& p,
+                const QString& value)
+{
+    const QString& type = p.type;
+    if (isScalar(type)) {
+        addText(doc, parent, QStringLiteral("fl"), number(value.toDouble()));
+    } else if (type == QLatin1String("int") || type == QLatin1String("enum")) {
+        addText(doc, parent, QStringLiteral("i"), QString::number(choiceIndex(value, p.choices)));
+    } else if (type == QLatin1String("bool") || type == QLatin1String("button")) {
+        const QString v = value.trimmed();
+        addText(doc, parent, QStringLiteral("b"),
+                v == QLatin1String("1") || v.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0
+                    ? QStringLiteral("1") : QStringLiteral("0"));
+    } else if (type == QLatin1String("color")) {
+        const QColor color(value.trimmed());
+        parent.appendChild(colorElement(doc, color.isValid() ? color : QColor(Qt::black)));
+    } else if (type == QLatin1String("point2d") || type == QLatin1String("point3d")) {
+        const bool three = type == QLatin1String("point3d");
+        const QStringList parts = components(value, three ? 3 : 2);
+        QDomElement point = doc.createElement(three ? QStringLiteral("p3") : QStringLiteral("p2"));
+        point.setAttribute(QStringLiteral("X"), number(parts.at(0).toDouble()));
+        point.setAttribute(QStringLiteral("Y"), number(parts.at(1).toDouble()));
+        if (three) point.setAttribute(QStringLiteral("Z"), number(parts.at(2).toDouble()));
+        parent.appendChild(point);
+    } else if (type == QLatin1String("layer") || type == QLatin1String("mask")) {
+        addText(doc, parent, QStringLiteral("id"), value.trimmed().isEmpty() ? kZeroId : value.trimmed());
+    } else {
+        addText(doc, parent, QStringLiteral("st"), value);
+    }
+}
+
+void appendProperty(QDomDocument& doc, QDomElement& propertyManager, const project::NativeEffectEntry::Parameter& p,
+                    const composition::Effect& effect, int index, double fps)
+{
+    const QString value = index < effect.parameterValues.size() && !effect.parameterValues.at(index).isEmpty()
+        ? effect.parameterValues.at(index) : p.defaultValue;
+    const QString& type = p.type;
+    if (type == QLatin1String("label")) return;
+    // Type 0 for what animates smoothly (floats, colours, points - spatial),
+    // 1 for discrete values; a combo box does not interpolate in time.
+    const bool smooth = isScalar(type) || type == QLatin1String("color") || type == QLatin1String("point2d")
+                        || type == QLatin1String("point3d");
+    const bool spatial = type == QLatin1String("point2d") || type == QLatin1String("point3d");
+    const bool interpolates = smooth || (type == QLatin1String("int") && p.choices.isEmpty());
+    QDomElement element = prop(doc, propertyManager, p.name, smooth ? 0 : 1, spatial, interpolates);
+    QDomElement stat = holder(doc, element);
+    writeValue(doc, stat, p, value);
+    const auto curve = effect.animation.constFind(index);
+    if (curve == effect.animation.cend() || curve->isEmpty()) return;
+    const QVector<composition::KeyFrame> keys = curve->all();
+    const auto numeric = [&](const QVariant& v) { return isScalar(type) ? v.toDouble() : 0.0; };
+    QDomElement animation = doc.createElement(QStringLiteral("Animation"));
+    for (int k = 0; k < keys.size(); ++k) {
+        const composition::KeyFrame& key = keys.at(k);
+        const bool hasPrevious = k > 0, hasNext = k + 1 < keys.size();
+        appendKey(doc, animation, key, fps, hasPrevious ? keyTimeMs(keys.at(k - 1).frame, fps) : 0.0,
+                  hasNext ? keyTimeMs(keys.at(k + 1).frame, fps) : 0.0,
+                  hasPrevious ? numeric(keys.at(k - 1).value) : 0.0,
+                  hasNext ? numeric(keys.at(k + 1).value) : 0.0, hasPrevious, hasNext,
+                  [&](QDomElement& holderElement) {
+                      const QString text = key.value.typeId() == QMetaType::Bool
+                          ? (key.value.toBool() ? QStringLiteral("true") : QStringLiteral("false"))
+                          : key.value.toString();
+                      writeValue(doc, holderElement, p, text);
+                  });
+    }
+    element.appendChild(animation);
+}
+
+// The effect's <Instance> in `container`.
+void appendInstance(QDomDocument& doc, QDomElement& container, const project::NativeEffectEntry& entry,
+                    const composition::Effect& effect, const QString& instanceId, const QString& layerId,
+                    const QString& shotId, const QSizeF& layerSize, double fps)
+{
+    QDomElement instance = doc.createElement(QStringLiteral("Instance"));
+    instance.setAttribute(QStringLiteral("Version"), 8);
+    addText(doc, instance, QStringLiteral("ID"), instanceId);
+    addText(doc, instance, QStringLiteral("Name"), effect.name.isEmpty() ? entry.name : effect.name);
+    addText(doc, instance, QStringLiteral("PluginID"), entry.guid);
+    addText(doc, instance, QStringLiteral("PluginName"), entry.name);
+    QDomElement version = doc.createElement(QStringLiteral("PluginVersion"));
+    version.setAttribute(QStringLiteral("Ma"), entry.versionMajor);
+    version.setAttribute(QStringLiteral("Mi"), entry.versionMinor);
+    version.setAttribute(QStringLiteral("Re"), 0);
+    version.setAttribute(QStringLiteral("Bu"), 0);
+    instance.appendChild(version);
+    addText(doc, instance, QStringLiteral("ParentID"), layerId);
+    addText(doc, instance, QStringLiteral("ParentTimelineID"), shotId.isEmpty() ? kZeroId : shotId);
+    addText(doc, instance, QStringLiteral("Enabled"), effect.enabled ? QStringLiteral("1") : QStringLiteral("0"));
+    addText(doc, instance, QStringLiteral("CreatedInComp"), QStringLiteral("1"));
+    addText(doc, instance, QStringLiteral("InitializedUIState"), QStringLiteral("1"));
+    QDomElement size = doc.createElement(QStringLiteral("ParentLayerLastSize"));
+    size.setAttribute(QStringLiteral("X"), number(layerSize.width()));
+    size.setAttribute(QStringLiteral("Y"), number(layerSize.height()));
+    instance.appendChild(size);
+    QDomElement properties = doc.createElement(QStringLiteral("PropertyManager"));
+    properties.setAttribute(QStringLiteral("Version"), QStringLiteral("7"));
+    for (int i = 0; i < entry.parameters.size(); ++i) appendProperty(doc, properties, entry.parameters.at(i), effect, i, fps);
+    instance.appendChild(properties);
+    instance.appendChild(doc.createElement(QStringLiteral("UIState")));
+    if (!effect.instanceData.isEmpty())
+        addText(doc, instance, QStringLiteral("InstanceBytes"), QString::fromLatin1(effect.instanceData.toBase64()));
+    container.appendChild(instance);
+}
+
+// An <Instance> written back as it was read.
+void appendVerbatim(QDomDocument& doc, QDomElement& container, const QString& xml)
+{
+    QDomDocument fragment;
+    if (!fragment.setContent(xml)) return;
+    container.appendChild(doc.importNode(fragment.documentElement(), true));
+}
+
+QString textOf(const QDomElement& element)
+{
+    QString text;
+    QTextStream stream(&text);
+    element.save(stream, 0);
+    return text;
+}
+
+// The value a property of `type` holds, as this port keeps it.
+QString readHolderValue(const QDomElement& value, const project::NativeEffectEntry::Parameter& p)
+{
+    const QString& type = p.type;
+    if (type == QLatin1String("double") || type == QLatin1String("angle")) {
+        const QDomElement fl = value.firstChildElement(QStringLiteral("fl"));
+        const QDomElement db = value.firstChildElement(QStringLiteral("db"));
+        if (!fl.isNull()) return number(fl.text().toDouble());
+        if (!db.isNull()) return number(db.text().toDouble());
+    } else if (type == QLatin1String("int") || type == QLatin1String("enum")) {
+        const QDomElement i = value.firstChildElement(QStringLiteral("i"));
+        if (!i.isNull()) return QString::number(i.text().trimmed().toInt());
+    } else if (type == QLatin1String("bool") || type == QLatin1String("button")) {
+        const QDomElement b = value.firstChildElement(QStringLiteral("b"));
+        if (!b.isNull()) {
+            const QString text = b.text().trimmed();
+            return text == QLatin1String("1") || text.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0
+                ? QStringLiteral("true") : QStringLiteral("false");
+        }
+    } else if (type == QLatin1String("color")) {
+        const QDomElement cl = value.firstChildElement(QStringLiteral("cl"));
+        if (!cl.isNull()) {
+            const auto channel = [&](const char* key) {
+                return qBound(0.0, cl.attribute(QString::fromLatin1(key), QStringLiteral("1")).toDouble(), 1.0);
+            };
+            const QColor color = QColor::fromRgbF(float(channel("R")), float(channel("G")), float(channel("B")),
+                                                  float(channel("A")));
+            return color.alpha() == 255 ? color.name() : color.name(QColor::HexArgb);
+        }
+    } else if (type == QLatin1String("point2d") || type == QLatin1String("point3d")) {
+        for (const char* tag : {"p2", "p3", "v2", "v3"}) {
+            const QDomElement point = value.firstChildElement(QString::fromLatin1(tag));
+            if (point.isNull()) continue;
+            QStringList parts {number(point.attribute(QStringLiteral("X")).toDouble()),
+                               number(point.attribute(QStringLiteral("Y")).toDouble())};
+            if (type == QLatin1String("point3d")) parts << number(point.attribute(QStringLiteral("Z")).toDouble());
+            return parts.join(QLatin1Char(','));
+        }
+    } else if (type == QLatin1String("layer") || type == QLatin1String("mask")) {
+        const QDomElement id = value.firstChildElement(QStringLiteral("id"));
+        if (!id.isNull()) {
+            const QString text = id.text().trimmed();
+            return text == kZeroId ? QString() : text;
+        }
+    } else {
+        const QDomElement st = value.firstChildElement(QStringLiteral("st"));
+        if (!st.isNull()) return st.text();
+    }
+    return p.defaultValue;
+}
+
+QString readValue(const QDomElement& property, const project::NativeEffectEntry::Parameter& p)
+{
+    return readHolderValue(propValueHolder(property), p);
+}
+
+// The keys of a property that is not a float: each value whole, as this
+// port keys it (a colour "#rrggbb", a point "x,y"), at the key's time.
+composition::KeyFrameList readKeys(const QDomElement& property, const project::NativeEffectEntry::Parameter& p,
+                                   double fps)
+{
+    composition::KeyFrameList curve;
+    const QDomElement animation = property.firstChildElement(QStringLiteral("Animation"));
+    if (animation.isNull() || fps <= 0.0) return curve;
+    const bool discrete = !(p.type == QLatin1String("color") || p.type == QLatin1String("point2d")
+                            || p.type == QLatin1String("point3d")
+                            || (p.type == QLatin1String("int") && p.choices.isEmpty()));
+    curve.setCanInterpolate(!discrete);
+    for (QDomElement key = animation.firstChildElement(QStringLiteral("Key")); !key.isNull();
+         key = key.nextSiblingElement(QStringLiteral("Key"))) {
+        composition::KeyFrame frame;
+        frame.frame = int(qRound(key.attribute(QStringLiteral("Ti")).toDouble() / 1000.0 * fps));
+        frame.temporal = discrete ? composition::TemporalType::Hold
+                                  : temporalTypeFromId(key.attribute(QStringLiteral("Tp")).toInt());
+        const QString text = readHolderValue(key.firstChildElement(QStringLiteral("Vl")), p);
+        if (p.type == QLatin1String("int") || p.type == QLatin1String("enum")) frame.value = text.toInt();
+        else if (p.type == QLatin1String("bool") || p.type == QLatin1String("button"))
+            frame.value = text == QLatin1String("true");
+        else frame.value = text;
+        curve.add(frame);
+    }
+    return curve;
+}
+
+QVector<composition::Effect> readInstanceList(const QDomElement& list, const QString& tag, double fps);
+
+// The effects of the reference's own lists under `layerWrapper` (Effects,
+// GeometryEffects) and `named` (BehaviorEffects), in that order.
+QVector<composition::Effect> readInstances(const QDomElement& layerWrapper, const QDomElement& named, double fps)
+{
+    QVector<composition::Effect> effects;
+    const auto readList = [&](const QDomElement& parent, const QString& tag) {
+        effects += readInstanceList(parent.firstChildElement(tag), tag, fps);
+    };
+    readList(layerWrapper, QStringLiteral("Effects"));
+    readList(layerWrapper, QStringLiteral("GeometryEffects"));
+    readList(named, QStringLiteral("BehaviorEffects"));
+    return effects;
+}
+
+// Writes `effects` - native ones as <Instance>, unknown ones as they were
+// read - into `list`, whatever their kind (a preset's EffectsPreset holds all
+// of them).
+void appendInstanceList(QDomDocument& doc, QDomElement& list, const QVector<composition::Effect>& effects,
+                        const QString& layerId, const QString& shotId, const QSizeF& layerSize, double fps)
+{
+    for (int e = 0; e < effects.size(); ++e) {
+        const composition::Effect& effect = effects.at(e);
+        if (effect.isTransition()) continue;
+        if (!effect.nativeXml.isEmpty()) {
+            appendVerbatim(doc, list, effect.nativeXml);
+            continue;
+        }
+        const std::optional<project::NativeEffectEntry> entry = project::findNativeEffect(effect.pluginId.value());
+        if (!entry || entry->guid.isEmpty()) continue;
+        const QString instanceId = effect.instanceId.isValid()
+            ? effect.instanceId.value() : QUuid::createUuid().toString(QUuid::WithoutBraces);
+        appendInstance(doc, list, *entry, effect, instanceId, layerId, shotId, layerSize, fps);
+    }
+}
+
+QVector<composition::Effect> readInstanceList(const QDomElement& list, const QString& tag, double fps)
+{
+    QVector<composition::Effect> effects;
+    {
+        for (QDomElement instance = list.firstChildElement(QStringLiteral("Instance")); !instance.isNull();
+             instance = instance.nextSiblingElement(QStringLiteral("Instance"))) {
+            composition::Effect effect;
+            const QString guid = elemText(instance, QStringLiteral("PluginID")).trimmed();
+            effect.instanceId = core::Identifier(elemText(instance, QStringLiteral("ID")).trimmed());
+            effect.name = elemText(instance, QStringLiteral("Name"));
+            effect.enabled = elemText(instance, QStringLiteral("Enabled")).trimmed() != QLatin1String("0");
+            const QDomElement bytes = instance.firstChildElement(QStringLiteral("InstanceBytes"));
+            if (!bytes.isNull()) effect.instanceData = QByteArray::fromBase64(bytes.text().toLatin1());
+            const std::optional<project::NativeEffectEntry> entry = project::findNativeEffect(guid);
+            if (!entry) {
+                // Kept as the file had it, to go back out unchanged.
+                effect.pluginId = core::Identifier(guid);
+                if (effect.name.isEmpty()) effect.name = elemText(instance, QStringLiteral("PluginName"));
+                effect.nativeXml = textOf(instance);
+                effect.nativeContainer = tag;
+                effects.append(effect);
+                continue;
+            }
+            effect.pluginId = core::Identifier(entry->pluginId);
+            if (effect.name.isEmpty()) effect.name = entry->name;
+            const QDomElement properties = instance.firstChildElement(QStringLiteral("PropertyManager"));
+            for (int i = 0; i < entry->parameters.size(); ++i) {
+                const project::NativeEffectEntry::Parameter& p = entry->parameters.at(i);
+                const QDomElement property = propElement(properties, p.name);
+                effect.parameterValues.append(property.isNull() ? p.defaultValue : readValue(property, p));
+                if (property.isNull()) continue;
+                composition::KeyFrameList curve = isScalar(p.type) ? propAnimation(property, fps, QString())
+                                                                   : readKeys(property, p, fps);
+                if (curve.isEmpty()) continue;
+                curve.setDefaultValue(effect.parameterValues.last());
+                effect.animation.insert(i, curve);
+            }
+            effects.append(effect);
+        }
+    }
+    return effects;
+}
+
+} // namespace nativefx
+
+} // namespace
+
+QVector<composition::Effect> VegfxSerializer::effectsFromInstances(const QDomElement& list, double fps)
+{
+    return nativefx::readInstanceList(list, list.tagName(), fps);
+}
+
+void VegfxSerializer::appendEffectInstances(QDomDocument& doc, QDomElement& list,
+                                            const QVector<composition::Effect>& effects, double fps)
+{
+    nativefx::appendInstanceList(doc, list, effects, nativefx::kZeroId, nativefx::kZeroId, QSizeF(), fps);
+}
+
+namespace {
 
 void appendClipsExtension(QDomDocument& doc, QDomElement& wrapper,
                           const QVector<composition::Clip>& clips, bool force = false)
@@ -2049,6 +2448,9 @@ void readCompositionAsset(const QDomElement& compositionAsset,
         if (kindIt == kLayerElements.constEnd()) {
             continue;
         }
+        // A later clip of a layer of this port, written as a layer of its own
+        // for the reference: the layer's OpenVegasClips already holds it.
+        if (lw.hasAttribute(QStringLiteral("OpenVegasSliceOf"))) continue;
         composition::LayerKind layerKind = kindIt.value();
         const QString kindAttr = lw.attribute(QStringLiteral("OpenVegasKind"));
         if (!kindAttr.isEmpty()) {
@@ -2116,6 +2518,19 @@ void readCompositionAsset(const QDomElement& compositionAsset,
             layer.opacity = opacityPct / 100.0;
         }
         layer.transform = readTransform(pm, fps);
+        // <AutoOrient>, <AutoOrientPathAxis> and <AutoOrientLayer>, as
+        // AssetLayer, CameraLayer, LightLayer and PointLayer keep them.
+        {
+            bool modeOk = false;
+            const int mode = elemText(lw, QStringLiteral("AutoOrient")).toInt(&modeOk);
+            if (modeOk && (mode == 0 || mode == 1 || mode == 2 || mode == 4 || mode == 5))
+                layer.autoOrient = composition::AutoOrient(mode);
+            bool axisOk = false;
+            const int axis = elemText(lw, QStringLiteral("AutoOrientPathAxis")).toInt(&axisOk);
+            if (axisOk && axis >= 1 && axis <= 3) layer.autoOrientAxis = axis;
+            const QUuid towards(elemText(lw, QStringLiteral("AutoOrientLayer")));
+            if (!towards.isNull()) layer.autoOrientLayer = core::Identifier(towards.toString(QUuid::WithoutBraces));
+        }
         if (layerKind == composition::LayerKind::Camera) {
             // CameraLayer: its lens properties and the elements beside them.
             composition::CameraSettings& camera = layer.camera;
@@ -2183,6 +2598,32 @@ void readCompositionAsset(const QDomElement& compositionAsset,
             surface.billboardedShadows = propBool(pm, QStringLiteral("billboardedShadows"), surface.billboardedShadows);
             surface.selfShadowBias = qBound(1.0, propScalar(pm, QStringLiteral("selfShadowBias"), surface.selfShadowBias),
                                             1000.0);
+            surface.castAmbientOcclusion =
+                propBool(pm, QStringLiteral("castAmbientOcclusion"), surface.castAmbientOcclusion);
+            surface.receiveAmbientOcclusion =
+                propBool(pm, QStringLiteral("receiveAmbientOcclusion"), surface.receiveAmbientOcclusion);
+            surface.aoSamples = qBound(4, propInt(pm, QStringLiteral("aoSamples"), surface.aoSamples), 10);
+            surface.aoSampleRadius = qBound(0, propInt(pm, QStringLiteral("aoSampleRadius"), surface.aoSampleRadius), 20);
+            surface.aoIntensity = qBound(0.0, propScalar(pm, QStringLiteral("aoIntensity"), surface.aoIntensity), 100.0);
+            surface.aoDepthScale = qBound(0.0, propScalar(pm, QStringLiteral("aoDepthScale"), surface.aoDepthScale), 100.0);
+            surface.aoBias = qBound(0.0, propScalar(pm, QStringLiteral("aoBias"), surface.aoBias), 10.0);
+            surface.aoBlurRadius = qBound(1, propInt(pm, QStringLiteral("aoBlurRadius"), surface.aoBlurRadius), 20);
+            surface.aoDepthFalloff =
+                qBound(0.0, propScalar(pm, QStringLiteral("aoDepthFallOff"), surface.aoDepthFalloff), 100.0);
+            surface.includeSemiTransparentTriangles = propBool(pm, QStringLiteral("includeSemiTransparentTriangles"),
+                                                               surface.includeSemiTransparentTriangles);
+            surface.castReflections = propBool(pm, QStringLiteral("castReflections"), surface.castReflections);
+            surface.castReflectionsIfInvisible =
+                propBool(pm, QStringLiteral("castReflectionsIfLayerDisabled"), surface.castReflectionsIfInvisible);
+            surface.receiveReflections = propBool(pm, QStringLiteral("receiveReflections"), surface.receiveReflections);
+            surface.specularReflectivity =
+                propScalar(pm, QStringLiteral("specularReflectivity"), surface.specularReflectivity);
+            surface.diffuseReflectivity = propScalar(pm, QStringLiteral("diffuseReflectivity"), surface.diffuseReflectivity);
+            const int environment = propInt(pm, QStringLiteral("environmentMapType"), int(surface.environmentMap));
+            if (environment >= 1000 && environment <= 1003)
+                surface.environmentMap = composition::SurfaceShading::EnvironmentMap(environment);
+            surface.environmentMapLayer = core::Identifier(
+                propValueHolder(propElement(pm, QStringLiteral("environmentMapLayerID"))).firstChildElement(QStringLiteral("id")).text());
             const auto keys = [&](const char* name) {
                 return propAnimation(propElement(pm, QString::fromLatin1(name)), fps, QString());
             };
@@ -2191,6 +2632,8 @@ void readCompositionAsset(const QDomElement& compositionAsset,
             surface.specularCurve = keys("matSpecular");
             surface.shininessCurve = keys("matShininess");
             surface.emissiveCurve = propColorAnimation(propElement(pm, QStringLiteral("matEmissiveColor")), fps);
+            surface.specularReflectivityCurve = keys("specularReflectivity");
+            surface.diffuseReflectivityCurve = keys("diffuseReflectivity");
         }
         // Audio > Level. Its keys are composition milliseconds like every
         // other layer property - project_1's music layer fades out over
@@ -2340,6 +2783,16 @@ void readCompositionAsset(const QDomElement& compositionAsset,
         const long long start = elemText(named, QStringLiteral("StartFrame")).toLongLong();
         const long long end = elemText(named, QStringLiteral("EndFrame")).toLongLong();
         const long long len = (end > start) ? (end - start) : 0;
+        // A layer without clips keeps its span. One from the start to the
+        // shot's end stays open, following the shot's length; older saves of
+        // this port wrote an empty one (EndFrame = StartFrame), the whole
+        // shot.
+        if (composition::layerHasSpan(layer.kind)) {
+            layer.spanStartSeconds = frameToSeconds(qMax(0LL, start), fps);
+            const bool toShotEnd = statedDuration > 0.0 && start <= 0
+                                   && end >= qRound64(statedDuration * fps);
+            layer.spanEndSeconds = end > start && !toShotEnd ? frameToSeconds(end, fps) : -1.0;
+        }
 
         if (kind == QStringLiteral("AssetLayer")) {
             const QString assetGuid = elemText(lw, QStringLiteral("AssetID"));
@@ -2411,7 +2864,11 @@ void readCompositionAsset(const QDomElement& compositionAsset,
         // the loop rather than beside the other attributes.
         if (!layer.clips.isEmpty()) {
             composition::Clip& first = layer.clips.first();
-            readEffectsExtension(lw, &first);
+            if (!readEffectsExtension(lw, &first)) {
+                // A file of the reference: its own effect lists.
+                for (const composition::Effect& effect : nativefx::readInstances(lw, named, fps))
+                    first.effects.append(effect);
+            }
             bool ok = false;
             const double source =
                 lw.attribute(QStringLiteral("OpenVegasSourceStart")).toDouble(&ok);
@@ -2443,6 +2900,13 @@ void readCompositionAsset(const QDomElement& compositionAsset,
             if (ok) first.audioLevel = audioLevel;
         }
         readClipsExtension(lw, &layer);
+        // Key times are relative to the layer's start in the reference (Flux
+        // evaluates a layer at AbstractLayer::GlobalFrameToRelativeTime: frame
+        // - StartFrame); here they are on the shot's timeline. Saves of this
+        // port without OpenVegasKeyTimes wrote them there already.
+        const bool shotTimes = lw.hasAttribute(QStringLiteral("OpenVegasKind"))
+                               && lw.attribute(QStringLiteral("OpenVegasKeyTimes")) != QLatin1String("layer");
+        if (!shotTimes) composition::shiftLayerKeys(layer, int(start));
     }
     if (statedDuration > 0.0) composition->setDurationSeconds(statedDuration);
 }
@@ -2964,7 +3428,46 @@ static QDomDocument projectDocument(const QString& filePath,
             return qMax(0LL, qRound64(seconds * shotFps));
         };
 
-        for (const composition::Layer& layer : shot.layers()) {
+        // A layer of this port may hold several clips; a reference layer has
+        // one range. Its second and later clips go out as layers of their own
+        // as well - what the reference's Slice Layer makes (a copy of the
+        // layer, its keys kept) - marked OpenVegasSliceOf so this port leaves
+        // them out on reading: the first one's OpenVegasClips has them all.
+        struct WrittenLayer
+        {
+            composition::Layer layer;
+            QString sliceOf;
+        };
+        QVector<WrittenLayer> writtenLayers;
+        for (const composition::Layer& shotLayer : shot.layers()) {
+            writtenLayers.append({shotLayer, QString()});
+            for (int c = 1; c < shotLayer.clips.size(); ++c) {
+                composition::Layer slice = shotLayer;
+                slice.clips = {shotLayer.clips.at(c)};
+                // The same identity on every save of the same layer.
+                slice.id = core::Identifier(
+                    QUuid::createUuidV5(QUuid(shotLayer.id.value()),
+                                        QStringLiteral("slice:%1").arg(c)).toString(QUuid::WithoutBraces));
+                writtenLayers.append({slice, shotLayer.id.value()});
+            }
+        }
+        for (const WrittenLayer& written : std::as_const(writtenLayers)) {
+            const composition::Layer& shotLayer = written.layer;
+            // Keys go out relative to the layer's start (its StartFrame below),
+            // as the reference keeps them.
+            composition::Layer layer = shotLayer;
+            // A layer without clips lies by its span, open to the shot's end
+            // when it has none of its own; one with clips by its first.
+            const bool spanned = composition::layerHasSpan(layer);
+            const long long layerStartFrame = spanned
+                ? frameRound(layer.spanStartSeconds)
+                : frameRound(layer.clips.isEmpty() ? 0.0 : layer.clips.first().startSeconds);
+            const long long layerEndFrame = spanned
+                ? qMax(layerStartFrame + 1,
+                       layer.spanEndSeconds < 0.0 ? shotFrameCount : frameRound(layer.spanEndSeconds))
+                : frameRound(layer.clips.isEmpty()
+                                 ? 0.0 : layer.clips.first().startSeconds + layer.clips.first().durationSeconds);
+            composition::shiftLayerKeys(layer, -int(layerStartFrame));
             // Point, Light and Camera carry no clips at all, so an empty-clip test
             // would drop them from the file entirely.
             const bool clipless = layer.kind == composition::LayerKind::Point
@@ -2991,8 +3494,11 @@ static QDomDocument projectDocument(const QString& filePath,
             wrapper.setAttribute(QStringLiteral("Version"),
                                  text ? QStringLiteral("13") : QStringLiteral("17"));
             // Distinguishes Plane from Media, which share AssetLayer.
+            if (!written.sliceOf.isEmpty())
+                wrapper.setAttribute(QStringLiteral("OpenVegasSliceOf"), written.sliceOf);
             wrapper.setAttribute(QStringLiteral("OpenVegasKind"),
                                  composition::layerKindToken(layer.kind));
+            wrapper.setAttribute(QStringLiteral("OpenVegasKeyTimes"), QStringLiteral("layer"));
             wrapper.setAttribute(QStringLiteral("OpenVegasMuted"), layer.muted ? 1 : 0);
             if (layer.kind == composition::LayerKind::Camera) {
                 // CameraLayer's own elements: depth of field, clipping, film.
@@ -3004,6 +3510,17 @@ static QDomDocument projectDocument(const QString& filePath,
             }
             if (layer.kind == composition::LayerKind::Light)
                 addText(doc, wrapper, QStringLiteral("LightType"), QString::number(int(layer.light.type)));
+            if (layer.kind == composition::LayerKind::Media || layer.kind == composition::LayerKind::Plane || text
+                || layer.kind == composition::LayerKind::Camera || layer.kind == composition::LayerKind::Light
+                || layer.kind == composition::LayerKind::Point) {
+                // The layer's Alignment, as its own element keeps it.
+                addText(doc, wrapper, QStringLiteral("AutoOrient"), QString::number(int(layer.autoOrient)));
+                if (layer.kind != composition::LayerKind::Point)
+                    addText(doc, wrapper, QStringLiteral("AutoOrientPathAxis"), QString::number(layer.autoOrientAxis));
+                addText(doc, wrapper, QStringLiteral("AutoOrientLayer"),
+                        layer.autoOrientLayer.isValid() ? layer.autoOrientLayer.value()
+                                                        : QStringLiteral("00000000-0000-0000-0000-000000000000"));
+            }
             if (layer.kind == composition::LayerKind::Plane)
                 wrapper.setAttribute(QStringLiteral("OpenVegasPlaneColor"), layer.planeColor.name(QColor::HexArgb));
 
@@ -3225,12 +3742,54 @@ static QDomDocument projectDocument(const QString& filePath,
                 wrapper.appendChild(savedStyle);
             }
 
+            // The reference's own effect lists; the extension below stays the
+            // port's lossless copy (and the only one of its built-in effects).
+            QDomElement effectsList = doc.createElement(QStringLiteral("Effects"));
+            QDomElement geometryList = doc.createElement(QStringLiteral("GeometryEffects"));
+            QDomElement behaviorList = doc.createElement(QStringLiteral("BehaviorEffects"));
+            {
+                QSizeF layerSize(shot.width(), shot.height());
+                if (layer.kind == composition::LayerKind::Media && clip.mediaId.isValid()) {
+                    const QSize frame = media.assetById(clip.mediaId).frameSize();
+                    if (frame.isValid() && !frame.isEmpty()) layerSize = QSizeF(frame);
+                }
+                for (int e = 0; e < clip.effects.size(); ++e) {
+                    const composition::Effect& effect = clip.effects.at(e);
+                    if (effect.isTransition()) continue;
+                    if (!effect.nativeXml.isEmpty()) {
+                        QDomElement& list = effect.nativeContainer == QLatin1String("GeometryEffects") ? geometryList
+                            : effect.nativeContainer == QLatin1String("BehaviorEffects") ? behaviorList : effectsList;
+                        nativefx::appendVerbatim(doc, list, effect.nativeXml);
+                        continue;
+                    }
+                    const std::optional<project::NativeEffectEntry> entry =
+                        project::findNativeEffect(effect.pluginId.value());
+                    if (!entry || entry->guid.isEmpty()) continue;
+                    QDomElement* list = nullptr;
+                    switch (entry->container) {
+                    case project::NativeEffectEntry::Container::Effects: list = &effectsList; break;
+                    case project::NativeEffectEntry::Container::GeometryEffects: list = &geometryList; break;
+                    case project::NativeEffectEntry::Container::BehaviorEffects: list = &behaviorList; break;
+                    case project::NativeEffectEntry::Container::None: break;
+                    }
+                    if (!list) continue;
+                    // The same identity on every save of the same effect.
+                    const QString instanceId = effect.instanceId.isValid()
+                        ? effect.instanceId.value()
+                        : QUuid::createUuidV5(QUuid(layer.id.value()), QStringLiteral("effect:%1").arg(e))
+                              .toString(QUuid::WithoutBraces);
+                    nativefx::appendInstance(doc, *list, *entry, effect, instanceId, layer.id.value(),
+                                             shot.id().value(), layerSize, shotFps);
+                }
+            }
+            wrapper.appendChild(effectsList);
+            if (text || !geometryList.firstChildElement().isNull()) wrapper.appendChild(geometryList);
             appendEffectsExtension(doc, wrapper, clip);
             const bool hasNestedClip = std::any_of(
                 layer.clips.cbegin(), layer.clips.cend(), [](const composition::Clip& c) {
                     return bool(c.nestedComposition) || c.nestedCompositionId.isValid();
                 });
-            appendClipsExtension(doc, wrapper, layer.clips, hasNestedClip);
+            if (written.sliceOf.isEmpty()) appendClipsExtension(doc, wrapper, layer.clips, hasNestedClip);
             appendMasksExtension(doc, wrapper, layer.masks);
             appendMotionTracksExtension(doc, wrapper, layer.motionTracks);
 
@@ -3241,11 +3800,8 @@ static QDomDocument projectDocument(const QString& filePath,
             addText(doc, named, QStringLiteral("ParentLayerID"),
                     layer.parentLayerId.isValid() ? layer.parentLayerId.value()
                                                   : QStringLiteral("00000000-0000-0000-0000-000000000000"));
-            addText(doc, named, QStringLiteral("StartFrame"),
-                    QStringLiteral("%1").arg(frameRound(clip.startSeconds)));
-            addText(doc, named, QStringLiteral("EndFrame"),
-                    QStringLiteral("%1")
-                        .arg(frameRound(clip.startSeconds + clip.durationSeconds)));
+            addText(doc, named, QStringLiteral("StartFrame"), QStringLiteral("%1").arg(layerStartFrame));
+            addText(doc, named, QStringLiteral("EndFrame"), QStringLiteral("%1").arg(layerEndFrame));
             // Mirrors the read above: the default goes back out as 0.
             addText(doc, named, QStringLiteral("BlendMode"),
                     layer.blendMode == QStringLiteral("None") ? QStringLiteral("0")
@@ -3283,6 +3839,11 @@ static QDomDocument projectDocument(const QString& filePath,
                             shotFps, t.anchorPointZ);
             appendPointProp(doc, pmEl, QStringLiteral("position"), QStringLiteral("p3"), t.position,
                             t.positionXCurve, t.positionYCurve, shotFps, t.positionZ, t.positionZCurve);
+            if (layer.kind == composition::LayerKind::Camera || layer.kind == composition::LayerKind::Light
+                || layer.kind == composition::LayerKind::Point) {
+                appendPointProp(doc, pmEl, QStringLiteral("target"), QStringLiteral("p3"), QPointF(t.targetX, t.targetY),
+                                t.targetXCurve, t.targetYCurve, shotFps, t.targetZ, t.targetZCurve);
+            }
             appendPointProp(doc, pmEl, QStringLiteral("scale"), QStringLiteral("sc"), t.scalePercent,
                             t.scaleXCurve, t.scaleYCurve, shotFps, t.scaleZPercent, t.scaleZCurve);
             // The 3D side in the reference's own properties; a 2D layer carries
@@ -3332,10 +3893,39 @@ static QDomDocument projectDocument(const QString& filePath,
                 appendBoolProp(doc, pmEl, QStringLiteral("receiveShadows"), surface.receiveShadows);
                 appendBoolProp(doc, pmEl, QStringLiteral("billboardedLights"), surface.billboardedLights);
                 appendBoolProp(doc, pmEl, QStringLiteral("billboardedShadows"), surface.billboardedShadows);
-                if (layer.kind == composition::LayerKind::Model3D) {
-                    // A static <fl> (Type 1), as Model3DLayer keeps it.
-                    appendStaticProp(doc, pmEl, QStringLiteral("selfShadowBias"), [&](QDomElement& holder) {
-                        addText(doc, holder, QStringLiteral("fl"), QString::number(surface.selfShadowBias, 'g', 9));
+                // Static <fl>s (Type 1), as the reference keeps them.
+                const auto staticReal = [&](const char* name, double value) {
+                    appendStaticProp(doc, pmEl, QString::fromLatin1(name), [&](QDomElement& holder) {
+                        addText(doc, holder, QStringLiteral("fl"), QString::number(value, 'g', 9));
+                    });
+                };
+                if (layer.kind == composition::LayerKind::Model3D) staticReal("selfShadowBias", surface.selfShadowBias);
+                appendBoolProp(doc, pmEl, QStringLiteral("castAmbientOcclusion"), surface.castAmbientOcclusion);
+                appendBoolProp(doc, pmEl, QStringLiteral("receiveAmbientOcclusion"), surface.receiveAmbientOcclusion);
+                appendIntProp(doc, pmEl, QStringLiteral("aoSamples"), surface.aoSamples);
+                appendIntProp(doc, pmEl, QStringLiteral("aoSampleRadius"), surface.aoSampleRadius);
+                staticReal("aoIntensity", surface.aoIntensity);
+                staticReal("aoDepthScale", surface.aoDepthScale);
+                staticReal("aoBias", surface.aoBias);
+                appendIntProp(doc, pmEl, QStringLiteral("aoBlurRadius"), surface.aoBlurRadius);
+                staticReal("aoDepthFallOff", surface.aoDepthFalloff);
+                if (layer.kind == composition::LayerKind::Model3D)
+                    appendBoolProp(doc, pmEl, QStringLiteral("includeSemiTransparentTriangles"),
+                                   surface.includeSemiTransparentTriangles);
+                appendBoolProp(doc, pmEl, QStringLiteral("castReflections"), surface.castReflections);
+                appendBoolProp(doc, pmEl, QStringLiteral("castReflectionsIfLayerDisabled"),
+                               surface.castReflectionsIfInvisible);
+                appendBoolProp(doc, pmEl, QStringLiteral("receiveReflections"), surface.receiveReflections);
+                if (layer.kind != composition::LayerKind::Model3D)
+                    appendScalarProp(doc, pmEl, QStringLiteral("specularReflectivity"), surface.specularReflectivity,
+                                     surface.specularReflectivityCurve, shotFps);
+                if (layer.kind == composition::LayerKind::Text)
+                    appendScalarProp(doc, pmEl, QStringLiteral("diffuseReflectivity"), surface.diffuseReflectivity,
+                                     surface.diffuseReflectivityCurve, shotFps);
+                if (layer.kind == composition::LayerKind::Text || layer.kind == composition::LayerKind::Model3D) {
+                    appendIntProp(doc, pmEl, QStringLiteral("environmentMapType"), int(surface.environmentMap));
+                    appendStaticProp(doc, pmEl, QStringLiteral("environmentMapLayerID"), [&](QDomElement& holder) {
+                        addText(doc, holder, QStringLiteral("id"), surface.environmentMapLayer.value());
                     });
                 }
                 appendColorProp(doc, pmEl, QStringLiteral("shadowColor"), surface.shadowColor);
@@ -3364,6 +3954,7 @@ static QDomDocument projectDocument(const QString& filePath,
                 }
             }
 
+            named.appendChild(behaviorList);
             named.appendChild(pmEl);
 
             wrapper.appendChild(named);

@@ -6,7 +6,7 @@
 #include "media/AudioFormat.h"
 
 namespace openvegas {
-namespace composition { class Composition; }
+namespace composition { class Composition; struct Layer; }
 namespace media { class MediaManager; }
 namespace render {
 
@@ -37,6 +37,9 @@ struct ExportAudioRequest
     double frameRate = 30.0;
     double exportStart = 0.0;
     double exportEnd = 0.0;
+    // The project's pre-render root: a nested shot pre-rendered as it is now
+    // plays its pre-render's audio instead of being mixed again.
+    QString preRenderDirectory;
 };
 
 bool fileHasAudioStream(const QString& ffprobe, const QString& path);
@@ -55,6 +58,31 @@ QString exportAudioMixFilter(const QVector<ExportAudioInput>& inputs, int sample
 // on one thread; releases that thread's native audio modules when done.
 bool buildExportAudioInputs(const ExportAudioRequest& request,
                             QVector<ExportAudioInput>& inputs, QString* error);
+
+// A whole shot's mix - its layers, nested shots and audio effects, as export
+// mixes them - written to `path` as 16-bit stereo PCM WAV at the shot's rate
+// (through a part file, so a reader never sees half of it). True with no
+// file when the shot has no audio. Nested shots pre-rendered under
+// `preRenderDirectory` play their pre-render's audio.
+bool writeCompositionAudio(const composition::Composition& shot, const media::MediaManager* media,
+                           const QString& preRenderDirectory, const QString& path, QString* error);
+
+// One clip of `layer` with its native Audio effects, processed whole as
+// export processes it (every effect sees the whole dry clip it gets, past
+// and future), without its gain: `spanStart`..`spanEnd` in its shot's
+// seconds - the clip and the handles its transitions play into - read from
+// `source` (the media, or the mix of a nested shot), written to `path` as
+// 16-bit stereo PCM WAV at `sampleRate` through a part file. What playback
+// plays for a clip whose effects ask for more than it has in realtime. Runs
+// on the calling thread and releases its native modules when done.
+bool writeProcessedClipAudio(const composition::Layer& layer, int clipIndex, double frameRate, int sampleRate,
+                             double spanStart, double spanEnd, const QString& source, int audioStreamIndex,
+                             const QString& path, QString* error);
+
+// Whether a nested shot's clip has audio processing of its own - native
+// audio effects, an audio transition on it - which the reference applies
+// after the shot's own mix (its composite clip's DSP after the child mix).
+bool nestedClipProcessesItsMix(const composition::Layer& layer, int clipIndex, double frameRate);
 
 } // namespace render
 } // namespace openvegas

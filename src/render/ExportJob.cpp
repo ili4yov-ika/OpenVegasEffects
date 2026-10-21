@@ -221,6 +221,7 @@ void ExportJob::encode()
     audioRequest.frameRate = fps;
     audioRequest.exportStart = exportStart;
     audioRequest.exportEnd = exportStart + exportDuration;
+    audioRequest.preRenderDirectory = m_request.preRenderDirectory;
     QString audioError;
     if (withAudio && !buildExportAudioInputs(audioRequest, audioInputs, &audioError)) {
         finish(false, audioError);
@@ -277,6 +278,7 @@ void ExportJob::encode()
                   << (suffix == QLatin1String("mov") ? QStringLiteral("pcm_s16le") : QStringLiteral("aac"))
                   << QStringLiteral("-ar") << QString::number(audioRate)
                   << QStringLiteral("-ac") << QStringLiteral("2");
+    if (video) arguments = withVideoColorTags(arguments);
     arguments << QStringLiteral("-t") << QString::number(exportDuration, 'f', 6);
     arguments << m_request.outputPath;
     auto* process = new QProcess(this);

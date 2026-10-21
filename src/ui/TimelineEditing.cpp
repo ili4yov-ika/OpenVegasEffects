@@ -8,6 +8,9 @@
 #include "ui/TimelineParameterEditor.h"
 #include "ui/TimelineValueGraphView.h"
 #include "plugin/PluginManager.h"
+#include "project/EffectPresets.h"
+#include <QFileInfo>
+#include <cmath>
 #include <QDataStream>
 #include <QDateTime>
 #include <QTreeWidgetItemIterator>
@@ -103,6 +106,33 @@ int TimelineWidget::addEffect(int layerIndex, int clipIndex, const plugin::Effec
         added = addEffectToClip(layer.clips[clipIndex], spec, seconds);
     }, true);
     return added;
+}
+
+int TimelineWidget::addPreset(int layerIndex, int clipIndex, const QString& presetPath, QString* error)
+{
+    if (!m_comp || layerIndex < 0 || layerIndex >= m_comp->layers().size()
+        || m_comp->layers()[layerIndex].locked) {
+        return -1;
+    }
+    const composition::Layer& layer = m_comp->layers()[layerIndex];
+    if (clipIndex < 0 || clipIndex >= layer.clips.size()) return -1;
+    const double fps = m_comp->fpsDenominator() > 0
+        ? double(m_comp->fpsNumerator()) / m_comp->fpsDenominator() : 30.0;
+    int result = project::PresetOk;
+    QVector<composition::Effect> effects = project::effectPresetEffects(presetPath, fps, &result);
+    if (effects.isEmpty()) {
+        if (error) *error = project::effectPresetError(result);
+        return 0;
+    }
+    // From the layer's start to the shot's frames, as a project is read.
+    const int start = int(std::lround(layer.clips[clipIndex].startSeconds * fps));
+    for (composition::Effect& effect : effects)
+        for (auto it = effect.animation.begin(); it != effect.animation.end(); ++it) it->shift(start);
+    editLayer(layerIndex, tr("Add %1").arg(QFileInfo(presetPath).completeBaseName()),
+              [&](composition::Layer& target) {
+        if (clipIndex < target.clips.size()) target.clips[clipIndex].effects += effects;
+    }, true);
+    return int(effects.size());
 }
 
 void TimelineWidget::editLayer(int index, const QString& title,
@@ -238,8 +268,17 @@ void TimelineWidget::buildParameterEditor(QTreeWidgetItem* row, int layerIndex, 
 
 void TimelineWidget::buildTransformRows(QTreeWidgetItem* parent, int index)
 {
-    for (auto prop : composition::transformPropertiesFor(m_comp->layers()[index].dimension))
+    // A camera, a light and a point layer have a Target after Position
+    // (LightLayer's and CameraLayer's transform: position, target,
+    // orientation, rotations).
+    const composition::Layer& layer = m_comp->layers()[index];
+    const bool aims = layer.kind == composition::LayerKind::Camera || layer.kind == composition::LayerKind::Light
+                      || layer.kind == composition::LayerKind::Point;
+    for (auto prop : composition::transformPropertiesFor(layer.dimension)) {
         buildTransformRow(parent, index, prop);
+        if (aims && prop == composition::TransformProperty::Position)
+            buildTransformRow(parent, index, composition::TransformProperty::Target);
+    }
 }
 
 void TimelineWidget::buildTransformRow(QTreeWidgetItem* parent, int index,

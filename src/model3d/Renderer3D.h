@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QHash>
 #include <QImage>
 #include <memory>
 
@@ -138,13 +139,17 @@ struct ShadowCaster
 std::shared_ptr<const ShadowMap> makeShadowMap(const Light& light, const QVector<ShadowCaster>& casters,
                                                int size);
 
-// The lights a surface is drawn with, its Material, and the lights' shadow
-// maps (one per light, null where it casts none).
+struct Reflections;
+
+// The lights a surface is drawn with, its Material, the lights' shadow
+// maps (one per light, null where it casts none) and, for a model, what it
+// reflects (null: nothing).
 struct Lighting
 {
     QVector<Light> lights;
     SurfaceLighting surface;
     QVector<std::shared_ptr<const ShadowMap>> shadows;
+    std::shared_ptr<const Reflections> reflections;
 };
 
 // How a model's material answers each light, as Flux hands it to the
@@ -228,6 +233,23 @@ enum class ShadingMode
     Wireframe,
 };
 
+// What a mesh shows at each pixel of renderMesh's picture, for the 3D
+// scene's ambient occlusion: the nearest surface's point and normal in the
+// scene (the normal turned to the eye, as a two-sided face shows it), its
+// opacity (the material's and its maps', not how much of the pixel it
+// covers) and its depth (NDC); a pixel showing nothing has an infinite one.
+struct SurfaceBuffer
+{
+    QSize size;
+    QVector<QVector3D> positions;
+    QVector<QVector3D> normals;
+    QVector<float> alphas;
+    QVector<float> depths;
+
+    void reset(const QSize& canvas);
+    bool has(int index) const;
+};
+
 // Rasterises `mesh` into an image the size of the canvas, transparent where
 // nothing was drawn so the result composites over the layers beneath.
 //
@@ -243,9 +265,113 @@ enum class ShadingMode
 // (times its map) as the specular one, its emissive colour added to the
 // layer's. Without lights it is drawn unlit, as the reference draws a model
 // in a shot with no light layer.
+//
+// With `surfaces` it also notes what each pixel shows (SurfaceBuffer), over
+// what the buffer holds from an earlier mesh drawn the same size, the nearer
+// kept.
 QImage renderMesh(const Mesh& mesh, const QMatrix4x4& modelMatrix, const Camera& camera,
                   const QSize& canvas, const Lighting& lighting, ShadingMode mode,
-                  double opacity = 1.0, const Fog& fog = Fog(), int samples = 1);
+                  double opacity = 1.0, const Fog& fog = Fog(), int samples = 1,
+                  SurfaceBuffer* surfaces = nullptr);
+
+// A layer's ambient occlusion settings (its Material's Ambient Occlusion
+// group) as Flux takes them (Flux.dll 0x180474a80): Samples, Sample Radius
+// and Blur Radius as they are, Intensity, Depth Scale and Depth Falloff
+// divided by 100, Bias as it is.
+struct AmbientOcclusion
+{
+    int samples = 4;
+    double sampleRadius = 15.0;
+    double intensity = 0.5;
+    double depthScale = 0.1;
+    double bias = 0.01;
+    int blurRadius = 5;
+    double depthFalloff = 0.1;
+};
+
+// Flux's ConvertVec2LatLong: where a direction falls on a lat-long
+// (equirectangular) picture - u = atan2(x, z) / pi / 2 + 0.5 (0 when x or z
+// is 0), v = 1 - acos(y / |d|) / pi, so +Y is the top row and +Z the middle.
+QVector2D latLongOf(const QVector3D& direction);
+
+// The colour (0..1) a lat-long picture (RGBA8888, straight) shows along
+// `direction`, bilinear and repeating both ways, as Flux binds a model's
+// reflection map (GL_REPEAT on S and T, Flux.dll 0x180370e10) - so straight
+// up or down it meets the other edge's row half way.
+QVector3D environmentColor(const QImage& latLong, const QVector3D& direction);
+
+// The light a lat-long picture throws on a surface facing each way, as
+// Flux's diffuse environment term takes it (EnvironmentMapRenderData,
+// Flux.dll 0x1804b9dc0): the picture projected on the nine spherical
+// harmonics a channel (0x180435e50, scaled by 4 pi over the samples at
+// 0x180436790) and turned into Ramamoorthi and Hanrahan's matrices
+// (0x180437360), E(n) = (n, 1)^T M (n, 1) for a unit normal n.
+struct Irradiance
+{
+    QMatrix4x4 red;
+    QMatrix4x4 green;
+    QMatrix4x4 blue;
+    QVector3D at(const QVector3D& normal) const;
+};
+Irradiance irradianceOf(const QImage& latLong);
+
+// What a model reflects, as Flux's model shader takes it in its last pass
+// (Flux.dll 0x1804c1ce0; the amounts set at 0x180370e10):
+// - `levels`: the lat-long reflection map round the model (a Spherical
+//   material's), its mip levels each half the last (MaxReflectionLOD 4),
+//   and its irradiance;
+// - `planar`: a Planar material's map of the scene mirrored in its plane,
+//   by material index, the shot's size and lined up with it.
+// With either, a material adds - all times its diffuse alpha -
+// - its irradiance on the normal (n, 1)^T M (n, 1), not below 0, times its
+//   diffuse colour and Diffuse Reflectivity;
+// - a Planar material with its map: the map's colour times its alpha, times
+//   the specular colour and Specular Reflectivity;
+// - otherwise IBLSpecularColor along the view reflected in the normal, times
+//   Specular Reflectivity: Phong and Cook-Torrance the map times the
+//   specular colour; Metallic-Roughness and Specular-Glossiness the map at
+//   LOD roughness * 4 times (F * A + B), F = FresnelSchlickRoughness(N.V,
+//   F0, roughness) and (A, B) the split-sum BRDF (Karis's approximation of
+//   Flux's BRDF table here);
+// - with Refraction Amount: the map along refract(to the eye, n, 1 / Index
+//   of Refraction) - LOD 0 for Phong, roughness * 4 otherwise - times the
+//   amount.
+// The physically based models drop their unlit colour where a map is (the
+// shader's useEnvMap).
+struct Reflections
+{
+    QVector<QImage> levels;
+    Irradiance irradiance;
+    QHash<int, QImage> planar;
+
+    // The map along `direction` at mip level `lod` (trilinear).
+    QVector3D at(const QVector3D& direction, double lod) const;
+    // A lat-long picture made a reflection map: its levels and irradiance.
+    static Reflections fromLatLong(const QImage& latLong);
+};
+
+// The ambient occlusion of a picture of the scene (1 open, down to 0), as
+// Flux's AmbientOcclusionRenderer draws it (Flux.dll 0x180478960; its
+// shaders built at 0x180478030) from a G-buffer: each pixel's point and
+// normal in eye space (the camera at the origin looking down -Z) and its
+// opacity (`weights`). A pixel weighing less than 0.9 is left open; one
+// weighing less than 0.8 occludes nothing.
+//
+// For a pixel at p with normal n (texture coordinates uv, 0..1 up from the
+// bottom left), `samples` directions - (1, 0), (-1, 0), (0, 1), (0, -1),
+// (1, 1), (-1, 1), (-1, -1), (1, -1), (0.7, 0.7), (-0.7, -0.65), each
+// reflected about the pixel's random unit vector - scaled by
+// rad = sampleRadius / p.z (texture units), four taps along each (a quarter
+// and three quarters of it, and half and all of it turned 45 degrees); a tap
+// meeting a point s adds max(0, n . normalize(s - p) - bias)
+// / (1 + |s - p| depthScale) * intensity * 10. The sum, divided by
+// samples squared, taken from 1 and clamped, is then blurred over
+// (2 blurRadius + 1)^2 pixels: a Gaussian with sigma (2 blurRadius + 1) / 3,
+// each tap weighed again by 1 / (depthFalloff + its difference in eye depth);
+// a pixel showing nothing stays open.
+QVector<float> ambientOcclusionMap(const QSize& size, const QVector<QVector3D>& positions,
+                                   const QVector<QVector3D>& normals, const QVector<float>& weights,
+                                   const AmbientOcclusion& settings);
 
 // A model's texture as the project lets it be drawn (Project Settings
 // "Model Texture Max Size", ProjectRenderSettings::modelTextureMaxSize): a

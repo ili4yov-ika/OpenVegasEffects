@@ -1091,7 +1091,10 @@ void ViewerWidget::buildToolStrip()
 
     // Camera Orbit. Named and keyed as the reference has it - toolButtonCameraOrbit
     // (141323bd8) on B - rather than the toolButtonOrbit / O this port invented.
+    // Like the shape button it keeps a list (press and hold, or right-click):
+    // Orbit Around Selected Layers and Orbit Around Clicked Point.
     auto* orbitButton = new QToolButton(m_toolStrip);
+    m_orbitButton = orbitButton;
     const QIcon orbitIcon(QStringLiteral(":/icons/camera-orbit.svg"));
     if (!orbitIcon.isNull() && !orbitIcon.pixmap(QSize(kToolIconExtent, kToolIconExtent)).isNull()) {
         orbitButton->setIcon(orbitIcon);
@@ -1103,6 +1106,31 @@ void ViewerWidget::buildToolStrip()
     orbitButton->setObjectName(QStringLiteral("toolButtonCameraOrbit"));
     orbitButton->setProperty("viewerTool", static_cast<int>(ViewerTool::Orbit));
     connect(orbitButton, &QToolButton::clicked, this, [this] { setTool(ViewerTool::Orbit); });
+    orbitButton->setPopupMode(QToolButton::DelayedPopup);
+    orbitButton->setContextMenuPolicy(Qt::CustomContextMenu);
+    auto* orbitMenu = new QMenu(orbitButton);
+    auto* orbitModes = new QActionGroup(orbitMenu);
+    const std::pair<const char*, OrbitPivot> pivots[] = {
+        {QT_TR_NOOP("Orbit Around Selected Layers"), OrbitPivot::SelectedLayers},
+        {QT_TR_NOOP("Orbit Around Clicked Point"), OrbitPivot::ClickedPoint},
+    };
+    for (const auto& [label, pivot] : pivots) {
+        QAction* action = orbitMenu->addAction(tr(label));
+        action->setCheckable(true);
+        action->setChecked(pivot == m_orbitPivot);
+        action->setData(int(pivot));
+        action->setObjectName(pivot == OrbitPivot::SelectedLayers ? QStringLiteral("actionOrbitAroundSelectedLayers")
+                                                                  : QStringLiteral("actionOrbitAroundClickedPoint"));
+        orbitModes->addAction(action);
+        connect(action, &QAction::triggered, this, [this, pivot = pivot] {
+            setOrbitPivot(pivot);
+            setTool(ViewerTool::Orbit);
+        });
+    }
+    orbitButton->setMenu(orbitMenu);
+    connect(orbitButton, &QToolButton::customContextMenuRequested, this, [orbitButton, orbitMenu](const QPoint& pos) {
+        orbitMenu->popup(orbitButton->mapToGlobal(pos));
+    });
     auto* orbitShortcut = new QShortcut(QKeySequence(Qt::Key_B), this);
     orbitShortcut->setContext(Qt::WidgetShortcut);
     connect(orbitShortcut, &QShortcut::activated, this, [this] { setTool(ViewerTool::Orbit); });
@@ -1815,10 +1843,55 @@ void ViewerWidget::resizeEvent(QResizeEvent* event)
     update();
 }
 
+void ViewerWidget::setOrbitPivot(OrbitPivot pivot)
+{
+    m_orbitPivot = pivot;
+    if (!m_orbitButton || !m_orbitButton->menu()) return;
+    for (QAction* action : m_orbitButton->menu()->actions())
+        action->setChecked(action->data().toInt() == int(pivot));
+}
+
+ViewDrag viewDragFor(Qt::MouseButton button, Qt::KeyboardModifiers modifiers)
+{
+    const bool alt = modifiers & Qt::AltModifier;
+    const bool control = modifiers & Qt::ControlModifier;
+    if (!alt && !control) {
+        if (button == Qt::RightButton) return ViewDrag::Pan;
+        if (button == Qt::MiddleButton) return ViewDrag::Rotate;
+        return ViewDrag::None;
+    }
+    if (!alt) {
+        if (button == Qt::LeftButton) return ViewDrag::Pan;
+        if (button == Qt::RightButton) return ViewDrag::Zoom;
+        return ViewDrag::None;
+    }
+    if (button == Qt::LeftButton) return ViewDrag::Orbit;
+    if (button == Qt::MiddleButton) return ViewDrag::Pan;
+    if (button == Qt::RightButton) return ViewDrag::Dolly;
+    return ViewDrag::None;
+}
+
 void ViewerWidget::mousePressEvent(QMouseEvent* event)
 {
     setFocus(Qt::MouseFocusReason);
+    m_skipContextMenu = false;
+    // The right and middle buttons (and, below, the left one with Ctrl or
+    // Alt) move a view's own camera.
     if (event->button() != Qt::LeftButton) {
+        const int view = viewAt(event->pos());
+        const ViewDrag drag = view >= 0 && viewHasOwnPicture(view)
+            ? viewDragFor(event->button(), event->modifiers()) : ViewDrag::None;
+        if (drag != ViewDrag::None && m_viewDrag == ViewDrag::None) {
+            if (view != m_activeView) setActiveView(view);
+            m_dragView = view;
+            m_lastMouse = event->pos();
+            m_viewDrag = drag;
+            m_viewDragButton = event->button();
+            m_viewDragMoved = false;
+            setCursor(drag == ViewDrag::Pan ? Qt::ClosedHandCursor : Qt::SizeAllCursor);
+            event->accept();
+            return;
+        }
         QWidget::mousePressEvent(event);
         return;
     }
@@ -1866,10 +1939,27 @@ void ViewerWidget::mousePressEvent(QMouseEvent* event)
     }
 
     // In a view of its own camera the layers are not at hand: Orbit turns
-    // that camera, and Select does nothing.
+    // that camera, and Select does nothing; Ctrl or Alt with the left button
+    // pan or orbit it whatever the tool.
     if (viewHasOwnPicture(index)) {
+        const ViewerMapping map = mapping(index);
+        const QPointF where(map.canvasSize.width() > 0.0 ? pointer.canvasPos.x() / map.canvasSize.width() : 0.5,
+                            map.canvasSize.height() > 0.0 ? pointer.canvasPos.y() / map.canvasSize.height() : 0.5);
+        const ViewDrag drag = viewDragFor(event->button(), event->modifiers());
+        if (drag != ViewDrag::None) {
+            m_viewDrag = drag;
+            m_viewDragButton = event->button();
+            m_viewDragMoved = false;
+            setCursor(drag == ViewDrag::Pan ? Qt::ClosedHandCursor : Qt::SizeAllCursor);
+            if (drag == ViewDrag::Orbit) emit viewOrbitStarted(index, where, OrbitPivot::SelectedLayers);
+            event->accept();
+            return;
+        }
         m_viewOrbiting = m_tool == ViewerTool::Orbit;
-        if (m_viewOrbiting) setCursor(Qt::SizeAllCursor);
+        if (m_viewOrbiting) {
+            setCursor(Qt::SizeAllCursor);
+            emit viewOrbitStarted(index, where, m_orbitPivot);
+        }
         event->accept();
         return;
     }
@@ -1929,6 +2019,12 @@ void ViewerWidget::mouseDoubleClickEvent(QMouseEvent* event)
 
 void ViewerWidget::contextMenuEvent(QContextMenuEvent* event)
 {
+    if (m_skipContextMenu || m_viewDrag != ViewDrag::None) {
+        // The right button just moved a view's camera.
+        m_skipContextMenu = false;
+        event->accept();
+        return;
+    }
     const int view = viewAt(event->pos());
     if (view >= 0) {
         ViewerPointerEvent pointer = pointerEvent(QPointF(event->pos()), view, Qt::RightButton,
@@ -2008,6 +2104,22 @@ void ViewerWidget::mouseMoveEvent(QMouseEvent* event)
         event->accept();
         return;
     }
+    if (m_viewDrag != ViewDrag::None) {
+        const QPointF delta = event->pos() - m_lastMouse;
+        if (m_viewDrag == ViewDrag::Pan) {
+            const ViewerMapping map = mapping(m_dragView);
+            const QPointF canvasDelta = map.toCanvas(event->position()) - map.toCanvas(QPointF(m_lastMouse));
+            if (!canvasDelta.isNull()) emit viewPanned(m_dragView, canvasDelta);
+        } else if (m_viewDrag == ViewDrag::Orbit) {
+            if (!delta.isNull()) emit viewOrbited(m_dragView, delta);
+        } else if (!delta.isNull()) {
+            emit viewCameraDragged(m_dragView, int(m_viewDrag), delta);
+        }
+        m_lastMouse = event->pos();
+        m_viewDragMoved = m_viewDragMoved || !delta.isNull();
+        event->accept();
+        return;
+    }
 
     if (m_handPanning && m_dragView == m_activeView) {
         m_panOffset += event->pos() - m_lastMouse;
@@ -2051,6 +2163,15 @@ void ViewerWidget::mouseMoveEvent(QMouseEvent* event)
 
 void ViewerWidget::mouseReleaseEvent(QMouseEvent* event)
 {
+    if (m_viewDrag != ViewDrag::None && event->button() == m_viewDragButton) {
+        m_skipContextMenu = m_viewDragButton == Qt::RightButton && m_viewDragMoved;
+        m_viewDrag = ViewDrag::None;
+        m_viewDragButton = Qt::NoButton;
+        m_dragView = -1;
+        setCursor(toolCursor());
+        event->accept();
+        return;
+    }
     if (m_viewOrbiting && event->button() == Qt::LeftButton) {
         m_viewOrbiting = false;
         setCursor(toolCursor());

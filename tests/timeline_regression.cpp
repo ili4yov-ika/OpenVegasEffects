@@ -26,6 +26,7 @@
 #include "ui/ViewerTransportBar.h"
 #include "ui/DockTitleBar.h"
 #include "ui/LayoutPanel.h"
+#include "ui/ScrubberSpinBox.h"
 #include "ui/LayoutTransformCommand.h"
 #include <QScrollArea>
 #include "ui/TimelineValueGraphView.h"
@@ -38,6 +39,7 @@
 #include "render/TextRender.h"
 #include "project/VegfxSerializer.h"
 #include "app/ProjectDefaults.h"
+#include "app/FileAssociation.h"
 #include "composition/MotionTracker.h"
 #include "composition/CompositionState.h"
 #include "composition/Transition.h"
@@ -45,6 +47,12 @@
 #include "render/AudioExport.h"
 #include "render/ExportJob.h"
 #include "media/AudioWaveform.h"
+#include "media/ConformedAudio.h"
+#include "render/NestedAudioMix.h"
+#include "project/EffectPresets.h"
+#include "project/NativeEffectCatalog.h"
+#include "ui/EffectsFavorites.h"
+#include "ui/EffectsPanel.h"
 #include "ui/EffectPlacement.h"
 #include "ui/TextureWarning.h"
 #include "ui/CameraRule.h"
@@ -631,6 +639,65 @@ private slots:
         QVERIFY(inspector.previewFrame().pixelColor(160,90).red()>240);
         inspector.setSelection(1); inspector.setSelection(QVector<int>{0,1});
         QTest::qWait(100); QVERIFY(inspector.previewFrame().isNull());
+    }
+    // The Layer panel shows what the reference's RenderLayerViewJob draws
+    // (Flux::RenderLayer, flags 0x13): an asset layer's source and masks on a
+    // canvas of its own size - not its effects, transform or opacity - and
+    // only for footage with a picture or a plane.
+    void layerPanelShowsTheSourceAndItsMasks() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString still = temp.filePath("halves.png");
+        QImage halves(200, 100, QImage::Format_RGB32);
+        for (int y = 0; y < 100; ++y)
+            for (int x = 0; x < 200; ++x) halves.setPixelColor(x, y, x < 100 ? QColor(Qt::red) : QColor(Qt::green));
+        QVERIFY(halves.save(still));
+        auto media = std::make_shared<media::MediaManager>();
+        QVERIFY(media->importFile(still).isSuccess());
+        const core::Identifier stillId = media->assetByFilePath(QFileInfo(still).absoluteFilePath()).id();
+        auto model = std::make_shared<composition::Composition>();
+        model->setSize(640, 360); model->setDurationSeconds(2);
+        {
+            auto& layer = model->addLayer("Halves");
+            composition::Clip clip; clip.mediaId = stillId; clip.durationSeconds = 2;
+            composition::Effect invert; invert.pluginId = core::Identifier("openvegas.builtin.invert");
+            invert.name = "Invert"; clip.effects.append(invert);
+            layer.clips.append(clip);
+            layer.transform.position = QPointF(150, -80);
+            layer.transform.rotationDegrees = 90;
+            layer.transform.scalePercent = QPointF(50, 50);
+            layer.opacity = 0.25;
+            // The right quarter of the picture, in the shot's space over the
+            // centred picture (it spans 220..420 x 130..230).
+            composition::LayerMask mask; mask.bounds = QRectF(370, 130, 50, 100);
+            layer.masks.append(mask);
+        }
+        model->addLayer("Words").kind = composition::LayerKind::Text;
+        ui::LayerPanel panel; panel.resize(600, 650); panel.bindModel(model);
+        panel.setMediaManager(media); panel.show(); panel.setSelection(0);
+        const auto isolated = panel.previewComposition();
+        QVERIFY(isolated);
+        QCOMPARE(isolated->displaySize(), QSize(200, 100));
+        QCOMPARE(isolated->layers().size(), 1);
+        const auto& shown = isolated->layers().first();
+        QVERIFY(shown.clips.first().effects.isEmpty());
+        QCOMPARE(shown.transform.rotationDegrees, 0.0);
+        QCOMPARE(shown.opacity, 1.0);
+        QCOMPARE(shown.masks.first().bounds, QRectF(150, 0, 50, 100));
+        QTRY_VERIFY_WITH_TIMEOUT(!panel.previewFrame().isNull(), 5000);
+        const QImage frame = panel.previewFrame();
+        QCOMPARE(frame.size(), QSize(200, 100));
+        // Not inverted, not turned: green on the right, inside the mask;
+        // the rest masked away.
+        const QColor right = frame.pixelColor(175, 50);
+        QVERIFY2(right.green() > 240 && right.red() < 15 && right.alpha() > 240, qPrintable(right.name(QColor::HexArgb)));
+        // Outside the mask: the background, not the red half.
+        for (const QPoint at : {QPoint(50, 50), QPoint(125, 50)}) {
+            const QColor masked = frame.pixelColor(at);
+            QVERIFY2(masked.red() < 40 && masked.green() < 40, qPrintable(masked.name(QColor::HexArgb)));
+        }
+        // Text is not an asset layer.
+        panel.setSelection(1);
+        QVERIFY(!panel.previewComposition());
     }
     // A model's objects are its nodes (the reference's Model3DGroup and
     // Model3DTransformNode): each with its pivot, a row under the layer's
@@ -1671,6 +1738,43 @@ private slots:
         QCOMPARE(path->pos(), QPoint(1, 257));
         QVERIFY(viewer.grab().save(testArtifactPath(QStringLiteral("viewer-tool-strip.png"))));
     }
+    // Text under a parent turned a quarter clockwise: its frame turns with
+    // the parent, and moving it 50 right and 20 down on the canvas moves it in
+    // the parent's units (20 right, 50 up there).
+    void textFrameFollowsItsParent() {
+        ui::ViewerWidget viewer;
+        viewer.resize(664, 360); viewer.show(); QTest::qWait(20);
+        viewer.setProjectSize(QSize(640, 360));
+        viewer.setFrame(QImage(640, 360, QImage::Format_ARGB32_Premultiplied));
+        composition::Layer layer; layer.kind = composition::LayerKind::Text;
+        composition::TextStyle style; style.text = "Hello"; style.fontSize = 60;
+        style.alignH = composition::TextStyle::AlignH::Center;
+        style.alignV = composition::TextStyle::AlignV::Middle;
+        // The parent's turn about the canvas centre.
+        QTransform after;
+        after.translate(320, 180); after.rotate(90); after.translate(-320, -180);
+        const auto targetOf = [&] {
+            ui::TextTransformOverlay::Target target{&layer, style, 0, QSizeF(640, 360)};
+            target.after = after;
+            return target;
+        };
+        ui::TextTransformOverlay overlay(targetOf, [] {}, [](const composition::LayerTransform&,
+                                                              const composition::LayerTransform&, const QString&) {});
+        viewer.addOverlay(&overlay);
+        const QRectF upright = ui::TextTransformOverlay::quadFor({&layer, style, 0, QSizeF(640, 360)}).boundingRect();
+        const QRectF turned = ui::TextTransformOverlay::quadFor(targetOf()).boundingRect();
+        QVERIFY2(std::abs(turned.width() - upright.height()) < 1.0 && std::abs(turned.height() - upright.width()) < 1.0,
+                 qPrintable(QStringLiteral("%1x%2 %3x%4").arg(upright.width()).arg(upright.height())
+                                .arg(turned.width()).arg(turned.height())));
+        const QPoint centre = viewer.mapping().toWidget(turned.center()).toPoint();
+        QCOMPARE(overlay.handleAt(centre, viewer.mapping()), ui::TextTransformOverlay::Handle::Move);
+        QTest::mousePress(&viewer, Qt::LeftButton, Qt::NoModifier, centre);
+        QTest::mouseMove(&viewer, centre + QPoint(50, 20));
+        QTest::mouseRelease(&viewer, Qt::LeftButton, Qt::NoModifier, centre + QPoint(50, 20));
+        QVERIFY2(std::abs(layer.transform.position.x() - 20.0) < 0.01 && std::abs(layer.transform.position.y() - 50.0) < 0.01,
+                 qPrintable(QStringLiteral("%1 %2").arg(layer.transform.position.x()).arg(layer.transform.position.y())));
+        viewer.removeOverlay(&overlay);
+    }
     void viewerTextTransformFrame() {
         // A 640x360 frame shown at 100% beside the 24 px tool strip, so a
         // widget pixel is a canvas pixel shifted by the strip.
@@ -1977,6 +2081,792 @@ private slots:
         QCOMPARE(overlay.canvasQuad().size(), 4);
         viewer.removeOverlay(&overlay);
     }
+    // The 360 viewer draws through the reference's EnvironmentMapViewer
+    // module when it is registered, and its CPU projection is the module's:
+    // the same turns (pitch, then yaw, then roll about the world's Z), both
+    // lenses, Scale and Scale Ratio. Needs the OpenGL 4.1 context native
+    // modules run in.
+    void viewer360DrawsThroughEnvironmentMapViewer() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/EnvironmentMapViewer.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference EnvironmentMapViewer.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        plugin::registerNativeEffectModule(core::Identifier("test.native.envviewer"), module, dir, true,
+                                           metadata.parameters);
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        QCOMPARE(plugin::nativeModuleNamed(QStringLiteral("environmentmapviewer")).value(),
+                 QString("test.native.envviewer"));
+        // A smooth panorama, so a lens or turn that differs shows everywhere
+        // and the seam (a jump in red) counts for little.
+        QImage pano(1024, 512, QImage::Format_ARGB32);
+        for (int y = 0; y < 512; ++y)
+            for (int x = 0; x < 1024; ++x)
+                pano.setPixel(x, y, qRgb(x * 255 / 1023, y * 255 / 511,
+                                         qBound(0, int(128 + 100 * std::sin(x * M_PI / 64) * std::cos(y * M_PI / 64)), 255)));
+        const auto difference = [](const QImage& a, const QImage& b) {
+            double sum = 0; int n = 0;
+            for (int y = 0; y < a.height(); ++y)
+                for (int x = 0; x < a.width(); ++x) {
+                    const QRgb p = a.pixel(x, y), q = b.pixel(x, y);
+                    sum += std::abs(qGreen(p) - qGreen(q)) + std::abs(qBlue(p) - qBlue(q)); n += 2;
+                }
+            return sum / n;
+        };
+        struct Case { bool fish; double yaw, pitch, roll, fov, scale, ratio; };
+        const Case cases[] = {
+            {true, 0, 0, 0, 90, 100, 2}, {false, 0, 0, 0, 90, 100, 2},
+            {true, 50, 30, 20, 120, 100, 2}, {false, 50, 30, 20, 70, 100, 2},
+            {false, -120, -35, -40, 60, 100, 2}, {true, 160, 60, 10, 150, 100, 2},
+            {false, 30, 10, 0, 90, 200, 1}, {true, -20, -10, 0, 90, 150, 3},
+        };
+        for (const Case& c : cases) {
+            ui::Viewer360View view;
+            view.setFishEye(c.fish); view.setYawPitch(c.yaw, c.pitch); view.setRoll(c.roll);
+            view.setFieldOfView(c.fov); view.setTextureScale(c.scale); view.setScaleRatio(c.ratio);
+            const QImage native = view.project(pano, QSize(320, 180));
+            if (!view.lastProjectionWasNative())
+                QSKIP("No OpenGL 4.1 context for native modules on this platform");
+            QCOMPARE(native.size(), QSize(320, 180));
+            view.setNativeRendering(false);
+            const QImage cpu = view.project(pano, QSize(320, 180));
+            QVERIFY(!view.lastProjectionWasNative());
+            const double d = difference(native, cpu);
+            if (d >= 2.0) {
+                native.save(testArtifactPath(QStringLiteral("viewer360-native.png")));
+                cpu.save(testArtifactPath(QStringLiteral("viewer360-cpu.png")));
+            }
+            QVERIFY2(d < 2.0, qPrintable(QStringLiteral("fish %1 yaw %2 pitch %3 roll %4: %5")
+                                             .arg(c.fish).arg(c.yaw).arg(c.pitch).arg(c.roll).arg(d)));
+            // The lens maps both ways: the view's points go to the frame and back.
+            for (const QPointF point : {QPointF(40, 30), QPointF(160, 90), QPointF(300, 170)}) {
+                const QPointF at = view.frameAt(point, QSizeF(320, 180), QSizeF(1024, 512));
+                QPointF again;
+                QVERIFY(view.viewAt(at, QSizeF(1024, 512), QSizeF(320, 180), &again));
+                QVERIFY2(QLineF(point, again).length() < 0.01, qPrintable(QStringLiteral("%1,%2").arg(again.x()).arg(again.y())));
+            }
+        }
+        // The reference's names: Top looks at the frame's top row, Left at
+        // its left quarter.
+        ui::Viewer360View view;
+        view.setFishEye(false);
+        view.setCurrentView(ui::Viewer360View::View::Top);
+        QVERIFY(qGreen(view.project(pano, QSize(32, 18)).pixel(16, 9)) < 12);
+        view.setCurrentView(ui::Viewer360View::View::Left);
+        QVERIFY(std::abs(qRed(view.project(pano, QSize(32, 18)).pixel(16, 9)) - 64) < 6);
+    }
+
+    // Keys sit on whole frames; between them the segment's curve is
+    // followed (a motion blur's sub-samples), on a key it is the key, and
+    // a Hold segment holds.
+    void keyFramesBetweenFrames() {
+        composition::KeyFrameList keys(QVariant(0.0));
+        keys.set(10, 0.0); keys.set(20, 100.0);
+        QCOMPARE(keys.valueAtTime(12.5).toDouble(), 25.0);
+        QCOMPARE(keys.valueAtTime(19.9).toDouble(), keys.valueAt(20).toDouble() - 1.0);
+        QCOMPARE(keys.valueAtTime(10.0), keys.valueAt(10));
+        QCOMPARE(keys.valueAtTime(4.5).toDouble(), 0.0);
+        QCOMPARE(keys.valueAtTime(30.25).toDouble(), 100.0);
+        keys.set(10, 0.0, composition::TemporalType::Hold);
+        QCOMPARE(keys.valueAtTime(15.5).toDouble(), 0.0);
+        composition::Effect effect;
+        effect.parameterValues = {QStringLiteral("7")};
+        QCOMPARE(effect.parameterAtTime(0, 3.5).toString(), QString("7"));
+        composition::KeyFrameList turn(QVariant(0.0));
+        turn.set(0, 0.0); turn.set(10, 90.0);
+        effect.animation.insert(0, turn);
+        QCOMPARE(effect.parameterAtTime(0, 2.5).toDouble(), 22.5);
+    }
+    // With Motion Blur on, EnvironmentMapViewer reads its values again at
+    // its sub-samples' times (the layer's milliseconds); the host answers
+    // from the effect's keyframes there, so a keyframed turn blurs, and a
+    // still one draws as it does without blur. Needs the OpenGL 4.1 context
+    // native modules run in.
+    void nativeMotionBlurReadsKeyframesBetweenFrames() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/EnvironmentMapViewer.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference EnvironmentMapViewer.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("test.native.envviewer.blur");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        // Narrow vertical stripes: a turn about Y smears them sideways.
+        QImage pano(512, 256, QImage::Format_RGBA8888);
+        for (int y = 0; y < 256; ++y)
+            for (int x = 0; x < 512; ++x)
+                pano.setPixelColor(x, y, (x / 4) % 2 ? QColor(240, 240, 240) : QColor(20, 20, 20));
+        int yRotation = -1;
+        const auto values = [&](const QString& mode) {
+            QStringList list;
+            for (int i = 0; i < metadata.parameters.size(); ++i) {
+                const auto& parameter = metadata.parameters.at(i);
+                QString v = parameter.defaultValue;
+                if (parameter.name == "useFishEyeLens" || parameter.name == "useCameraFOV") v = "false";
+                if (parameter.name == "envWrapX" || parameter.name == "envWrapY") v = "1";
+                if (parameter.name == "motionBlurMode") v = mode;
+                if (parameter.name == "motionBlurSamples") v = "16";
+                if (parameter.name == "motionBlurScale") v = "0.5";
+                if (parameter.name == "envTrasnformYRot") { yRotation = i; v = "30"; }
+                list << v;
+            }
+            return list;
+        };
+        // 1 degree a frame; the render is at frame 30 (YRot 30).
+        const auto turning = [&](int index, double frame) {
+            return index == yRotation ? QString::number(frame) : QString();
+        };
+        const auto still = [](int, double) { return QString(); };
+        const auto draw = [&](const QString& mode, std::function<QString(int, double)> valueAt, bool* ok) {
+            QImage image = pano;
+            plugin::NativeFrameTime time;
+            time.frame = 30; time.layerFrame = 30; time.layerFrames = 100; time.frameRate = 30.0;
+            time.valueAt = valueAt;
+            *ok = plugin::applyEffectToImage(image, id, values(mode), time);
+            return image;
+        };
+        // How sharp the stripes are: the mean step between neighbours.
+        const auto sharpness = [](const QImage& image) {
+            double sum = 0; int n = 0;
+            for (int y = 64; y < 192; y += 4)
+                for (int x = 1; x < image.width(); ++x) {
+                    sum += std::abs(qGray(image.pixel(x, y)) - qGray(image.pixel(x - 1, y))); ++n;
+                }
+            return sum / n;
+        };
+        bool ok = false;
+        const QImage sharp = draw(QStringLiteral("0"), turning, &ok);
+        if (!ok) QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        const QImage blurred = draw(QStringLiteral("2"), turning, &ok);
+        QVERIFY(ok);
+        const QImage held = draw(QStringLiteral("2"), still, &ok);
+        QVERIFY(ok);
+        QVERIFY(yRotation >= 0);
+        const double edges = sharpness(sharp), smeared = sharpness(blurred), kept = sharpness(held);
+        QVERIFY2(smeared < edges * 0.6, qPrintable(QStringLiteral("%1 vs %2").arg(smeared).arg(edges)));
+        QVERIFY2(std::abs(kept - edges) < edges * 0.05, qPrintable(QStringLiteral("%1 vs %2").arg(kept).arg(edges)));
+    }
+    // Debug > Show Hardware Decoding Indicator, as the reference's viewer
+    // cache draws its encode/decode squares: a frame stored gets a blue
+    // square at the top left (a software encoder's colour), a frame read
+    // back a dark blue one at the top right (a software decoder's); off,
+    // the frame comes back as it went in.
+    void cacheDebugSquaresFollowTheReference() {
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        render::FrameDiskCache cache; cache.setDirectory(dir.path());
+        const QSize size(320, 240);
+        QByteArray grey(size.width() * size.height() * 4, char(100));
+        const auto pixel = [&](const QByteArray& rgba, int x, int y) {
+            const uchar* p = reinterpret_cast<const uchar*>(rgba.constData()) + (y * size.width() + x) * 4;
+            return QColor(p[0], p[1], p[2], p[3]);
+        };
+        auto reset = qScopeGuard([] { render::FrameDiskCache::setDebugSquares(false); });
+        QVERIFY(cache.store("plain", size, grey));
+        QByteArray back;
+        QVERIFY(cache.load("plain", size, &back));
+        QCOMPARE(back, grey);
+        render::FrameDiskCache::setDebugSquares(true);
+        QVERIFY(cache.store("squared", size, grey));
+        QVERIFY(cache.load("squared", size, &back));
+        QCOMPARE(pixel(back, 10, 10), QColor(0, 0, 255, 255));
+        QCOMPARE(pixel(back, 119, 199), QColor(0, 0, 255, 255));
+        QCOMPARE(pixel(back, 310, 10), QColor(0, 0, 128, 255));
+        QCOMPARE(pixel(back, 120, 199), QColor(0, 0, 128, 255));   // the read one drawn over
+        QCOMPARE(pixel(back, 160, 220), QColor(100, 100, 100, 100));
+        QCOMPARE(pixel(back, 10, 230), QColor(100, 100, 100, 100));
+    }
+
+    // Whether glyph Behavior `id` moves the letters of a text layer at some
+    // frame of its first three seconds, rendered as the viewer renders it.
+    bool glyphBehaviorMovesText(const core::Identifier& id, const QStringList& values) {
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setDurationSeconds(4);
+        auto& layer = shot->addLayer("Text"); layer.kind = composition::LayerKind::Text;
+        composition::TextStyle style;
+        style.text = "MOVE"; style.fontSize = 48;
+        style.alignH = composition::TextStyle::AlignH::Center;
+        style.alignV = composition::TextStyle::AlignV::Middle;
+        composition::Clip clip; clip.durationSeconds = 4;
+        composition::Effect text; text.pluginId = core::Identifier("text"); text.name = "Text";
+        text.parameterValues = composition::textStyleToParameters(style);
+        composition::Effect behavior; behavior.pluginId = id; behavior.name = id.value();
+        behavior.parameterValues = values;
+        clip.effects << text << behavior;
+        layer.clips.append(clip);
+        auto plain = std::make_shared<composition::Composition>(*shot);
+        plain->layerRef(0).clips[0].effects.removeLast();
+        const auto frameOf = [](const std::shared_ptr<composition::Composition>& composition, double seconds) {
+            render::RenderManager manager; manager.setComposition(composition);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, seconds, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() >= 1; }, 10000)) return QByteArray();
+            return frames.last()[1].toByteArray();
+        };
+        for (double seconds : {0.1, 0.5, 1.0, 2.0, 3.0}) {
+            const QByteArray moved = frameOf(shot, seconds);
+            if (!moved.isEmpty() && moved != frameOf(plain, seconds)) return true;
+        }
+        return false;
+    }
+
+    // Every module the reference ships runs its own machine code through the
+    // host as its kind is rendered - a 2D effect over a picture, a video
+    // transition between two, an audio effect and an audio transition over
+    // PCM, a Behavior asked for its layer's transformation, a Geometry module
+    // over a quad - with its default values, and none fails. MotionTrack and
+    // the effects that analyse their own layer run on an instance of their
+    // own (motionTrackHostTracksFootage, stabilizersSteadyTheirOwnLayer).
+    // Needs the OpenGL 4.1 context native modules run in.
+    void everyShippedModuleRuns() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects/Plugins";
+        if (!QFileInfo::exists(dir)) QSKIP("The reference plugins are not in SAMPLES");
+        auto manager = plugin::createPluginManager();
+        manager->setPluginDirs({dir});
+        QVERIFY(manager->scan().isSuccess());
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        QImage pattern(64, 64, QImage::Format_RGBA8888);
+        for (int y = 0; y < 64; ++y)
+            for (int x = 0; x < 64; ++x) pattern.setPixelColor(x, y, QColor(x * 4, y * 4, 128));
+        QImage other = pattern.mirrored(true, false);
+        QVector<qint16> tone(4800 * 2);
+        for (int i = 0; i < 4800; ++i)
+            tone[2 * i] = tone[2 * i + 1] = qint16(8000 * std::sin(i * 2 * M_PI * 440 / 48000.0));
+        {
+            QImage probe = pattern;
+            bool any = false;
+            for (const auto& id : manager->allPluginIds())
+                if (manager->spec(id).kind == plugin::PluginKind::Effect2D && !any) {
+                    QStringList values;
+                    for (const auto& parameter : manager->spec(id).parameters) values << parameter.defaultValue;
+                    any = plugin::applyEffectToImage(probe, id, values, plugin::NativeFrameTime());
+                }
+            if (!any) QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        }
+        QStringList failed;
+        QHash<int, int> ran;
+        for (const auto& id : manager->allPluginIds()) {
+            const plugin::EffectSpec spec = manager->spec(id);
+            QStringList values;
+            for (const auto& parameter : spec.parameters) values << parameter.defaultValue;
+            bool ok = true;
+            switch (spec.kind) {
+            case plugin::PluginKind::Effect2D: {
+                if (plugin::nativeEffectAnalysesOwnLayer(id)) continue;
+                QImage image = pattern;
+                plugin::NativeFrameTime time; time.frame = 10; time.layerFrame = 10; time.layerFrames = 60;
+                ok = plugin::applyEffectToImage(image, id, values, time);
+                break;
+            }
+            case plugin::PluginKind::VideoTransition: {
+                QImage out(64, 64, QImage::Format_RGBA8888);
+                ok = plugin::applyNativeVideoTransition(out, pattern, other, 0.5f, id, values);
+                break;
+            }
+            case plugin::PluginKind::AudioEffect: {
+                QVector<qint16> samples = tone;
+                ok = plugin::applyNativeAudioEffect(samples, 2, 48000, 0, id, values);
+                break;
+            }
+            case plugin::PluginKind::AudioTransition: {
+                QVector<qint16> out(tone.size());
+                ok = plugin::applyNativeAudioTransition(out, tone, tone, 2, 0, 4800, id, values);
+                break;
+            }
+            case plugin::PluginKind::BehaviorEffect: {
+                if (plugin::nativeBehaviorUsesInstance(id)) continue;
+                if (plugin::nativeBehaviorSubObjectRenderingVerified(id)) {
+                    // A glyph Behavior moves the letters of a text layer.
+                    ok = glyphBehaviorMovesText(id, values);
+                    break;
+                }
+                plugin::NativeBehaviorResult result;
+                ok = plugin::evaluateNativeBehavior(result, 10, 10, 60, 640, 360, 30.0, id, values);
+                break;
+            }
+            case plugin::PluginKind::GeometryEffect: {
+                plugin::NativeGeometryBatch quad;
+                const float corners[4][2] = {{-50, -50}, {50, -50}, {50, 50}, {-50, 50}};
+                for (const auto& corner : corners) {
+                    plugin::NativeGeometryVertex vertex;
+                    vertex.position[0] = corner[0]; vertex.position[1] = corner[1];
+                    vertex.uv[0] = corner[0] > 0 ? 1.0f : 0.0f; vertex.uv[1] = corner[1] > 0 ? 1.0f : 0.0f;
+                    quad.vertices << vertex;
+                }
+                plugin::NativeGeometryTriangle a, b;
+                a.indices[0] = 0; a.indices[1] = 1; a.indices[2] = 2;
+                b.indices[0] = 0; b.indices[1] = 2; b.indices[2] = 3;
+                quad.triangles << a << b;
+                plugin::NativeGeometryPolygon polygon; polygon.indices = {0, 1, 2, 3};
+                quad.polygons << polygon;
+                quad.extents[0] = -50; quad.extents[1] = -50; quad.extents[2] = 50; quad.extents[3] = 50;
+                QVector<plugin::NativeGeometryBatch> geometry{quad};
+                ok = plugin::applyNativeGeometryEffect(geometry, id, values, 10, 10, 60, 30.0);
+                if (!ok) {
+                    // A module whose defaults change nothing sets no output:
+                    // every ranged number a third into its range.
+                    QStringList moved = values;
+                    for (int i = 0; i < spec.parameters.size(); ++i) {
+                        const auto& parameter = spec.parameters.at(i);
+                        if ((parameter.type == "double" || parameter.type == "int" || parameter.type == "angle")
+                            && parameter.maximum > parameter.minimum && parameter.maximum < 100000)
+                            moved[i] = QString::number(parameter.minimum + (parameter.maximum - parameter.minimum) / 3.0);
+                    }
+                    geometry = {quad};
+                    ok = plugin::applyNativeGeometryEffect(geometry, id, moved, 10, 10, 60, 30.0);
+                }
+                break;
+            }
+            default:
+                continue;
+            }
+            ++ran[int(spec.kind)];
+            if (!ok) failed << QStringLiteral("%1 (%2)").arg(spec.name).arg(int(spec.kind));
+        }
+        int total = 0;
+        for (int count : std::as_const(ran)) total += count;
+        qInfo().noquote() << "modules run" << total << "failed" << failed.size() << failed.join(", ");
+        QVERIFY(total > 300);
+        QVERIFY2(failed.isEmpty(), qPrintable(failed.join(", ")));
+    }
+
+    // Builds SAMPLES/vegfx_projects/project_3 (OPENVEGAS_PROJECT3_OUT names
+    // the folder; skipped without it): the cube of project_2 turning on
+    // keyframes in a shot of its own with a text centred on each face and
+    // parented to it, effects, glyph Behaviors and Extrude on the texts,
+    // that shot nested in the main one over a ramp, with effects, a
+    // transition and a shake burst on it, a title, a grade layer and the
+    // folder's two songs with audio effects and fades. The project is saved
+    // with relative paths, read back and, with OPENVEGAS_PROJECT3_PREVIEW
+    // naming a folder, frames are rendered there.
+    void buildProject3() {
+        const QString out = qEnvironmentVariable("OPENVEGAS_PROJECT3_OUT");
+        if (out.isEmpty()) QSKIP("OPENVEGAS_PROJECT3_OUT is not set");
+        const QString samples = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES";
+        auto manager = plugin::createPluginManager();
+        manager->setPluginDirs({samples + "/VEGAS_Effects/Plugins"});
+        QVERIFY(manager->scan().isSuccess());
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        // An effect of module `name`, its defaults with `values` over them.
+        const auto effect = [&](const QString& name, const QHash<QString, QString>& values = {}) {
+            const core::Identifier id = plugin::nativeModuleNamed(name);
+            const plugin::EffectSpec spec = manager->spec(id);
+            composition::Effect fx;
+            fx.pluginId = id;
+            fx.name = spec.displayName.isEmpty() ? spec.name : spec.displayName;
+            for (const auto& parameter : spec.parameters)
+                fx.parameterValues << values.value(parameter.name, parameter.defaultValue);
+            for (auto it = values.cbegin(); it != values.cend(); ++it) {
+                bool known = false;
+                for (const auto& parameter : spec.parameters) known |= parameter.name == it.key();
+                if (!known) qWarning().noquote() << "no parameter" << it.key() << "in" << name;
+            }
+            return fx;
+        };
+        const auto keyed = [](std::initializer_list<std::pair<int, double>> keys,
+                              composition::TemporalType temporal = composition::TemporalType::Linear) {
+            composition::KeyFrameList list(QVariant(0.0));
+            for (const auto& [frame, value] : keys) list.set(frame, value, temporal);
+            return list;
+        };
+        const auto textClip = [](const QString& words, int size, const QColor& colour, double seconds) {
+            composition::TextStyle style;
+            style.text = words; style.fontSize = size; style.fontColor = colour;
+            style.fontStyle = QStringLiteral("Bold");
+            style.alignH = composition::TextStyle::AlignH::Center;
+            style.alignV = composition::TextStyle::AlignV::Middle;
+            composition::Clip clip; clip.durationSeconds = seconds;
+            composition::Effect text; text.pluginId = core::Identifier("text"); text.name = "Text";
+            text.parameterValues = composition::textStyleToParameters(style);
+            clip.effects << text;
+            return clip;
+        };
+
+        auto media = std::make_shared<media::MediaManager>();
+        const QString cubePath = QFileInfo(samples + "/vegfx_projects/project_2/model/cube.obj").absoluteFilePath();
+        QVERIFY(media->importModel(cubePath, model3d::ImportSettings()).isSuccess());
+        const core::Identifier cubeId = media->assetByFilePath(cubePath).id();
+        const QString song1 = QDir(out).absoluteFilePath("Alf42red - Mauiwowi.wav");
+        const QString song2 = QDir(out).absoluteFilePath("TameAnderson - MakeMe.flac");
+        QVERIFY(media->importFile(song1).isSuccess());
+        QVERIFY(media->importFile(song2).isSuccess());
+        QVector3D low, high;
+        QVERIFY(media->modelMesh(cubeId).bounds(&low, &high));
+        const double half = (high - low).length() / std::sqrt(3.0) / 2.0;   // the cube's half side
+        qInfo() << "cube half side" << half;
+
+        const double seconds = 20.0;
+        const int frames = 600;
+        // The scene: the cube, its six faces' words and the light.
+        auto scene = std::make_shared<composition::Composition>();
+        scene->setName("Cube Scene"); scene->setSize(1920, 1080); scene->setFrameRate(30, 1);
+        scene->setDurationSeconds(seconds);
+        composition::Layer cube;
+        cube.name = "Cube"; cube.kind = composition::LayerKind::Model3D;
+        cube.dimension = composition::LayerDimension::ThreeD; cube.modelAssetId = cubeId;
+        cube.spanStartSeconds = 0.0; cube.spanEndSeconds = seconds;
+        {
+            auto& t = cube.transform;
+            t.rotationXCurve = keyed({{0, -20}, {120, 70}, {240, 160}, {330, 200}, {450, 290}, {600, 340}},
+                                     composition::TemporalType::EasyEase);
+            t.rotationYCurve = keyed({{0, 30}, {150, 210}, {300, 330}, {420, 480}, {600, 750}},
+                                     composition::TemporalType::EasyEase);
+            t.rotationCurve = keyed({{0, 0}, {200, 45}, {360, -30}, {520, 90}, {600, 0}},
+                                    composition::TemporalType::EasyEase);
+            t.positionYCurve = keyed({{0, 0}, {75, 60}, {150, 0}, {225, -60}, {300, 0}, {375, 60}, {450, 0},
+                                      {525, -60}, {600, 0}}, composition::TemporalType::EasyEase);
+            t.scaleXCurve = keyed({{0, 100}, {280, 100}, {300, 125}, {320, 100}, {600, 100}});
+            t.scaleYCurve = t.scaleXCurve; t.scaleZCurve = t.scaleXCurve;
+        }
+        QVector<composition::Layer> sceneLayers;
+        struct Face { QString words; QVector3D offset; double rotationX, rotationY; QColor colour; QString extra; };
+        const double lift = half * 1.01;
+        const QVector<Face> faces{
+            {"OpenVegas", {0, 0, float(lift)}, 0, 0, QColor(255, 240, 200), "Glow"},
+            {"EFFECTS", {0, 0, float(-lift)}, 0, 180, QColor(200, 230, 255), "Typewriter"},
+            {"3D", {float(lift), 0, 0}, 0, -90, QColor(255, 200, 120), "Extrude"},
+            {u8"Тест", {float(-lift), 0, 0}, 0, 90, QColor(180, 255, 180), "WavyStyle"},
+            {"HFPL", {0, float(lift), 0}, 90, 0, QColor(255, 180, 220), "DropShadow"},
+            {u8"日本語", {0, float(-lift), 0}, -90, 0, QColor(220, 220, 255), "Bevel"},
+        };
+        for (const Face& face : faces) {
+            composition::Layer text;
+            text.name = face.words; text.kind = composition::LayerKind::Text;
+            text.dimension = composition::LayerDimension::ThreeD;
+            text.parentLayerId = cube.id;
+            text.transform.position = QPointF(face.offset.x(), face.offset.y());
+            text.transform.positionZ = face.offset.z();
+            text.transform.rotationXDegrees = face.rotationX;
+            text.transform.rotationYDegrees = face.rotationY;
+            composition::Clip clip = textClip(face.words, int(half * 0.42), face.colour, seconds);
+            if (face.extra == "Glow") clip.effects << effect("Glow", {{"intensity", "1.2"}, {"threshold", "30"}, {"radius_f", "18"}});
+            if (face.extra == "DropShadow") clip.effects << effect("DropShadow", {{"distance_f", "10"}, {"opacity", "0.7"}, {"radius_f", "6"}, {"shadowColor", "#400020"}});
+            if (face.extra == "Typewriter") clip.effects << effect("Typewriter", {{"revealLength", "40"}});
+            if (face.extra == "WavyStyle") clip.effects << effect("WavyStyle", {{"revealLength", "60"}});
+            if (face.extra == "Extrude") clip.effects << effect("Extrude", {{"extrusion", "20"}});
+            if (face.extra == "Bevel") clip.effects << effect("Bevel", {{"extrusion", "8"}, {"expansion", "-4"}});
+            text.clips << clip;
+            sceneLayers << text;
+        }
+        sceneLayers << cube;
+        composition::Layer key;
+        key.name = "Key Light"; key.kind = composition::LayerKind::Light;
+        key.dimension = composition::LayerDimension::ThreeD;
+        key.light.type = composition::LightSettings::Type::Point; key.light.intensity = 70;
+        key.transform.position = QPointF(-700, 500); key.transform.positionZ = -900;
+        key.spanStartSeconds = 0.0; key.spanEndSeconds = seconds;
+        composition::Layer fill;
+        fill.name = "Fill Light"; fill.kind = composition::LayerKind::Light;
+        fill.dimension = composition::LayerDimension::ThreeD;
+        fill.light.type = composition::LightSettings::Type::Ambient; fill.light.intensity = 25;
+        fill.light.color = QColor(170, 190, 255);
+        fill.spanStartSeconds = 0.0; fill.spanEndSeconds = seconds;
+        sceneLayers << key << fill;
+        scene->setLayers(sceneLayers);
+
+        // The main shot.
+        composition::Composition shot;
+        shot.setName("project_3"); shot.setSize(1920, 1080); shot.setFrameRate(30, 1);
+        shot.setDurationSeconds(seconds);
+        QVector<composition::Layer> layers;
+        {
+            composition::Layer grade; grade.name = "Grade"; grade.kind = composition::LayerKind::Grade;
+            composition::Clip clip; clip.durationSeconds = seconds;
+            clip.effects << effect("ColorCorrection", {{"saturation", "1.15"}, {"exposure", "0.1"}, {"shadowStrength", "0.3"},
+                                                       {"shadowHue", "220"}, {"highlightStrength", "0.2"}, {"highlightHue", "40"}})
+                         << effect("Vignette", {{"boundingBoxWidth", "1920"}, {"boundingBoxHeight", "1080"}, {"opacity", "0.7"}})
+                         << effect("LightLeak", {{"threashold", "75"}, {"leakBrightness", "60"}})
+                         << effect("FilmGrain", {{"grainStrength", "12"}});
+            grade.clips << clip;
+            layers << grade;
+        }
+        {
+            composition::Layer title; title.name = "Title"; title.kind = composition::LayerKind::Text;
+            title.transform.position = QPointF(0, -430);
+            composition::Clip clip = textClip(u8"project_3 · OpenVegas Effects", 64, QColor(255, 255, 255), seconds);
+            clip.effects << effect("DropInByChar", {{"revealLength", "30"}})
+                         << effect("Glow", {{"intensity", "0.9"}, {"threshold", "20"}, {"radius_f", "14"}, {"useAandBColors", "true"},
+                                            {"colorA", "#40a0ff"}, {"colorB", "#40a0ff"}});
+            title.clips << clip;
+            layers << title;
+        }
+        {
+            composition::Layer nested; nested.name = "Cube Scene";
+            composition::Clip clip; clip.durationSeconds = seconds;
+            clip.nestedComposition = scene; clip.nestedCompositionId = scene->id();
+            clip.mediaId = core::Identifier("composition:" + scene->id().value());
+            clip.effects << effect("Glow", {{"intensity", "0.5"}, {"threshold", "55"}, {"radius_f", "30"}})
+                         << effect("ChromaticAberration", {{"separation", "2"}})
+                         << effect("DropShadow", {{"distance_f", "24"}, {"opacity", "0.6"}, {"radius_f", "16"}, {"angle", "135"}});
+            composition::Effect shake = effect("Shake", {{"amount", "0"}, {"speed", "4"}, {"motionBlurMode", "Custom"},
+                                                         {"motionBlurSamples", "12"}});
+            for (int i = 0; i < shake.parameterValues.size(); ++i)
+                if (manager->spec(shake.pluginId).parameters.at(i).name == "amount")
+                    shake.animation.insert(i, keyed({{0, 0}, {290, 0}, {300, 45}, {330, 0}}));
+            clip.effects << shake;
+            composition::Effect fadeIn = effect("FadeTransition");
+            fadeIn.transitionEdge = composition::TransitionEdge::In; fadeIn.transitionSeconds = 1.5;
+            composition::Effect fadeOut = effect("FadeTransition");
+            fadeOut.transitionEdge = composition::TransitionEdge::Out; fadeOut.transitionSeconds = 1.5;
+            clip.effects << fadeIn << fadeOut;
+            nested.clips << clip;
+            layers << nested;
+        }
+        {
+            composition::Layer background; background.name = "Background"; background.kind = composition::LayerKind::Plane;
+            background.planeColor = QColor(16, 16, 32);
+            composition::Clip clip; clip.durationSeconds = seconds;
+            clip.effects << effect("4PointRamp", {{"point1", "-960,540"}, {"color1", "#1a1040"}, {"point2", "960,540"},
+                                                  {"color2", "#0b2a4a"}, {"point3", "960,-540"}, {"color3", "#3a0f2a"},
+                                                  {"point4", "-960,-540"}, {"color4", "#06141c"}})
+                         << effect("Grain", {{"amount", "8"}});
+            background.clips << clip;
+            layers << background;
+        }
+        {
+            composition::Layer music; music.name = "Mauiwowi";
+            composition::Clip clip; clip.mediaId = media->assetByFilePath(song1).id();
+            clip.durationSeconds = 12.0; clip.sourceStartSeconds = 30.0;
+            clip.effects << effect("Equaliser", {{"EQ_band_63Hz", "4"}, {"EQ_band_125Hz", "3"}, {"EQ_band_8000Hz", "2"}})
+                         << effect("AudioEcho", {{"delay", "350"}, {"falloff", "60"}, {"numberOfEchoes", "2"}});
+            composition::Effect in = effect("Fade"); in.transitionEdge = composition::TransitionEdge::In; in.transitionSeconds = 1.0;
+            composition::Effect out2 = effect("Fade"); out2.transitionEdge = composition::TransitionEdge::Out; out2.transitionSeconds = 2.0;
+            clip.effects << in << out2;
+            music.clips << clip;
+            layers << music;
+        }
+        {
+            composition::Layer music; music.name = "MakeMe";
+            composition::Clip clip; clip.mediaId = media->assetByFilePath(song2).id();
+            clip.startSeconds = 10.0; clip.durationSeconds = 10.0; clip.sourceStartSeconds = 45.0;
+            clip.effects << effect("Compressor", {{"threshold", "-14"}, {"ratio", "3"}, {"outputGain", "3"}})
+                         << effect("LargeRoom", {{"gain", "-6"}});
+            composition::Effect in = effect("Fade"); in.transitionEdge = composition::TransitionEdge::In; in.transitionSeconds = 2.0;
+            composition::Effect out2 = effect("Fade"); out2.transitionEdge = composition::TransitionEdge::Out; out2.transitionSeconds = 1.5;
+            clip.effects << in << out2;
+            music.clips << clip;
+            layers << music;
+        }
+        shot.setLayers(layers);
+        Q_UNUSED(frames);
+
+        project::ProjectSaveOptions options; options.useRelativePaths = true;
+        const QString path = QDir(out).absoluteFilePath("Project.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(path, shot, *media, options).isSuccess());
+        // Read back as a project is opened.
+        auto loaded = std::make_shared<composition::Composition>();
+        auto loadedMedia = std::make_shared<media::MediaManager>();
+        QVERIFY(project::VegfxSerializer::loadFromFile(path, loaded.get(), loadedMedia.get()).isSuccess());
+        QCOMPARE(loaded->layers().size(), layers.size());
+        QVERIFY(loaded->layers().at(2).clips.first().nestedComposition);
+        QCOMPARE(loaded->layers().at(2).clips.first().nestedComposition->layers().size(), sceneLayers.size());
+
+        const QString preview = qEnvironmentVariable("OPENVEGAS_PROJECT3_PREVIEW");
+        if (preview.isEmpty()) return;
+        // The cube still, turned to show each face head on.
+        const QVector<QVector3D> turns{{0, 0, 0}, {0, 180, 0}, {0, 90, 0}, {0, -90, 0}, {90, 0, 0}, {-90, 0, 0},
+                                       {30, 50, 20}, {150, 40, 0}, {-60, 120, 45}};
+        for (int t = 0; t < turns.size(); ++t) {
+            auto still = std::make_shared<composition::Composition>(*loaded->layers().at(2).clips.first().nestedComposition);
+            for (int i = 0; i < still->layers().size(); ++i) {
+                if (still->layers().at(i).kind != composition::LayerKind::Model3D) continue;
+                auto& cubeLayer = still->layerRef(i);
+                cubeLayer.transform = composition::LayerTransform();
+                cubeLayer.transform.rotationXDegrees = turns[t].x();
+                cubeLayer.transform.rotationYDegrees = turns[t].y();
+                cubeLayer.transform.rotationDegrees = turns[t].z();
+            }
+            render::RenderManager faceRenderer; faceRenderer.setMediaManager(loadedMedia); faceRenderer.setComposition(still);
+            QSignalSpy face(&faceRenderer, &render::RenderManager::frameReady);
+            faceRenderer.requestFrame(0, 3.0, QSize(480, 270));
+            QVERIFY(QTest::qWaitFor([&] { return face.count() >= 1; }, 60000));
+            const QByteArray rgba = face.last()[1].toByteArray();
+            QImage(reinterpret_cast<const uchar*>(rgba.constData()), 480, 270, 480 * 4, QImage::Format_RGBA8888).copy()
+                .save(QDir(preview).filePath(QStringLiteral("face_%1.png").arg(t)));
+        }
+        render::RenderManager renderer; renderer.setMediaManager(loadedMedia); renderer.setComposition(loaded);
+        QSignalSpy ready(&renderer, &render::RenderManager::frameReady);
+        for (double at : {0.5, 2.0, 5.0, 8.0, 10.0, 13.0, 16.0, 19.0}) {
+            ready.clear();
+            renderer.requestFrame(0, at, QSize(960, 540));
+            QVERIFY(QTest::qWaitFor([&] { return ready.count() >= 1; }, 60000));
+            const QByteArray rgba = ready.last()[1].toByteArray();
+            const QSize size = ready.last()[2].toSize();
+            QImage(reinterpret_cast<const uchar*>(rgba.constData()), size.width(), size.height(), size.width() * 4,
+                   QImage::Format_RGBA8888).copy().save(QDir(preview).filePath(QStringLiteral("p3_%1.png").arg(at, 4, 'f', 1, QLatin1Char('0'))));
+        }
+    }
+
+    // Before every Render Flux asks a 2D effect how far it reaches past its
+    // layer (GetRenderGrowth, Notify 9) with the render's context - +0x24 the
+    // normalisation 1 among it - and grows its target by that: Drop Shadow
+    // answers with the room its shadow needs, places the layer at those
+    // margins itself and draws its shadow there. The layer stays where it
+    // is, unscaled, with the shadow beside it. Needs the OpenGL 4.1 context
+    // native modules run in.
+    void effectsGrowTheirTarget() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/DropShadow.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference DropShadow.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("test.native.dropshadow");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        for (const bool wide : {false, true}) {
+            QImage image(256, 144, QImage::Format_RGBA8888);
+            image.fill(Qt::transparent);
+            for (int y = 40; y < 100; ++y) for (int x = 100; x < 160; ++x) image.setPixelColor(x, y, QColor(250, 200, 50));
+            QStringList values;
+            for (const auto& p : metadata.parameters) {
+                QString v = p.defaultValue;
+                if (wide && p.name == "distance_f") v = "24";
+                if (wide && p.name == "radius_f") v = "16";
+                if (wide && p.name == "angle") v = "135";
+                values << v;
+            }
+            plugin::NativeFrameTime time; time.frame = 10; time.layerFrame = 10; time.layerFrames = 60;
+            if (!plugin::applyEffectToImage(image, id, values, time))
+                QSKIP("No OpenGL 4.1 context for native modules on this platform");
+            // The layer where it was, its corners included.
+            for (const QPoint at : {QPoint(100, 40), QPoint(159, 40), QPoint(100, 99), QPoint(159, 99), QPoint(130, 70)})
+                QCOMPARE(image.pixelColor(at), QColor(250, 200, 50));
+            // A shadow outside it.
+            int shadow = 0;
+            for (int y = 0; y < 144; ++y)
+                for (int x = 0; x < 256; ++x)
+                    if ((x < 100 || x >= 160 || y < 40 || y >= 100) && image.pixelColor(x, y).alpha() > 40) ++shadow;
+            QVERIFY2(shadow > (wide ? 600 : 100), qPrintable(QString::number(shadow)));
+        }
+    }
+
+    // Native modules see Y running up, as Flux's GL textures run bottom row
+    // first: 4PointRamp's points at +54 colour the top of the frame, those at
+    // -54 its bottom (uploaded top row first, the picture came out mirrored).
+    // Needs the OpenGL 4.1 context native modules run in.
+    void nativeEffectsSeeYUp() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/4PointRamp.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference 4PointRamp.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("test.native.ramp");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        QImage image(192, 108, QImage::Format_RGBA8888); image.fill(Qt::white);
+        QStringList values;
+        for (const auto& p : metadata.parameters) {
+            QString v = p.defaultValue;
+            if (p.name == "point1") v = "-96,54"; if (p.name == "color1") v = "#ff0000";
+            if (p.name == "point2") v = "96,54"; if (p.name == "color2") v = "#ff0000";
+            if (p.name == "point3") v = "96,-54"; if (p.name == "color3") v = "#0000ff";
+            if (p.name == "point4") v = "-96,-54"; if (p.name == "color4") v = "#0000ff";
+            if (p.name == "tansferMode") v = "None";
+            values << v;
+        }
+        if (!plugin::applyEffectToImage(image, id, values, plugin::NativeFrameTime()))
+            QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        const QColor top = image.pixelColor(96, 2), bottom = image.pixelColor(96, 105);
+        QVERIFY2(top.red() > 200 && top.blue() < 50, qPrintable(top.name()));
+        QVERIFY2(bottom.blue() > 200 && bottom.red() < 50, qPrintable(bottom.name()));
+    }
+
+    // In a shared 3D space a body is met where its surface lies, pixel by
+    // pixel: a red sheet inside a cube, between its centre and its front
+    // face, stays behind the face (by the layer's position alone it was
+    // nearer than the cube and drawn over it); the same sheet in front of
+    // the cube covers it.
+    void bodiesHideWhatIsBehindTheirSurface() {
+        const QString cubePath = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects/project_2/model/cube.obj";
+        if (!QFileInfo::exists(cubePath)) QSKIP("The project_2 cube is not in SAMPLES");
+        auto media = std::make_shared<media::MediaManager>();
+        QVERIFY(media->importModel(cubePath, model3d::ImportSettings()).isSuccess());
+        const core::Identifier cubeId = media->assetByFilePath(QFileInfo(cubePath).absoluteFilePath()).id();
+        QVector3D low, high;
+        QVERIFY(media->modelMesh(cubeId).bounds(&low, &high));
+        const float half = (high.z() - low.z()) / 2.0f;
+        const auto centreWith = [&](float sheetZ) {
+            auto shot = std::make_shared<composition::Composition>();
+            shot->setSize(1920, 1080); shot->setDurationSeconds(1);
+            composition::Layer sheet; sheet.name = "Sheet"; sheet.kind = composition::LayerKind::Plane;
+            sheet.dimension = composition::LayerDimension::ThreeD; sheet.planeColor = QColor(255, 0, 0);
+            sheet.transform.scalePercent = QPointF(10, 10); sheet.transform.positionZ = sheetZ;
+            composition::Clip clip; clip.durationSeconds = 1; sheet.clips << clip;
+            composition::Layer cube; cube.name = "Cube"; cube.kind = composition::LayerKind::Model3D;
+            cube.dimension = composition::LayerDimension::ThreeD; cube.modelAssetId = cubeId;
+            cube.spanStartSeconds = 0.0; cube.spanEndSeconds = 1.0;
+            shot->setLayers({sheet, cube});
+            render::RenderManager manager; manager.setMediaManager(media); manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 0.0, QSize(960, 540));
+            if (!QTest::qWaitFor([&] { return frames.count() >= 1; }, 20000)) return QColor();
+            const QByteArray rgba = frames.last()[1].toByteArray();
+            const QImage image(reinterpret_cast<const uchar*>(rgba.constData()), 960, 540, 960 * 4, QImage::Format_RGBA8888);
+            return image.pixelColor(480, 270);
+        };
+        // The camera stands on the +Z side, some 1500 out: a sheet at +Z is nearer.
+        const QColor inside = centreWith(half * 0.5f), before = centreWith(half * 1.5f);
+        QVERIFY2(!(inside.red() > 200 && inside.green() < 40 && inside.blue() < 40), qPrintable(inside.name()));
+        QVERIFY2(before.red() > 200 && before.green() < 40 && before.blue() < 40, qPrintable(before.name()));
+    }
+
+    // Fade to Color draws only the side of the edit point it is told
+    // (RenderContext +0x08: 2 the outgoing clip, 1 the incoming one) and
+    // reads its position, start, edit point and end (+0x54..+0x60) in
+    // milliseconds: red dips to its black before the edit point, green rises
+    // out of it after, and from nothing (the edit point at the start) the
+    // clip rises out of black over the whole window. With no side it drew
+    // nothing at all. Needs the OpenGL 4.1 context native modules run in.
+    void fadeToColorDrawsItsSide() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/VideoTransitions/FadeTransition.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference FadeTransition.hfpl is not in SAMPLES");
+        auto manager = plugin::createPluginManager();
+        manager->setPluginDirs({dir + "/Plugins"});
+        QVERIFY(manager->scan().isSuccess());
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        const core::Identifier id = plugin::nativeModuleNamed(QStringLiteral("FadeTransition"));
+        QVERIFY(id.isValid());
+        QStringList values;
+        for (const auto& parameter : manager->spec(id).parameters) values << parameter.defaultValue;
+        QImage red(32, 32, QImage::Format_RGBA8888); red.fill(QColor(200, 0, 0));
+        QImage green(32, 32, QImage::Format_RGBA8888); green.fill(QColor(0, 200, 0));
+        QImage none(32, 32, QImage::Format_RGBA8888); none.fill(Qt::transparent);
+        const auto at = [&](const QImage& from, const QImage& to, float progress, float cut, bool* ok) {
+            plugin::NativeFrameTime time;
+            time.transitionSeconds = 1.5;
+            time.transitionCut = cut;
+            QImage out;
+            *ok = plugin::applyNativeVideoTransition(out, from, to, progress, id, values, time);
+            return out.pixelColor(16, 16);
+        };
+        bool ok = false;
+        const QColor before = at(red, green, 0.25f, 0.5f, &ok);
+        if (!ok) QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        QVERIFY2(before.red() > 80 && before.red() < 120 && before.green() < 10 && before.alpha() == 255,
+                 qPrintable(before.name(QColor::HexArgb)));
+        const QColor after = at(red, green, 0.75f, 0.5f, &ok);
+        QVERIFY(ok);
+        QVERIFY2(after.green() > 80 && after.green() < 120 && after.red() < 10 && after.alpha() == 255,
+                 qPrintable(after.name(QColor::HexArgb)));
+        const QColor start = at(none, green, 0.0f, 0.0f, &ok);
+        QVERIFY(ok);
+        QVERIFY2(start.alpha() == 255 && start.green() < 10, qPrintable(start.name(QColor::HexArgb)));
+        const QColor middle = at(none, green, 0.5f, 0.0f, &ok);
+        QVERIFY(ok);
+        QVERIFY2(middle.green() > 80 && middle.green() < 120, qPrintable(middle.name(QColor::HexArgb)));
+    }
+
     // 2D effects that move by themselves get the time (RenderContext
     // +0x6c/+0x70/+0x98/+0x9c/+0xa0): Linear Wipe at frame 0 and at frame 30
     // of a 120-frame layer differ, the same frame is the same picture, and
@@ -2019,7 +2909,8 @@ private slots:
     // normalisation factor) and the host reduces its moved centre; the host
     // reduces BoxBlur's radius in px and Magnify's iris radius, in pixels
     // without saying so (unmarkedPixelValues). Emboss, which depends on the
-    // pixel grid, is drawn full and reduced. All four look like the full frame
+    // pixel grid, is drawn at half size too, as Flux's effect pass draws every
+    // effect, with its values as they are. All four look like the full frame
     // reduced.
     void nativeEffectsDrawReducedPreviews() {
         const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
@@ -2125,6 +3016,177 @@ private slots:
     // big it is (PluginBehaviorEffect::TransformationAtTime): FadeBehavior
     // fades in over its first 25 %, DownInsert brings a layer down from the
     // top of the frame and leaves it in place.
+    // A simulated body moves in the world: the reference puts the simulated
+    // body's matrix in place of the layer's whole world (FUN_18036c010 after
+    // SimulateLayers), so Gravity pulls a plane down the frame even under a
+    // parent turned a quarter, where a Behavior inside the parent would push
+    // it sideways. Its box and its drawn pixels agree.
+    void simulatedBehaviorsMoveInTheWorld() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString gravity = dir + "/Plugins/Behavior/Gravity.hfpl";
+        if (!QFileInfo::exists(gravity)) QSKIP("The reference Gravity module is not in SAMPLES");
+        const core::Identifier id("test.native.gravity");
+        const auto metadata = plugin::loadNativePluginMetadata(gravity, dir);
+        plugin::registerNativeBehaviorModule(id, gravity, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        if (!plugin::nativeBehaviorSimulationRenderingVerified(id)) QSKIP("Gravity is not a verified simulation here");
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(2);
+        {
+            auto& plane = shot->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            plane.planeColor = Qt::red;
+            plane.transform.scalePercent = QPointF(10, 10);
+            composition::Effect fx; fx.pluginId = id; fx.name = "Gravity";
+            for (const auto& parameter : metadata.parameters) fx.parameterValues << parameter.defaultValue;
+            composition::Clip clip; clip.durationSeconds = 2; clip.effects << fx;
+            plane.clips << clip;
+            auto& parent = shot->addLayer("Parent");
+            parent.kind = composition::LayerKind::Point;
+            parent.transform.rotationDegrees = 90.0;
+            shot->layerRef(0).parentLayerId = parent.id;
+        }
+        const composition::Layer& plane = shot->layers()[0];
+        const QPointF start = render::layerGeometry(*shot, plane, nullptr, 0).bounds().center();
+        const QPointF later = render::layerGeometry(*shot, plane, nullptr, 8).bounds().center();
+        if (std::abs(later.x() - start.x()) < 0.01 && std::abs(later.y() - start.y()) < 0.01)
+            QSKIP("Native simulation does not run on this platform");
+        QVERIFY2(later.y() - start.y() > 1.0 && std::abs(later.x() - start.x()) < 0.01,
+                 qPrintable(QStringLiteral("%1,%2 -> %3,%4").arg(start.x()).arg(start.y()).arg(later.x()).arg(later.y())));
+        render::RenderManager manager; manager.setComposition(shot);
+        QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+        manager.requestFrame(0, 8.0 / 30.0, QSize(320, 180));
+        QVERIFY(QTest::qWaitFor([&] { return frames.count() > 0; }, 30000));
+        const QByteArray bytes = frames[0][1].toByteArray();
+        const QImage image = QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                                    QImage::Format_RGBA8888).copy();
+        QRect drawn;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor c = image.pixelColor(x, y);
+                if (c.red() > 128 && c.green() < 80) drawn |= QRect(x, y, 1, 1);
+            }
+        QVERIFY2(!drawn.isEmpty(), qPrintable(QStringLiteral("nothing drawn, box %1,%2").arg(later.x()).arg(later.y())));
+        const QPointF centre = QRectF(drawn).center() + QPointF(0.5, 0.5);
+        QVERIFY2(std::abs(centre.x() - later.x()) <= 2.0 && std::abs(centre.y() - later.y()) <= 2.0,
+                 qPrintable(QStringLiteral("drawn %1,%2 box %3,%4").arg(centre.x()).arg(centre.y())
+                                .arg(later.x()).arg(later.y())));
+        // A child of the falling plane falls with it: a simulated parent
+        // puts its children under its body (ParentingWorldTransformationAtTime
+        // with the simulation on).
+        {
+            composition::Layer child;
+            child.name = "Child"; child.kind = composition::LayerKind::Plane;
+            child.planeColor = Qt::blue;
+            child.transform.position = QPointF(0, 300);
+            child.parentLayerId = shot->layers()[0].id;
+            composition::Clip clip; clip.durationSeconds = 2; child.clips << clip;
+            QVERIFY(shot->insertLayer(0, child));
+            const composition::Layer& placed = shot->layers()[0];
+            const QPointF childStart = render::layerGeometry(*shot, placed, nullptr, 0).bounds().center();
+            const QPointF childLater = render::layerGeometry(*shot, placed, nullptr, 8).bounds().center();
+            const QPointF fall = later - start;
+            QVERIFY2(std::abs(childLater.x() - childStart.x() - fall.x()) < 0.05
+                         && std::abs(childLater.y() - childStart.y() - fall.y()) < 0.05,
+                     qPrintable(QStringLiteral("%1,%2 against %3,%4").arg(childLater.x() - childStart.x())
+                                    .arg(childLater.y() - childStart.y()).arg(fall.x()).arg(fall.y())));
+        }
+        // The run is kept and gone on from: an earlier frame read after a
+        // later one is what a fresh run gives (the layer renamed: another
+        // state of the shot); between frames the body is taken back along
+        // its velocity, between where it is at the frames either side.
+        {
+            const composition::Layer& falling = shot->layers()[1];
+            QVector3D at4, at7, at8, between, fresh;
+            QVERIFY(render::layerSimulationOffsetAt(*shot, nullptr, falling, 4, &at4));
+            QVERIFY(render::layerSimulationOffsetAt(*shot, nullptr, falling, 7, &at7));
+            QVERIFY(render::layerSimulationOffsetAt(*shot, nullptr, falling, 8, &at8));
+            QVERIFY(render::layerSimulationOffsetAt(*shot, nullptr, falling, 7.5, &between));
+            QVERIFY2(between.y() < at7.y() && between.y() > at8.y(),
+                     qPrintable(QStringLiteral("%1 %2 %3").arg(at7.y()).arg(between.y()).arg(at8.y())));
+            shot->layerRef(1).name = QStringLiteral("Renamed");
+            QVERIFY(render::layerSimulationOffsetAt(*shot, nullptr, shot->layers()[1], 4, &fresh));
+            QVERIFY2((fresh - at4).length() < 1e-4f,
+                     qPrintable(QStringLiteral("%1 against %2").arg(fresh.y()).arg(at4.y())));
+        }
+        // A body moving without keys is blurred along its fall: its samples
+        // take it between frames.
+        {
+            auto falling = std::make_shared<composition::Composition>();
+            falling->setSize(320, 180); falling->setFrameRate(30, 1); falling->setDurationSeconds(2);
+            auto& plane = falling->addLayer("Falling");
+            plane.kind = composition::LayerKind::Plane;
+            plane.planeColor = Qt::red;
+            plane.transform.scalePercent = QPointF(10, 10);
+            composition::Effect fx; fx.pluginId = id; fx.name = "Gravity";
+            for (const auto& parameter : metadata.parameters) fx.parameterValues << parameter.defaultValue;
+            composition::Clip clip; clip.durationSeconds = 2; clip.effects << fx;
+            plane.clips << clip;
+            const auto redRows = [&](bool blurred) {
+                falling->layerRef(0).motionBlur = blurred;
+                render::RenderManager manager; manager.setComposition(falling);
+                QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+                manager.requestFrame(0, 16.0 / 30.0, QSize(320, 180));
+                if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 30000)) return -1;
+                const QByteArray bytes = frames[0][1].toByteArray();
+                const QImage image = QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                                            QImage::Format_RGBA8888).copy();
+                int rows = 0;
+                for (int y = 0; y < image.height(); ++y) {
+                    bool red = false;
+                    for (int x = 0; x < image.width() && !red; ++x) red = image.pixelColor(x, y).red() > 40;
+                    rows += red ? 1 : 0;
+                }
+                return rows;
+            };
+            const int sharp = redRows(false), smeared = redRows(true);
+            QVERIFY2(sharp > 0 && smeared >= sharp + 2, qPrintable(QStringLiteral("%1 %2").arg(sharp).arg(smeared)));
+        }
+        const QString drag = dir + "/Plugins/Behavior/Drag.hfpl";
+        if (!QFileInfo::exists(drag)) return;
+        const core::Identifier dragId("test.native.drag");
+        const auto dragMetadata = plugin::loadNativePluginMetadata(drag, dir);
+        plugin::registerNativeBehaviorModule(dragId, drag, dir, true, dragMetadata.parameters);
+        // A child that is a body itself: its body stands for its world, so
+        // the parent's fall does not carry it again; the parent's forces
+        // come to it instead (SimulateLayers' list by ParentLayer) - it falls
+        // about as far, a little less with its own Drag, not twice as far.
+        {
+            composition::Layer& child = shot->layerRef(0);
+            composition::Effect fx; fx.pluginId = dragId; fx.name = "Drag";
+            for (const auto& parameter : dragMetadata.parameters) fx.parameterValues << parameter.defaultValue;
+            child.clips[0].effects << fx;
+            const composition::Layer& placed = shot->layers()[0];
+            const QPointF childStart = render::layerGeometry(*shot, placed, nullptr, 0).bounds().center();
+            const QPointF childLater = render::layerGeometry(*shot, placed, nullptr, 8).bounds().center();
+            const double fall = later.y() - start.y();
+            const double childFall = childLater.y() - childStart.y();
+            QVERIFY2(childFall > 0.5 * fall && childFall < fall + 0.05,
+                     qPrintable(QStringLiteral("%1 against %2").arg(childFall).arg(fall)));
+        }
+        // Drag damps the whole velocity, the animation's too: a plane keyed
+        // to cross the frame at a steady speed lags behind its keys with it.
+        auto moving = std::make_shared<composition::Composition>();
+        moving->setSize(320, 180); moving->setFrameRate(30, 1); moving->setDurationSeconds(2);
+        {
+            auto& plane = moving->addLayer("Moving");
+            plane.kind = composition::LayerKind::Plane;
+            plane.transform.scalePercent = QPointF(10, 10);
+            plane.transform.positionXCurve.set(0, -120.0);
+            plane.transform.positionXCurve.set(30, 120.0);
+            composition::Effect fx; fx.pluginId = dragId; fx.name = "Drag";
+            for (const auto& parameter : dragMetadata.parameters) fx.parameterValues << parameter.defaultValue;
+            composition::Clip clip; clip.durationSeconds = 2; clip.effects << fx;
+            plane.clips << clip;
+        }
+        const double keyed = 160.0 + moving->layers()[0].transform.positionAt(15).x();
+        const double dragged = render::layerGeometry(*moving, moving->layers()[0], nullptr, 15).bounds().center().x();
+        QVERIFY2(dragged < keyed - 1.0 && dragged > 160.0 - 120.0,
+                 qPrintable(QStringLiteral("%1 against %2").arg(dragged).arg(keyed)));
+    }
     void nativeBehaviorsKnowTimeAndLayer() {
         const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
         const QString fade = dir + "/Plugins/Behavior/FadeBehavior.hfpl";
@@ -2383,6 +3445,19 @@ private slots:
             for (const auto& parameter : metadata.parameters) behavior.parameterValues << parameter.defaultValue;
             clip.effects << text << behavior;
             layer.clips.append(clip);
+        }
+        // The Layout box does not follow the glyphs: the reference frames a
+        // layer by its own extent times WorldTransformationAtTime
+        // (FUN_1403186c0), and a glyph Behavior moves no layer - while the
+        // letters drop in, the box is the one of the same text without it.
+        {
+            composition::Layer plain = shot->layers()[0];
+            plain.clips[0].effects.removeLast();
+            for (int frame : {6, 15, 90}) {
+                QCOMPARE(render::layerGeometry(*shot, shot->layers()[0], nullptr, frame).bounds(),
+                         render::layerGeometry(*shot, plain, nullptr, frame).bounds());
+                QCOMPARE(render::layerBehaviorTransformAt(*shot, nullptr, shot->layers()[0], frame), QTransform());
+            }
         }
         render::RenderManager manager; manager.setComposition(shot);
         QSignalSpy frames(&manager, &render::RenderManager::frameReady);
@@ -2692,7 +3767,327 @@ private slots:
         QVERIFY(plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
         QVERIFY2(qAbs(matrix[12] - 58.0f) < 1.5f && qAbs(matrix[13] + 29.0f) < 1.5f,
                  qPrintable(QStringLiteral("%1, %2").arg(matrix[12]).arg(matrix[13])));
+
+        // The footage layer moved in the shot: GetLayerInfoV2 tells the
+        // module its world, the module answers in it, the host takes it
+        // back off - the footage's motion as before.
+        shot->layerRef(0).transform.position = QPointF(30, -10);
+        plugin::clearNativeInstanceTransforms();
+        host.restoreAll();
+        QVERIFY(plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
+        QVERIFY2(qAbs(matrix[12] - 58.0f) < 1.5f && qAbs(matrix[13] + 29.0f) < 1.5f,
+                 qPrintable(QStringLiteral("%1, %2").arg(matrix[12]).arg(matrix[13])));
+        // Turned too: the same motion seen through the turned footage, 30
+        // degrees clockwise - 35.7 right, 54.1 down.
+        shot->layerRef(0).transform.rotationDegrees = 30.0;
+        plugin::clearNativeInstanceTransforms();
+        host.restoreAll();
+        QVERIFY(plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
+        QVERIFY2(qAbs(matrix[12] - 35.7f) < 1.5f && qAbs(matrix[13] + 54.1f) < 1.5f,
+                 qPrintable(QStringLiteral("%1, %2").arg(matrix[12]).arg(matrix[13])));
+        shot->layerRef(0).transform.position = QPointF();
+        shot->layerRef(0).transform.rotationDegrees = 0.0;
+
+        // The shot nested in another, never opened: its instance moves its
+        // layer all the same (the open shot's host restores the whole tree).
+        auto outer = std::make_shared<composition::Composition>();
+        outer->setSize(size.width(), size.height()); outer->setDurationSeconds(1);
+        {
+            auto& nested = outer->addLayer("Nested");
+            composition::Clip clip; clip.nestedComposition = shot; clip.durationSeconds = 1;
+            nested.clips.append(clip);
+        }
+        plugin::clearNativeInstanceTransforms();
+        QVERIFY(!plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
+        ui::NativeInstanceHost outerHost([outer] { return outer; }, [media] { return media; });
+        outerHost.restoreAll();
+        QVERIFY(plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
+        QVERIFY2(qAbs(matrix[12] - 58.0f) < 1.5f && qAbs(matrix[13] + 29.0f) < 1.5f,
+                 qPrintable(QStringLiteral("%1, %2").arg(matrix[12]).arg(matrix[13])));
+        // sync() sees the nested instance as restored: nothing to redo.
+        plugin::clearNativeInstanceTransforms();
+        outerHost.sync();
+        QVERIFY(!plugin::nativeInstanceTransformAt(key, kFrames - 1, &matrix));
     }
+    // What MotionTrack is told about a composite shot it tracks and how its
+    // answer is taken: the nested shot as footage of type 3 at the shot's
+    // rate (tagBiffAssetInfo), and the result - the footage layer's world
+    // times the footage's motion - with that world taken back off.
+    void motionTrackReadsNestedShotsAndWorlds() {
+        auto inner = std::make_shared<composition::Composition>();
+        inner->setSize(64, 32); inner->setDurationSeconds(4);
+        composition::Clip clip;
+        clip.nestedComposition = inner;
+        clip.sourceStartSeconds = 1.0;
+        clip.durationSeconds = 2.0;
+        const plugin::NativeAssetInfo info = render::nativeFootageInfo(clip, nullptr, 25.0);
+        QVERIFY(info.valid);
+        QCOMPARE(info.type, 3);
+        QCOMPARE(info.frameRate, 25.0);
+        QCOMPARE(info.frameCount, 100);
+        QCOMPARE(info.startFrame, 25);
+        QCOMPARE(info.endFrame, 74);
+        QCOMPARE(info.key, QStringLiteral("composition:") + inner->id().value());
+        // Nothing for a clip with neither footage nor a shot.
+        QVERIFY(!render::nativeFootageInfo(composition::Clip(), nullptr, 25.0).valid);
+
+        // The nested shot's frame as the module reads it: the shot drawn
+        // at its display size.
+        {
+            auto& plane = inner->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane; plane.planeColor = Qt::blue;
+            composition::Clip still; still.durationSeconds = 4; plane.clips.append(still);
+        }
+        const QImage frame = render::renderCompositionFrame(inner, nullptr, 1.5);
+        QCOMPARE(frame.size(), QSize(64, 32));
+        QVERIFY(frame.pixelColor(32, 16).blue() > 200);
+
+        // A layer's world (Y up from the frame's centre): its position, then
+        // its turn and scale.
+        composition::Layer layer;
+        layer.transform.position = QPointF(100, 40);
+        layer.transform.rotationDegrees = 30.0;
+        layer.transform.scalePercent = QPointF(200, 200);
+        const std::array<float, 16> world = render::nativeLayerWorld(inner.get(), layer, 0);
+        QVERIFY(qAbs(world[12] - 100.0f) < 1e-4f && qAbs(world[13] - 40.0f) < 1e-4f);
+        QVERIFY(qAbs(std::hypot(world[0], world[1]) - 2.0f) < 1e-4f);
+
+        // What the module gives for a world W and the footage's motion R
+        // (measured with the reference module: W*R, its pixels running Y up
+        // as the port's layer space does); the host gets R back.
+        QMatrix4x4 w(world.data());
+        w = w.transposed();
+        QMatrix4x4 motion;
+        motion.translate(58.0f, -29.0f);
+        motion.rotate(5.0f, 0.0f, 0.0f, 1.0f);
+        const QMatrix4x4 given = w * motion;
+        std::array<float, 16> answer {};
+        std::copy(given.constData(), given.constData() + 16, answer.begin());
+        const std::array<float, 16> alone = ui::NativeInstanceHost::withoutWorld(answer, world);
+        for (int i = 0; i < 16; ++i) QVERIFY(qAbs(alone[i] - motion.constData()[i]) < 1e-3f);
+        // A world that cannot be undone leaves the answer as it is.
+        std::array<float, 16> flat {};
+        QCOMPARE(ui::NativeInstanceHost::withoutWorld(answer, flat), answer);
+    }
+    // AutomaticStabilizer and MotionLock on their own footage, as the
+    // application drives them: told they were put on the layer, the footage
+    // analysed in the background, the frames drawn by the renderer's own
+    // instance from the effect's data (the shake gone); then their buttons -
+    // a point layer with the motion's keys and "Apply To" pointed at it, keys
+    // on a layer - each one step named as the module names it. Needs the
+    // OpenGL 4.1 context native modules run in.
+    void stabilizersSteadyTheirOwnLayer() {
+        const QString dependencies = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        for (const QString name : {QStringLiteral("AutomaticStabilizer"), QStringLiteral("MotionLock")}) {
+            const QString module = dependencies + "/Plugins/2D/" + name + ".hfpl";
+            if (!QFileInfo::exists(module)) QSKIP("The reference stabilizers are not in SAMPLES");
+            const auto metadata = plugin::loadNativePluginMetadata(module, dependencies);
+            const core::Identifier id(QStringLiteral("test.native.") + name.toLower());
+            plugin::registerNativeEffectModule(id, module, dependencies, true, metadata.parameters);
+            auto cleanup = qScopeGuard([] {
+                plugin::clearNativeControlStates();
+                plugin::clearNativeTrackedFeatures();
+                plugin::releaseNativeEffectThreadRenderer();
+                plugin::clearNativeEffectModules();
+            });
+            QVERIFY(plugin::nativeEffectAnalysesOwnLayer(id) && plugin::nativeEffectUsesInstance(id));
+            QVERIFY(!plugin::nativeBehaviorUsesInstance(id));
+            QStringList defaults;
+            const auto indexOf = [&](const QString& key) {
+                for (int i = 0; i < metadata.parameters.size(); ++i)
+                    if (metadata.parameters.at(i).name == key) return i;
+                return -1;
+            };
+            for (const auto& parameter : metadata.parameters) defaults << parameter.defaultValue;
+            {
+                plugin::NativeCustomUiView probe;
+                probe.area = QSize(64, 64);
+                probe.instanceKey = QStringLiteral("gl-check");
+                if (!plugin::nativeCustomUiSetup(id, defaults, probe).handled)
+                    QSKIP("No OpenGL 4.1 context for native modules on this platform");
+                plugin::nativeCustomUiShutdown(id, defaults, probe);
+            }
+
+            // Footage: blurred noise shaking up to 6 px about where it starts.
+            constexpr int kFrames = 30;
+            const QSize size(320, 180);
+            const int pad = 16;
+            QImage texture(size.width() + 2 * pad, size.height() + 2 * pad, QImage::Format_RGBA8888);
+            quint32 seed = 54321u;
+            for (int y = 0; y < texture.height(); ++y) {
+                for (int x = 0; x < texture.width(); ++x) {
+                    seed = seed * 1664525u + 1013904223u;
+                    const int v = int((seed >> 24) & 0xff);
+                    texture.setPixelColor(x, y, QColor(v, v, v));
+                }
+            }
+            texture = texture.scaled(texture.width() / 4, texture.height() / 4, Qt::IgnoreAspectRatio,
+                                     Qt::FastTransformation)
+                          .scaled(texture.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+            QVector<QPoint> offsets(kFrames);
+            quint32 jitter = 777u;
+            for (int f = 1; f < kFrames; ++f) {
+                jitter = jitter * 1664525u + 1013904223u;
+                const int dx = int((jitter >> 16) % 13u) - 6;
+                jitter = jitter * 1664525u + 1013904223u;
+                offsets[f] = QPoint(dx, int((jitter >> 16) % 13u) - 6);
+            }
+            QTemporaryDir temp; QVERIFY(temp.isValid());
+            QStringList files;
+            QVector<QImage> footage;
+            for (int f = 0; f < kFrames; ++f) {
+                footage << texture.copy(QRect(QPoint(pad, pad) - offsets.at(f), size));
+                files << temp.filePath(QStringLiteral("frame%1.png").arg(f, 3, 10, QLatin1Char('0')));
+                QVERIFY(footage.last().save(files.last()));
+            }
+            auto media = std::make_shared<media::MediaManager>();
+            QString assetPath;
+            QVERIFY(media->importImageSequence(files, 30.0, &assetPath).isSuccess());
+            const media::MediaAsset asset = media->assetByFilePath(assetPath);
+            QVERIFY(asset.isValid());
+
+            auto shot = std::make_shared<composition::Composition>();
+            shot->setSize(size.width(), size.height()); shot->setFrameRate(30, 1); shot->setDurationSeconds(1);
+            core::Identifier footageId;
+            {
+                auto& layer = shot->addLayer("Footage");
+                composition::Effect fx; fx.pluginId = id; fx.name = name; fx.parameterValues = defaults;
+                composition::Clip clip; clip.mediaId = asset.id(); clip.durationSeconds = 1;
+                clip.effects.append(fx);
+                layer.clips.append(clip);
+                footageId = layer.id;
+            }
+            const auto effect = [&]() -> const composition::Effect& {
+                for (const composition::Layer& layer : shot->layers())
+                    if (layer.id == footageId) return layer.clips[0].effects[0];
+                return shot->layers()[0].clips[0].effects[0];
+            };
+            ui::NativeInstanceHost host([shot] { return shot; }, [media] { return media; });
+            QSignalSpy edits(&host, &ui::NativeInstanceHost::layersEdited);
+            const ui::NativeInstanceHost::Ref ref {footageId, 0, 0};
+            // Put on its layer: the module analyses it.
+            host.sync();
+            QVERIFY(host.isBusy());
+            QTRY_VERIFY_WITH_TIMEOUT(!host.isBusy() && !effect().instanceData.isEmpty(), 120000);
+
+            // Where frame b's middle is found in frame a.
+            const auto shiftOf = [](const QImage& a, const QImage& b) {
+                const QRect middle(a.width() / 3, a.height() / 3, a.width() / 3, a.height() / 3);
+                QPoint best;
+                double bestError = 1e30;
+                for (int dy = -14; dy <= 14; ++dy) {
+                    for (int dx = -14; dx <= 14; ++dx) {
+                        double sum = 0.0;
+                        for (int y = middle.top(); y <= middle.bottom(); y += 2)
+                            for (int x = middle.left(); x <= middle.right(); x += 2)
+                                sum += std::abs(qRed(a.pixel(x + dx, y + dy)) - qRed(b.pixel(x, y)));
+                        if (sum < bestError) { bestError = sum; best = QPoint(dx, dy); }
+                    }
+                }
+                return best;
+            };
+            // The renderer's frames: the effect draws from its data.
+            render::RenderManager manager; manager.setMediaManager(media); manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            const auto frameAt = [&](int f) {
+                const int before = int(frames.count());
+                manager.requestFrame(f, f / 30.0, size);
+                if (!QTest::qWaitFor([&] { return frames.count() > before; }, 20000)) return QImage();
+                const QByteArray bytes = frames.last()[1].toByteArray();
+                return QImage(reinterpret_cast<const uchar*>(bytes.constData()), size.width(), size.height(),
+                              size.width() * 4, QImage::Format_RGBA8888).copy();
+            };
+            int drawnJitter = 0, footageJitter = 0;
+            QImage previous = frameAt(0);
+            QVERIFY(!previous.isNull());
+            for (int f = 1; f < kFrames - 1; ++f) {
+                const QImage current = frameAt(f);
+                QVERIFY(!current.isNull());
+                drawnJitter += shiftOf(current, previous).manhattanLength();
+                footageJitter += shiftOf(footage.at(f), footage.at(f - 1)).manhattanLength();
+                previous = current;
+            }
+            previous.save(testArtifactPath(name + QStringLiteral("-stabilized.png")));
+            QVERIFY2(footageJitter > 100 && drawnJitter * 3 < footageJitter,
+                     qPrintable(QStringLiteral("%1: drawn %2, footage %3").arg(name).arg(drawnJitter)
+                                    .arg(footageJitter)));
+
+            // The buttons: a press is the value raised and the change sent.
+            const auto press = [&](const QString& key) {
+                const int index = indexOf(key);
+                QVERIFY(index >= 0);
+                for (int i = 0; i < shot->layers().size(); ++i)
+                    if (shot->layers()[i].id == footageId)
+                        shot->layerRef(i).clips[0].effects[0].parameterValues[index] = QStringLiteral("true");
+                host.propertyChanged(ref, index, 0.0);
+            };
+            if (name == QLatin1String("AutomaticStabilizer")) {
+                press(QStringLiteral("createPointLayer"));
+                QCOMPARE(edits.count(), 1);
+                QCOMPARE(edits[0][0].value<QVector<composition::Layer>>().size(), 1);
+                QCOMPARE(edits[0][1].toString(), QString("Create Point Layer"));
+                QCOMPARE(shot->layers().size(), 2);
+                const composition::Layer& point = shot->layers()[0];
+                QCOMPARE(point.kind, composition::LayerKind::Point);
+                QCOMPARE(point.name, QString("Point Layer"));
+                // Over the source layer's frames: its span is the clip's.
+                QCOMPARE(point.spanStartSeconds, 0.0);
+                QCOMPARE(point.spanEndSeconds, 1.0);
+                QCOMPARE(effect().parameterValues.at(indexOf(QStringLiteral("applyToLayer"))), point.id.value());
+                // Keyed at every frame of the footage, from where it starts.
+                QCOMPARE(point.transform.positionXCurve.count(), kFrames);
+                QCOMPARE(point.transform.rotationCurve.count(), kFrames);
+                QCOMPARE(point.transform.scaleXCurve.locations().first(), 0);
+                QCOMPARE(point.transform.scaleXCurve.locations().last(), kFrames - 1);
+                const auto keys = point.transform.positionXCurve.all();
+                press(QStringLiteral("applyTransfromToLayer"));
+                QCOMPARE(edits.count(), 2);
+                QCOMPARE(edits[1][1].toString(), QString("Transform Layer"));
+                QCOMPARE(shot->layers()[0].transform.positionXCurve.count(), kFrames);
+                QCOMPARE(shot->layers()[0].transform.positionXCurve.all().last().value, keys.last().value);
+            } else {
+                press(QStringLiteral("applyInverseTransfrom"));
+                QCOMPARE(edits.count(), 1);
+                QCOMPARE(edits[0][1].toString(), QString("Transform Layer"));
+                QCOMPARE(shot->layers().size(), 1);
+                const composition::LayerTransform& t = shot->layers()[0].transform;
+                // The footage's own motion as keys from its first frame.
+                QVERIFY(t.positionXCurve.count() >= kFrames - 1);
+                QCOMPARE(t.positionXCurve.locations().first(), 0);
+                const double moved = t.positionXCurve.valueAt(1).toDouble();
+                QVERIFY2(std::abs(moved - offsets.at(1).x()) < 1.0, qPrintable(QString::number(moved)));
+            }
+        }
+    }
+
+    // One point layer's keys from four transforms, and one transform as
+    // static values (CreatePointLayer / ApplyTransformToLayer): position,
+    // rotationZ and scale, at the given start plus each time.
+    void layerTransformsBecomeKeys() {
+        composition::Layer layer;
+        layer.kind = composition::LayerKind::Point;
+        QVector<plugin::NativeLayerTransform> transforms;
+        for (int i = 0; i < 4; ++i) transforms.append({qint32(i * 1000 / 30), float(i), float(-i), float(i * 10), 100.0f + i});
+        ui::NativeInstanceHost::applyLayerTransforms(layer, transforms, 12, 30.0);
+        QCOMPARE(layer.transform.positionXCurve.locations(), (QVector<int> {12, 13, 14, 15}));
+        QCOMPARE(layer.transform.positionYCurve.at(15)->value.toDouble(), -3.0);
+        QCOMPARE(layer.transform.rotationCurve.at(14)->value.toDouble(), 20.0);
+        QCOMPARE(layer.transform.scaleYCurve.at(13)->value.toDouble(), 101.0);
+        QVERIFY(layer.transform.positionZCurve.isEmpty());   // a 2D layer
+        composition::Layer still;
+        still.dimension = composition::LayerDimension::ThreeD;
+        ui::NativeInstanceHost::applyLayerTransforms(still, {{0, 5.0f, 6.0f, 7.0f, 80.0f}}, 0, 30.0);
+        QVERIFY(still.transform.positionXCurve.isEmpty());
+        QCOMPARE(still.transform.position, QPointF(5, 6));
+        QCOMPARE(still.transform.rotationDegrees, 7.0);
+        QCOMPARE(still.transform.scalePercent, QPointF(80, 80));
+        QCOMPARE(still.transform.scaleZPercent, 80.0);
+        // An animated property takes a key at that time instead.
+        ui::NativeInstanceHost::applyLayerTransforms(layer, {{0, 9.0f, 9.0f, 0.0f, 100.0f}}, 20, 30.0);
+        QCOMPARE(layer.transform.positionXCurve.count(), 5);
+        QCOMPARE(layer.transform.positionXCurve.at(20)->value.toDouble(), 9.0);
+    }
+
     void viewerCustomUiReachesNativeModule() {
         // Key and cursor tables the bridge hands to modules.
         QCOMPARE(plugin::nativeKeysym(Qt::Key_Control, QString()), quint32(0xffe3));
@@ -4368,6 +5763,40 @@ private slots:
         QSignalSpy openSpy(&start, &ui::StartPanel::openProjectRequested);
         importFile->click(); newProject->click(); openProject->click();
         QCOMPARE(importSpy.count(), 1); QCOMPARE(newSpy.count(), 1); QCOMPARE(openSpy.count(), 1);
+        // Create New shows the project file's icon beside its label.
+        QVERIFY(!newProject->icon().pixmap(QSize(16, 16)).isNull());
+        QCOMPARE(newProject->toolButtonStyle(), Qt::ToolButtonTextBesideIcon);
+        const QImage icon = newProject->icon().pixmap(QSize(32, 32)).toImage();
+        QCOMPARE(icon.pixelColor(icon.width() / 4, icon.height() * 3 / 4).rgb(), QColor(0x01, 0xC5, 0x5B).rgb());
+        start.resize(900, 520); start.show(); QTest::qWait(20);
+        QVERIFY(start.grab().save(testArtifactPath(QStringLiteral("start-panel.png"))));
+    }
+    // .vegfx files get the project icon - the executable's icon 1 - through
+    // the ProgID, and through Applications\<exe> when the user picked the
+    // program by its file; the extension's own default is left alone.
+    void projectFilesGetTheirIcon() {
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        QSettings classes(dir.filePath(QStringLiteral("classes.ini")), QSettings::IniFormat);
+        const QString exe = dir.filePath(QStringLiteral("OpenVegasEffects.exe"));
+        const QString native = QDir::toNativeSeparators(exe);
+        QVERIFY(app::FileAssociation::registerProjectFileType(classes, exe));
+        QCOMPARE(classes.value("OpenVegasEffects.Project/DefaultIcon/Default").toString(),
+                 QStringLiteral("\"%1\",1").arg(native));
+        QCOMPARE(classes.value("OpenVegasEffects.Project/shell/open/command/Default").toString(),
+                 QStringLiteral("\"%1\" \"%2\"").arg(native, QStringLiteral("%1")));
+        QCOMPARE(classes.value("OpenVegasEffects.Project/Default").toString(), QString("OpenVegas Effects Project"));
+        QVERIFY(classes.contains(".vegfx/OpenWithProgids/OpenVegasEffects.Project"));
+        QVERIFY(!classes.contains(".vegfx/Default"));
+        QCOMPARE(classes.value("Applications/OpenVegasEffects.exe/DefaultIcon/Default").toString(),
+                 QStringLiteral("\"%1\",1").arg(native));
+        QVERIFY(!app::FileAssociation::registerProjectFileType(classes, exe));
+        QVERIFY(app::FileAssociation::registerProjectFileType(classes, dir.filePath("moved/OpenVegasEffects.exe")));
+        // The icon resource exists with the sizes Explorer asks for.
+        const QIcon file(QStringLiteral(":/icons/project-file.svg"));
+        QVERIFY(!file.pixmap(QSize(256, 256)).isNull());
+        const QString ico = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/resources/icons/iconfile.ico";
+        QVERIFY(QFileInfo::exists(ico));
+        QImage big(ico); QVERIFY(!big.isNull());
     }
     void libraryLoadsConfiguredFolders() {
         QTemporaryDir temp;
@@ -5412,6 +6841,151 @@ private slots:
     // colour image from a clip; LightWave's left-handed space comes out
     // mirrored, still facing the camera. Then an LWOB (LightWave 5) with a
     // detail polygon, read by Assimp's rules as the reference reads it.
+    // Projected LightWave textures get the UVs Assimp's GenUVCoords gives
+    // them (the reference reads with it): planar across the surface's
+    // bounds, cylindrical round its axis and along it - a polygon across the
+    // seam having its sides swapped (RemoveUVSeams), the wrap scaling it
+    // about the middle (TransformUVCoords) - and an LWOB "Planar Image Map"
+    // about its TFLG axis.
+    void lightWaveProjectedTexturesGetUvs() {
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        QImage texture(2, 2, QImage::Format_RGBA8888); texture.fill(Qt::green);
+        QVERIFY(texture.save(dir.filePath("tex.png")));
+        const auto bytes = [](const std::function<void(QDataStream&)>& write) {
+            QByteArray out;
+            QDataStream data(&out, QIODevice::WriteOnly);   // big-endian
+            data.setFloatingPointPrecision(QDataStream::SinglePrecision);
+            write(data);
+            return out;
+        };
+        const auto chunk = [&](const char* id, const QByteArray& payload) {
+            QByteArray out(id, 4);
+            out += bytes([&](QDataStream& d) { d << quint32(payload.size()); }) + payload;
+            if (payload.size() & 1) out += '\0';
+            return out;
+        };
+        const auto sub = [&](const char* id, const QByteArray& payload) {
+            QByteArray out(id, 4);
+            out += bytes([&](QDataStream& d) { d << quint16(payload.size()); }) + payload;
+            if (payload.size() & 1) out += '\0';
+            return out;
+        };
+        const auto text = [](const char* value) {
+            QByteArray out(value); out += '\0';
+            if (out.size() & 1) out += '\0';
+            return out;
+        };
+        const double pi = 3.14159265358979323846;
+        // A plane (x -1..3, y 0..2) mapped planar along Z, and a hexagonal
+        // tube round Y (radius 1, height 2) mapped cylindrically, twice round.
+        QVector<QVector3D> points = {{-1, 0, 0}, {-1, 2, 0}, {3, 2, 0}, {3, 0, 0}};
+        for (int i = 0; i < 6; ++i) {
+            const double angle = qDegreesToRadians(30.0 + 60.0 * i);
+            points.append(QVector3D(float(std::sin(angle)), 0.0f, float(std::cos(angle))));
+            points.append(QVector3D(float(std::sin(angle)), 2.0f, float(std::cos(angle))));
+        }
+        QByteArray body = "LWO2";
+        body += chunk("TAGS", text("Flat") + text("Tube"));
+        body += chunk("LAYR", bytes([](QDataStream& d) { d << quint16(0) << quint16(0) << 0.f << 0.f << 0.f; })
+                                  + text("Things"));
+        body += chunk("PNTS", bytes([&](QDataStream& d) { for (const QVector3D& p : points) d << p.x() << p.y() << p.z(); }));
+        body += chunk("POLS", QByteArray("FACE", 4) + bytes([](QDataStream& d) {
+            d << quint16(4) << quint16(0) << quint16(1) << quint16(2) << quint16(3);
+            for (int i = 0; i < 6; ++i) {
+                const int a = 4 + 2 * i, b = 4 + 2 * ((i + 1) % 6);
+                d << quint16(4) << quint16(a) << quint16(a + 1) << quint16(b + 1) << quint16(b);
+            }
+        }));
+        body += chunk("PTAG", QByteArray("SURF", 4) + bytes([](QDataStream& d) {
+            d << quint16(0) << quint16(0);
+            for (int i = 1; i <= 6; ++i) d << quint16(i) << quint16(1);
+        }));
+        body += chunk("CLIP", bytes([](QDataStream& d) { d << quint32(1); }) + sub("STIL", text("tex.png")));
+        const auto block = [&](quint16 projection, quint16 axis, float wrap) {
+            return sub("IMAP", text("\x80") + sub("CHAN", "COLR"))
+                   + sub("PROJ", bytes([&](QDataStream& d) { d << projection; }))
+                   + sub("AXIS", bytes([&](QDataStream& d) { d << axis; }))
+                   + sub("WRPW", bytes([&](QDataStream& d) { d << wrap << quint16(0); }))
+                   + sub("IMAG", bytes([](QDataStream& d) { d << quint16(1); }));
+        };
+        body += chunk("SURF", text("Flat") + text("") + sub("BLOK", block(0, 2, 1.0f)));
+        body += chunk("SURF", text("Tube") + text("") + sub("BLOK", block(1, 1, 2.0f)));
+        {
+            QFile out(dir.filePath("things.lwo")); QVERIFY(out.open(QIODevice::WriteOnly));
+            out.write(chunk("FORM", body));
+        }
+        model3d::ImportSettings settings;
+        settings.centerAnchorPoint = false; settings.autoNormalize = false;
+        const auto loaded = model3d::loadModel(dir.filePath("things.lwo"), settings);
+        QVERIFY2(loaded.ok, qPrintable(loaded.message));
+        const model3d::Mesh& mesh = loaded.mesh;
+        QCOMPARE(mesh.materials.size(), 2);
+        QVERIFY(!mesh.materials[0].diffuseImage.isNull() && !mesh.materials[1].diffuseImage.isNull());
+        const auto near = [](const QVector2D& a, const QVector2D& b) { return (a - b).length() < 1e-4f; };
+        int planar = 0;
+        for (const model3d::Triangle& triangle : mesh.triangles) {
+            if (triangle.material != 0) continue;
+            for (int c = 0; c < 3; ++c) {
+                QVERIFY(triangle.uv[c] >= 0);
+                const QVector3D p = mesh.positions[triangle.position[c]];
+                QVERIFY2(near(mesh.uvs[triangle.uv[c]], QVector2D((p.x() + 1) / 4, p.y() / 2)),
+                         qPrintable(QStringLiteral("%1 %2").arg(mesh.uvs[triangle.uv[c]].x()).arg(mesh.uvs[triangle.uv[c]].y())));
+                ++planar;
+            }
+        }
+        QCOMPARE(planar, 6);
+        // The tube: round Y in the mirrored space (z negated), along Y, then
+        // twice round about the middle - but on the face across the seam
+        // (angles 150 and -150 degrees there) the two sides trade places.
+        int across = 0, round = 0;
+        for (const model3d::Triangle& triangle : mesh.triangles) {
+            if (triangle.material != 1) continue;
+            QVector<float> raw;
+            for (int c = 0; c < 3; ++c) {
+                const QVector3D p = mesh.positions[triangle.position[c]];
+                raw.append(float((std::atan2(p.x(), p.z()) + pi) / (2.0 * pi)));
+            }
+            const bool seam = std::any_of(raw.cbegin(), raw.cend(), [](float u) { return u < 0.1f; })
+                              && std::any_of(raw.cbegin(), raw.cend(), [](float u) { return u > 0.9f; });
+            for (int c = 0; c < 3; ++c) {
+                const QVector3D p = mesh.positions[triangle.position[c]];
+                float u = raw[c];
+                if (seam) u = u > 0.9f ? 0.0f : 1.0f;
+                const QVector2D expected(0.5f + 2.0f * (u - 0.5f), p.y() / 2);
+                QVERIFY2(near(mesh.uvs[triangle.uv[c]], expected),
+                         qPrintable(QStringLiteral("%1 %2 vs %3 %4").arg(mesh.uvs[triangle.uv[c]].x())
+                                        .arg(mesh.uvs[triangle.uv[c]].y()).arg(expected.x()).arg(expected.y())));
+                ++round;
+            }
+            across += seam ? 1 : 0;
+        }
+        QCOMPARE(round, 36);
+        QCOMPARE(across, 2);
+
+        // LWOB: a "Planar Image Map" about Y (TFLG 2) on a floor x 0..4, z 0..2.
+        QByteArray lwob = "LWOB";
+        lwob += chunk("PNTS", bytes([](QDataStream& d) {
+            for (float v : {0.f, 0.f, 0.f, 4.f, 0.f, 0.f, 4.f, 0.f, 2.f, 0.f, 0.f, 2.f}) d << v;
+        }));
+        lwob += chunk("SRFS", text("Floor"));
+        lwob += chunk("POLS", bytes([](QDataStream& d) {
+            d << quint16(4) << quint16(0) << quint16(1) << quint16(2) << quint16(3) << qint16(1);
+        }));
+        lwob += chunk("SURF", text("Floor") + sub("CTEX", text("Planar Image Map")) + sub("TIMG", text("tex.png"))
+                                 + sub("TFLG", bytes([](QDataStream& d) { d << quint16(2); })));
+        {
+            QFile out(dir.filePath("floor.lwo")); QVERIFY(out.open(QIODevice::WriteOnly));
+            out.write(chunk("FORM", lwob));
+        }
+        const auto floor = model3d::loadModel(dir.filePath("floor.lwo"), settings);
+        QVERIFY2(floor.ok, qPrintable(floor.message));
+        QVERIFY(!floor.mesh.materials[0].diffuseImage.isNull());
+        for (const model3d::Triangle& triangle : floor.mesh.triangles)
+            for (int c = 0; c < 3; ++c) {
+                const QVector3D p = floor.mesh.positions[triangle.position[c]];   // z mirrored: -2..0
+                QVERIFY(near(floor.mesh.uvs[triangle.uv[c]], QVector2D(p.x() / 4, (p.z() + 2) / 2)));
+            }
+    }
     void lightWaveModelsAreRead() {
         QTemporaryDir dir; QVERIFY(dir.isValid());
         QVERIFY(QDir(dir.path()).mkpath("images"));
@@ -5987,6 +7561,42 @@ private slots:
         QVERIFY(close(bent.positions[0], QVector3D(-10, 0, 0)));
         // The normals turn with the bone too: the upper corners' stay along z.
         QVERIFY(qAbs(bent.normals[2].z() - 1.0f) < 1e-3f);
+
+        // SkinningType, as the reference's importer takes it: the top right
+        // point held half by each bone. Linear sums the matrices (half way
+        // between the points they make); DualQuaternion turns it half the
+        // bone's quarter about the bone; Blend mixes the two by the point's
+        // BlendWeights.
+        const auto shared = [&](const char* type, double share) {
+            QVector<FbxRecord> variant = scene;
+            for (FbxRecord& section : variant) {
+                if (section.name != "Objects") continue;
+                for (FbxRecord& record : section.children) {
+                    const qint64 id = qint64(record.values.value(0).number);
+                    if (record.name == "Deformer" && id == 30) {
+                        record.children = {text("SkinningType", type), array("Indexes", 'i', {2}),
+                                           array("BlendWeights", 'd', {share})};
+                    }
+                    if (record.name == "Deformer" && id == 31)
+                        record.children[0] = array("Indexes", 'i', {0, 1, 2}), record.children[1] = array("Weights", 'd', {1, 1, 1});
+                }
+            }
+            const QString path = dir.filePath(QStringLiteral("strip-%1.fbx").arg(type));
+            QFile out(path);
+            if (!out.open(QIODevice::WriteOnly)) return QVector3D();
+            out.write(fbxBinary(variant, 7400, true));
+            out.close();
+            const auto model = model3d::loadModel(path, settings);
+            if (!model.ok) return QVector3D();
+            return model.mesh.skinned(model.mesh.animatedNodeWorlds(model.mesh.animations[0], 1.0)).positions[2];
+        };
+        const float h = std::sqrt(0.5f);
+        const QVector3D linear(-5, 35, 0), dual(10 * h - 20 * h, 20 + 10 * h + 20 * h, 0);
+        const QVector3D asLinear = shared("Linear", 0.0), asDual = shared("DualQuaternion", 0.0),
+                        asBlend = shared("Blend", 0.5);
+        QVERIFY2(close(asLinear, linear), qPrintable(QString("%1 %2").arg(asLinear.x()).arg(asLinear.y())));
+        QVERIFY2(close(asDual, dual), qPrintable(QString("%1 %2").arg(asDual.x()).arg(asDual.y())));
+        QVERIFY2(close(asBlend, (linear + dual) / 2), qPrintable(QString("%1 %2").arg(asBlend.x()).arg(asBlend.y())));
     }
     // FBX pivots and time: "Arm" turns about its RotationPivot and scales
     // about its ScalingPivot (both at x 10), as FbxNode::EvaluateGlobalTransform
@@ -6070,8 +7680,11 @@ private slots:
         QVERIFY(close(mesh.animatedNodeMatrices(0, 1.9)[arm].map(mesh.positions[1]), QVector3D(110, 20, 0)));
     }
     // FBX blend shapes: a quad whose "Raise" channel's shape lifts its top
-    // edge 10 and tilts its normals, resting at DeformPercent 50 and keyed
-    // from 0 to 100 by "Smile"; its model's place carries the motion.
+    // edge 10 and tilts its normals, keyed from 0 to 100 by "Smile"; its
+    // model's place carries the motion. Its DeformPercent 50 at rest moves
+    // nothing - the reference moves points only by keyed channels - and an
+    // in-between shape goes the way the reference's ComputeShapeDeformation
+    // takes it.
     void fbxBlendShapesFollowTheirWeights() {
         QTemporaryDir dir; QVERIFY(dir.isValid());
         using V = FbxValue;
@@ -6136,13 +7749,15 @@ private slots:
         QCOMPARE(mesh.morphs[0].targets.size(), 1);
         QCOMPARE(mesh.morphs[0].targets[0].name, QString("Raise"));
         QCOMPARE(mesh.morphs[0].targets[0].positions.size(), 2);
-        QCOMPARE(mesh.morphs[0].defaultWeights, QVector<float>{0.5f});
+        QCOMPARE(mesh.morphs[0].defaultWeights, QVector<float>{0.0f});
+        QCOMPARE(mesh.morphs[0].channels.size(), 1);
+        QCOMPARE(mesh.morphs[0].channels[0].fullWeights, QVector<float>{1.0f});
         const auto close = [](const QVector3D& a, const QVector3D& b) { return (a - b).length() < 1e-3f; };
-        // At rest: the top edge raised 5, its normals tilted half way.
-        QVERIFY2(close(mesh.positions[2], QVector3D(110, 25, 0)),
+        // At rest: as the file has it, DeformPercent or not.
+        QVERIFY2(close(mesh.positions[2], QVector3D(110, 20, 0)),
                  qPrintable(QString("%1 %2").arg(mesh.positions[2].x()).arg(mesh.positions[2].y())));
         QVERIFY(close(mesh.positions[0], QVector3D(90, 0, 0)));
-        QVERIFY(close(mesh.normals[2], QVector3D(1, 0, 0.5f).normalized()));
+        QVERIFY(close(mesh.normals[2], QVector3D(0, 0, 1)));
         QVERIFY(close(mesh.normals[0], QVector3D(0, 0, 1)));
         QCOMPARE(mesh.animations.size(), 1);
         QCOMPARE(mesh.animations[0].name, QString("Smile"));
@@ -6164,7 +7779,52 @@ private slots:
         layer.modelAnimations.append(smile);
         QVERIFY(close(render::posedModelMesh(layer, mesh, 24, 24.0, file).positions[2], QVector3D(110, 30, 0)));
         layer.modelAnimations[0].strength = 50.0;
-        QVERIFY(close(render::posedModelMesh(layer, mesh, 24, 24.0, file).positions[2], QVector3D(110, 27.5f, 0)));
+        QVERIFY(close(render::posedModelMesh(layer, mesh, 24, 24.0, file).positions[2], QVector3D(110, 25.0f, 0)));
+
+        // The rule: up to the first full weight the first shape grows; between
+        // two it goes from one to the next; at 0, at a later full weight and
+        // past the last, nothing.
+        const QVector<float> stages{0.5f, 1.0f};
+        QCOMPARE(model3d::channelTargetWeights(stages, 0.25f), (QVector<float>{0.5f, 0.0f}));
+        QCOMPARE(model3d::channelTargetWeights(stages, 0.5f), (QVector<float>{1.0f, 0.0f}));
+        QCOMPARE(model3d::channelTargetWeights(stages, 0.75f), (QVector<float>{0.5f, 0.5f}));
+        QCOMPARE(model3d::channelTargetWeights(stages, 1.0f), (QVector<float>{0.0f, 0.0f}));
+        QCOMPARE(model3d::channelTargetWeights(stages, 1.5f), (QVector<float>{0.0f, 0.0f}));
+        QCOMPARE(model3d::channelTargetWeights(stages, 0.0f), (QVector<float>{0.0f, 0.0f}));
+        QCOMPARE(model3d::channelTargetWeights({1.0f}, 1.0f), QVector<float>{1.0f});
+
+        // An in-between shape: "Raise" lifts the top edge 10 at 50% and 30
+        // at 100%, keyed 0 to 100 over the second.
+        QVector<FbxRecord> staged = scene;
+        for (FbxRecord& section : staged) {
+            if (section.name == "Objects") {
+                for (FbxRecord& record : section.children) {
+                    if (record.name == "Deformer" && record.values.value(0).number == 31)
+                        record.children.append(array("FullWeights", 'd', {50, 100}));
+                }
+                section.children.append(object("Geometry", 33, "Raise30" + sep + "Geometry", "Shape", {
+                    array("Indexes", 'i', {2, 3}), array("Vertices", 'd', {0, 30, 0, 0, 30, 0})}));
+            }
+            if (section.name == "Connections") section.children.append(link("OO", 33, 31));
+        }
+        const QString stagedFile = dir.filePath("staged.fbx");
+        {
+            QFile out(stagedFile); QVERIFY(out.open(QIODevice::WriteOnly));
+            out.write(fbxBinary(staged, 7400, false));
+        }
+        const auto stagedLoaded = model3d::loadModel(stagedFile, settings);
+        QVERIFY2(stagedLoaded.ok, qPrintable(stagedLoaded.message));
+        const model3d::Mesh& twoStep = stagedLoaded.mesh;
+        QCOMPARE(twoStep.morphs[0].targets.size(), 2);
+        QCOMPARE(twoStep.morphs[0].channels[0].fullWeights, (QVector<float>{0.5f, 1.0f}));
+        const auto liftAt = [&](double seconds) {
+            return twoStep.deformed(twoStep.restNodeWorlds(), twoStep.morphWeights(twoStep.animations[0], seconds))
+                .positions[2].y() - 20.0f;
+        };
+        QVERIFY2(qAbs(liftAt(0.25) - 5.0f) < 1e-3f, qPrintable(QString::number(liftAt(0.25))));
+        QVERIFY(qAbs(liftAt(0.5) - 10.0f) < 1e-3f);
+        QVERIFY2(qAbs(liftAt(0.75) - 20.0f) < 1e-3f, qPrintable(QString::number(liftAt(0.75))));
+        QVERIFY(qAbs(liftAt(1.0)) < 1e-3f);
     }
     // FBX, binary (7.4, 7.5 with deflated arrays) and ASCII: an "Arm" null
     // holding "Hand", whose quad is turned, scaled and coloured by a red
@@ -6681,13 +8341,342 @@ private slots:
         render::ViewCameraState eye; eye.position = QVector3D(0, 0, 1000);
         QVERIFY(std::abs(render::zoomedView(ViewType::Perspective, eye, 1).position.z() - 880.0f) < 1e-2f);
         QCOMPARE(render::viewCamera(ViewType::Perspective, eye, nullptr, QSize(200, 100), 0).fieldOfViewDegrees, 60.0);
+        // Orbit: 0.3 degrees a pixel about the world's up and the level side
+        // axis, the camera still on the origin at its distance, upright.
         const render::ViewCameraState orbited = render::orbitedView(ViewType::Perspective, eye, QPointF(90, 30));
         QVERIFY(std::abs(orbited.position.length() - 1000.0f) < 1e-2f);
-        QVERIFY(std::abs(orbited.rotation.y() + 90 * 0.0052359878f) < 1e-5f);   // 0.3 degrees a pixel
-        QVERIFY(std::abs(orbited.rotation.x() + 30 * 0.0052359878f) < 1e-5f);
         const QVector3D looking = render::viewCameraAim(orbited).map(QVector3D(0, 0, -1));
-        QVERIFY(QVector3D::dotProduct(looking, -orbited.position.normalized()) > 0.999f);
+        QVERIFY(QVector3D::dotProduct(looking, -orbited.position.normalized()) > 0.9999f);
+        QVERIFY(std::abs(render::viewCameraAim(orbited).map(QVector3D(1, 0, 0)).y()) < 1e-4f);   // no roll
+        QVERIFY(orbited.position.y() > 0.0f && orbited.position.x() < 0.0f);   // dragged down and right
+        const float across = std::atan2(-orbited.position.x(), orbited.position.z());
+        QVERIFY(std::abs(across - 90 * 0.0052359878f) < 1e-4f);
         QCOMPARE(render::orbitedView(ViewType::Top, frontState, QPointF(50, 0)).rotation, frontState.rotation);
+        // About another pivot: its distance to it, and how it looks past it, kept.
+        const QVector3D pivot(100, 0, 0);
+        const render::ViewCameraState aside = render::orbitedView(ViewType::Perspective, eye, QPointF(40, -20), pivot);
+        QVERIFY(std::abs((aside.position - pivot).length() - (eye.position - pivot).length()) < 1e-2f);
+        const auto offAxis = [&](const render::ViewCameraState& state) {
+            return QVector3D::dotProduct(render::viewCameraAim(state).map(QVector3D(0, 0, -1)),
+                                         (pivot - state.position).normalized());
+        };
+        QVERIFY(std::abs(offAxis(aside) - offAxis(eye)) < 1e-4f);
+        // Never over the top.
+        render::ViewCameraState high = eye;
+        for (int i = 0; i < 20; ++i) high = render::orbitedView(ViewType::Perspective, high, QPointF(0, 30));
+        QVERIFY(high.position.z() > 0.0f && high.position.y() > 950.0f);
+        // Dolly: a unit a pixel of an upward drag forward; an axis view zooms.
+        QVERIFY(std::abs(render::dolliedView(ViewType::Perspective, eye, QPointF(5, -10)).position.z() - 990.0f) < 1e-3f);
+        QVERIFY(std::abs(render::dolliedView(ViewType::Front, frontState, QPointF(0, -100)).scale - 1.1) < 1e-9);
+        // Rotate Camera: 0.1 degrees a pixel where it stands.
+        const render::ViewCameraState turned = render::turnedView(ViewType::Perspective, eye, QPointF(10, 0));
+        QCOMPARE(turned.position, eye.position);
+        QVERIFY(std::abs(turned.rotation.y() - qDegreesToRadians(1.0f)) < 1e-5f);
+        QCOMPARE(render::turnedView(ViewType::Front, frontState, QPointF(10, 0)).rotation, frontState.rotation);
+        // Zoom Camera: the perspective view's scale narrows its field of view.
+        const render::ViewCameraState nearer = render::dragZoomedView(ViewType::Perspective, eye, QPointF(0, 100));
+        QVERIFY(std::abs(nearer.scale - 1.1) < 1e-9);
+        QVERIFY(std::abs(render::viewCamera(ViewType::Perspective, nearer, nullptr, QSize(200, 100), 0).fieldOfViewDegrees
+                         - qRadiansToDegrees(2.0 * std::atan(std::tan(qDegreesToRadians(30.0)) / 1.1))) < 1e-9);
+        QVERIFY(std::abs(render::dragZoomedView(ViewType::Front, frontState, QPointF(0, 100)).scale - 0.9) < 1e-9);
+        QCOMPARE(render::dragZoomedView(ViewType::Front, frontState, QPointF(0, 5000)).scale, 0.0002);
+        // The buttons and keys, as the reference's OpenGLView picks its modes.
+        using ui::ViewDrag;
+        QCOMPARE(ui::viewDragFor(Qt::RightButton, Qt::NoModifier), ViewDrag::Pan);
+        QCOMPARE(ui::viewDragFor(Qt::MiddleButton, Qt::ShiftModifier), ViewDrag::Rotate);
+        QCOMPARE(ui::viewDragFor(Qt::LeftButton, Qt::NoModifier), ViewDrag::None);
+        QCOMPARE(ui::viewDragFor(Qt::LeftButton, Qt::ControlModifier), ViewDrag::Pan);
+        QCOMPARE(ui::viewDragFor(Qt::RightButton, Qt::ControlModifier), ViewDrag::Zoom);
+        QCOMPARE(ui::viewDragFor(Qt::LeftButton, Qt::AltModifier), ViewDrag::Orbit);
+        QCOMPARE(ui::viewDragFor(Qt::MiddleButton, Qt::AltModifier), ViewDrag::Pan);
+        QCOMPARE(ui::viewDragFor(Qt::RightButton, Qt::AltModifier), ViewDrag::Dolly);
+        // In the Viewer: a middle drag over a perspective view turns its
+        // camera; over the shot's own view nothing moves.
+        ui::ViewerWidget navigated; navigated.resize(400, 260); navigated.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&navigated));
+        navigated.setProjectSize(QSize(320, 180));
+        navigated.setViewType(0, int(ViewType::Perspective));
+        QImage picture(320, 180, QImage::Format_ARGB32_Premultiplied); picture.fill(Qt::black);
+        navigated.setFrame(picture);
+        navigated.setViewFrame(0, picture);
+        QSignalSpy dragged(&navigated, &ui::ViewerWidget::viewCameraDragged);
+        QSignalSpy panned(&navigated, &ui::ViewerWidget::viewPanned);
+        const QPoint middle = navigated.rect().center();
+        QTest::mousePress(&navigated, Qt::MiddleButton, Qt::NoModifier, middle);
+        QMouseEvent turn(QEvent::MouseMove, QPointF(middle + QPoint(12, 0)), navigated.mapToGlobal(QPointF(middle + QPoint(12, 0))),
+                         Qt::NoButton, Qt::MiddleButton, Qt::NoModifier);
+        QApplication::sendEvent(&navigated, &turn);
+        QTest::mouseRelease(&navigated, Qt::MiddleButton, Qt::NoModifier, middle + QPoint(12, 0));
+        QCOMPARE(dragged.count(), 1);
+        QCOMPARE(dragged[0][1].toInt(), int(ViewDrag::Rotate));
+        QCOMPARE(dragged[0][2].toPointF(), QPointF(12, 0));
+        QTest::mousePress(&navigated, Qt::RightButton, Qt::NoModifier, middle);
+        QMouseEvent pan(QEvent::MouseMove, QPointF(middle + QPoint(0, 8)), navigated.mapToGlobal(QPointF(middle + QPoint(0, 8))),
+                        Qt::NoButton, Qt::RightButton, Qt::NoModifier);
+        QApplication::sendEvent(&navigated, &pan);
+        QTest::mouseRelease(&navigated, Qt::RightButton, Qt::NoModifier, middle + QPoint(0, 8));
+        QCOMPARE(panned.count(), 1);
+        navigated.setViewType(0, int(ViewType::ActiveCamera));
+        dragged.clear();
+        QTest::mousePress(&navigated, Qt::MiddleButton, Qt::NoModifier, middle);
+        QApplication::sendEvent(&navigated, &turn);
+        QTest::mouseRelease(&navigated, Qt::MiddleButton, Qt::NoModifier, middle + QPoint(12, 0));
+        QCOMPARE(dragged.count(), 0);
+    }
+    // Orbit Around Clicked Point: the point of the scene under a ray - the
+    // nearest visible 3D sheet where its content is, or a model's triangle,
+    // a hidden layer passed through, nothing beside them - and the Orbit
+    // button's list of the reference's two modes, the Viewer telling at the
+    // press which one turns the view (Alt with the left button always the
+    // selected layers) and where the press was; through a perspective
+    // view's own camera, the middle of the picture meets the shot's plane.
+    void orbitTurnsAboutTheClickedPoint() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString cube = temp.filePath("cube.obj");
+        {
+            QFile file(cube); QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+            QTextStream obj(&file);
+            for (int i = 0; i < 8; ++i)
+                obj << "v " << (i & 1 ? 40 : -40) << ' ' << (i & 2 ? 40 : -40) << ' ' << (i & 4 ? 40 : -40) << '\n';
+            const int quads[6][4] = {{1, 2, 4, 3}, {5, 7, 8, 6}, {1, 5, 6, 2}, {3, 4, 8, 7}, {1, 3, 7, 5}, {2, 6, 8, 4}};
+            for (const auto& q : quads)
+                obj << "f " << q[0] << ' ' << q[1] << ' ' << q[2] << "\nf " << q[0] << ' ' << q[2] << ' ' << q[3] << '\n';
+        }
+        media::MediaManager media;
+        model3d::ImportSettings settings;
+        settings.unit = model3d::ImportSettings::Unit::Pixel;
+        settings.autoNormalize = false;
+        settings.centerAnchorPoint = false;
+        QVERIFY(media.importModel(cube, settings).isSuccess());
+        composition::Composition shot;
+        shot.setSize(320, 180); shot.setFrameRate(24, 1); shot.setDurationSeconds(1);
+        composition::Clip clip; clip.durationSeconds = 1;
+        {
+            auto& floor = shot.addLayer("Back");
+            floor.kind = composition::LayerKind::Plane; floor.dimension = composition::LayerDimension::ThreeD;
+            floor.clips << clip;
+            floor.transform.scalePercent = QPointF(300, 300);   // 960 x 540
+            auto& card = shot.addLayer("Card");
+            card.kind = composition::LayerKind::Plane; card.dimension = composition::LayerDimension::ThreeD;
+            card.clips << clip;
+            card.transform.position = QPointF(100, 0); card.transform.positionZ = 50;
+            card.transform.scalePercent = QPointF(10, 10);
+            auto& hidden = shot.addLayer("Hidden");
+            hidden.kind = composition::LayerKind::Plane; hidden.dimension = composition::LayerDimension::ThreeD;
+            hidden.clips << clip; hidden.transform.positionZ = 100; hidden.visible = false;
+            auto& model = shot.addLayer("Cube");
+            model.kind = composition::LayerKind::Model3D; model.dimension = composition::LayerDimension::ThreeD;
+            model.modelAssetId = media.assetByFilePath(QFileInfo(cube).absoluteFilePath()).id();
+            model.transform.position = QPointF(-100, 0);
+        }
+        const QVector3D down(0, 0, -1);
+        const auto hit = [&](const QVector3D& from) { return render::sceneRayHit(shot, &media, 0, from, down); };
+        const auto near = [](const std::optional<QVector3D>& a, const QVector3D& b) {
+            return a && (*a - b).length() < 0.01f;
+        };
+        QVERIFY(near(hit(QVector3D(0, 0, 1000)), QVector3D(0, 0, 0)));
+        QVERIFY(near(hit(QVector3D(100, 0, 1000)), QVector3D(100, 0, 50)));
+        QVERIFY(near(hit(QVector3D(-100, 0, 1000)), QVector3D(-100, 0, 40)));
+        QVERIFY(near(hit(QVector3D(130, 0, 1000)), QVector3D(130, 0, 0)));   // past the card: the back
+        QVERIFY(!hit(QVector3D(500, 0, 1000)));
+        QVERIFY(!render::sceneRayHit(shot, &media, 0, QVector3D(0, 280, 1000), down));
+        QVERIFY(!render::sceneRayHit(shot, &media, 0, QVector3D(0, 0, 1000), QVector3D(0, 0, 1)));
+
+        // Through a perspective view's own camera, the middle of its picture.
+        using render::ViewType;
+        const render::ViewCameraState state = render::defaultViewCameraState(ViewType::Perspective);
+        const model3d::Camera camera = render::viewCamera(ViewType::Perspective, state, &shot, QSize(320, 180), 0);
+        bool invertible = false;
+        const QMatrix4x4 unproject = camera.viewProjection(QSize(320, 180)).inverted(&invertible);
+        QVERIFY(invertible);
+        const QVector3D start = unproject.map(QVector3D(0, 0, -1)), end = unproject.map(QVector3D(0, 0, 1));
+        const std::optional<QVector3D> centre = render::sceneRayHit(shot, &media, 0, start, end - start);
+        QVERIFY(near(centre, QVector3D(0, 100, 0)));   // the view stands 100 up, looking along -Z
+
+        // The Orbit button's list.
+        ui::ViewerWidget viewer; viewer.resize(400, 260); viewer.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&viewer));
+        viewer.setProjectSize(QSize(320, 180));
+        viewer.setViewType(0, int(ViewType::Perspective));
+        QImage picture(320, 180, QImage::Format_ARGB32_Premultiplied); picture.fill(Qt::black);
+        viewer.setFrame(picture);
+        viewer.setViewFrame(0, picture);
+        auto* button = viewer.findChild<QToolButton*>("toolButtonCameraOrbit"); QVERIFY(button && button->menu());
+        QCOMPARE(button->menu()->actions().size(), 2);
+        QCOMPARE(button->menu()->actions().at(0)->text(), QString("Orbit Around Selected Layers"));
+        QCOMPARE(viewer.orbitPivot(), ui::OrbitPivot::SelectedLayers);
+        auto* clicked = viewer.findChild<QAction*>("actionOrbitAroundClickedPoint"); QVERIFY(clicked);
+        clicked->trigger();
+        QCOMPARE(viewer.orbitPivot(), ui::OrbitPivot::ClickedPoint);
+        QCOMPARE(viewer.tool(), ui::ViewerWidget::ViewerTool::Orbit);
+        QVERIFY(clicked->isChecked() && !viewer.findChild<QAction*>("actionOrbitAroundSelectedLayers")->isChecked());
+        QSignalSpy started(&viewer, &ui::ViewerWidget::viewOrbitStarted);
+        QSignalSpy orbited(&viewer, &ui::ViewerWidget::viewOrbited);
+        const QPoint middle = viewer.mapping(0).toWidget(QPointF(160, 90)).toPoint();
+        QTest::mousePress(&viewer, Qt::LeftButton, Qt::NoModifier, middle);
+        QMouseEvent move(QEvent::MouseMove, QPointF(middle + QPoint(10, 0)), viewer.mapToGlobal(QPointF(middle + QPoint(10, 0))),
+                         Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&viewer, &move);
+        QTest::mouseRelease(&viewer, Qt::LeftButton, Qt::NoModifier, middle + QPoint(10, 0));
+        QCOMPARE(started.count(), 1);
+        QCOMPARE(started[0][0].toInt(), 0);
+        QCOMPARE(started[0][2].value<ui::OrbitPivot>(), ui::OrbitPivot::ClickedPoint);
+        const QPointF where = started[0][1].toPointF();
+        QVERIFY2(std::abs(where.x() - 0.5) < 0.02 && std::abs(where.y() - 0.5) < 0.02,
+                 qPrintable(QStringLiteral("%1 %2").arg(where.x()).arg(where.y())));
+        QCOMPARE(orbited.count(), 1);
+        // Alt with the left button: the selected layers, whatever the list.
+        started.clear();
+        QTest::mousePress(&viewer, Qt::LeftButton, Qt::AltModifier, middle);
+        QTest::mouseRelease(&viewer, Qt::LeftButton, Qt::AltModifier, middle);
+        QCOMPARE(started.count(), 1);
+        QCOMPARE(started[0][2].value<ui::OrbitPivot>(), ui::OrbitPivot::SelectedLayers);
+    }
+    // Towards Layer's second turn (AlignToTarget): once a layer faces the
+    // other one, it turns about the way to it until its up, seen across the
+    // way, is the other layer's - a camera looking at a point turned a
+    // quarter about Z takes that point's up, half a turn when the point is
+    // upside down; a sheet does the same about its centre, and a light
+    // above it; a light whose way lies along the point's up takes the
+    // point's -Z instead.
+    void towardsLayerTakesTheOtherLayersUp() {
+        using composition::AutoOrient;
+        composition::Composition shot;
+        shot.setSize(320, 180); shot.setFrameRate(24, 1); shot.setDurationSeconds(1);
+        {
+            auto& point = shot.addLayer("Point");
+            point.kind = composition::LayerKind::Point; point.dimension = composition::LayerDimension::ThreeD;
+            point.transform.rotationDegrees = 90;
+            auto& lens = shot.addLayer("Camera");
+            lens.kind = composition::LayerKind::Camera; lens.dimension = composition::LayerDimension::ThreeD;
+            lens.transform.positionZ = 500;
+            lens.autoOrient = AutoOrient::TowardsLayer; lens.autoOrientLayer = shot.layers()[0].id;
+            auto& sheet = shot.addLayer("Sheet");
+            sheet.kind = composition::LayerKind::Plane; sheet.dimension = composition::LayerDimension::ThreeD;
+            sheet.transform.positionZ = -400;
+            sheet.autoOrient = AutoOrient::TowardsLayer; sheet.autoOrientLayer = shot.layers()[0].id;
+            auto& lamp = shot.addLayer("Lamp");
+            lamp.kind = composition::LayerKind::Light; lamp.dimension = composition::LayerDimension::ThreeD;
+            lamp.transform.position = QPointF(0, 300);
+            lamp.autoOrient = AutoOrient::TowardsLayer; lamp.autoOrientLayer = shot.layers()[0].id;
+        }
+        const auto near = [](const QVector3D& a, const QVector3D& b) { return (a - b).length() < 1e-3f; };
+        const auto text = [](const QVector3D& v) { return QStringLiteral("%1 %2 %3").arg(v.x()).arg(v.y()).arg(v.z()); };
+        const QVector3D pointUp = render::layerRotationAt(shot.layers()[0].transform, 0).mapVector(QVector3D(0, 1, 0));
+        QVERIFY(std::abs(pointUp.y()) < 1e-3f);   // turned a quarter
+        const QMatrix4x4 camera = render::layerTurnAt(&shot, shot.layers()[1], 0);
+        QVERIFY(near(camera.mapVector(QVector3D(0, 0, -1)), QVector3D(0, 0, -1)));
+        QVERIFY2(near(camera.mapVector(QVector3D(0, 1, 0)), pointUp), qPrintable(text(camera.mapVector(QVector3D(0, 1, 0)))));
+        const QMatrix4x4 sheet = render::layerSheetMatrixAt(&shot, shot.layers()[2], 0);
+        QVERIFY(near(sheet.mapVector(QVector3D(0, 0, 1)).normalized(), QVector3D(0, 0, 1)));
+        QVERIFY2(near(sheet.mapVector(QVector3D(0, 1, 0)).normalized(), pointUp),
+                 qPrintable(text(sheet.mapVector(QVector3D(0, 1, 0)).normalized())));
+        // The light above looks straight down: the point's Y lies across that
+        // way, so the light's up is the point's (its -Z for the light).
+        const QMatrix4x4 lamp = render::layerTurnAt(&shot, shot.layers()[3], 0);
+        QVERIFY(near(lamp.mapVector(QVector3D(0, 0, -1)), QVector3D(0, -1, 0)));
+        QVERIFY2(near(lamp.mapVector(QVector3D(0, 1, 0)), pointUp), qPrintable(text(lamp.mapVector(QVector3D(0, 1, 0)))));
+        // Upside down: half a turn.
+        shot.layerRef(0).transform.rotationDegrees = 180;
+        QVERIFY(near(render::layerTurnAt(&shot, shot.layers()[1], 0).mapVector(QVector3D(0, 1, 0)), QVector3D(0, -1, 0)));
+        // With the point's Y along the light's way, its -Z: the point turned
+        // a quarter about Z, the light at its side looking along -X.
+        shot.layerRef(0).transform.rotationDegrees = 90;
+        shot.layerRef(3).transform.position = QPointF(300, 0);
+        const QVector3D way(-1, 0, 0);
+        QVERIFY(QVector3D::crossProduct(way, pointUp).length() < 1e-3f);
+        const QVector3D pointBack = render::layerRotationAt(shot.layers()[0].transform, 0).mapVector(QVector3D(0, 0, -1));
+        const QMatrix4x4 side = render::layerTurnAt(&shot, shot.layers()[3], 0);
+        QVERIFY(near(side.mapVector(QVector3D(0, 0, -1)), way));
+        const QVector3D expected = QVector3D::crossProduct(way, QVector3D::crossProduct(way, pointBack)).normalized();
+        const QVector3D got = QVector3D::crossProduct(way, QVector3D::crossProduct(way, side.mapVector(QVector3D(0, 1, 0)))).normalized();
+        QVERIFY2(!expected.isNull() && near(got, expected), qPrintable(text(got) + " / " + text(expected)));
+    }
+    // Parents (AbstractLayer::ParentTransformationAtTime): a 2D layer under
+    // a 2D parent is placed, turned and scaled by it - in the scene's
+    // numbers, on the canvas, in the Layout frame and in the render, the
+    // parent hidden or not; a media parent's anchor point is taken off; a
+    // camera stands where its parent puts it; a 2D layer under a 3D parent
+    // only follows where that parent shows on the frame; a loop of parents
+    // is no parent.
+    void childrenFollowTheirParents() {
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(24, 1); shot->setDurationSeconds(1);
+        composition::Clip clip; clip.durationSeconds = 1;
+        {
+            auto& parent = shot->addLayer("Parent");
+            parent.kind = composition::LayerKind::Plane; parent.planeColor = Qt::blue; parent.clips << clip;
+            parent.transform.position = QPointF(100, 0);
+            parent.transform.rotationDegrees = 90;
+            parent.transform.scalePercent = QPointF(50, 50);
+            parent.visible = false;
+            auto& child = shot->addLayer("Child");
+            child.kind = composition::LayerKind::Plane; child.planeColor = Qt::red; child.clips << clip;
+            child.transform.position = QPointF(40, 0);
+            child.transform.scalePercent = QPointF(10, 10);
+            child.parentLayerId = shot->layers()[0].id;
+        }
+        const auto near = [](const QVector3D& a, const QVector3D& b) { return (a - b).length() < 1e-3f; };
+        const auto text = [](const QVector3D& v) { return QStringLiteral("%1 %2 %3").arg(v.x()).arg(v.y()).arg(v.z()); };
+        // 40 to the right, halved and turned a quarter clockwise: 20 down.
+        const QVector3D at = render::layerPositionAt(shot.get(), shot->layers()[1], 0);
+        QVERIFY2(near(at, QVector3D(100, -20, 0)), qPrintable(text(at)));
+        const QTransform canvasParent = render::layerCanvasParentAt(shot.get(), shot->layers()[1], 0, QSizeF(320, 180));
+        const QPointF mapped = canvasParent.map(QPointF(200, 90));
+        QVERIFY2(QLineF(mapped, QPointF(260, 110)).length() < 1e-3, qPrintable(QStringLiteral("%1 %2").arg(mapped.x()).arg(mapped.y())));
+        const render::LayerGeometry box = render::layerGeometry(*shot, shot->layers()[1], nullptr, 0);
+        QVERIFY(QLineF(box.bounds().center(), QPointF(260, 110)).length() < 0.5);
+        const auto frameOf = [&] {
+            render::RenderManager manager; manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 0.0, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 20000)) return QImage();
+            const QByteArray bytes = frames[0][1].toByteArray();
+            return QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                          QImage::Format_RGBA8888).copy();
+        };
+        const QImage drawn = frameOf();
+        QVERIFY(drawn.save(testArtifactPath(QStringLiteral("parented-2d.png"))));
+        QVERIFY(drawn.pixelColor(260, 110).red() > 250 && drawn.pixelColor(260, 110).green() < 5);
+        QVERIFY(drawn.pixelColor(200, 90).red() < 100);   // not where it would be alone
+        // Child turned with its parent: the red plane (32 x 18, then halved
+        // and turned) stands 9 wide and 16 tall.
+        QVERIFY(drawn.pixelColor(260, 103).red() > 250 && drawn.pixelColor(260, 116).red() > 250);
+        QVERIFY(drawn.pixelColor(253, 110).red() < 100 && drawn.pixelColor(267, 110).red() < 100);
+
+        // A media parent's anchor point is taken off: a plane parent too.
+        shot->layerRef(0).transform.rotationDegrees = 0;
+        shot->layerRef(0).transform.scalePercent = QPointF(100, 100);
+        shot->layerRef(0).transform.anchorPoint = QPointF(30, 0);
+        QVERIFY(near(render::layerPositionAt(shot.get(), shot->layers()[1], 0), QVector3D(110, 0, 0)));
+        shot->layerRef(0).transform.anchorPoint = QPointF(0, 0);
+        // A loop is no parent.
+        shot->layerRef(0).parentLayerId = shot->layers()[1].id;
+        QVERIFY(render::layerParentMatrixAt(shot.get(), shot->layers()[1], 0).map(QVector3D()).length() < 1e6f);
+        shot->layerRef(0).parentLayerId = core::Identifier();
+
+        // A camera under a point stands where the point puts it.
+        {
+            auto& point = shot->addLayer("Point");
+            point.kind = composition::LayerKind::Point; point.dimension = composition::LayerDimension::ThreeD;
+            point.transform.position = QPointF(50, 0);
+            auto& lens = shot->addLayer("Camera");
+            lens.kind = composition::LayerKind::Camera; lens.dimension = composition::LayerDimension::ThreeD;
+            lens.transform.positionZ = 800;
+            lens.parentLayerId = shot->layers()[2].id;
+        }
+        const model3d::Camera camera = render::sceneCameraOf(shot.get(), QSize(320, 180), 0);
+        QVERIFY2(near(camera.position, QVector3D(50, 0, 800)), qPrintable(text(camera.position)));
+        shot->layerRef(3).visible = false;   // back to the default camera
+
+        // A 2D layer under a 3D parent follows where the parent shows.
+        shot->layerRef(0).dimension = composition::LayerDimension::ThreeD;
+        shot->layerRef(0).transform.position = QPointF(60, 0);
+        shot->layerRef(1).transform.position = QPointF(0, 0);
+        const QVector3D under3D = render::layerPositionAt(shot.get(), shot->layers()[1], 0);
+        QVERIFY2(near(under3D, QVector3D(60, 0, 0)), qPrintable(text(under3D)));
+        shot->layerRef(0).transform.rotationDegrees = 90;   // its turn does not reach the 2D child
+        QVERIFY(render::turnOf(render::layerParentMatrixAt(shot.get(), shot->layers()[1], 0)).isIdentity());
     }
     // A file's 3D model animations as a Media asset (the reference's
     // Model3DAnimationAsset under "3D Model Animations"): apart from the same
@@ -7420,6 +9409,821 @@ private slots:
             for (int y = 0; y < 180 && !cardSeen; ++y)
                 if (shown.pixelColor(x, y).green() > 200 && casting.pixelColor(x, y).green() < 50) cardSeen = true;
         QVERIFY(cardSeen);
+    }
+    // Ambient occlusion as Flux draws it (AmbientOcclusionRenderer): over a
+    // G-buffer a flat surface stays open, a floor beside a raised block is
+    // darkened along it and open further off, the block's top open, and a
+    // pixel weighing too little stays open and occludes nothing. renderMesh
+    // notes what each pixel shows, the nearer of two meshes, its normal
+    // turned to the eye. In a shot, a floor that receives occlusion darkens
+    // round a card in front of it that casts it - not when the card does
+    // not cast it, nor when the floor does not receive it - and the card
+    // keeps its colour. The Material group has Receives and Casts Ambient
+    // Occlusion and the Ambient Occlusion group (a model's with Include Semi
+    // Transparent Triangles), and all of it is saved as the reference keeps
+    // it: static, the counts as <i>, the rest as <fl>.
+    void ambientOcclusionDarkensWhereSurfacesMeet() {
+        const QSize size(200, 120);
+        const int count = size.width() * size.height();
+        QVector<QVector3D> positions(count), normals(count, QVector3D(0, 0, 1));
+        QVector<float> weights(count, 1.0f);
+        const QRect block(80, 40, 40, 40);
+        for (int y = 0; y < size.height(); ++y)
+            for (int x = 0; x < size.width(); ++x)
+                positions[y * size.width() + x] =
+                    QVector3D(x - 100.0f, 60.0f - y, block.contains(x, y) ? -450.0f : -500.0f);
+        const model3d::AmbientOcclusion settings;   // the reference's defaults
+        QVector<QVector3D> flat = positions;
+        for (QVector3D& p : flat) p.setZ(-500.0f);
+        const auto allOpen = [](const QVector<float>& map) {
+            return std::all_of(map.cbegin(), map.cend(), [](float v) { return std::abs(v - 1.0f) < 1e-5f; });
+        };
+        QVERIFY(allOpen(model3d::ambientOcclusionMap(size, flat, normals, weights, settings)));
+        const QVector<float> map = model3d::ambientOcclusionMap(size, positions, normals, weights, settings);
+        const auto at = [&](int x, int y) { return map.at(y * size.width() + x); };
+        const QString values = QStringLiteral("beside %1 %2, far %3, top %4")
+                                   .arg(at(77, 60)).arg(at(100, 37)).arg(at(20, 60)).arg(at(100, 60));
+        QVERIFY2(at(77, 60) < 0.9f && at(100, 37) < 0.99f, qPrintable(values));
+        QVERIFY2(at(20, 60) > 0.999f && at(100, 60) > 0.999f, qPrintable(values));
+        model3d::AmbientOcclusion none = settings;
+        none.intensity = 0.0;
+        QVERIFY(allOpen(model3d::ambientOcclusionMap(size, positions, normals, weights, none)));
+        QVector<float> faint = weights;
+        faint.fill(0.5f);
+        QVERIFY(allOpen(model3d::ambientOcclusionMap(size, positions, normals, faint, settings)));
+
+        // A triangle on the z = 0 plane wound away from the camera, then a
+        // nearer one over part of it.
+        model3d::Mesh mesh;
+        mesh.positions = {QVector3D(-70, -60, 0), QVector3D(-20, 75, 0), QVector3D(80, -45, 0)};
+        model3d::Triangle triangle;
+        triangle.position[0] = 0; triangle.position[1] = 1; triangle.position[2] = 2;
+        mesh.triangles = {triangle};
+        const QSize canvas(200, 200);
+        const model3d::Camera camera = model3d::defaultCameraForCanvas(canvas);
+        model3d::SurfaceBuffer shown;
+        model3d::renderMesh(mesh, QMatrix4x4(), camera, canvas, model3d::Lighting(), model3d::ShadingMode::Shaded,
+                            1.0, model3d::Fog(), 4, &shown);
+        QCOMPARE(shown.size, canvas);
+        const int inside = 110 * canvas.width() + 96, outside = 5 * canvas.width() + 5;
+        QVERIFY(shown.has(inside) && !shown.has(outside));
+        QVERIFY(std::abs(shown.positions.at(inside).z()) < 1e-3f);
+        QVERIFY2((shown.normals.at(inside) - QVector3D(0, 0, 1)).length() < 1e-4f,
+                 qPrintable(QStringLiteral("%1 %2 %3").arg(shown.normals.at(inside).x())
+                                .arg(shown.normals.at(inside).y()).arg(shown.normals.at(inside).z())));
+        QCOMPARE(shown.alphas.at(inside), 1.0f);
+        QMatrix4x4 nearer; nearer.translate(0, 0, 50);
+        model3d::renderMesh(mesh, nearer, camera, canvas, model3d::Lighting(), model3d::ShadingMode::Shaded,
+                            1.0, model3d::Fog(), 1, &shown);
+        QVERIFY(std::abs(shown.positions.at(inside).z() - 50.0f) < 1e-2f);
+
+        // A shot: a card 30 px in front of a floor.
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(24, 1); shot->setDurationSeconds(1);
+        composition::Clip clip; clip.durationSeconds = 1;
+        {
+            auto& card = shot->addLayer("Card");
+            card.kind = composition::LayerKind::Plane; card.planeColor = Qt::red;
+            card.dimension = composition::LayerDimension::ThreeD; card.clips << clip;
+            card.transform.positionZ = 30;
+            card.transform.scalePercent = QPointF(25, 25);
+            auto& floor = shot->addLayer("Floor");
+            floor.kind = composition::LayerKind::Plane; floor.planeColor = Qt::white;
+            floor.dimension = composition::LayerDimension::ThreeD; floor.clips << clip;
+            auto& model = shot->addLayer("Model");
+            model.kind = composition::LayerKind::Model3D; model.dimension = composition::LayerDimension::ThreeD;
+            model.visible = false;
+        }
+        const auto frame = [&] {
+            render::RenderManager manager; manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 0.0, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 20000)) return QImage();
+            const QByteArray bytes = frames[0][1].toByteArray();
+            return QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                          QImage::Format_RGBA8888).copy();
+        };
+        const QImage plain = frame();
+        QVERIFY(!plain.isNull());
+        // The card's left edge on the middle row.
+        int edge = -1;
+        for (int x = 0; x < 320 && edge < 0; ++x)
+            if (plain.pixelColor(x, 90).green() < 50) edge = x;
+        QVERIFY2(edge > 100 && edge < 160, qPrintable(QString::number(edge)));
+        QCOMPARE(plain.pixelColor(edge - 4, 90), QColor(Qt::white));
+        shot->layerRef(1).surface.receiveAmbientOcclusion = true;
+        QCOMPARE(frame().pixelColor(edge - 4, 90), QColor(Qt::white));   // the card casts none
+        shot->layerRef(0).surface.castAmbientOcclusion = true;
+        const QImage occluded = frame();
+        QVERIFY(occluded.save(testArtifactPath(QStringLiteral("ambient-occlusion-card.png"))));
+        const QColor beside = occluded.pixelColor(edge - 4, 90);
+        QVERIFY2(beside.red() < 225 && beside.red() == beside.green() && beside.green() == beside.blue(),
+                 qPrintable(beside.name()));
+        QCOMPARE(occluded.pixelColor(10, 10), QColor(Qt::white));
+        QCOMPARE(occluded.pixelColor(160, 90), plain.pixelColor(160, 90));   // the card itself
+        shot->layerRef(1).surface.receiveAmbientOcclusion = false;
+        QCOMPARE(frame().pixelColor(edge - 4, 90), QColor(Qt::white));
+
+        // The Material group.
+        QUndoStack history;
+        ui::TimelineWidget timeline; timeline.resize(900, 1400);
+        timeline.setUndoStack(&history); timeline.setComposition(shot);
+        timeline.show(); QVERIFY(QTest::qWaitForWindowExposed(&timeline));
+        const auto editor = [&](const QString& name) { return timeline.findChild<QWidget*>(name); };
+        for (const char* key : {"receiveAmbientOcclusion", "castAmbientOcclusion", "aoSamples", "aoSampleRadius",
+                                "aoIntensity", "aoDepthScale", "aoBias", "aoBlurRadius", "aoDepthFalloff"}) {
+            QVERIFY2(editor(QStringLiteral("timelineSurface_1_%1").arg(key)), key);
+            QVERIFY2(editor(QStringLiteral("timelineSurface_2_%1").arg(key)), key);
+        }
+        QVERIFY(!editor("timelineSurface_1_includeSemiTransparentTriangles")
+                && editor("timelineSurface_2_includeSemiTransparentTriangles"));
+        auto* tree = timeline.findChild<QTreeWidget*>(); QVERIFY(tree);
+        QTreeWidgetItem* group = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->text(0) == QLatin1String("Ambient Occlusion") && (*it)->data(0, Qt::UserRole).toInt() == 1)
+                group = *it;
+        QVERIFY(group);
+        QCOMPARE(group->childCount(), 7);
+        QCOMPARE(group->parent()->text(0), QString("Material"));
+        auto* samples = editor("timelineSurface_1_aoSamples")->findChild<QDoubleSpinBox*>(); QVERIFY(samples);
+        QCOMPARE(samples->value(), 4.0);
+        QCOMPARE(samples->decimals(), 0);
+        samples->setValue(8);
+        QCOMPARE(shot->layers()[1].surface.aoSamples, 8);
+        history.undo();
+        QCOMPARE(shot->layers()[1].surface.aoSamples, 4);
+
+        // Saved and read back.
+        composition::SurfaceShading& surface = shot->layerRef(1).surface;
+        surface.receiveAmbientOcclusion = true;
+        surface.aoSamples = 9; surface.aoSampleRadius = 3; surface.aoIntensity = 75; surface.aoDepthScale = 20;
+        surface.aoBias = 0.5; surface.aoBlurRadius = 2; surface.aoDepthFalloff = 30;
+        shot->layerRef(2).surface.includeSemiTransparentTriangles = false;
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString path = dir.filePath("occlusion.vegfx");
+        media::MediaManager media;
+        QVERIFY(project::VegfxSerializer::saveToFile(path, *shot, media).isSuccess());
+        {
+            QFile saved(path); QVERIFY(saved.open(QIODevice::ReadOnly));
+            QDomDocument doc; QVERIFY(doc.setContent(&saved));
+            QStringList kinds;
+            const QDomNodeList props = doc.elementsByTagName("Prop");
+            for (int i = 0; i < props.size(); ++i) {
+                const QDomElement prop = props.at(i).toElement();
+                const QString name = prop.firstChildElement("Name").text();
+                if (name != "aoSamples" && name != "aoBias" && name != "receiveAmbientOcclusion") continue;
+                QCOMPARE(prop.attribute("Type"), QString("1"));
+                kinds << name + ":" + prop.firstChildElement("Static").firstChildElement().tagName();
+            }
+            QVERIFY2(kinds.contains("aoSamples:i") && kinds.contains("aoBias:fl")
+                         && kinds.contains("receiveAmbientOcclusion:b"),
+                     qPrintable(kinds.join(' ')));
+        }
+        composition::Composition loaded; media::MediaManager reloaded;
+        QVERIFY(project::VegfxSerializer::loadFromFile(path, &loaded, &reloaded).isSuccess());
+        const composition::SurfaceShading& back = loaded.layers()[1].surface;
+        QVERIFY(back.receiveAmbientOcclusion && !back.castAmbientOcclusion);
+        QVERIFY(loaded.layers()[0].surface.castAmbientOcclusion);
+        QCOMPARE(back.aoSamples, 9); QCOMPARE(back.aoSampleRadius, 3); QCOMPARE(back.aoIntensity, 75.0);
+        QCOMPARE(back.aoDepthScale, 20.0); QCOMPARE(back.aoBias, 0.5); QCOMPARE(back.aoBlurRadius, 2);
+        QCOMPARE(back.aoDepthFalloff, 30.0);
+        QVERIFY(!loaded.layers()[2].surface.includeSemiTransparentTriangles);
+        QVERIFY(loaded.layers()[1].surface.includeSemiTransparentTriangles);
+    }
+    // Reflections as Flux draws them. Lat-long lookups go as
+    // ConvertVec2LatLong does (+Y the top row, a direction with x or z 0 at
+    // the middle column), and a white environment lights every way by pi.
+    // A black mirror sheet that receives reflections shows a green card in
+    // front of it where its mirror image falls - added at full strength,
+    // at a quarter with Specular Reflectivity 50 - not without Receives or
+    // Casts Reflections, still from a hidden card with Cast Reflections If
+    // Visibility Is Off, and never from a card behind the mirror. A 3D
+    // text with an Environment Map takes the colour of the layer it uses,
+    // or of the shot beneath with Use Composite Shot. The Material group
+    // has the reference's rows for each kind (Environment Map's Layer once
+    // asked for), and all of it is saved under the reference's names.
+    void reflectionsMirrorTheSceneInSheets() {
+        QVERIFY((model3d::latLongOf(QVector3D(0, 0, 1)) - QVector2D(0.5f, 0.5f)).length() < 1e-5f);
+        QVERIFY(std::abs(model3d::latLongOf(QVector3D(0, 1, 0)).y() - 1.0f) < 1e-5f);
+        QVERIFY(std::abs(model3d::latLongOf(QVector3D(1, 0, 0.001f)).x() - 0.75f) < 1e-3f);
+        QVERIFY(std::abs(model3d::latLongOf(QVector3D(1, 0, 0)).x() - 0.5f) < 1e-5f);   // the shader's quirk
+        QImage sky(64, 32, QImage::Format_RGBA8888);
+        sky.fill(Qt::blue);
+        for (int y = 0; y < 16; ++y)
+            for (int x = 0; x < 64; ++x) sky.setPixelColor(x, y, Qt::red);
+        QVERIFY(model3d::environmentColor(sky, QVector3D(0, 1, 0.2f)).x() > 0.99f);
+        QVERIFY(model3d::environmentColor(sky, QVector3D(0, -1, 0.2f)).z() > 0.99f);
+        // Straight up, the map repeats: half the bottom row.
+        QVERIFY(std::abs(model3d::environmentColor(sky, QVector3D(0, 1, 0)).x() - 0.5f) < 0.01f);
+        QImage white(64, 32, QImage::Format_RGBA8888);
+        white.fill(Qt::white);
+        const model3d::Irradiance even = model3d::irradianceOf(white);
+        for (const QVector3D& n : {QVector3D(0, 1, 0), QVector3D(1, 0, 0), QVector3D(0, 0, -1)})
+            QVERIFY2(std::abs(even.at(n).x() - 3.14159f) < 0.05f, qPrintable(QString::number(even.at(n).x())));
+        const model3d::Irradiance skyLight = model3d::irradianceOf(sky);
+        QVERIFY(skyLight.at(QVector3D(0, 1, 0)).x() > skyLight.at(QVector3D(0, -1, 0)).x() + 1.0f);
+
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(24, 1); shot->setDurationSeconds(1);
+        composition::Clip clip; clip.durationSeconds = 1;
+        {
+            auto& card = shot->addLayer("Card");
+            card.kind = composition::LayerKind::Plane; card.planeColor = Qt::green;
+            card.dimension = composition::LayerDimension::ThreeD; card.clips << clip;
+            card.transform.position = QPointF(60, 0); card.transform.positionZ = 100;
+            card.transform.scalePercent = QPointF(10, 10);
+            auto& mirror = shot->addLayer("Mirror");
+            mirror.kind = composition::LayerKind::Plane; mirror.planeColor = Qt::black;
+            mirror.dimension = composition::LayerDimension::ThreeD; mirror.clips << clip;
+        }
+        const auto frameOf = [&](const std::shared_ptr<composition::Composition>& composition) {
+            render::RenderManager manager; manager.setComposition(composition);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 0.0, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 20000)) return QImage();
+            const QByteArray bytes = frames[0][1].toByteArray();
+            return QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                          QImage::Format_RGBA8888).copy();
+        };
+        // The card's mirror image is 100 behind the mirror: its middle at
+        // 160 + 60 f / (d + 100) with f = d = 90 / tan(19.8 degrees).
+        const double d = 90.0 / std::tan(qDegreesToRadians(39.6 / 2.0));
+        const int reflected = qRound(160 + 60 * d / (d + 100)), direct = qRound(160 + 60 * d / (d - 100));
+        const QImage plain = frameOf(shot);
+        QVERIFY(!plain.isNull());
+        QCOMPARE(plain.pixelColor(reflected, 90), QColor(Qt::black));
+        QVERIFY(plain.pixelColor(direct, 90).green() > 250);
+        shot->layerRef(1).surface.receiveReflections = true;
+        QCOMPARE(frameOf(shot).pixelColor(reflected, 90), QColor(Qt::black));   // the card casts none
+        shot->layerRef(0).surface.castReflections = true;
+        const QImage mirrored = frameOf(shot);
+        QVERIFY(mirrored.save(testArtifactPath(QStringLiteral("planar-reflection.png"))));
+        QCOMPARE(mirrored.pixelColor(reflected, 90), QColor(Qt::green));
+        QCOMPARE(mirrored.pixelColor(160, 90), QColor(Qt::black));
+        QVERIFY(mirrored.pixelColor(direct, 90).green() > 250);
+        shot->layerRef(1).surface.specularReflectivity = 50;
+        const QColor quarter = frameOf(shot).pixelColor(reflected, 90);
+        QVERIFY2(std::abs(quarter.green() - 64) <= 2 && quarter.red() == 0, qPrintable(quarter.name()));
+        shot->layerRef(1).surface.specularReflectivity = 100;
+        // Hidden: still reflected with Cast Reflections If Visibility Is Off.
+        shot->layerRef(0).visible = false;
+        QCOMPARE(frameOf(shot).pixelColor(reflected, 90), QColor(Qt::black));
+        shot->layerRef(0).surface.castReflectionsIfInvisible = true;
+        const QImage hidden = frameOf(shot);
+        QCOMPARE(hidden.pixelColor(reflected, 90), QColor(Qt::green));
+        QCOMPARE(hidden.pixelColor(direct, 90), QColor(Qt::black));
+        shot->layerRef(0).visible = true;
+        // Behind the mirror: cut away, no reflection where it would fall.
+        shot->layerRef(0).transform.positionZ = -100;
+        const QImage behind = frameOf(shot);
+        for (int x = 150; x < 300; ++x) QVERIFY2(behind.pixelColor(x, 90).green() < 5, qPrintable(QString::number(x)));
+        shot->layerRef(0).transform.positionZ = 100;
+
+        // A 3D text with an environment map.
+        auto titled = std::make_shared<composition::Composition>();
+        titled->setSize(320, 180); titled->setFrameRate(24, 1); titled->setDurationSeconds(1);
+        {
+            auto& title = titled->addLayer("Title");
+            title.kind = composition::LayerKind::Text; title.dimension = composition::LayerDimension::ThreeD;
+            composition::TextStyle style;
+            style.text = "MMMM"; style.fontSize = 90; style.fontColor = QColor(0, 128, 0);
+            style.alignH = composition::TextStyle::AlignH::Center;
+            style.alignV = composition::TextStyle::AlignV::Middle;
+            composition::Clip textClip; textClip.durationSeconds = 1;
+            composition::Effect text; text.pluginId = core::Identifier("text"); text.name = "Text";
+            text.parameterValues = composition::textStyleToParameters(style);
+            textClip.effects << text;
+            title.clips << textClip;
+            auto& red = titled->addLayer("Red");
+            red.kind = composition::LayerKind::Plane; red.planeColor = Qt::red; red.clips << clip;
+            red.visible = false;
+            auto& floor = titled->addLayer("Blue");
+            floor.kind = composition::LayerKind::Plane; floor.planeColor = Qt::blue; floor.clips << clip;
+        }
+        const auto count = [](const QImage& image, const std::function<bool(const QColor&)>& wanted) {
+            int found = 0;
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = 0; x < image.width(); ++x) found += wanted(image.pixelColor(x, y)) ? 1 : 0;
+            return found;
+        };
+        const auto inked = [](const QColor& c) { return c.green() > 100 && c.red() < 40 && c.blue() < 40; };
+        const QImage bare = frameOf(titled);
+        QVERIFY2(count(bare, inked) > 300, qPrintable(QString::number(count(bare, inked))));
+        using Environment = composition::SurfaceShading::EnvironmentMap;
+        titled->layerRef(0).surface.environmentMap = Environment::Layer;
+        titled->layerRef(0).surface.environmentMapLayer = titled->layers()[1].id;
+        const QImage redder = frameOf(titled);
+        QVERIFY(redder.save(testArtifactPath(QStringLiteral("environment-map-layer.png"))));
+        const auto reddened = [](const QColor& c) { return c.red() > 200 && c.green() > 100 && c.blue() < 40; };
+        QVERIFY2(count(redder, reddened) > 300 && count(redder, inked) < 20,
+                 qPrintable(QStringLiteral("%1 %2").arg(count(redder, reddened)).arg(count(redder, inked))));
+        titled->layerRef(0).surface.environmentMap = Environment::CompositeShot;
+        const QImage bluer = frameOf(titled);
+        const auto blued = [](const QColor& c) { return c.blue() > 200 && c.green() > 100 && c.red() < 40; };
+        QVERIFY2(count(bluer, blued) > 300, qPrintable(QString::number(count(bluer, blued))));
+        titled->layerRef(0).surface.specularReflectivity = 0;
+        QCOMPARE(count(frameOf(titled), blued), 0);
+        titled->layerRef(0).surface.specularReflectivity = 100;
+
+        // The Material group.
+        {
+            auto& model = shot->addLayer("Model");
+            model.kind = composition::LayerKind::Model3D; model.dimension = composition::LayerDimension::ThreeD;
+            model.visible = false;
+            auto& title = shot->addLayer("Title");
+            title.kind = composition::LayerKind::Text; title.dimension = composition::LayerDimension::ThreeD;
+            title.clips << clip;
+        }
+        QUndoStack history;
+        ui::TimelineWidget timeline; timeline.resize(900, 1600);
+        timeline.setUndoStack(&history); timeline.setComposition(shot);
+        timeline.show(); QVERIFY(QTest::qWaitForWindowExposed(&timeline));
+        const auto editor = [&](const QString& name) { return timeline.findChild<QWidget*>(name); };
+        for (int layer : {1, 2, 3})
+            for (const char* key : {"receiveReflections", "castReflections", "castReflectionsIfInvisible"})
+                QVERIFY2(editor(QStringLiteral("timelineSurface_%1_%2").arg(layer).arg(key)), key);
+        QVERIFY(!editor("timelineSurface_1_environmentMap") && editor("timelineSurface_2_environmentMap")
+                && editor("timelineSurface_3_environmentMap"));
+        QVERIFY(editor("timelineSurface_1_specularReflectivity") && !editor("timelineSurface_2_specularReflectivity")
+                && editor("timelineSurface_3_specularReflectivity"));
+        QVERIFY(!editor("timelineSurface_1_diffuseReflectivity") && editor("timelineSurface_3_diffuseReflectivity"));
+        QVERIFY(!editor("timelineSurface_3_environmentMapLayer"));
+        auto* environment = editor("timelineSurface_3_environmentMap")->findChild<QComboBox*>(); QVERIFY(environment);
+        QCOMPARE(environment->count(), 3);
+        environment->setCurrentIndex(2);
+        QCOMPARE(shot->layers()[3].surface.environmentMap, Environment::Layer);
+        QTRY_VERIFY(editor("timelineSurface_3_environmentMapLayer"));
+        auto* source = editor("timelineSurface_3_environmentMapLayer")->findChild<QComboBox*>(); QVERIFY(source);
+        source->setCurrentIndex(source->findText("Mirror"));
+        QCOMPARE(shot->layers()[3].surface.environmentMapLayer, shot->layers()[1].id);
+        auto* tree = timeline.findChild<QTreeWidget*>(); QVERIFY(tree);
+        bool keyed = false;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            keyed = keyed || ((*it)->data(0, Qt::UserRole).toInt() == 3
+                              && (*it)->data(0, ui::kLayerPropertyRole).toString() == "diffuseReflectivity");
+        QVERIFY(keyed);
+
+        // Saved and read back.
+        composition::toggleKeyedLayerProperty(shot->layerRef(1), "specularReflectivity", 0);
+        composition::setKeyedLayerProperty(shot->layerRef(1), "specularReflectivity", 20.0, 24);
+        shot->layerRef(3).surface.diffuseReflectivity = 40;
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString path = dir.filePath("reflections.vegfx");
+        media::MediaManager media;
+        QVERIFY(project::VegfxSerializer::saveToFile(path, *shot, media).isSuccess());
+        composition::Composition loaded; media::MediaManager reloaded;
+        QVERIFY(project::VegfxSerializer::loadFromFile(path, &loaded, &reloaded).isSuccess());
+        QVERIFY(loaded.layers()[0].surface.castReflections && loaded.layers()[0].surface.castReflectionsIfInvisible);
+        QVERIFY(loaded.layers()[1].surface.receiveReflections && !loaded.layers()[1].surface.castReflections);
+        QCOMPARE(loaded.layers()[1].surface.specularReflectivityAt(12), 60.0);
+        QCOMPARE(loaded.layers()[3].surface.environmentMap, Environment::Layer);
+        QCOMPARE(loaded.layers()[3].surface.environmentMapLayer, shot->layers()[1].id);
+        QCOMPARE(loaded.layers()[3].surface.diffuseReflectivity, 40.0);
+    }
+    // A model's reflections as Flux's model shader takes them. A reflection
+    // map has its mip levels. A cube's front face, unlit grey, turns red with
+    // an Environment Map of a red layer (its Specular Reflectivity adding
+    // the map), stays grey without; receiving reflections, it shows a green
+    // card behind the camera that casts them, seen in the scene round the
+    // cube. A flat model whose material's Reflection Mode is Planar shows a
+    // card mirrored in its plane where the mirror image falls, a Spherical
+    // one does not. Reflection Mode is saved as the reference's
+    // ReflectionType and read back.
+    void modelsReflectTheirSurroundings() {
+        QImage white(64, 32, QImage::Format_RGBA8888);
+        white.fill(Qt::white);
+        const model3d::Reflections map = model3d::Reflections::fromLatLong(white);
+        QCOMPARE(map.levels.size(), 5);
+        QCOMPARE(map.levels.last().size(), QSize(4, 2));
+        QVERIFY(std::abs(map.at(QVector3D(0, 0.3f, 1), 2.5).x() - 1.0f) < 0.01f);
+
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const auto writeObj = [&](const QString& name, const std::function<void(QTextStream&)>& body) {
+            const QString path = temp.filePath(name);
+            QFile file(path);
+            if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) return QString();
+            QTextStream obj(&file);
+            body(obj);
+            return path;
+        };
+        const QString cube = writeObj("cube.obj", [](QTextStream& obj) {
+            for (int i = 0; i < 8; ++i)
+                obj << "v " << (i & 1 ? 40 : -40) << ' ' << (i & 2 ? 40 : -40) << ' ' << (i & 4 ? 40 : -40) << '\n';
+            const int quads[6][4] = {{1, 2, 4, 3}, {5, 7, 8, 6}, {1, 5, 6, 2}, {3, 4, 8, 7}, {1, 3, 7, 5}, {2, 6, 8, 4}};
+            for (const auto& q : quads)
+                obj << "f " << q[0] << ' ' << q[1] << ' ' << q[2] << "\nf " << q[0] << ' ' << q[2] << ' ' << q[3] << '\n';
+        });
+        const QString flat = writeObj("flat.obj", [](QTextStream& obj) {
+            obj << "v -160 -90 0\nv 160 -90 0\nv 160 90 0\nv -160 90 0\nf 1 2 3\nf 1 3 4\n";
+        });
+        QVERIFY(!cube.isEmpty() && !flat.isEmpty());
+        auto media = std::make_shared<media::MediaManager>();
+        model3d::ImportSettings settings;
+        settings.unit = model3d::ImportSettings::Unit::Pixel;
+        settings.autoNormalize = false;
+        settings.centerAnchorPoint = false;
+        QVERIFY(media->importModel(cube, settings).isSuccess());
+        QVERIFY(media->importModel(flat, settings).isSuccess());
+        const core::Identifier cubeId = media->assetByFilePath(QFileInfo(cube).absoluteFilePath()).id();
+        const core::Identifier flatId = media->assetByFilePath(QFileInfo(flat).absoluteFilePath()).id();
+        QVERIFY(!media->modelMesh(cubeId).isEmpty() && !media->modelMesh(flatId).isEmpty());
+        // White specular, no diffuse reflectivity: the reflection alone.
+        const auto shiny = [&](const core::Identifier& id, model3d::ReflectionMode mode) {
+            QVector<model3d::Material> materials = media->modelMesh(id).materials;
+            for (model3d::Material& material : materials) {
+                material.specularColor = Qt::white;
+                material.diffuseReflectivity = 0.0;
+                material.reflectionMode = mode;
+            }
+            media->setModelMaterials(id, materials);
+        };
+        shiny(cubeId, model3d::ReflectionMode::Spherical);
+        shiny(flatId, model3d::ReflectionMode::Planar);
+
+        composition::Clip clip; clip.durationSeconds = 1;
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(24, 1); shot->setDurationSeconds(1);
+        {
+            auto& model = shot->addLayer("Cube");
+            model.kind = composition::LayerKind::Model3D; model.dimension = composition::LayerDimension::ThreeD;
+            model.modelAssetId = cubeId;
+            auto& red = shot->addLayer("Red");
+            red.kind = composition::LayerKind::Plane; red.planeColor = Qt::red; red.clips << clip;
+            red.visible = false;
+            auto& card = shot->addLayer("Card");
+            card.kind = composition::LayerKind::Plane; card.planeColor = Qt::green; card.clips << clip;
+            card.dimension = composition::LayerDimension::ThreeD;
+            card.transform.positionZ = 400;
+            card.visible = false;
+        }
+        const auto frameOf = [&](const std::shared_ptr<composition::Composition>& composition) {
+            render::RenderManager manager; manager.setMediaManager(media); manager.setComposition(composition);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 0.0, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 30000)) return QImage();
+            const QByteArray bytes = frames[0][1].toByteArray();
+            return QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                          QImage::Format_RGBA8888).copy();
+        };
+        const QColor grey = frameOf(shot).pixelColor(160, 90);
+        QVERIFY2(grey.red() > 100 && grey.red() < 230 && grey.red() == grey.green() && grey.green() == grey.blue(),
+                 qPrintable(grey.name()));
+        using Environment = composition::SurfaceShading::EnvironmentMap;
+        shot->layerRef(0).surface.environmentMap = Environment::Layer;
+        shot->layerRef(0).surface.environmentMapLayer = shot->layers()[1].id;
+        const QColor reddened = frameOf(shot).pixelColor(160, 90);
+        QVERIFY2(reddened.red() == 255 && std::abs(reddened.green() - grey.green()) <= 2, qPrintable(reddened.name()));
+        // Type 1003 (not in the Material rows): a project asset's picture,
+        // no layer of the shot.
+        {
+            QImage redPicture(64, 32, QImage::Format_RGBA8888);
+            redPicture.fill(Qt::red);
+            const QString redPath = temp.filePath("red.png");
+            QVERIFY(redPicture.save(redPath));
+            QVERIFY(media->importFile(redPath).isSuccess());
+            shot->layerRef(0).surface.environmentMap = Environment::Asset;
+            shot->layerRef(0).surface.environmentMapLayer =
+                media->assetByFilePath(QFileInfo(redPath).absoluteFilePath()).id();
+            const QColor fromAsset = frameOf(shot).pixelColor(160, 90);
+            QVERIFY2(fromAsset.red() == 255 && std::abs(fromAsset.green() - grey.green()) <= 2,
+                     qPrintable(fromAsset.name()));
+        }
+        shot->layerRef(0).surface.environmentMap = Environment::None;
+        // Receiving reflections: the card behind the camera, in the cube.
+        shot->layerRef(0).surface.receiveReflections = true;
+        QCOMPARE(frameOf(shot).pixelColor(160, 90), grey);   // the card casts none
+        shot->layerRef(2).surface.castReflections = true;
+        shot->layerRef(2).surface.castReflectionsIfInvisible = true;
+        const QImage surrounded = frameOf(shot);
+        QVERIFY(surrounded.save(testArtifactPath(QStringLiteral("model-reflection-cube.png"))));
+        const QColor greened = surrounded.pixelColor(160, 90);
+        QVERIFY2(greened.green() == 255 && greened.red() == grey.red(), qPrintable(greened.name()));
+
+        // A flat model, Planar, over a card in front of it.
+        QVector<model3d::Material> materials = media->modelMaterialEdits(flatId);
+        QVERIFY(!materials.isEmpty());
+        auto mirrored = std::make_shared<composition::Composition>();
+        mirrored->setSize(320, 180); mirrored->setFrameRate(24, 1); mirrored->setDurationSeconds(1);
+        {
+            auto& card = mirrored->addLayer("Card");
+            card.kind = composition::LayerKind::Plane; card.planeColor = Qt::green; card.clips << clip;
+            card.dimension = composition::LayerDimension::ThreeD;
+            card.transform.position = QPointF(60, 0); card.transform.positionZ = 100;
+            card.transform.scalePercent = QPointF(10, 10);
+            card.surface.castReflections = true;
+            auto& model = mirrored->addLayer("Mirror");
+            model.kind = composition::LayerKind::Model3D; model.dimension = composition::LayerDimension::ThreeD;
+            model.modelAssetId = flatId;
+            model.surface.receiveReflections = true;
+        }
+        const double d = 90.0 / std::tan(qDegreesToRadians(39.6 / 2.0));
+        const int reflected = qRound(160 + 60 * d / (d + 100));
+        const QImage planar = frameOf(mirrored);
+        QVERIFY(planar.save(testArtifactPath(QStringLiteral("model-reflection-planar.png"))));
+        const QColor seen = planar.pixelColor(reflected, 90);
+        QVERIFY2(seen.green() == 255 && seen.red() < 230, qPrintable(seen.name()));
+        const QColor plain = planar.pixelColor(100, 90);
+        QVERIFY2(plain.green() == plain.red(), qPrintable(plain.name()));
+        materials.first().reflectionMode = model3d::ReflectionMode::Spherical;
+        media->setModelMaterials(flatId, materials);
+        QVERIFY(frameOf(mirrored).pixelColor(reflected, 90).green() < 240);
+
+        // Saved as ReflectionType and read back.
+        materials.first().reflectionMode = model3d::ReflectionMode::Planar;
+        media->setModelMaterials(flatId, materials);
+        const QString path = temp.filePath("planar.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(path, *mirrored, *media).isSuccess());
+        {
+            QFile saved(path); QVERIFY(saved.open(QIODevice::ReadOnly));
+            QVERIFY(saved.readAll().contains("<ReflectionType>0</ReflectionType>"));
+        }
+        composition::Composition loaded; media::MediaManager reloaded;
+        QVERIFY(project::VegfxSerializer::loadFromFile(path, &loaded, &reloaded).isSuccess());
+        const QVector<model3d::Material> back = reloaded.modelMaterialEdits(flatId);
+        QVERIFY(!back.isEmpty());
+        QCOMPARE(back.first().reflectionMode, model3d::ReflectionMode::Planar);
+    }
+    // Alignment (AutoOrient) as the reference turns layers by it: a light and
+    // a camera Towards Target Position aim their -Z at their Target - one
+    // straight below keeps (-1, 0, 0) as its up - and a point layer its +Z;
+    // Towards Layer aims at that layer; a 3D plane Towards Active Camera turns
+    // as the shot's camera does, whatever its own rotation, and is drawn
+    // whole. The Transform group shows Target after Position for those
+    // layers, Alignment with the reference's choices for the kind and
+    // Alignment Layer once it is asked for; all of it is saved as the
+    // reference keeps it (<AutoOrient>, <AutoOrientLayer>, "target").
+    void layersTurnByTheirAlignment() {
+        using composition::AutoOrient;
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(24, 1); shot->setDurationSeconds(1);
+        composition::Clip clip; clip.durationSeconds = 1;
+        {
+            auto& lamp = shot->addLayer("Lamp");
+            lamp.kind = composition::LayerKind::Light; lamp.dimension = composition::LayerDimension::ThreeD;
+            lamp.transform.position = QPointF(0, 400);
+            lamp.autoOrient = AutoOrient::TowardsTargetPosition;
+            auto& lens = shot->addLayer("Lens");
+            lens.kind = composition::LayerKind::Camera; lens.dimension = composition::LayerDimension::ThreeD;
+            lens.transform.positionZ = 1000;
+            lens.autoOrient = AutoOrient::TowardsTargetPosition;
+            lens.transform.targetX = 100;
+            auto& mark = shot->addLayer("Mark");
+            mark.kind = composition::LayerKind::Point; mark.dimension = composition::LayerDimension::ThreeD;
+            mark.autoOrient = AutoOrient::TowardsTargetPosition;
+            mark.transform.targetX = 500;
+            auto& card = shot->addLayer("Card");
+            card.kind = composition::LayerKind::Plane; card.planeColor = Qt::white;
+            card.dimension = composition::LayerDimension::ThreeD; card.clips << clip;
+            card.transform.rotationYDegrees = 80;
+            auto& flat = shot->addLayer("Flat");
+            flat.kind = composition::LayerKind::Plane; flat.clips << clip; flat.visible = false;
+        }
+        const auto near = [](const QVector3D& a, const QVector3D& b) { return (a - b).length() < 1e-3f; };
+        // A light straight above its target looks down.
+        QVERIFY(near(render::sceneLightsOf(shot.get(), 0).first().direction, QVector3D(0, -1, 0)));
+        shot->layerRef(0).transform.targetX = 300; shot->layerRef(0).transform.targetY = 400;
+        QVERIFY(near(render::sceneLightsOf(shot.get(), 0).first().direction, QVector3D(1, 0, 0)));
+        // Straight down, its up is (-1, 0, 0): its X is (0, 0, -1).
+        shot->layerRef(0).transform.targetX = 0; shot->layerRef(0).transform.targetY = 0;
+        const QMatrix4x4 down = render::layerTurnAt(shot.get(), shot->layers()[0], 0);
+        QVERIFY(near(down.mapVector(QVector3D(0, 1, 0)), QVector3D(-1, 0, 0)));
+        QVERIFY(near(down.mapVector(QVector3D(1, 0, 0)), QVector3D(0, 0, -1)));
+        // Its own rotation turns it further, after the aim.
+        shot->layerRef(0).transform.orientationX = 90;
+        QVERIFY(near(render::layerTurnAt(shot.get(), shot->layers()[0], 0).mapVector(QVector3D(0, 0, -1)),
+                     down.mapVector(QMatrix4x4(render::layerRotationAt(shot->layers()[0].transform, 0))
+                                        .mapVector(QVector3D(0, 0, -1)))));
+        shot->layerRef(0).transform.orientationX = 0;
+        // The camera at (0, 0, 1000) looks at (100, 0, 0), upright.
+        const model3d::Camera camera = render::sceneCameraOf(shot.get(), QSize(320, 180), 0);
+        QVERIFY(near((camera.target - camera.position).normalized(), QVector3D(100, 0, -1000).normalized()));
+        QVERIFY(camera.up.y() > 0.99f);
+        // The point layer's +Z faces its target.
+        QVERIFY(near(render::layerTurnAt(shot.get(), shot->layers()[2], 0).mapVector(QVector3D(0, 0, 1)),
+                     QVector3D(1, 0, 0)));
+        // Towards Layer: the light aims at the point layer.
+        shot->layerRef(0).autoOrient = AutoOrient::TowardsLayer;
+        shot->layerRef(0).autoOrientLayer = shot->layers()[2].id;
+        shot->layerRef(2).transform.position = QPointF(400, 400);
+        QVERIFY(near(render::sceneLightsOf(shot.get(), 0).first().direction, QVector3D(1, 0, 0)));
+        // Towards Active Camera: the card turns as the camera does.
+        shot->layerRef(3).autoOrient = AutoOrient::TowardsActiveCamera;
+        const QMatrix4x4 cameraTurn = render::layerTurnAt(shot.get(), shot->layers()[1], 0);
+        const QMatrix4x4 cardTurn = render::layerTurnAt(shot.get(), shot->layers()[3], 0);
+        for (const QVector3D& axis : {QVector3D(1, 0, 0), QVector3D(0, 1, 0), QVector3D(0, 0, 1)})
+            QVERIFY(near(cardTurn.mapVector(axis), cameraTurn.mapVector(axis)));
+
+        // Drawn: edge-on at 80 degrees it is a sliver; facing the default
+        // camera (the camera layer hidden) it fills the frame across; unlit,
+        // the light hidden too.
+        shot->layerRef(1).visible = false;
+        shot->layerRef(0).visible = false;
+        const auto whiteAcross = [&] {
+            render::RenderManager manager; manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 0.0, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 10000)) return -1;
+            const QByteArray bytes = frames[0][1].toByteArray();
+            const QImage image(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                               QImage::Format_RGBA8888);
+            int count = 0;
+            for (int x = 0; x < 320; ++x) count += image.pixelColor(x, 90).lightness() > 200 ? 1 : 0;
+            return count;
+        };
+        const int facing = whiteAcross();
+        shot->layerRef(3).autoOrient = AutoOrient::None;
+        const int edgeOn = whiteAcross();
+        QVERIFY2(facing > 300 && edgeOn < 120, qPrintable(QStringLiteral("%1 %2").arg(facing).arg(edgeOn)));
+        shot->layerRef(3).autoOrient = AutoOrient::TowardsActiveCamera;
+        shot->layerRef(1).visible = true;
+        shot->layerRef(0).visible = true;
+
+        // The rows.
+        QUndoStack history;
+        ui::TimelineWidget timeline; timeline.resize(900, 900);
+        timeline.setUndoStack(&history); timeline.setComposition(shot);
+        timeline.show(); QVERIFY(QTest::qWaitForWindowExposed(&timeline));
+        const auto editor = [&](const QString& name) { return timeline.findChild<QWidget*>(name); };
+        const int target = int(composition::TransformProperty::Target);
+        QVERIFY(editor(QStringLiteral("timelineTransform_0_%1_2").arg(target)));
+        QVERIFY(editor(QStringLiteral("timelineTransform_2_%1_0").arg(target)));
+        QVERIFY(!editor(QStringLiteral("timelineTransform_3_%1_0").arg(target)));
+        const auto choices = [&](const QString& name) {
+            QStringList values;
+            if (auto* combo = editor(name) ? editor(name)->findChild<QComboBox*>() : nullptr)
+                for (int i = 0; i < combo->count(); ++i) values << combo->itemData(i).toString();
+            return values.join(',');
+        };
+        QCOMPARE(choices("timelineAlignment_0_alignment"), QString("0,1,4,5"));
+        QCOMPARE(choices("timelineAlignment_2_alignment"), QString("0,4,5"));
+        QCOMPARE(choices("timelineAlignment_3_alignment"), QString("0,1,2,5"));
+        QCOMPARE(choices("timelineAlignment_4_alignment"), QString("0,1"));
+        QVERIFY(editor("timelineAlignment_0_alignmentLayer"));
+        QVERIFY(!editor("timelineAlignment_1_alignmentLayer"));
+        auto* mode = editor("timelineAlignment_1_alignment")->findChild<QComboBox*>();
+        mode->setCurrentIndex(mode->findData(QStringLiteral("1")));
+        QCOMPARE(shot->layers()[1].autoOrient, AutoOrient::AlongMotionPath);
+        QCOMPARE(history.undoText(), QString("Set Layer Alignment"));
+        QTRY_VERIFY(editor("timelineAlignment_1_alignmentAxis"));
+        QCOMPARE(choices("timelineAlignment_1_alignmentAxis"), QString("1,2,3"));
+        history.undo();
+        QCOMPARE(shot->layers()[1].autoOrient, AutoOrient::TowardsTargetPosition);
+        if (auto* tree = timeline.findChild<QTreeWidget*>()) {
+            for (QTreeWidgetItemIterator it(tree); *it; ++it) {
+                const QString group = (*it)->text(0);
+                if (group == "Transform" || group == "Light" || group == "Lens") (*it)->setExpanded(group == "Transform");
+            }
+        }
+        QVERIFY(timeline.grab().save(testArtifactPath(QStringLiteral("timeline-alignment.png"))));
+
+        // Saved by the reference's names and read back.
+        shot->layerRef(1).transform.targetXCurve.set(0, 100.0);
+        shot->layerRef(1).transform.targetXCurve.set(24, -100.0);
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString path = dir.filePath("aim.vegfx");
+        media::MediaManager media;
+        QVERIFY(project::VegfxSerializer::saveToFile(path, *shot, media).isSuccess());
+        {
+            QFile saved(path); QVERIFY(saved.open(QIODevice::ReadOnly));
+            const QString xml = QString::fromUtf8(saved.readAll());
+            QVERIFY(xml.contains("<AutoOrient>4</AutoOrient>") && xml.contains("<AutoOrient>5</AutoOrient>")
+                    && xml.contains("<AutoOrient>2</AutoOrient>"));
+            QVERIFY(xml.contains(QStringLiteral("<AutoOrientLayer>%1</AutoOrientLayer>").arg(shot->layers()[2].id.value())));
+            QVERIFY(xml.contains("<Name>target</Name>"));
+        }
+        composition::Composition loaded; media::MediaManager reloaded;
+        QVERIFY(project::VegfxSerializer::loadFromFile(path, &loaded, &reloaded).isSuccess());
+        QCOMPARE(loaded.layers()[0].autoOrient, AutoOrient::TowardsLayer);
+        QCOMPARE(loaded.layers()[0].autoOrientLayer.value(), shot->layers()[2].id.value());
+        QCOMPARE(loaded.layers()[1].autoOrient, AutoOrient::TowardsTargetPosition);
+        QCOMPARE(loaded.layers()[1].transform.targetAt(12, 0), 0.0);
+        QCOMPARE(loaded.layers()[2].transform.targetX, 500.0);
+        QCOMPARE(loaded.layers()[3].autoOrient, AutoOrient::TowardsActiveCamera);
+        QVERIFY(near(render::sceneLightsOf(&loaded, 0).first().direction, QVector3D(1, 0, 0)));
+    }
+    // Along Motion Path and Towards Layer, as TransformationHelper::
+    // AlignToMotion and AlignToTarget turn layers: a 2D bar laid along its
+    // diagonal motion (its X, or its Y), whatever its own Rotation, and back
+    // to that Rotation once it stops - drawn so and framed so in Layout; a 3D
+    // sheet and a light turned the shortest way along their motion; a sheet's
+    // front (+Z) and a camera's -Z turned to the layer they follow, the sheet
+    // about its own centre.
+    void layersFollowTheirMotionAndOtherLayers() {
+        using composition::AutoOrient;
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(24, 1); shot->setDurationSeconds(1);
+        composition::Clip clip; clip.durationSeconds = 1;
+        {
+            auto& bar = shot->addLayer("Bar");
+            bar.kind = composition::LayerKind::Plane; bar.planeColor = Qt::white; bar.clips << clip;
+            bar.transform.scalePercent = QPointF(50, 5);   // 160 x 9
+            bar.transform.rotationDegrees = 30;
+            bar.transform.positionXCurve.set(0, -50.0); bar.transform.positionXCurve.set(10, 50.0);
+            bar.transform.positionYCurve.set(0, -50.0); bar.transform.positionYCurve.set(10, 50.0);
+            bar.autoOrient = AutoOrient::AlongMotionPath;
+        }
+        const composition::Layer& bar = shot->layers()[0];
+        QCOMPARE(qRound(render::layerAngleAt(bar, 2)), -45);
+        shot->layerRef(0).autoOrientAxis = 2;
+        QCOMPARE(qRound(render::layerAngleAt(bar, 2)), 45);
+        shot->layerRef(0).autoOrientAxis = 1;
+        QCOMPARE(render::layerAngleAt(bar, 20), 30.0);   // still: its own Rotation
+        const render::LayerGeometry frame = render::layerGeometry(*shot, bar, nullptr, 2);
+        QVERIFY(frame.valid);
+        QCOMPARE(qRound(QLineF(frame.quad.at(0), frame.quad.at(1)).angle()), 45);   // up and right
+        // Drawn along the diagonal: from its centre (130, 120) up-right, not across.
+        {
+            render::RenderManager manager; manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 2.0 / 24.0, QSize(320, 180));
+            QVERIFY(QTest::qWaitFor([&] { return frames.count() > 0; }, 10000));
+            const QByteArray bytes = frames[0][1].toByteArray();
+            const QImage image(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                               QImage::Format_RGBA8888);
+            QVERIFY(image.copy().save(testArtifactPath(QStringLiteral("align-motion-2d.png"))));
+            QVERIFY(image.pixelColor(130, 120).lightness() > 200);
+            QVERIFY(image.pixelColor(172, 78).lightness() > 200);
+            QVERIFY(image.pixelColor(190, 120).lightness() < 50);
+        }
+
+        // In the scene.
+        {
+            auto& sheet = shot->addLayer("Sheet");
+            sheet.kind = composition::LayerKind::Plane; sheet.dimension = composition::LayerDimension::ThreeD;
+            sheet.clips << clip;
+            sheet.transform.positionYCurve.set(0, 0.0); sheet.transform.positionYCurve.set(10, 100.0);
+            sheet.autoOrient = AutoOrient::AlongMotionPath;
+            auto& lamp = shot->addLayer("Lamp");
+            lamp.kind = composition::LayerKind::Light; lamp.dimension = composition::LayerDimension::ThreeD;
+            lamp.light.type = composition::LightSettings::Type::Spot;
+            lamp.transform.positionXCurve.set(0, 0.0); lamp.transform.positionXCurve.set(10, 100.0);
+            lamp.autoOrient = AutoOrient::AlongMotionPath; lamp.autoOrientAxis = 3;
+            auto& mark = shot->addLayer("Mark");
+            mark.kind = composition::LayerKind::Point; mark.dimension = composition::LayerDimension::ThreeD;
+            mark.transform.position = QPointF(500, 0);
+            auto& lens = shot->addLayer("Lens");
+            lens.kind = composition::LayerKind::Camera; lens.dimension = composition::LayerDimension::ThreeD;
+            lens.transform.positionZ = 1000; lens.visible = false;
+        }
+        const auto near = [](const QVector3D& a, const QVector3D& b) { return (a - b).length() < 1e-3f; };
+        // The sheet's X turned up along its rise; the spot's -Z along its run.
+        QVERIFY(near(render::layerTurnAt(shot.get(), shot->layers()[1], 2).mapVector(QVector3D(1, 0, 0)),
+                     QVector3D(0, 1, 0)));
+        QVERIFY(near(render::sceneLightsOf(shot.get(), 2).first().direction, QVector3D(1, 0, 0)));
+        // Towards Layer: the sheet's front and the camera's -Z to the point.
+        shot->layerRef(1).autoOrient = AutoOrient::TowardsLayer;
+        shot->layerRef(1).autoOrientLayer = shot->layers()[3].id;
+        shot->layerRef(1).transform.positionYCurve.clear();
+        QVERIFY(near(render::layerTurnAt(shot.get(), shot->layers()[1], 0).mapVector(QVector3D(0, 0, 1)),
+                     QVector3D(1, 0, 0)));
+        const QMatrix4x4 placed = render::layerSheetMatrixAt(shot.get(), shot->layers()[1], 0);
+        QVERIFY(near(placed.map(QVector3D()), QVector3D()));
+        QVERIFY(near(placed.mapVector(QVector3D(0, 0, 1)).normalized(), QVector3D(1, 0, 0)));
+        shot->layerRef(4).autoOrient = AutoOrient::TowardsLayer;
+        shot->layerRef(4).autoOrientLayer = shot->layers()[3].id;
+        shot->layerRef(4).visible = true;
+        const model3d::Camera camera = render::sceneCameraOf(shot.get(), QSize(320, 180), 0);
+        QVERIFY(near((camera.target - camera.position).normalized(), QVector3D(500, 0, -1000).normalized()));
+
+        // The Target in the Viewer: a line and a handle of its own, dragged
+        // parallel to the view - the light stays where it is.
+        auto aimed = std::make_shared<composition::Composition>();
+        aimed->setSize(320, 180); aimed->setDurationSeconds(1);
+        aimed->addLayer("Camera") = ui::newCameraLayer(*aimed);
+        {
+            auto& lamp = aimed->addLayer("Lamp");
+            lamp.kind = composition::LayerKind::Light; lamp.dimension = composition::LayerDimension::ThreeD;
+            lamp.light.type = composition::LightSettings::Type::Spot;
+            lamp.transform.position = QPointF(100, 0);
+            lamp.autoOrient = AutoOrient::TowardsTargetPosition;
+            lamp.transform.targetX = -100;
+        }
+        bool targetFinished = false;
+        ui::SceneObjectOverlay* overlayPtr = nullptr;
+        ui::SceneObjectOverlay overlay(
+            [&] { return ui::SceneObjectOverlay::Scene{aimed.get(), 0, -1}; },
+            [&](int) -> std::optional<ui::SceneObjectOverlay::ViewCamera> {
+                return ui::SceneObjectOverlay::ViewCamera{render::sceneCameraOf(aimed.get(), aimed->displaySize(), 0), true};
+            },
+            [](int) {}, [] {}, [] {}, [&] { targetFinished = overlayPtr && overlayPtr->dragsTarget(); });
+        overlayPtr = &overlay;
+        const ui::SceneObjectOverlay::Drawing shown = overlay.drawing(0);
+        QCOMPARE(shown.handles.size(), 2);
+        QVERIFY(shown.handles[1].target && shown.handles[1].layer == 1);
+        QVERIFY((shown.handles[1].position - QPointF(60, 90)).manhattanLength() < 0.5);
+        ui::ViewerPointerEvent press;
+        press.button = Qt::LeftButton; press.buttons = Qt::LeftButton;
+        press.mapping.view = 0; press.mapping.canvasSize = QSizeF(320, 180);
+        press.mapping.imageRect = QRectF(0, 0, 320, 180); press.mapping.viewRect = press.mapping.imageRect;
+        press.canvasPos = QPointF(60, 90);
+        QVERIFY(overlay.mousePress(press));
+        ui::ViewerPointerEvent drag = press; drag.canvasPos = QPointF(90, 90);
+        overlay.mouseMove(drag);
+        overlay.mouseRelease(drag);
+        QVERIFY(targetFinished);
+        QVERIFY2(std::abs(aimed->layers()[1].transform.targetX + 70.0) < 0.5,
+                 qPrintable(QString::number(aimed->layers()[1].transform.targetX)));
+        QCOMPARE(aimed->layers()[1].transform.position, QPointF(100, 0));
     }
     // Shadows: a small sheet that casts them between a light and a red floor
     // that receives them leaves its shadow there - all of the light's
@@ -8744,6 +11548,165 @@ private slots:
         }
     }
 
+    // The Effects panel's favourites and recents as the reference keeps them
+    // (EffectsFavoritesManager): settings group Plugins, keys Favorites and
+    // Recents, a QDataStream of int 0, the count and the IDs; five recents,
+    // the newest last; the panel shows Favorites then Recents first and its
+    // menu adds, removes and clears.
+    void effectsFavoritesAndRecentsAreKept() {
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString ini = dir.filePath("settings.ini");
+        QStringList ids;
+        for (int i = 0; i < 7; ++i) ids << QStringLiteral("{0000000%1-0000-0000-0000-000000000000}").arg(i);
+        {
+            ui::EffectsFavorites favorites(ini);
+            QSignalSpy changed(&favorites, &ui::EffectsFavorites::favoritesChanged);
+            favorites.setFavorite(ids[2], true);
+            favorites.setFavorite(ids[0], true);
+            favorites.setFavorite(ids[0], true);   // already one
+            QCOMPARE(changed.size(), 2);
+            for (const QString& id : ids) favorites.addRecent(id);
+            QCOMPARE(favorites.recents(), ids.mid(2));
+            favorites.addRecent(ids[3]);           // used again: moves to the end
+            QCOMPARE(favorites.recents(), (QStringList {ids[2], ids[4], ids[5], ids[6], ids[3]}));
+        }
+        {
+            // The stored shape, byte for byte.
+            QSettings settings(ini, QSettings::IniFormat);
+            const QByteArray stored = settings.value("Plugins/Favorites").toByteArray();
+            QByteArray expected;
+            QDataStream stream(&expected, QIODevice::WriteOnly);
+            stream.setVersion(QDataStream::Qt_5_11);
+            stream << qint32(0) << qint32(2) << ids[2] << ids[0];
+            QCOMPARE(stored, expected);
+            QCOMPARE(ui::EffectsFavorites::decode(settings.value("Plugins/Recents").toByteArray()).size(), 5);
+        }
+        ui::EffectsFavorites favorites(ini);
+        QCOMPARE(favorites.favorites(), (QStringList {ids[2], ids[0]}));
+        QCOMPARE(favorites.recents().last(), ids[3]);
+
+        // The panel: Favorites, then Recents, then the categories.
+        QVector<plugin::EffectSpec> specs;
+        for (int i = 0; i < 7; ++i) {
+            plugin::EffectSpec spec;
+            spec.id = core::Identifier(ids[i]);
+            spec.name = spec.displayName = QStringLiteral("Effect %1").arg(i);
+            spec.category = i < 4 ? QStringLiteral("Blur") : QStringLiteral("Color");
+            specs << spec;
+        }
+        ui::EffectsPanel panel;
+        panel.setEffects(specs);
+        panel.setFavoritesManager(&favorites);
+        auto* tree = panel.findChild<QTreeWidget*>();
+        QVERIFY(tree);
+        QCOMPARE(tree->topLevelItemCount(), 4);
+        QCOMPARE(tree->topLevelItem(0)->text(0), QStringLiteral("Favorites"));
+        QCOMPARE(tree->topLevelItem(0)->childCount(), 2);
+        QCOMPARE(tree->topLevelItem(0)->child(0)->text(0), QStringLiteral("Effect 2"));
+        QCOMPARE(tree->topLevelItem(1)->text(0), QStringLiteral("Recents"));
+        QCOMPARE(tree->topLevelItem(1)->childCount(), 5);
+        QCOMPARE(tree->topLevelItem(1)->child(4)->text(0), QStringLiteral("Effect 3"));
+        QCOMPARE(tree->topLevelItem(2)->text(0), QStringLiteral("Blur"));
+        // The count is of the effects, not their repeats.
+        auto* count = panel.findChild<QLabel*>("effects_panel_count");
+        QVERIFY(count);
+        QVERIFY2(count->text().startsWith("7"), qPrintable(count->text()));
+
+        // About: the name and version, then author and copyright.
+        plugin::EffectSpec about = specs[0];
+        about.version = core::Version(5, 0, 0);
+        QCOMPARE(ui::EffectsPanel::aboutText(about), QStringLiteral("Effect 0, V5.0"));
+        about.author = "FXhome"; about.copyright = "(c) 2023";
+        QCOMPARE(ui::EffectsPanel::aboutText(about), QStringLiteral("Effect 0, V5.0\n\nFXhome\n(c) 2023"));
+
+        // The star toggles through the manager; Clear Recents empties them.
+        QTreeWidgetItem* row = tree->topLevelItem(3)->child(0);   // Color: Effect 4
+        QCOMPARE(row->text(0), QStringLiteral("Effect 4"));
+        QCOMPARE(row->text(1), QString(QChar(0x2606)));
+        emit tree->itemClicked(row, 1);
+        QVERIFY(favorites.isFavorite(ids[4]));
+        QCOMPARE(tree->topLevelItem(0)->childCount(), 3);
+        favorites.clearRecents();
+        QCOMPARE(tree->topLevelItemCount(), 3);
+        QCOMPARE(tree->topLevelItem(1)->text(0), QStringLiteral("Blur"));
+        QVERIFY(ui::EffectsFavorites(ini).recents().isEmpty());
+    }
+
+    // A clip processed whole for playback, as export processes it: Reverse
+    // over 2 s plays the clip's end first, without the clip's gain, and the
+    // cache makes it once per state of the clip.
+    void clipsAreProcessedWholeForPlayback() {
+        const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
+        const QString balancePath = qEnvironmentVariable("OPENVEGAS_HFPL_BALANCE");
+        if (ffmpeg.isEmpty() || !QFileInfo::exists(balancePath))
+            QSKIP("FFmpeg and OPENVEGAS_HFPL_BALANCE are required");
+        const QDir modules = QFileInfo(balancePath).absoluteDir();
+        const QString dependency = modules.absoluteFilePath("../..");
+        const QString reversePath = modules.filePath("AudioReverse.hfpl");
+        const core::Identifier reverse("test.whole.reverse");
+        const auto clear = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        const auto metadata = plugin::loadNativePluginMetadata(reversePath, dependency);
+        QVERIFY(metadata.lifecycleCompatible);
+        plugin::registerNativeAudioEffectModule(reverse, reversePath, dependency, true, metadata.parameters);
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString source = dir.filePath("steps.wav");
+        {
+            QFile wave(source); QVERIFY(wave.open(QIODevice::WriteOnly));
+            QDataStream stream(&wave); stream.setByteOrder(QDataStream::LittleEndian);
+            stream.writeRawData("RIFF", 4); stream << quint32(36 + 96000 * 4);
+            stream.writeRawData("WAVEfmt ", 8);
+            stream << quint32(16) << quint16(1) << quint16(2) << quint32(48000)
+                   << quint32(192000) << quint16(4) << quint16(16);
+            stream.writeRawData("data", 4); stream << quint32(96000 * 4);
+            for (int frame = 0; frame < 96000; ++frame) {
+                const qint16 value = frame < 48000 ? 1000 : 3000; stream << value << value;
+            }
+        }
+        composition::Layer layer;
+        layer.name = "Reversed";
+        layer.transform.audioLevel = -6.020599913; // not in the file: playback applies it
+        composition::Clip clip; clip.durationSeconds = 2;
+        composition::Effect effect; effect.pluginId = reverse; effect.name = "Reverse";
+        clip.effects.append(effect);
+        layer.clips.append(clip);
+
+        const auto valueAt = [](const QString& wav, double seconds) {
+            QFile file(wav);
+            if (!file.open(QIODevice::ReadOnly)) return INT_MIN;
+            const QByteArray bytes = file.readAll();
+            const qsizetype at = 44 + qsizetype(std::llround(seconds * 48000)) * 4;
+            return at + 2 <= bytes.size() ? int(qFromLittleEndian<qint16>(bytes.constData() + at)) : INT_MIN;
+        };
+        const QString direct = dir.filePath("direct.wav");
+        QString error;
+        QVERIFY2(render::writeProcessedClipAudio(layer, 0, 30.0, 48000, 0.0, 2.0, source, -1, direct, &error),
+                 qPrintable(error));
+        QVERIFY(QFileInfo(direct).size() >= 44 + 96000 * 4 - 8);
+        QCOMPARE(valueAt(direct, 0.2), 3000);
+        QCOMPARE(valueAt(direct, 1.8), 1000);
+
+        render::ProcessedClipAudioCache cache;
+        cache.setDirectory(dir.filePath("Processed"));
+        render::ProcessedClipAudioCache::Request request;
+        request.layer = std::make_shared<composition::Layer>(layer);
+        request.clipIndex = 0; request.frameRate = 30.0; request.sampleRate = 48000;
+        request.spanStart = 0.0; request.spanEnd = 2.0; request.source = source;
+        QSignalSpy ready(&cache, &render::ProcessedClipAudioCache::processedReady);
+        QVERIFY(cache.readyFor(request).isEmpty());
+        QVERIFY(cache.processedFor(request).isEmpty());
+        QVERIFY(cache.isBusy());
+        QVERIFY(cache.processedFor(request).isEmpty()); // made once
+        QTRY_COMPARE_WITH_TIMEOUT(ready.size(), 1, 60000);
+        const QString made = cache.readyFor(request);
+        QCOMPARE(made, ready.first().at(0).toString());
+        QCOMPARE(cache.processedFor(request), made);
+        QCOMPARE(valueAt(made, 0.2), 3000);
+        // Another state of the clip is another file.
+        request.layer->clips[0].durationSeconds = 1.5;
+        QVERIFY(cache.pathFor(request) != made);
+        QVERIFY(cache.readyFor(request).isEmpty());
+    }
+
     void nestedAudioNativeDspAndTransitions() {
         const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
         const QString ffprobe = QStandardPaths::findExecutable("ffprobe");
@@ -9083,6 +12046,1388 @@ private slots:
         comp->layerRef(0).clips = originalClips;
         panel->setComposition(comp);
     }
+    // A layer moved in time takes its keys along (the reference keeps key
+    // times relative to the layer's start): dragging the clip body moves the
+    // layer's keys by as many frames, as one undoable edit.
+    void movedLayerTakesItsKeys() {
+        auto* canvas = panel->findChild<ui::TimelineCanvas*>(); const int y = ui::kTimelineRulerHeight + 11;
+        panel->setSnapEnabled(false);
+        const auto original = comp->layers()[0];
+        QCOMPARE(original.clips.size(), 1);
+        const composition::Clip& clip = original.clips[0];
+        const int fps = comp->fpsNumerator() / qMax(1, comp->fpsDenominator());
+        const int keyFrame = int(std::lround((clip.startSeconds + clip.durationSeconds / 2.0) * fps));
+        comp->layerRef(0).transform.positionXCurve.set(keyFrame, 25.0);
+        composition::Effect fx; fx.pluginId = core::Identifier("test.keys.follow"); fx.parameterValues = {"1"};
+        fx.animation[0].set(keyFrame + 3, 0.5);
+        comp->layerRef(0).clips[0].effects.append(fx);
+        panel->setComposition(comp);
+        const int historyBefore = history.count();
+        const auto xFor = [&](double seconds) {
+            return int(std::lround(seconds * canvas->pixelsPerSecond())) - canvas->hScrollOffset();
+        };
+        const double middle = clip.startSeconds + clip.durationSeconds / 2.0;
+        const QPoint start(xFor(middle), y);
+        const QPoint finish = start + QPoint(int(std::lround(canvas->pixelsPerSecond())), 0);   // a second later
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, start);
+        QMouseEvent move(QEvent::MouseMove, finish, canvas->mapToGlobal(finish), Qt::NoButton,
+                         Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas, &move);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, finish);
+        const composition::Layer& moved = comp->layers()[0];
+        const int frames = int(std::lround((moved.clips[0].startSeconds - clip.startSeconds) * fps));
+        QVERIFY2(frames > 0, qPrintable(QString::number(frames)));
+        QCOMPARE(moved.transform.positionXCurve.locations(), (QVector<int> {keyFrame + frames}));
+        QCOMPARE(moved.clips[0].effects.last().animation.value(0).locations(), (QVector<int> {keyFrame + 3 + frames}));
+        QCOMPARE(history.count(), historyBefore + 1);
+        history.undo();
+        QCOMPARE(comp->layers()[0].transform.positionXCurve.locations(), (QVector<int> {keyFrame}));
+        comp->layerRef(0) = original;
+        panel->setComposition(comp);
+    }
+    // Trimming a layer's head keeps its keys where they were on the shot's
+    // timeline, as the reference's trim does (it moves the relative keys back
+    // by as much as the start moved, and the media in-point with the start):
+    // the keys stay on their frames, also one now before the layer's start,
+    // and still do after a save and a load.
+    void trimmedLayerKeepsItsKeys() {
+        auto* canvas = panel->findChild<ui::TimelineCanvas*>(); const int y = ui::kTimelineRulerHeight + 11;
+        panel->setSnapEnabled(false);
+        const auto original = comp->layers()[0];
+        QCOMPARE(original.clips.size(), 1);
+        const composition::Clip& clip = original.clips[0];
+        const int fps = comp->fpsNumerator() / qMax(1, comp->fpsDenominator());
+        const int startFrame = int(std::lround(clip.startSeconds * fps));
+        const int keyFrame = int(std::lround((clip.startSeconds + clip.durationSeconds * 0.75) * fps));
+        comp->layerRef(0).transform.positionXCurve.set(startFrame + 1, 0.0);
+        comp->layerRef(0).transform.positionXCurve.set(keyFrame, 25.0);
+        composition::Effect fx; fx.pluginId = core::Identifier("test.keys.trim"); fx.parameterValues = {"1"};
+        fx.animation[0].set(keyFrame + 2, 0.5);
+        comp->layerRef(0).clips[0].effects.append(fx);
+        panel->setComposition(comp);
+        const int historyBefore = history.count();
+        const auto xFor = [&](double seconds) {
+            return int(std::lround(seconds * canvas->pixelsPerSecond())) - canvas->hScrollOffset();
+        };
+        // The head, grabbed a pixel inside, dragged a quarter of the clip on.
+        const QPoint start(xFor(clip.startSeconds) + 1, y);
+        const QPoint finish = start + QPoint(int(std::lround(canvas->pixelsPerSecond() * clip.durationSeconds / 4.0)), 0);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, start);
+        QMouseEvent move(QEvent::MouseMove, finish, canvas->mapToGlobal(finish), Qt::NoButton,
+                         Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas, &move);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, finish);
+        const composition::Layer& trimmed = comp->layers()[0];
+        const double moved = trimmed.clips[0].startSeconds - clip.startSeconds;
+        QVERIFY2(moved > 0.0, qPrintable(QString::number(moved)));
+        QVERIFY(std::abs(trimmed.clips[0].endSeconds() - clip.endSeconds()) < 1e-9);
+        QVERIFY(std::abs(trimmed.clips[0].sourceStartSeconds - (clip.sourceStartSeconds + moved)) < 1e-9);
+        QCOMPARE(trimmed.transform.positionXCurve.locations(), (QVector<int> {startFrame + 1, keyFrame}));
+        QCOMPARE(trimmed.clips[0].effects.last().animation.value(0).locations(), (QVector<int> {keyFrame + 2}));
+        QCOMPARE(history.count(), historyBefore + 1);
+        // Out relative to the new start (the first key before it) and back.
+        {
+            QTemporaryDir temp; QVERIFY(temp.isValid());
+            media::MediaManager media;
+            composition::Composition shot;
+            shot.setSize(320, 180); shot.setFrameRate(fps, 1); shot.setDurationSeconds(comp->durationSeconds());
+            composition::Layer& copy = shot.addLayer("Trimmed");
+            const core::Identifier id = copy.id;
+            copy = trimmed;
+            copy.id = id;
+            copy.kind = composition::LayerKind::Plane;
+            copy.clips[0].mediaId = core::Identifier();
+            copy.clips[0].effects.clear();
+            const QString path = temp.filePath("trimmed.vegfx");
+            QVERIFY(project::VegfxSerializer::saveToFile(path, shot, media).isSuccess());
+            composition::Composition loaded; media::MediaManager media2;
+            QVERIFY(project::VegfxSerializer::loadFromFile(path, &loaded, &media2).isSuccess());
+            QCOMPARE(loaded.layers().size(), 1);
+            QCOMPARE(loaded.layers()[0].transform.positionXCurve.locations(), (QVector<int> {startFrame + 1, keyFrame}));
+        }
+        history.undo();
+        QVERIFY(std::abs(comp->layers()[0].clips[0].startSeconds - clip.startSeconds) < 1e-9);
+        QCOMPARE(comp->layers()[0].transform.positionXCurve.locations(), (QVector<int> {startFrame + 1, keyFrame}));
+        comp->layerRef(0) = original;
+        panel->setComposition(comp);
+    }
+    // A layer without clips (camera, light, point, model) lies on the shot's
+    // timeline by its span - the reference's StartFrame and EndFrame. A span
+    // of its own is written and read back; one to the shot's end goes out as
+    // the shot's FrameCount (not an empty layer) and stays open; an older
+    // save of this port, which wrote EndFrame = StartFrame, is the whole shot.
+    void layersWithoutClipsKeepTheirSpan() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        media::MediaManager media;
+        composition::Composition shot;
+        shot.setSize(320, 180); shot.setFrameRate(30, 1); shot.setDurationSeconds(3);
+        {
+            auto& camera = shot.addLayer("Late camera");
+            camera.kind = composition::LayerKind::Camera;
+            camera.dimension = composition::LayerDimension::ThreeD;
+            camera.spanStartSeconds = 1.0;
+            camera.spanEndSeconds = 2.0;
+            camera.transform.positionXCurve.set(45, 10.0);   // 0.5 s into it
+            auto& light = shot.addLayer("Light");
+            light.kind = composition::LayerKind::Light;
+            light.dimension = composition::LayerDimension::ThreeD;
+        }
+        const QString path = temp.filePath("spans.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(path, shot, media).isSuccess());
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
+        const QString xml = QString::fromUtf8(file.readAll());
+        file.close();
+        const QRegularExpression cameraSpan(QStringLiteral("<StartFrame>30</StartFrame>\\s*<EndFrame>60</EndFrame>"));
+        const QRegularExpression openSpan(QStringLiteral("<StartFrame>0</StartFrame>\\s*<EndFrame>90</EndFrame>"));
+        QVERIFY2(xml.contains(cameraSpan), "camera span");
+        QVERIFY2(xml.contains(openSpan), "open span");
+        QVERIFY(!xml.contains(QStringLiteral("<EndFrame>0</EndFrame>")));
+        const auto load = [&](const QString& text, composition::Composition* loaded) {
+            QFile out(path); if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+            out.write(text.toUtf8()); out.close();
+            media::MediaManager media2;
+            return project::VegfxSerializer::loadFromFile(path, loaded, &media2).isSuccess()
+                   && loaded->layers().size() == 2;
+        };
+        composition::Composition loaded;
+        QVERIFY(load(xml, &loaded));
+        QCOMPARE(loaded.layers()[0].spanStartSeconds, 1.0);
+        QCOMPARE(loaded.layers()[0].spanEndSeconds, 2.0);
+        QCOMPARE(loaded.layers()[0].transform.positionXCurve.locations(), (QVector<int> {45}));
+        QCOMPARE(loaded.layers()[1].spanStartSeconds, 0.0);
+        QCOMPARE(loaded.layers()[1].spanEndSeconds, -1.0);
+        // The light's file as an older save wrote it: an empty span.
+        QString older = xml;
+        older.replace(openSpan, QStringLiteral("<StartFrame>0</StartFrame><EndFrame>0</EndFrame>"));
+        composition::Composition olderLoaded;
+        QVERIFY(load(older, &olderLoaded));
+        QCOMPARE(olderLoaded.layers()[1].spanEndSeconds, -1.0);
+        QVERIFY(composition::layerSpanCovers(olderLoaded.layers()[1], 89, 30.0));
+    }
+    // The active camera is the topmost visible one whose span holds the frame
+    // (CompositionAsset::ActiveCameraLayer: StartFrame <= frame < EndFrame),
+    // and a light lights only within its own.
+    void camerasAndLightsTakePartWithinTheirSpan() {
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(4);
+        {
+            auto& first = shot->addLayer("First");
+            first.kind = composition::LayerKind::Camera;
+            first.dimension = composition::LayerDimension::ThreeD;
+            first.transform.position = QPointF(-100.0, 0.0);
+            first.spanStartSeconds = 0.0; first.spanEndSeconds = 1.0;
+            auto& second = shot->addLayer("Second");
+            second.kind = composition::LayerKind::Camera;
+            second.dimension = composition::LayerDimension::ThreeD;
+            second.transform.position = QPointF(100.0, 0.0);
+            second.spanStartSeconds = 1.0;
+            auto& light = shot->addLayer("Light");
+            light.kind = composition::LayerKind::Light;
+            light.dimension = composition::LayerDimension::ThreeD;
+            light.spanStartSeconds = 2.0; light.spanEndSeconds = 3.0;
+        }
+        const QSize canvas(320, 180);
+        QVERIFY(render::sceneCameraOf(shot.get(), canvas, 29).position.x() < 0.0f);
+        QVERIFY(render::sceneCameraOf(shot.get(), canvas, 30).position.x() > 0.0f);
+        QVERIFY(render::sceneCameraOf(shot.get(), canvas, 119).position.x() > 0.0f);
+        QVERIFY(render::sceneLightsOf(shot.get(), 59).isEmpty());
+        QCOMPARE(render::sceneLightsOf(shot.get(), 60).size(), 1);
+        QVERIFY(render::sceneLightsOf(shot.get(), 90).isEmpty());
+    }
+    // A camera's bar on the timeline: its body moves the span and the keys
+    // with it; its end trims the span and leaves the keys; each drag one
+    // undoable edit.
+    void cameraBarMovesAndTrimsItsSpan() {
+        composition::Layer camera;
+        camera.name = "Camera"; camera.kind = composition::LayerKind::Camera;
+        camera.dimension = composition::LayerDimension::ThreeD;
+        camera.spanStartSeconds = 5.0; camera.spanEndSeconds = 15.0;
+        const int fps = comp->fpsNumerator() / qMax(1, comp->fpsDenominator());
+        camera.transform.positionXCurve.set(10 * fps, 20.0);
+        QVERIFY(comp->insertLayer(0, camera));
+        panel->setComposition(comp);
+        panel->setSnapEnabled(false);
+        auto* canvas = panel->findChild<ui::TimelineCanvas*>(); const int y = ui::kTimelineRulerHeight + 11;
+        const auto xFor = [&](double seconds) {
+            return int(std::lround(seconds * canvas->pixelsPerSecond())) - canvas->hScrollOffset();
+        };
+        const auto drag = [&](const QPoint& from, const QPoint& to) {
+            QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, from);
+            QMouseEvent move(QEvent::MouseMove, to, canvas->mapToGlobal(to), Qt::NoButton,
+                             Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(canvas, &move);
+            QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, to);
+        };
+        const int second = int(std::lround(canvas->pixelsPerSecond()));
+        QVERIFY(second >= 4);
+        const int historyBefore = history.count();
+        // The body, two seconds on.
+        drag(QPoint(xFor(10.0), y), QPoint(xFor(10.0) + 2 * second, y));
+        const composition::Layer& moved = comp->layers()[0];
+        const double shift = moved.spanStartSeconds - 5.0;
+        QVERIFY2(shift > 1.0, qPrintable(QString::number(shift)));
+        QVERIFY(std::abs(moved.spanEndSeconds - (15.0 + shift)) < 1e-9);
+        QCOMPARE(moved.transform.positionXCurve.locations(),
+                 (QVector<int> {10 * fps + int(std::lround(shift * fps))}));
+        QCOMPARE(history.count(), historyBefore + 1);
+        // The tail, a second back: the keys stay.
+        const double end = moved.spanEndSeconds;
+        const QVector<int> keys = moved.transform.positionXCurve.locations();
+        drag(QPoint(xFor(end) - 3, y), QPoint(xFor(end) - 3 - second, y));
+        QVERIFY2(comp->layers()[0].spanEndSeconds < end - 0.5, qPrintable(QString::number(comp->layers()[0].spanEndSeconds)));
+        QVERIFY(std::abs(comp->layers()[0].spanStartSeconds - (5.0 + shift)) < 1e-9);
+        QCOMPARE(comp->layers()[0].transform.positionXCurve.locations(), keys);
+        QCOMPARE(history.count(), historyBefore + 2);
+        history.undo(); history.undo();
+        QCOMPARE(comp->layers()[0].spanStartSeconds, 5.0);
+        QCOMPARE(comp->layers()[0].spanEndSeconds, 15.0);
+        QCOMPARE(comp->layers()[0].transform.positionXCurve.locations(), (QVector<int> {10 * fps}));
+    }
+    // The shot timeline's other tools on a camera's bar, as the reference
+    // has them: Slice cuts the layer in two (Slice Layer: a copy from the cut
+    // on, the keys of both where they were), Rate Stretch on its end trims
+    // it (no speed to change on a camera, FUN_1405cae00).
+    void sliceAndStretchCutAndTrimACameraSpan() {
+        composition::Layer camera;
+        camera.name = "Camera"; camera.kind = composition::LayerKind::Camera;
+        camera.dimension = composition::LayerDimension::ThreeD;
+        camera.spanStartSeconds = 5.0; camera.spanEndSeconds = 15.0;
+        const int fps = comp->fpsNumerator() / qMax(1, comp->fpsDenominator());
+        camera.transform.positionXCurve.set(12 * fps, 20.0);
+        QVERIFY(comp->insertLayer(0, camera));
+        panel->setComposition(comp);
+        panel->setSnapEnabled(false);
+        auto* canvas = panel->findChild<ui::TimelineCanvas*>(); const int y = ui::kTimelineRulerHeight + 11;
+        const auto xFor = [&](double seconds) {
+            return int(std::lround(seconds * canvas->pixelsPerSecond())) - canvas->hScrollOffset();
+        };
+        const int historyBefore = history.count();
+        const int layersBefore = comp->layers().size();
+        panel->setTool(ui::EditorTool::Slice);
+        QTest::mouseClick(canvas, Qt::LeftButton, Qt::NoModifier, QPoint(xFor(8.0), y));
+        QCOMPARE(comp->layers().size(), layersBefore + 1);
+        const composition::Layer& head = comp->layers()[0];
+        const composition::Layer& tail = comp->layers()[1];
+        QCOMPARE(head.kind, composition::LayerKind::Camera);
+        QCOMPARE(tail.kind, composition::LayerKind::Camera);
+        QVERIFY(head.id != tail.id);
+        QCOMPARE(head.spanStartSeconds, 5.0);
+        QVERIFY(std::abs(head.spanEndSeconds - 8.0) < 0.1);
+        QCOMPARE(tail.spanStartSeconds, head.spanEndSeconds);
+        QCOMPARE(tail.spanEndSeconds, 15.0);
+        QCOMPARE(head.transform.positionXCurve.locations(), (QVector<int> {12 * fps}));
+        QCOMPARE(tail.transform.positionXCurve.locations(), (QVector<int> {12 * fps}));
+        QCOMPARE(history.count(), historyBefore + 1);
+        // Rate Stretch on the tail's end: a trim, the key where it was.
+        panel->setTool(ui::EditorTool::Stretch);
+        history.undo();
+        QCOMPARE(comp->layers().size(), layersBefore);
+        const double end = comp->layers()[0].spanEndSeconds;
+        const int second = int(std::lround(canvas->pixelsPerSecond()));
+        const QPoint from(xFor(end) - 3, y), to(xFor(end) - 3 - 2 * second, y);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, from);
+        QMouseEvent move(QEvent::MouseMove, to, canvas->mapToGlobal(to), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas, &move);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, to);
+        QVERIFY2(comp->layers()[0].spanEndSeconds < end - 1.5,
+                 qPrintable(QString::number(comp->layers()[0].spanEndSeconds)));
+        QCOMPARE(comp->layers()[0].spanStartSeconds, 5.0);
+        QCOMPARE(comp->layers()[0].transform.positionXCurve.locations(), (QVector<int> {12 * fps}));
+        panel->setTool(ui::EditorTool::Select);
+    }
+    // A layer of this port with two clips goes out as two layers, as the
+    // reference's Slice Layer would leave it - the second marked
+    // OpenVegasSliceOf, its range its clip's - and comes back as one layer
+    // with both clips; the reference, without this port's attributes, reads
+    // two layers.
+    // Native effects in the reference's own lists (EffectsHelper::
+    // SerializeEffects / EffectInstance::Serialize): an <Instance Version="8">
+    // per effect with its plugin's FXID and a PropertyManager of the keys the
+    // module registered, by type; Behaviors in LayerBase's BehaviorEffects.
+    // A file of the reference (no port extension) reads them back; an effect
+    // of a plugin this build does not know goes back out as it came.
+    void nativeEffectsGoInTheReferencesLists() {
+        using Entry = project::NativeEffectEntry;
+        const auto fx0Bytes = [] { return QByteArray("RTOM\x01\x02", 6); };
+        Entry glow;
+        glow.pluginId = "com.test.Glow"; glow.guid = "11111111-2222-3333-4444-555555555555";
+        glow.name = "Glow"; glow.versionMajor = 2; glow.versionMinor = 1;
+        glow.container = Entry::Container::Effects;
+        glow.parameters = {{"radius", "double", "10", {}}, {"mode", "int", "0", {"Add", "Screen"}},
+                           {"enabled2", "bool", "false", {}}, {"tint", "color", "#ff0000", {}},
+                           {"center", "point2d", "0,0", {}}, {"source", "layer", "", {}},
+                           {"caption", "string", "", {}}, {"note", "label", "", {}}};
+        Entry wobble;
+        wobble.pluginId = "com.test.Wobble"; wobble.guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        wobble.name = "Wobble"; wobble.container = Entry::Container::BehaviorEffects;
+        wobble.parameters = {{"amount", "double", "1", {}}};
+        project::setNativeEffectLookup([=](const QString& key) -> std::optional<Entry> {
+            for (const Entry& entry : {glow, wobble})
+                if (entry.pluginId == key || entry.guid == key) return entry;
+            return std::nullopt;
+        });
+        auto restore = qScopeGuard([] { project::setNativeEffectLookup({}); });
+
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        media::MediaManager media;
+        composition::Composition shot;
+        shot.setSize(320, 180); shot.setFrameRate(30, 1); shot.setDurationSeconds(4);
+        const QString sourceLayer = QStringLiteral("99999999-0000-0000-0000-000000000001");
+        {
+            auto& plane = shot.addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            composition::Clip clip; clip.startSeconds = 1.0; clip.durationSeconds = 2.0;
+            composition::Effect fx; fx.pluginId = core::Identifier("com.test.Glow"); fx.name = "My Glow";
+            fx.parameterValues = {"12.5", "Screen", "true", "#00ff80", "40,-20", sourceLayer, "Hi <there>", ""};
+            composition::KeyFrameList radius; radius.set(30, 5.0); radius.set(60, 25.0);
+            fx.animation.insert(0, radius);
+            composition::KeyFrameList tint; tint.set(30, QStringLiteral("#00ff80")); tint.set(90, QStringLiteral("#0000ff"));
+            fx.animation.insert(3, tint);
+            composition::KeyFrameList center; center.set(45, QStringLiteral("40,-20")); center.set(75, QStringLiteral("-10,5"));
+            fx.animation.insert(4, center);
+            fx.instanceData = QByteArray("RTOM\x01\x02", 6);
+            clip.effects.append(fx);
+            composition::Effect behavior; behavior.pluginId = core::Identifier("com.test.Wobble");
+            behavior.name = "Wobble"; behavior.parameterValues = {"3"}; behavior.enabled = false;
+            clip.effects.append(behavior);
+            composition::Effect builtin; builtin.pluginId = core::Identifier("openvegas.builtin.invert");
+            builtin.name = "Invert";
+            clip.effects.append(builtin);
+            plane.clips << clip;
+        }
+        const QString path = temp.filePath("effects.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(path, shot, media).isSuccess());
+        const auto readText = [&] {
+            QFile file(path); return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+        };
+        const QString xml = readText();
+        QDomDocument document; QVERIFY(document.setContent(xml));
+        QDomElement layer = document.elementsByTagName("AssetLayer").at(0).toElement();
+        QDomElement effects = layer.firstChildElement("Effects");
+        QVERIFY(!effects.isNull());
+        const QDomElement instance = effects.firstChildElement("Instance");
+        QCOMPARE(instance.attribute("Version"), QString("8"));
+        QCOMPARE(instance.firstChildElement("PluginID").text(), glow.guid);
+        QCOMPARE(instance.firstChildElement("PluginName").text(), QString("Glow"));
+        QCOMPARE(instance.firstChildElement("Name").text(), QString("My Glow"));
+        QCOMPARE(instance.firstChildElement("PluginVersion").attribute("Ma"), QString("2"));
+        QCOMPARE(instance.firstChildElement("ParentID").text(), shot.layers()[0].id.value());
+        QCOMPARE(instance.firstChildElement("ParentTimelineID").text(), shot.id().value());
+        QCOMPARE(instance.firstChildElement("Enabled").text(), QString("1"));
+        QCOMPARE(instance.firstChildElement("ParentLayerLastSize").attribute("X"), QString("320"));
+        QCOMPARE(instance.firstChildElement("InstanceBytes").text(), QString::fromLatin1(fx0Bytes().toBase64()));
+        QVERIFY(instance.nextSiblingElement("Instance").isNull());   // the built-in stays out
+        const QDomElement properties = instance.firstChildElement("PropertyManager");
+        QStringList names;
+        for (QDomElement p = properties.firstChildElement("Prop"); !p.isNull(); p = p.nextSiblingElement("Prop"))
+            names << p.firstChildElement("Name").text();
+        QCOMPARE(names, (QStringList {"radius", "mode", "enabled2", "tint", "center", "source", "caption"}));
+        const auto valueOf = [&](const QString& name, const QString& tag) {
+            for (QDomElement p = properties.firstChildElement("Prop"); !p.isNull(); p = p.nextSiblingElement("Prop"))
+                if (p.firstChildElement("Name").text() == name)
+                    return p.firstChildElement("Static").firstChildElement(tag);
+            return QDomElement();
+        };
+        QCOMPARE(valueOf("radius", "fl").text(), QString("12.5"));
+        QCOMPARE(valueOf("mode", "i").text(), QString("1"));
+        QCOMPARE(valueOf("enabled2", "b").text(), QString("1"));
+        QCOMPARE(valueOf("tint", "cl").attribute("G"), QString("1"));
+        QCOMPARE(valueOf("center", "p2").attribute("Y"), QString("-20"));
+        QCOMPARE(valueOf("source", "id").text(), sourceLayer);
+        QCOMPARE(valueOf("caption", "st").text(), QString("Hi <there>"));
+        QCOMPARE(properties.firstChildElement("Prop").firstChildElement("Animation").elementsByTagName("Key").size(), 2);
+        // The Behavior in LayerBase, before its PropertyManager.
+        const QDomElement named = layer.firstChildElement("LayerBase");
+        const QDomElement behaviors = named.firstChildElement("BehaviorEffects");
+        QCOMPARE(behaviors.firstChildElement("Instance").firstChildElement("PluginID").text(), wobble.guid);
+        QCOMPARE(behaviors.firstChildElement("Instance").firstChildElement("Enabled").text(), QString("0"));
+        QCOMPARE(behaviors.nextSiblingElement().tagName(), QString("PropertyManager"));
+
+        // As the reference would have it: no port extension. An unknown
+        // plugin's instance comes along too.
+        QDomElement stray = instance.cloneNode(true).toElement();
+        stray.firstChildElement("PluginID").firstChild().setNodeValue("deadbeef-0000-0000-0000-000000000000");
+        stray.firstChildElement("Name").firstChild().setNodeValue("Somebody Else's");
+        effects.appendChild(stray);
+        layer.removeChild(layer.firstChildElement("OpenVegasEffects"));
+        {
+            QFile out(path); QVERIFY(out.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            out.write(document.toByteArray()); out.close();
+        }
+        composition::Composition back; media::MediaManager media2;
+        QVERIFY(project::VegfxSerializer::loadFromFile(path, &back, &media2).isSuccess());
+        QCOMPARE(back.layers().size(), 1);
+        const QVector<composition::Effect>& read = back.layers()[0].clips[0].effects;
+        QCOMPARE(read.size(), 3);
+        QCOMPARE(read[0].pluginId.value(), QString("com.test.Glow"));
+        QCOMPARE(read[0].name, QString("My Glow"));
+        QCOMPARE(read[0].parameterValues, (QStringList {"12.5", "1", "true", "#00ff80", "40,-20", sourceLayer,
+                                                         "Hi <there>", ""}));
+        QCOMPARE(read[0].instanceData, fx0Bytes());
+        QVERIFY(read[0].isAnimated(0));
+        // Keys are relative to the layer in the file and back on the shot's time.
+        QCOMPARE(read[0].animation.value(0).locations(), (QVector<int> {30, 60}));
+        QCOMPARE(read[0].parameterAt(0, 60).toDouble(), 25.0);
+        // A colour and a point keyed whole, each key a <cl> / <p2>.
+        QCOMPARE(read[0].animation.value(3).locations(), (QVector<int> {30, 90}));
+        QCOMPARE(read[0].animation.value(3).at(90)->value.toString(), QString("#0000ff"));
+        QCOMPARE(read[0].animation.value(4).locations(), (QVector<int> {45, 75}));
+        QCOMPARE(read[0].animation.value(4).at(75)->value.toString(), QString("-10,5"));
+        QCOMPARE(read[1].pluginId.value(), QString("deadbeef-0000-0000-0000-000000000000"));
+        QCOMPARE(read[1].nativeContainer, QString("Effects"));
+        QVERIFY(!read[1].nativeXml.isEmpty());
+        QCOMPARE(read[2].pluginId.value(), QString("com.test.Wobble"));
+        QVERIFY(!read[2].enabled);
+        QCOMPARE(read[2].parameterValues, QStringList {"3"});
+
+        // Saved again: the unknown one goes out as it came, in its list.
+        QVERIFY(project::VegfxSerializer::saveToFile(path, back, media2).isSuccess());
+        const QString again = readText();
+        QCOMPARE(again.count("<PluginID>deadbeef-0000-0000-0000-000000000000</PluginID>"), 1);
+        QCOMPARE(again.count("Somebody Else's"), 2);   // Instance Name and the extension's copy
+        QDomDocument againDocument; QVERIFY(againDocument.setContent(again));
+        QCOMPARE(againDocument.elementsByTagName("Effects").size(), 1);
+        // An effect taken off goes from the file too (the list follows the model).
+        back.layerRef(0).clips[0].effects.remove(1);
+        QVERIFY(project::VegfxSerializer::saveToFile(path, back, media2).isSuccess());
+        QVERIFY(!readText().contains("deadbeef"));
+
+        // Into a file of the reference: its empty <Effects /> becomes the
+        // list, once, and the other layers keep theirs.
+        const QString sample = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects/project_1/Project.vegfx";
+        if (QFileInfo::exists(sample)) {
+            const QString copy = temp.filePath("project_1.vegfx");
+            QVERIFY(QFile::copy(sample, copy));
+            QFile::setPermissions(copy, QFile::ReadOwner | QFile::WriteOwner);
+            composition::Composition project; media::MediaManager media3;
+            QVERIFY(project::VegfxSerializer::loadFromFile(copy, &project, &media3).isSuccess());
+            const int layers = project.layers().size();
+            QVERIFY(layers >= 2);
+            composition::Effect fx; fx.pluginId = core::Identifier("com.test.Glow"); fx.name = "Glow";
+            fx.parameterValues = {"7", "0", "false", "#ffffff", "0,0", "", "", ""};
+            project.layerRef(0).clips[0].effects.append(fx);
+            QVERIFY(project::VegfxSerializer::saveToFile(copy, project, media3).isSuccess());
+            QFile file(copy); QVERIFY(file.open(QIODevice::ReadOnly));
+            QDomDocument saved; QVERIFY(saved.setContent(file.readAll()));
+            int lists = 0, instances = 0;
+            const QDomNodeList all = saved.elementsByTagName("Effects");
+            for (int i = 0; i < all.size(); ++i) {
+                ++lists;
+                instances += all.at(i).toElement().elementsByTagName("Instance").size();
+            }
+            QCOMPARE(instances, 1);
+            QVERIFY(lists >= layers);
+            for (int i = 0; i < all.size(); ++i) {
+                const QDomElement wrapper = all.at(i).parentNode().toElement();
+                int direct = 0;
+                for (QDomElement c = wrapper.firstChildElement("Effects"); !c.isNull(); c = c.nextSiblingElement("Effects"))
+                    ++direct;
+                QCOMPARE(direct, 1);
+            }
+        }
+    }
+    // Effect presets (.hfpr) as the reference writes and reads them: a 2D
+    // preset of the chosen effects (<Preset Type Version Editable Has...>,
+    // <ID>, <EffectsPreset> of <Instance>), its header, a newer version and a
+    // 3D one refused with the reference's words, the Effects panel's 2D and
+    // 3D Presets with import/export/rename/remove, and a preset on a clip
+    // with its keys moved to the clip's start, as one undoable edit.
+    void effectPresetsAreWrittenReadAndApplied() {
+        using Entry = project::NativeEffectEntry;
+        Entry glow;
+        glow.pluginId = "com.test.Glow"; glow.guid = "11111111-2222-3333-4444-555555555555";
+        glow.name = "Glow"; glow.container = Entry::Container::Effects;
+        glow.parameters = {{"radius", "double", "10", {}}};
+        Entry wobble;
+        wobble.pluginId = "com.test.Wobble"; wobble.guid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        wobble.name = "Wobble"; wobble.container = Entry::Container::BehaviorEffects;
+        wobble.parameters = {{"amount", "double", "1", {}}};
+        project::setNativeEffectLookup([=](const QString& key) -> std::optional<Entry> {
+            for (const Entry& entry : {glow, wobble})
+                if (entry.pluginId == key || entry.guid == key) return entry;
+            return std::nullopt;
+        });
+        auto restore = qScopeGuard([] { project::setNativeEffectLookup({}); });
+
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString folder = temp.filePath("Presets");
+        QVERIFY(QDir().mkpath(folder));
+        composition::Effect fx; fx.pluginId = core::Identifier("com.test.Glow"); fx.name = "Soft Glow";
+        fx.parameterValues = {"4"};
+        composition::KeyFrameList radius; radius.set(0, 2.0); radius.set(30, 8.0);
+        fx.animation.insert(0, radius);
+        composition::Effect behavior; behavior.pluginId = core::Identifier("com.test.Wobble");
+        behavior.name = "Wobble"; behavior.parameterValues = {"5"};
+        const QString path = QDir(folder).filePath("Dreamy.hfpr");
+        QCOMPARE(project::writeEffectPreset(path, {fx, behavior}, 30.0), int(project::PresetOk));
+        QDomDocument document;
+        {
+            QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); QVERIFY(document.setContent(&file));
+        }
+        const QDomElement root = document.documentElement();
+        QCOMPARE(root.tagName(), QString("Preset"));
+        QCOMPARE(root.attribute("Type"), QString("2D"));
+        QCOMPARE(root.attribute("Version"), QString("1"));
+        QCOMPARE(root.attribute("Editable"), QString("1"));
+        QCOMPARE(root.attribute("HasVisualEffects"), QString("1"));
+        QCOMPARE(root.attribute("HasBehaviorEffects"), QString("1"));
+        QCOMPARE(root.attribute("HasAudioEffects"), QString("0"));
+        QVERIFY(!QUuid(root.firstChildElement("ID").text()).isNull());
+        QCOMPARE(root.firstChildElement("EffectsPreset").elementsByTagName("Instance").size(), 2);
+        // Nothing native to keep: no preset.
+        QCOMPARE(project::writeEffectPreset(QDir(folder).filePath("Empty.hfpr"), {}, 30.0),
+                 int(project::PresetNothingToSave));
+        QVERIFY(!project::effectPresetError(project::PresetNothingToSave).isEmpty());
+
+        project::EffectPreset header;
+        QVERIFY(project::readEffectPreset(path, &header));
+        QCOMPARE(header.name, QString("Dreamy"));
+        QVERIFY(!header.threeD && header.editable && header.hasVisualEffects && header.hasBehaviorEffects);
+        const QVector<composition::Effect> effects = project::effectPresetEffects(path, 30.0);
+        QCOMPARE(effects.size(), 2);
+        QCOMPARE(effects[0].name, QString("Soft Glow"));
+        QVERIFY(!effects[0].instanceId.isValid());
+        QCOMPARE(effects[0].animation.value(0).locations(), (QVector<int> {0, 30}));
+        QCOMPARE(effects[1].pluginId.value(), QString("com.test.Wobble"));
+
+        // A newer one and a 3D one.
+        const auto writeText = [](const QString& file, const QString& text) {
+            QFile out(file); if (!out.open(QIODevice::WriteOnly)) return false;
+            out.write(text.toUtf8()); return true;
+        };
+        const QString newer = QDir(folder).filePath("Future.hfpr");
+        QVERIFY(writeText(newer, "<Preset Type=\"2D\" Version=\"9\"><ID>x</ID><EffectsPreset/></Preset>"));
+        int result = 0;
+        QVERIFY(!project::readEffectPreset(newer, nullptr, &result));
+        QCOMPARE(result, int(project::PresetTooNew));
+        QVERIFY(project::effectPresetError(result).contains("newer version"));
+        QVERIFY(QFile::remove(newer));
+        const QString sparks = QDir(QDir(folder).filePath("Fire")).filePath("Sparks.hfpr");
+        QVERIFY(QDir().mkpath(QFileInfo(sparks).absolutePath()));
+        QVERIFY(writeText(sparks, "<Preset Type=\"3D\" Version=\"1\" Editable=\"0\"><ID>y</ID>"
+                                  "<EffectsPreset><Effect3DLayer/></EffectsPreset></Preset>"));
+        QVERIFY(project::effectPresetEffects(sparks, 30.0, &result).isEmpty());
+        QCOMPARE(result, int(project::PresetCannotRead));
+
+        // The Effects panel: 2D Presets and 3D Presets (sub-folders too).
+        ui::EffectsPanel panel;
+        panel.setPresetsDirectory(folder);
+        auto* tree = panel.findChild<QTreeWidget*>();
+        QVERIFY(tree);
+        QTreeWidgetItem* twoD = nullptr; QTreeWidgetItem* threeD = nullptr;
+        for (int i = 0; i < tree->topLevelItemCount(); ++i) {
+            if (tree->topLevelItem(i)->text(0) == "2D Presets") twoD = tree->topLevelItem(i);
+            if (tree->topLevelItem(i)->text(0) == "3D Presets") threeD = tree->topLevelItem(i);
+        }
+        QVERIFY(twoD && threeD);
+        QCOMPARE(twoD->childCount(), 1);
+        QCOMPARE(twoD->child(0)->text(0), QString("Dreamy"));
+        QCOMPARE(ui::EffectsPanel::presetPathOf(twoD->child(0)), QFileInfo(path).absoluteFilePath());
+        QCOMPARE(threeD->child(0)->text(0), QString("Sparks"));
+        QSignalSpy activated(&panel, &ui::EffectsPanel::presetActivated);
+        emit tree->itemDoubleClicked(twoD->child(0), 0);
+        QCOMPARE(activated.size(), 1);
+        // Import: the name is taken, so it comes in as "Dreamy (1)".
+        const QString outside = temp.filePath("Dreamy.hfpr");
+        QVERIFY(QFile::copy(path, outside));
+        QVERIFY(panel.importPresetFiles({outside}));
+        QVERIFY(QFileInfo::exists(QDir(folder).filePath("Dreamy (1).hfpr")));
+        QCOMPARE(panel.presets().size(), 3);
+        // Rename, export, remove.
+        QVERIFY(panel.renamePreset(QDir(folder).filePath("Dreamy (1).hfpr"), "Hazy"));
+        QVERIFY(QFileInfo::exists(QDir(folder).filePath("Hazy.hfpr")));
+        QVERIFY(!panel.renamePreset(QDir(folder).filePath("Hazy.hfpr"), "Dreamy"));   // taken
+        const QString exported = temp.filePath("out");
+        QVERIFY(QDir().mkpath(exported));
+        QVERIFY(panel.exportPresetFiles({QDir(folder).filePath("Hazy.hfpr")}, exported));
+        QVERIFY(QFileInfo::exists(QDir(exported).filePath("Hazy.hfpr")));
+        QVERIFY(panel.removePresets({QDir(folder).filePath("Hazy.hfpr")}));
+        QCOMPARE(panel.presets().size(), 2);
+        QCOMPARE(project::uniqueFilePath(path), QFileInfo(QDir(folder).filePath("Dreamy (1).hfpr")).absoluteFilePath());
+
+        // On a clip starting at 1 s: the keys move 30 frames, one undo step.
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(4);
+        {
+            auto& plane = shot->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            composition::Clip clip; clip.startSeconds = 1.0; clip.durationSeconds = 2.0;
+            plane.clips << clip;
+        }
+        QUndoStack stack;
+        ui::TimelineWidget timeline;
+        timeline.setUndoStack(&stack); timeline.setComposition(shot);
+        QCOMPARE(timeline.addPreset(0, 0, path), 2);
+        QCOMPARE(shot->layers()[0].clips[0].effects.size(), 2);
+        QCOMPARE(shot->layers()[0].clips[0].effects[0].animation.value(0).locations(), (QVector<int> {30, 60}));
+        QCOMPARE(stack.count(), 1);
+        stack.undo();
+        QCOMPARE(shot->layers()[0].clips[0].effects.size(), 0);
+        QString error;
+        QCOMPARE(timeline.addPreset(0, 0, sparks, &error), 0);
+        QVERIFY(!error.isEmpty());
+        shot->layerRef(0).locked = true;
+        QCOMPARE(timeline.addPreset(0, 0, path), -1);
+    }
+
+    // An exported movie shows the shot's colours: the frames go through the
+    // BT.709 matrix in limited range and the stream says so, where FFmpeg's
+    // default (BT.601, untagged) made players that take HD video as BT.709
+    // show reds brighter than the Viewer.
+    // The value graph as the reference draws it (ValueGraphGridGraphicsItem,
+    // TimebarRulerItem, ValueGraphCurveGraphicsItem, the GraphEditors): the
+    // ruler's time steps and their parts, the value steps of at least 40 px,
+    // white for one value and red/green/blue for X/Y/Z, and Auto Zoom over
+    // every channel of the property with a tenth of its range either side
+    // (0..100 shown as -10..110 when there is nothing to fit).
+    void valueGraphFollowsTheReference() {
+        using View = ui::TimelineValueGraphView;
+        QCOMPARE(View::timeGridSteps(30.0), (QVector<int> {5, 30, 150, 450, 1800, 9000, 27000, 108000}));
+        int step = 0, parts = 0;
+        View::timeGridStep(30.0, 20.0, &step, &parts);     // 5 frames are 100 px
+        QCOMPARE(step, 5); QCOMPARE(parts, 5);
+        View::timeGridStep(30.0, 2.0, &step, &parts);      // a second is 60 px: 5 s
+        QCOMPARE(step, 150); QCOMPARE(parts, 5);
+        View::timeGridStep(24.0, 4.0, &step, &parts);      // 24 = 4 past 20: six parts
+        QCOMPARE(step, 24); QCOMPARE(parts, 6);
+        View::timeGridStep(12.0, 8.0, &step, &parts);      // 12 = 2 past 10: four parts
+        QCOMPARE(step, 12); QCOMPARE(parts, 4);
+        QCOMPARE(View::valueGridStep(4.0), 10.0);          // 10 units are 40 px
+        QCOMPARE(View::valueGridStep(1.0), 50.0);
+        QCOMPARE(View::valueGridStep(500.0), 0.1);
+        QCOMPARE(View::channelColor(0, 1), QColor(Qt::white));
+        QCOMPARE(View::channelColor(0, 3), QColor(Qt::red));
+        QCOMPARE(View::channelColor(1, 3), QColor(Qt::green));
+        QCOMPARE(View::channelColor(2, 3), QColor(Qt::blue));
+
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(4);
+        {
+            auto& plane = shot->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            composition::Clip clip; clip.durationSeconds = 4; plane.clips << clip;
+        }
+        View view; view.resize(600, 300);
+        view.setComposition(shot);
+        QCOMPARE(view.valueRange(), (QPair<double, double>(-10.0, 110.0)));
+        // Position keyed on both axes: X 0..200, Y 50..100 - the range fits both.
+        auto& t = shot->layerRef(0).transform;
+        t.positionXCurve.set(0, 0.0); t.positionXCurve.set(60, 200.0);
+        t.positionYCurve.set(0, 50.0); t.positionYCurve.set(60, 100.0);
+        ui::TimelineLane position;
+        position.layerIndex = 0;
+        position.transformProp = int(composition::TransformProperty::Position);
+        view.setLanes({position});
+        view.setSelectedLane(0);
+        QCOMPARE(view.valueRange(), (QPair<double, double>(-20.0, 220.0)));
+    }
+
+    void exportedMoviesKeepTheShotsColours() {
+        // Arguments: a YUV output gets the conversion and the tags, after
+        // the filter it already has; an RGB one is left alone.
+        const QStringList tagged = render::withVideoColorTags(
+            {"-c:v", "libx264", "-pix_fmt", "yuv420p", "-vf", "setsar=1"});
+        QVERIFY(tagged.at(tagged.indexOf("-vf") + 1).startsWith("setsar=1,scale=out_color_matrix=bt709"));
+        QCOMPARE(tagged.at(tagged.indexOf("-colorspace") + 1), QString("bt709"));
+        QCOMPARE(tagged.at(tagged.indexOf("-color_range") + 1), QString("tv"));
+        const QStringList rgb {"-c:v", "png", "-pix_fmt", "rgba"};
+        QCOMPARE(render::withVideoColorTags(rgb), rgb);
+
+        const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
+        const QString ffprobe = QStandardPaths::findExecutable("ffprobe");
+        if (ffmpeg.isEmpty() || ffprobe.isEmpty()) QSKIP("FFmpeg is required");
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        composition::Composition scene;
+        scene.setSize(1280, 720); scene.setFrameRate(30, 1); scene.setDurationSeconds(1);
+        {
+            auto& plane = scene.addLayer("Red");
+            plane.kind = composition::LayerKind::Plane;
+            plane.planeColor = QColor(200, 40, 40);
+            composition::Clip clip; clip.durationSeconds = 1; plane.clips << clip;
+        }
+        media::MediaManager manager;
+        render::ExportJob::Request movie;
+        movie.composition = std::shared_ptr<composition::Composition>(&scene, [](auto*) {});
+        movie.media = std::shared_ptr<media::MediaManager>(&manager, [](auto*) {});
+        movie.outputPath = dir.filePath("red.mp4"); movie.lastFrame = 2;
+        movie.hardwareEncoding = false;
+        {
+            render::ExportJob job(movie);
+            QSignalSpy finished(&job, &render::ExportJob::finished);
+            job.start();
+            QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 60000);
+            QVERIFY2(finished[0][0].toBool(), qPrintable(finished[0][1].toString()));
+        }
+        QProcess probe;
+        probe.start(ffprobe, {"-v", "error", "-select_streams", "v:0", "-show_entries",
+                              "stream=color_space,color_range,color_primaries,color_transfer",
+                              "-of", "default=nw=1", movie.outputPath});
+        QVERIFY(probe.waitForFinished(10000));
+        const QString tags = QString::fromUtf8(probe.readAllStandardOutput());
+        for (const char* tag : {"color_space=bt709", "color_range=tv", "color_primaries=bt709",
+                                "color_transfer=bt709"})
+            QVERIFY2(tags.contains(tag), qPrintable(tags));
+        // Decoded by its tags, as a player does: the shot's red.
+        QProcess decode;
+        decode.start(ffmpeg, {"-v", "error", "-i", movie.outputPath, "-frames:v", "1", "-vf", "format=rgb24",
+                              "-f", "rawvideo", "pipe:1"});
+        QVERIFY(decode.waitForFinished(10000));
+        const QByteArray pixels = decode.readAllStandardOutput();
+        QCOMPARE(pixels.size(), 1280 * 720 * 3);
+        const qsizetype at = (qsizetype(360) * 1280 + 640) * 3;
+        const QColor seen {int(uchar(pixels[at])), int(uchar(pixels[at + 1])), int(uchar(pixels[at + 2]))};
+        QVERIFY2(qAbs(seen.red() - 200) <= 3 && qAbs(seen.green() - 40) <= 3 && qAbs(seen.blue() - 40) <= 3,
+                 qPrintable(seen.name()));
+    }
+
+    void multiClipLayersGoOutAsSlices() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        media::MediaManager media;
+        composition::Composition shot;
+        shot.setSize(320, 180); shot.setFrameRate(30, 1); shot.setDurationSeconds(4);
+        {
+            auto& plane = shot.addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            composition::Clip first; first.startSeconds = 0.0; first.durationSeconds = 1.0;
+            composition::Clip second; second.startSeconds = 2.0; second.durationSeconds = 1.0;
+            plane.clips << first << second;
+            plane.transform.positionXCurve.set(75, 30.0);
+        }
+        const QString path = temp.filePath("slices.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(path, shot, media).isSuccess());
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
+        const QString xml = QString::fromUtf8(file.readAll());
+        file.close();
+        QCOMPARE(xml.count(QStringLiteral("<AssetLayer ")), 2);
+        QCOMPARE(xml.count(QStringLiteral("OpenVegasSliceOf=\"%1\"").arg(shot.layers()[0].id.value())), 1);
+        QVERIFY(xml.contains(QRegularExpression(QStringLiteral("<StartFrame>60</StartFrame>\\s*<EndFrame>90</EndFrame>"))));
+        const auto load = [&](const QString& text) {
+            QFile out(path); if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) return composition::Composition();
+            out.write(text.toUtf8()); out.close();
+            composition::Composition loaded; media::MediaManager media2;
+            if (!project::VegfxSerializer::loadFromFile(path, &loaded, &media2).isSuccess()) return composition::Composition();
+            return loaded;
+        };
+        const composition::Composition back = load(xml);
+        QCOMPARE(back.layers().size(), 1);
+        QCOMPARE(back.layers()[0].clips.size(), 2);
+        QCOMPARE(back.layers()[0].transform.positionXCurve.locations(), (QVector<int> {75}));
+        // As the reference sees it: two layers of one range each, the key
+        // on both at its frame of the shot.
+        QString reference = xml;
+        reference.remove(QRegularExpression(QStringLiteral(" OpenVegasSliceOf=\"[^\"]*\"")));
+        reference.remove(QRegularExpression(QStringLiteral("<OpenVegasClips[^>]*>.*?</OpenVegasClips>"),
+                                            QRegularExpression::DotMatchesEverythingOption));
+        const composition::Composition seen = load(reference);
+        QCOMPARE(seen.layers().size(), 2);
+        QVector<double> starts;
+        for (const composition::Layer& layer : seen.layers()) {
+            QCOMPARE(layer.clips.size(), 1);
+            starts << layer.clips[0].startSeconds;
+            QCOMPARE(layer.transform.positionXCurve.locations(), (QVector<int> {75}));
+        }
+        std::sort(starts.begin(), starts.end());
+        QCOMPARE(starts, (QVector<double> {0.0, 2.0}));
+    }
+    // Key times in the file are relative to the layer's start, as the
+    // reference writes them (StartFrame), and come back on the shot's
+    // timeline; a save of this port from before kept them on the shot's
+    // timeline and is read as it was.
+    void keyTimesAreRelativeToTheLayer() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        media::MediaManager media;
+        composition::Composition shot;
+        shot.setSize(320, 180); shot.setFrameRate(30, 1); shot.setDurationSeconds(10);
+        {
+            auto& plane = shot.addLayer("Late");
+            plane.kind = composition::LayerKind::Plane;
+            composition::Clip clip; clip.startSeconds = 2.0; clip.durationSeconds = 3.0;
+            plane.clips << clip;
+            plane.transform.positionXCurve.set(60, 0.0);
+            plane.transform.positionXCurve.set(90, 100.0);
+            plane.transform.opacityCurve.set(75, 50.0);
+        }
+        const QString path = temp.filePath("late.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(path, shot, media).isSuccess());
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
+        QString xml = QString::fromUtf8(file.readAll());
+        file.close();
+        QVERIFY(xml.contains(QStringLiteral("OpenVegasKeyTimes=\"layer\"")));
+        // The keys at 2 s and 3 s of the shot are 0 ms and 1000 ms of the layer.
+        QVERIFY2(xml.contains(QStringLiteral("Ti=\"0.0000\"")) && xml.contains(QStringLiteral("Ti=\"1000.0000\""))
+                     && xml.contains(QStringLiteral("Ti=\"500.0000\"")),
+                 "relative key times");
+        QVERIFY(!xml.contains(QStringLiteral("Ti=\"2000.0000\"")));
+        const auto keysOf = [&](const QString& text) {
+            QFile out(path); if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) return QVector<int>();
+            out.write(text.toUtf8()); out.close();
+            composition::Composition loaded; media::MediaManager media2;
+            if (!project::VegfxSerializer::loadFromFile(path, &loaded, &media2).isSuccess()
+                || loaded.layers().isEmpty())
+                return QVector<int>();
+            return loaded.layers()[0].transform.positionXCurve.locations()
+                   + loaded.layers()[0].transform.opacityCurve.locations();
+        };
+        QCOMPARE(keysOf(xml), (QVector<int> {60, 90, 75}));
+        // A save from before the change: the same times read as the shot's.
+        QString older = xml;
+        older.remove(QStringLiteral(" OpenVegasKeyTimes=\"layer\""));
+        QCOMPARE(keysOf(older), (QVector<int> {0, 30, 15}));
+        // The reference's own file (no attributes of this port): relative.
+        QString reference = xml;
+        reference.remove(QStringLiteral(" OpenVegasKeyTimes=\"layer\""));
+        reference.remove(QRegularExpression(QStringLiteral(" OpenVegasKind=\"[^\"]*\"")));
+        const QVector<int> referenceKeys = keysOf(reference);
+        if (!referenceKeys.isEmpty()) QCOMPARE(referenceKeys, (QVector<int> {60, 90, 75}));
+        // Shifting moves every curve of a layer with identities kept.
+        composition::Layer layer = shot.layers()[0];
+        const int id = layer.transform.positionXCurve.at(60)->id;
+        composition::shiftLayerKeys(layer, -60);
+        QCOMPARE(layer.transform.positionXCurve.locations(), (QVector<int> {0, 30}));
+        QCOMPARE(layer.transform.positionXCurve.at(0)->id, id);
+        QCOMPARE(layer.transform.opacityCurve.locations(), (QVector<int> {15}));
+    }
+    // The Layout panel's numeric fields are the reference's
+    // DoubleScrubberSpinBox (Widgets.dll): a scrubber until clicked - one
+    // step a pixel from the value at the press, Shift snapping to multiples
+    // of 10 every five pixels in the drag's direction, held at the range's
+    // ends, one edit when the button goes up - and a text field after a
+    // click, Escape going back to where it was.
+    void layoutFieldsScrubLikeTheReference() {
+        using ui::DoubleScrubberSpinBox;
+        QCOMPARE(DoubleScrubberSpinBox::snapped(23.0, 10.0, true), 30.0);
+        QCOMPARE(DoubleScrubberSpinBox::snapped(23.0, 10.0, false), 20.0);
+        QCOMPARE(DoubleScrubberSpinBox::snapped(30.0, 10.0, true), 30.0);
+        QCOMPARE(DoubleScrubberSpinBox::snapped(-23.0, 10.0, true), -20.0);
+        QCOMPARE(DoubleScrubberSpinBox::snapped(-23.0, 10.0, false), -30.0);
+        QCOMPARE(DoubleScrubberSpinBox::formatted(12.0, 1, 1), QString("12.0"));
+        QCOMPARE(DoubleScrubberSpinBox::formatted(12.0, 3, 0), QString("12"));
+        QCOMPARE(DoubleScrubberSpinBox::formatted(12.5, 3, 0), QString("12.5"));
+        QCOMPARE(DoubleScrubberSpinBox::formatted(105.0, 1, 1), QString("105.0"));
+        QCOMPARE(DoubleScrubberSpinBox::formatted(-3.125, 3, 0), QString("-3.125"));
+
+        QWidget window; auto* box = new DoubleScrubberSpinBox(&window);
+        box->setRange(-99999, 99999); box->setValue(13.0);
+        box->setGeometry(10, 10, 120, 24);
+        window.resize(200, 60); window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QVERIFY(box->isReadOnly());
+        QCOMPARE(box->text(), QString("13.0"));
+        QLineEdit* edit = box->findChild<QLineEdit*>();
+        QVERIFY(edit);
+        QSignalSpy started(box, &DoubleScrubberSpinBox::editingStarted);
+        QSignalSpy released(box, &DoubleScrubberSpinBox::mouseReleased);
+        const QPoint at(20, 10);
+        const auto send = [&](QEvent::Type type, const QPoint& local, Qt::MouseButton button, Qt::MouseButtons buttons,
+                              Qt::KeyboardModifiers modifiers) {
+            QMouseEvent event(type, QPointF(local), QPointF(edit->mapToGlobal(local)), button, buttons, modifiers);
+            QApplication::sendEvent(edit, &event);
+        };
+        // A plain drag: 30 px right is 30 steps.
+        send(QEvent::MouseButtonPress, at, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCOMPARE(started.count(), 1);
+        send(QEvent::MouseMove, at + QPoint(30, 0), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QCOMPARE(box->value(), 43.0);
+        send(QEvent::MouseButtonRelease, at + QPoint(30, 0), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QCOMPARE(released.count(), 1);
+        QVERIFY(box->isReadOnly());
+        // With Shift: 10 a five pixels, onto multiples of 10 the way it goes.
+        box->setValue(13.0);
+        send(QEvent::MouseButtonPress, at, Qt::LeftButton, Qt::LeftButton, Qt::ShiftModifier);
+        // (Past the drag distance first: 12 px is 13 + 20, up to 40.)
+        send(QEvent::MouseMove, at + QPoint(12, 0), Qt::NoButton, Qt::LeftButton, Qt::ShiftModifier);
+        QCOMPARE(box->value(), 40.0);
+        // The pointer is put back where it went down, so each move adds on:
+        // 32 px in all, 13 + 60, up to 80.
+        send(QEvent::MouseMove, at + QPoint(20, 0), Qt::NoButton, Qt::LeftButton, Qt::ShiftModifier);
+        QCOMPARE(box->value(), 80.0);
+        send(QEvent::MouseButtonRelease, at + QPoint(20, 0), Qt::LeftButton, Qt::NoButton, Qt::ShiftModifier);
+        // Held at the end of its range.
+        box->setRange(0, 100); box->setValue(0.0);
+        send(QEvent::MouseButtonPress, at, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        send(QEvent::MouseMove, at - QPoint(40, 0), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QCOMPARE(box->value(), 0.0);
+        send(QEvent::MouseMove, at + QPoint(10, 0), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QCOMPARE(box->value(), 10.0);
+        send(QEvent::MouseButtonRelease, at + QPoint(10, 0), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QCOMPARE(released.count(), 3);
+        // A click without a drag edits the text; Escape goes back.
+        box->setValue(12.5);
+        send(QEvent::MouseButtonPress, at, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        send(QEvent::MouseButtonRelease, at, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QCOMPARE(released.count(), 3);
+        QTRY_VERIFY(!box->isReadOnly());
+        QCOMPARE(box->text(), QString("12.5"));
+        box->setValue(70.0);
+        QTest::keyClick(box, Qt::Key_Escape);
+        QCOMPARE(box->value(), 12.5);
+        QVERIFY(box->isReadOnly());
+
+        // The Layout panel's fields, and a scrub there is one edit.
+        ui::LayoutPanel layout;
+        auto* x = layout.findChild<DoubleScrubberSpinBox*>("spinBoxX");
+        QVERIFY(x && layout.findChild<DoubleScrubberSpinBox*>("spinBoxHeight"));
+        QCOMPARE(x->maximum(), 99999.0);
+        QCOMPARE(x->focusPolicy(), Qt::StrongFocus);
+    }
+    // A layer's box follows its Behaviors, as the renderer moves the picture
+    // (the reference's TransformWidget measures layers with
+    // WorldTransformationAtTime, Behaviors included): MotionTrack's matrices
+    // move a plane's box with it, frame by frame; without one the box stays.
+    void layerBoxFollowsItsBehaviors() {
+        const core::Identifier id("test.behavior.box.motiontrack");
+        plugin::registerNativeBehaviorModule(id, QStringLiteral("C:/nowhere/MotionTrack.hfpl"), QString(), false, {});
+        auto cleanup = qScopeGuard([] {
+            plugin::clearNativeInstanceTransforms();
+            plugin::clearNativeEffectModules();
+        });
+        QVERIFY(plugin::nativeBehaviorUsesInstance(id));
+        composition::Composition shot;
+        shot.setSize(320, 180); shot.setFrameRate(30, 1); shot.setDurationSeconds(1);
+        auto& plane = shot.addLayer("Plane");
+        plane.kind = composition::LayerKind::Plane;
+        plane.transform.scalePercent = QPointF(50, 50);
+        composition::Effect motion; motion.pluginId = id; motion.name = "Motion Track";
+        composition::Clip clip; clip.durationSeconds = 1; clip.effects << motion;
+        plane.clips << clip;
+        const QRectF still = render::layerGeometry(shot, plane, nullptr, 0).bounds();
+        QCOMPARE(still, QRectF(80, 45, 160, 90));
+        // Frame 0 unmoved, frame 1 50 right and 20 up (Y up).
+        QVector<std::array<float, 16>> matrices(2, {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1});
+        matrices[1][12] = 50.0f; matrices[1][13] = 20.0f;
+        plugin::setNativeInstanceTransforms(render::nativeInstanceKey(plane.id, 0, 0), 0, matrices);
+        QCOMPARE(render::layerGeometry(shot, plane, nullptr, 0).bounds(), still);
+        QCOMPARE(render::layerGeometry(shot, plane, nullptr, 1).bounds(), still.translated(50, -20));
+        QCOMPARE(render::layerBehaviorTransformAt(shot, nullptr, plane, 1), QTransform::fromTranslate(50, -20));
+        // A disabled Behavior moves nothing.
+        shot.layerRef(0).clips[0].effects[0].enabled = false;
+        QCOMPARE(render::layerGeometry(shot, shot.layers()[0], nullptr, 1).bounds(), still);
+    }
+    // A 3D sheet's Behaviors move it in the scene, between its parent and
+    // its own placement (ParentTransformationAtTime), and its box follows:
+    // where the renderer draws the moved plane, frame by frame. The sheet
+    // turned 30 degrees on its own moves along the scene's axes, not its own.
+    void sheetBoxFollowsItsBehaviors() {
+        const core::Identifier id("test.behavior.sheet.motiontrack");
+        plugin::registerNativeBehaviorModule(id, QStringLiteral("C:/nowhere/MotionTrack.hfpl"), QString(), false, {});
+        auto cleanup = qScopeGuard([] {
+            plugin::clearNativeInstanceTransforms();
+            plugin::clearNativeEffectModules();
+        });
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(1);
+        {
+            auto& plane = shot->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            plane.dimension = composition::LayerDimension::ThreeD;
+            plane.planeColor = Qt::red;
+            plane.transform.scalePercent = QPointF(50, 50);
+            plane.transform.rotationDegrees = 30.0;
+            composition::Effect motion; motion.pluginId = id; motion.name = "Motion Track";
+            composition::Clip clip; clip.durationSeconds = 1; clip.effects << motion;
+            plane.clips << clip;
+        }
+        const composition::Layer& plane = shot->layers()[0];
+        const QRectF still = render::layerGeometry(*shot, plane, nullptr, 0).bounds();
+        QVector<std::array<float, 16>> matrices(2, {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1});
+        matrices[1][12] = 60.0f; matrices[1][13] = -10.0f;
+        plugin::setNativeInstanceTransforms(render::nativeInstanceKey(plane.id, 0, 0), 0, matrices);
+        QMatrix4x4 shift; shift.translate(60.0f, -10.0f, 0.0f);
+        QCOMPARE(render::layerBehaviorMatrixAt(*shot, nullptr, plane, 1), shift);
+        QCOMPARE(render::layerBehaviorTransformAt(*shot, nullptr, plane, 1), QTransform());
+        QCOMPARE(render::layerSheetMatrixAt(shot.get(), plane, 1),
+                 shift * render::layerSheetMatrixAt(shot.get(), plane, 0));
+        const QRectF moved = render::layerGeometry(*shot, plane, nullptr, 1).bounds();
+        QVERIFY2(std::abs(moved.center().x() - still.center().x() - 60.0) < 0.01
+                     && std::abs(moved.center().y() - still.center().y() - 10.0) < 0.01, "the box stayed");
+        // The red pixels the renderer draws at frame 1.
+        render::RenderManager manager; manager.setComposition(shot);
+        QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+        manager.requestFrame(0, 1.0 / 30.0, QSize(320, 180));
+        QVERIFY(QTest::qWaitFor([&] { return frames.count() > 0; }, 30000));
+        const QByteArray bytes = frames[0][1].toByteArray();
+        const QImage image = QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                                    QImage::Format_RGBA8888).copy();
+        QRect drawn;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor c = image.pixelColor(x, y);
+                if (c.red() > 128 && c.green() < 80) drawn |= QRect(x, y, 1, 1);
+            }
+        QVERIFY2(!drawn.isEmpty(), "nothing drawn");
+        const auto near = [](double a, double b) { return std::abs(a - b) <= 3.0; };
+        QVERIFY2(near(drawn.left(), moved.left()) && near(drawn.right() + 1, moved.right())
+                     && near(drawn.top(), moved.top()) && near(drawn.bottom() + 1, moved.bottom()),
+                 qPrintable(QStringLiteral("drawn %1,%2 %3x%4 box %5,%6 %7x%8")
+                                .arg(drawn.x()).arg(drawn.y()).arg(drawn.width()).arg(drawn.height())
+                                .arg(moved.x()).arg(moved.y()).arg(moved.width()).arg(moved.height())));
+    }
+    // A parented layer's Behaviors act inside its parent (the reference's
+    // world is the parent's x the Behaviors x the layer's own): under a
+    // parent turned a quarter clockwise, MotionTrack's 50 to the right moves
+    // the plane 50 down on the canvas - its box and its drawn pixels.
+    void behaviorsActInsideTheParent() {
+        const core::Identifier id("test.behavior.parent.motiontrack");
+        plugin::registerNativeBehaviorModule(id, QStringLiteral("C:/nowhere/MotionTrack.hfpl"), QString(), false, {});
+        auto cleanup = qScopeGuard([] {
+            plugin::clearNativeInstanceTransforms();
+            plugin::clearNativeEffectModules();
+        });
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(1);
+        core::Identifier parentId;
+        {
+            auto& parent = shot->addLayer("Parent");
+            parent.kind = composition::LayerKind::Point;
+            parent.transform.rotationDegrees = 90.0;
+            parentId = parent.id;
+            auto& plane = shot->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            plane.planeColor = Qt::red;
+            plane.transform.scalePercent = QPointF(20, 20);
+            plane.parentLayerId = parentId;
+            composition::Effect motion; motion.pluginId = id; motion.name = "Motion Track";
+            composition::Clip clip; clip.durationSeconds = 1; clip.effects << motion;
+            plane.clips << clip;
+        }
+        const composition::Layer& plane = shot->layers()[1];
+        const QRectF still = render::layerGeometry(*shot, plane, nullptr, 1).bounds();
+        QVector<std::array<float, 16>> matrices(2, {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1});
+        matrices[1][12] = 50.0f;
+        plugin::setNativeInstanceTransforms(render::nativeInstanceKey(plane.id, 0, 0), 0, matrices);
+        const QRectF moved = render::layerGeometry(*shot, plane, nullptr, 1).bounds();
+        QVERIFY2(std::abs(moved.center().x() - still.center().x()) < 0.01
+                     && std::abs(moved.center().y() - still.center().y() - 50.0) < 0.01,
+                 qPrintable(QStringLiteral("%1,%2 -> %3,%4").arg(still.center().x()).arg(still.center().y())
+                                .arg(moved.center().x()).arg(moved.center().y())));
+        render::RenderManager manager; manager.setComposition(shot);
+        QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+        manager.requestFrame(0, 1.0 / 30.0, QSize(320, 180));
+        QVERIFY(QTest::qWaitFor([&] { return frames.count() > 0; }, 30000));
+        const QByteArray bytes = frames[0][1].toByteArray();
+        const QImage image = QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                                    QImage::Format_RGBA8888).copy();
+        QRect drawn;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x) {
+                const QColor c = image.pixelColor(x, y);
+                if (c.red() > 128 && c.green() < 80) drawn |= QRect(x, y, 1, 1);
+            }
+        QVERIFY2(!drawn.isEmpty(), "nothing drawn");
+        QVERIFY2(std::abs(QRectF(drawn).center().x() + 0.5 - moved.center().x()) <= 2.0
+                     && std::abs(QRectF(drawn).center().y() + 0.5 - moved.center().y()) <= 2.0,
+                 qPrintable(QStringLiteral("drawn %1,%2 box %3,%4").arg(QRectF(drawn).center().x())
+                                .arg(QRectF(drawn).center().y()).arg(moved.center().x()).arg(moved.center().y())));
+    }
+    // Several Behaviors multiply as the reference's do (B1 x B2: the last one
+    // nearest the layer, so it acts first): a quarter turn first in the list
+    // and a shift of 50 to the right after it take the plane 50 up, where the
+    // other order would take it 50 right. And a parent's Behaviors carry its
+    // children (ParentingWorldTransformationAtTime has them): the parent's
+    // shift moves the child as much. The boxes and the drawn pixels agree.
+    void behaviorsMultiplyInTheReferencesOrder() {
+        const core::Identifier id("test.behavior.order.motiontrack");
+        plugin::registerNativeBehaviorModule(id, QStringLiteral("C:/nowhere/MotionTrack.hfpl"), QString(), false, {});
+        auto cleanup = qScopeGuard([] {
+            plugin::clearNativeInstanceTransforms();
+            plugin::clearNativeEffectModules();
+        });
+        const auto drawnCentre = [](const std::shared_ptr<composition::Composition>& shot, QColor colour) {
+            render::RenderManager manager; manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 1.0 / 30.0, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 30000)) return QPointF(-1, -1);
+            const QByteArray bytes = frames[0][1].toByteArray();
+            const QImage image = QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                                        QImage::Format_RGBA8888).copy();
+            QRect drawn;
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = 0; x < image.width(); ++x) {
+                    const QColor c = image.pixelColor(x, y);
+                    if (std::abs(c.red() - colour.red()) < 60 && std::abs(c.green() - colour.green()) < 60
+                        && std::abs(c.blue() - colour.blue()) < 60)
+                        drawn |= QRect(x, y, 1, 1);
+                }
+            return drawn.isEmpty() ? QPointF(-1, -1) : QRectF(drawn).center() + QPointF(0.5, 0.5);
+        };
+        const auto near = [](const QPointF& a, const QPointF& b, double tolerance) {
+            return std::abs(a.x() - b.x()) <= tolerance && std::abs(a.y() - b.y()) <= tolerance;
+        };
+        const auto plane = [&](composition::Composition& shot, const QString& name, QColor colour, int behaviors) {
+            auto& layer = shot.addLayer(name);
+            layer.kind = composition::LayerKind::Plane;
+            layer.planeColor = colour;
+            layer.transform.scalePercent = QPointF(20, 20);
+            composition::Clip clip; clip.durationSeconds = 1;
+            for (int i = 0; i < behaviors; ++i) {
+                composition::Effect motion; motion.pluginId = id; motion.name = "Motion Track";
+                clip.effects << motion;
+            }
+            layer.clips << clip;
+            return layer.id;
+        };
+        const auto still = [] {
+            return QVector<std::array<float, 16>>(2, {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1});
+        };
+        {
+            auto shot = std::make_shared<composition::Composition>();
+            shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(1);
+            const core::Identifier layerId = plane(*shot, "Plane", Qt::red, 2);
+            auto turn = still();
+            QMatrix4x4 quarter; quarter.rotate(90.0f, 0.0f, 0.0f, 1.0f);
+            std::copy(quarter.constData(), quarter.constData() + 16, turn[1].begin());
+            auto shift = still();
+            shift[1][12] = 50.0f;
+            plugin::setNativeInstanceTransforms(render::nativeInstanceKey(layerId, 0, 0), 0, turn);
+            plugin::setNativeInstanceTransforms(render::nativeInstanceKey(layerId, 0, 1), 0, shift);
+            const QPointF centre = render::layerGeometry(*shot, shot->layers()[0], nullptr, 1).bounds().center();
+            QVERIFY2(near(centre, QPointF(160, 40), 0.01),
+                     qPrintable(QStringLiteral("%1,%2").arg(centre.x()).arg(centre.y())));
+            const QPointF drawn = drawnCentre(shot, Qt::red);
+            QVERIFY2(near(drawn, centre, 2.0), qPrintable(QStringLiteral("%1,%2").arg(drawn.x()).arg(drawn.y())));
+        }
+        plugin::clearNativeInstanceTransforms();
+        {
+            auto shot = std::make_shared<composition::Composition>();
+            shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(1);
+            // The child above its parent, so its pixels show whole.
+            plane(*shot, "Child", Qt::red, 0);
+            const core::Identifier parentId = plane(*shot, "Parent", Qt::blue, 1);
+            shot->layerRef(0).parentLayerId = parentId;
+            shot->layerRef(0).transform.position = QPointF(0, 50);
+            shot->layerRef(0).transform.scalePercent = QPointF(100, 100);
+            auto shift = still();
+            shift[1][12] = 40.0f;
+            plugin::setNativeInstanceTransforms(render::nativeInstanceKey(parentId, 0, 0), 0, shift);
+            const QPointF child0 = render::layerGeometry(*shot, shot->layers()[0], nullptr, 0).bounds().center();
+            const QPointF child1 = render::layerGeometry(*shot, shot->layers()[0], nullptr, 1).bounds().center();
+            QVERIFY2(near(child1 - child0, QPointF(40, 0), 0.01),
+                     qPrintable(QStringLiteral("%1,%2").arg(child1.x() - child0.x()).arg(child1.y() - child0.y())));
+            const QPointF drawn = drawnCentre(shot, Qt::red);
+            QVERIFY2(near(drawn, child1, 2.0), qPrintable(QStringLiteral("%1,%2 box %3,%4").arg(drawn.x()).arg(drawn.y())
+                                                              .arg(child1.x()).arg(child1.y())));
+        }
+    }
+    // Motion blur samples a layer's Behaviors at their own times, as the
+    // reference runs them at the sub-frame's: a plane without keys that
+    // MotionTrack's matrices carry 8 pixels a frame is smeared along its
+    // way, about where its box is, and a module's matrices are read in
+    // between frames.
+    void behaviorsBlurAtTheirSubFrames() {
+        const core::Identifier id("test.behavior.blur.motiontrack");
+        plugin::registerNativeBehaviorModule(id, QStringLiteral("C:/nowhere/MotionTrack.hfpl"), QString(), false, {});
+        auto cleanup = qScopeGuard([] {
+            plugin::clearNativeInstanceTransforms();
+            plugin::clearNativeEffectModules();
+        });
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(30, 1); shot->setDurationSeconds(1);
+        {
+            auto& plane = shot->addLayer("Plane");
+            plane.kind = composition::LayerKind::Plane;
+            plane.planeColor = Qt::red;
+            plane.transform.scalePercent = QPointF(10, 10);
+            composition::Effect motion; motion.pluginId = id; motion.name = "Motion Track";
+            composition::Clip clip; clip.durationSeconds = 1; clip.effects << motion;
+            plane.clips << clip;
+        }
+        const composition::Layer& plane = shot->layers()[0];
+        QVector<std::array<float, 16>> matrices(30, {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1});
+        for (int f = 0; f < 30; ++f) matrices[f][12] = 8.0f * (f - 10);
+        const QString key = render::nativeInstanceKey(plane.id, 0, 0);
+        plugin::setNativeInstanceTransforms(key, 0, matrices);
+        std::array<float, 16> between {};
+        QVERIFY(plugin::nativeInstanceTransformAt(key, 10.25, &between));
+        QCOMPARE(between[12], 2.0f);
+        const auto drawn = [&](bool blurred, double* centre) {
+            shot->layerRef(0).motionBlur = blurred;
+            render::RenderManager manager; manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 10.0 / 30.0, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 30000)) return -1;
+            const QByteArray bytes = frames[0][1].toByteArray();
+            const QImage image = QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                                        QImage::Format_RGBA8888).copy();
+            int first = -1, last = -1;
+            for (int x = 0; x < image.width(); ++x)
+                if (image.pixelColor(x, 90).red() > 25) { if (first < 0) first = x; last = x; }
+            *centre = (first + last + 1) / 2.0;
+            return first < 0 ? 0 : last - first + 1;
+        };
+        double sharpCentre = 0.0, smearedCentre = 0.0;
+        const int sharp = drawn(false, &sharpCentre), smeared = drawn(true, &smearedCentre);
+        const double box = render::layerGeometry(*shot, shot->layers()[0], nullptr, 10).bounds().center().x();
+        QVERIFY2(sharp > 0 && smeared >= sharp + 2,
+                 qPrintable(QStringLiteral("%1 %2").arg(sharp).arg(smeared)));
+        QVERIFY2(std::abs(sharpCentre - box) <= 1.5 && std::abs(smearedCentre - box) <= 1.5,
+                 qPrintable(QStringLiteral("%1 %2 box %3").arg(sharpCentre).arg(smearedCentre).arg(box)));
+    }
+    // Under a turned and scaled parent: Fit Layer to Box turns the box with
+    // the parent and moves the layer in the parent's units, so the box lands
+    // where asked; and the footage an instance tracks is placed under its
+    // parent, as renderClip draws it.
+    void parentedLayersFitAndPlaceTheirFootage() {
+        composition::Composition shot;
+        shot.setSize(320, 180); shot.setFrameRate(30, 1); shot.setDurationSeconds(1);
+        auto& parent = shot.addLayer("Parent");
+        parent.kind = composition::LayerKind::Point;
+        parent.transform.position = QPointF(40, 10);
+        parent.transform.rotationDegrees = 90.0;
+        parent.transform.scalePercent = QPointF(200, 200);
+        const core::Identifier parentId = parent.id;
+        auto& child = shot.addLayer("Child");
+        child.kind = composition::LayerKind::Plane;
+        child.transform.scalePercent = QPointF(25, 25);
+        child.transform.position = QPointF(10, 0);
+        child.parentLayerId = parentId;
+        composition::Clip clip; clip.durationSeconds = 1; child.clips << clip;
+        const QRectF target(20, 30, 100, 60);
+        QPointF position, scale;
+        QVERIFY(render::fitLayerToBox(shot, shot.layers()[1], nullptr, 0, target, &position, &scale));
+        composition::Layer fitted = shot.layers()[1];
+        fitted.transform.position = position;
+        fitted.transform.scalePercent = scale;
+        const QRectF placed = render::layerGeometry(shot, fitted, nullptr, 0).bounds();
+        QVERIFY2(std::abs(placed.left() - target.left()) < 0.5 && std::abs(placed.top() - target.top()) < 0.5
+                     && std::abs(placed.width() - target.width()) < 0.5 && std::abs(placed.height() - target.height()) < 0.5,
+                 qPrintable(QStringLiteral("%1 %2 %3 %4").arg(placed.left()).arg(placed.top())
+                                .arg(placed.width()).arg(placed.height())));
+
+        // The footage of an instance-backed effect under a parent that moves
+        // it 30 right and 20 up.
+        const core::Identifier id("test.parented.stabilizer");
+        plugin::registerNativeEffectModule(id, QStringLiteral("C:/nowhere/AutomaticStabilizer.hfpl"), QString(), true, {});
+        auto cleanup = qScopeGuard([] { plugin::clearNativeEffectModules(); });
+        auto shared = std::make_shared<composition::Composition>();
+        shared->setSize(320, 180); shared->setFrameRate(30, 1); shared->setDurationSeconds(1);
+        auto& mover = shared->addLayer("Mover");
+        mover.kind = composition::LayerKind::Point;
+        mover.transform.position = QPointF(30, 20);
+        const core::Identifier moverId = mover.id;
+        auto& footage = shared->addLayer("Footage");
+        footage.parentLayerId = moverId;
+        composition::Effect fx; fx.pluginId = id;
+        composition::Clip footageClip; footageClip.durationSeconds = 1; footageClip.effects << fx;
+        footage.clips << footageClip;
+        const core::Identifier footageId = footage.id;
+        auto media = std::make_shared<media::MediaManager>();
+        ui::NativeInstanceHost host([shared] { return shared; }, [media] { return media; });
+        core::Identifier plugin; QStringList values; plugin::NativeCustomUiView view;
+        QVERIFY(host.describe({footageId, 0, 0}, 0.0, &plugin, &values, &view));
+        QCOMPARE(view.area, QSize(320, 180));
+        QCOMPARE(view.matrix[12], 30.0f);
+        QCOMPARE(view.matrix[13], -20.0f);
+    }
+    // The Metallic-Roughness clear coat (Flux's MR shader): the specular the
+    // reflection maps take goes under an untinted coat, spec * (1 - coat *
+    // F(N.V, 0, 0)) + coat * F(N.V, 0, coat roughness) - a rough, dull
+    // surface seen at a grazing angle reflects far more with a smooth coat,
+    // and the same seen square on hardly changes.
+    void clearCoatBrightensGrazingReflections() {
+        model3d::Mesh mesh;
+        mesh.positions = {{-100, -100, 0}, {100, -100, 0}, {100, 100, 0}, {-100, 100, 0}};
+        mesh.normals = {{0, 0, 1}};
+        model3d::Material material;
+        material.illuminationModel = model3d::IlluminationModel::MetallicRoughness;
+        material.metallic = 0.0;
+        material.roughness = 1.0;
+        material.diffuseReflectivity = 0.0;
+        material.specularReflectivity = 1.0;
+        mesh.materials = {material};
+        for (const auto& corners : {std::array<int, 3> {0, 1, 2}, std::array<int, 3> {0, 2, 3}}) {
+            model3d::Triangle triangle;
+            for (int i = 0; i < 3; ++i) { triangle.position[i] = corners[i]; triangle.normal[i] = 0; }
+            triangle.material = 0;
+            mesh.triangles << triangle;
+        }
+        QImage white(64, 32, QImage::Format_RGBA8888);
+        white.fill(Qt::white);
+        model3d::Lighting lighting;
+        lighting.reflections = std::make_shared<model3d::Reflections>(model3d::Reflections::fromLatLong(white));
+        const QSize size(200, 200);
+        const auto brightness = [&](double coat, double tilt) {
+            model3d::Mesh coated = mesh;
+            coated.materials[0].clearCoat = coat;
+            coated.materials[0].clearCoatRoughness = 0.0;
+            QMatrix4x4 placement;
+            placement.rotate(float(tilt), 1.0f, 0.0f, 0.0f);
+            const QImage image = model3d::renderMesh(coated, placement, model3d::defaultCameraForCanvas(size), size,
+                                                     lighting, model3d::ShadingMode::Shaded, 1.0);
+            return qGray(image.pixel(100, 100));
+        };
+        const int dull = brightness(0.0, -80.0), coated = brightness(1.0, -80.0);
+        QVERIFY2(coated > dull + 40, qPrintable(QStringLiteral("%1 %2").arg(dull).arg(coated)));
+        const int square = brightness(0.0, 0.0), squareCoated = brightness(1.0, 0.0);
+        QVERIFY2(std::abs(squareCoated - square) <= 3, qPrintable(QStringLiteral("%1 %2").arg(square).arg(squareCoated)));
+    }
+    // 3D text drawn with Geometry takes its Environment Map on its mesh, as a
+    // model does: grey letters reflecting a red picture turn red where the
+    // same letters without one stay grey.
+    void textGeometryReflectsItsEnvironment() {
+        // A Geometry module that is only registered: the text stays the flat
+        // glyph mesh, which is enough here.
+        const core::Identifier geometryId("test.geometry.flat");
+        plugin::registerNativeGeometryModule(geometryId, QStringLiteral("C:/nowhere/Extrude.hfpl"), QString(), true, {});
+        auto cleanup = qScopeGuard([] { plugin::clearNativeEffectModules(); });
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        QImage redPicture(64, 32, QImage::Format_RGBA8888);
+        redPicture.fill(Qt::red);
+        const QString redPath = temp.filePath("red.png");
+        QVERIFY(redPicture.save(redPath));
+        auto media = std::make_shared<media::MediaManager>();
+        QVERIFY(media->importFile(redPath).isSuccess());
+        const core::Identifier redId = media->assetByFilePath(QFileInfo(redPath).absoluteFilePath()).id();
+        composition::TextStyle style;
+        style.text = QStringLiteral("HH");
+        style.fontSize = 120;
+        style.fontColor = QColor(90, 90, 90);
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setFrameRate(24, 1); shot->setDurationSeconds(1);
+        {
+            auto& layer = shot->addLayer("Text");
+            layer.kind = composition::LayerKind::Text;
+            layer.dimension = composition::LayerDimension::ThreeD;
+            composition::Clip clip; clip.durationSeconds = 1;
+            composition::Effect text; text.pluginId = core::Identifier("text");
+            text.name = "text"; text.parameterValues = composition::textStyleToParameters(style);
+            composition::Effect geometry; geometry.pluginId = geometryId; geometry.name = "Flat";
+            clip.effects << text << geometry;
+            layer.clips << clip;
+            layer.surface.diffuseReflectivity = 100.0;
+        }
+        const auto frameOf = [&] {
+            render::RenderManager manager; manager.setMediaManager(media); manager.setComposition(shot);
+            QSignalSpy frames(&manager, &render::RenderManager::frameReady);
+            manager.requestFrame(0, 0.0, QSize(320, 180));
+            if (!QTest::qWaitFor([&] { return frames.count() > 0; }, 30000)) return QImage();
+            const QByteArray bytes = frames[0][1].toByteArray();
+            return QImage(reinterpret_cast<const uchar*>(bytes.constData()), 320, 180, 320 * 4,
+                          QImage::Format_RGBA8888).copy();
+        };
+        // The letters' pixels: bright ones, and how red they are on average.
+        const auto letters = [](const QImage& image, double* redShare) {
+            int count = 0; double share = 0.0;
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = 0; x < image.width(); ++x) {
+                    const QColor c = image.pixelColor(x, y);
+                    if (qMax(c.red(), qMax(c.green(), c.blue())) < 50) continue;   // the background
+                    ++count;
+                    share += c.red() / double(qMax(1, c.green() + c.blue() + c.red()));
+                }
+            *redShare = count ? share / count : 0.0;
+            return count;
+        };
+        double plainShare = 0.0, mirroredShare = 0.0;
+        const QImage plain = frameOf();
+        QVERIFY2(letters(plain, &plainShare) > 200, "no letters drawn");
+        shot->layerRef(0).surface.environmentMap = composition::SurfaceShading::EnvironmentMap::Asset;
+        shot->layerRef(0).surface.environmentMapLayer = redId;
+        const QImage mirrored = frameOf();
+        mirrored.save(testArtifactPath(QStringLiteral("text-geometry-environment.png")));
+        QVERIFY(letters(mirrored, &mirroredShare) > 200);
+        QVERIFY2(mirroredShare > plainShare + 0.1,
+                 qPrintable(QStringLiteral("%1 %2").arg(plainShare).arg(mirroredShare)));
+    }
     void legacyProxyChoicesReachEncoderAndPreview() {
         for (const auto& low : {QStringLiteral("Низкое"), QStringLiteral("低")}) {
             const auto args = media::proxyEncodeArguments("source", "output", media::ProxyMode::Performance, low, "libx264");
@@ -9381,6 +13726,201 @@ private slots:
     // PreRenderProgressLabel's state; a pre-rendered shot edited since is
     // made again once the edits settle; Remove takes the files, cancelling
     // stops everything.
+    // A shot's pre-render has its audio too (the reference's pre-render
+    // writes video and audio): the shot's mix as a WAV in its folder, which
+    // export (and playback) take for the nested shot instead of mixing it
+    // again - until the shot is edited, when its old audio no longer matches.
+    // The media cache's conformed audio (the reference's ConformedAudioFile):
+    // a file's audio decoded once to 16-bit stereo PCM at the shot's rate in
+    // MediaCacheFiles, recorded when written, touched when read again; a
+    // replaced file is conformed again.
+    void mediaAudioIsConformedOnce() {
+        const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
+        if (ffmpeg.isEmpty()) QSKIP("FFmpeg is required");
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString source = dir.filePath("mono44.wav");
+        const auto writeTone = [&](qint16 value) {
+            QFile wave(source); QVERIFY(wave.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QDataStream stream(&wave); stream.setByteOrder(QDataStream::LittleEndian);
+            const quint32 frames = 22050;
+            stream.writeRawData("RIFF", 4); stream << quint32(36 + frames * 2);
+            stream.writeRawData("WAVEfmt ", 8);
+            stream << quint32(16) << quint16(1) << quint16(1) << quint32(44100)
+                   << quint32(88200) << quint16(2) << quint16(16);
+            stream.writeRawData("data", 4); stream << quint32(frames * 2);
+            for (quint32 frame = 0; frame < frames; ++frame) stream << value;
+        };
+        writeTone(4000);
+        QStringList stored, used;
+        media::ConformedAudioStore store;
+        store.directory = dir.filePath("Conformed");
+        store.stored = [&](const QString& key, const QString&) { stored << key; };
+        store.used = [&](const QString& key) { used << key; };
+        media::ConformedAudioCache cache;
+        cache.setStore(store);
+        QSignalSpy ready(&cache, &media::ConformedAudioCache::conformedReady);
+        QVERIFY(cache.conformed(source, -1, 48000).isEmpty());
+        QVERIFY(ready.wait(30000));
+        QCOMPARE(stored.size(), 1);
+        const QString conformed = cache.conformed(source, -1, 48000);
+        QVERIFY(!conformed.isEmpty());
+        QVERIFY(conformed.startsWith(store.directory));
+        QCOMPARE(used, stored);
+        // Its header: PCM, two channels, 48 kHz, 16-bit; half a second.
+        QFile file(conformed); QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray header = file.read(44);
+        QCOMPARE(header.mid(0, 4), QByteArray("RIFF"));
+        QDataStream fields(header.mid(22, 14)); fields.setByteOrder(QDataStream::LittleEndian);
+        quint16 channels = 0, bits = 0; quint32 rate = 0, byteRate = 0; quint16 align = 0;
+        fields >> channels >> rate >> byteRate >> align >> bits;
+        QCOMPARE(int(channels), 2); QCOMPARE(int(rate), 48000); QCOMPARE(int(bits), 16);
+        QVERIFY2(std::abs(file.size() - 24000 * 4) < 2000, qPrintable(QString::number(file.size())));
+        file.close();
+        // Another rate is another file; a replaced file is conformed again.
+        QVERIFY(cache.conformed(source, -1, 44100).isEmpty());
+        QVERIFY(ready.wait(30000));
+        QTest::qWait(1100);   // a modification time of its own
+        writeTone(2000);
+        QVERIFY(cache.conformed(source, -1, 48000).isEmpty());
+        QVERIFY(ready.wait(30000));
+        QCOMPARE(stored.size(), 3);
+    }
+    // A composite clip that processes what it plays - a native audio effect,
+    // an audio transition on it - has playback play its shot's mix and put
+    // the processing on that (the reference's DSP after the child mix): the
+    // mix is made once per state of the shot, in the background, and an
+    // edited shot is mixed again.
+    void nestedShotsAreMixedBeforeTheirClipsProcessThem() {
+        const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
+        if (ffmpeg.isEmpty()) QSKIP("FFmpeg is required");
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString source = dir.filePath("tone.wav");
+        {
+            QFile wave(source); QVERIFY(wave.open(QIODevice::WriteOnly));
+            QDataStream stream(&wave); stream.setByteOrder(QDataStream::LittleEndian);
+            const quint32 frames = 24000;
+            stream.writeRawData("RIFF", 4); stream << quint32(36 + frames * 4);
+            stream.writeRawData("WAVEfmt ", 8);
+            stream << quint32(16) << quint16(1) << quint16(2) << quint32(48000)
+                   << quint32(192000) << quint16(4) << quint16(16);
+            stream.writeRawData("data", 4); stream << quint32(frames * 4);
+            for (quint32 frame = 0; frame < frames; ++frame) stream << qint16(2000) << qint16(2000);
+        }
+        auto media = std::make_shared<media::MediaManager>();
+        QVERIFY(media->importFile(source).isSuccess());
+        auto child = std::make_shared<composition::Composition>();
+        child->setName("Child"); child->setSize(32, 32); child->setDurationSeconds(0.5);
+        child->setAudioSampleRate(48000);
+        composition::Clip leaf; leaf.mediaId = media->assetByFilePath(source).id(); leaf.durationSeconds = 0.5;
+        child->addLayer("Tone").clips.append(leaf);
+
+        // Which composite clips process their mix.
+        const core::Identifier echo("test.native.audio.echo");
+        plugin::registerNativeAudioEffectModule(echo, dir.filePath("missing.hfpl"), dir.path(), true);
+        auto cleanup = qScopeGuard([] { plugin::clearNativeEffectModules(); });
+        composition::Layer layer;
+        composition::Clip nested; nested.nestedComposition = child; nested.nestedCompositionId = child->id();
+        nested.durationSeconds = 0.5;
+        layer.clips << nested;
+        QVERIFY(!render::nestedClipProcessesItsMix(layer, 0, 30.0));
+        composition::Effect effect; effect.pluginId = echo; effect.name = "Echo";
+        layer.clips[0].effects << effect;
+        QVERIFY(render::nestedClipProcessesItsMix(layer, 0, 30.0));
+        layer.clips[0].effects[0].enabled = false;
+        QVERIFY(!render::nestedClipProcessesItsMix(layer, 0, 30.0));
+        composition::Layer footage; footage.clips << leaf; footage.clips[0].effects << effect;
+        QVERIFY(!render::nestedClipProcessesItsMix(footage, 0, 30.0));
+
+        render::NestedAudioMixCache mixes;
+        mixes.setDirectory(dir.filePath("Mixes"));
+        QSignalSpy ready(&mixes, &render::NestedAudioMixCache::mixReady);
+        QVERIFY(mixes.mixFor(child, media).isEmpty());
+        QVERIFY(ready.wait(60000));
+        const QString mix = mixes.mixFor(child, media);
+        QVERIFY(!mix.isEmpty());
+        QCOMPARE(mix, mixes.pathFor(*child, media.get()));
+        // Half a second of 48 kHz 16-bit stereo, at the tone's level.
+        QFile file(mix); QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray bytes = file.readAll();
+        QVERIFY2(std::abs(bytes.size() - 24000 * 4) < 2000, qPrintable(QString::number(bytes.size())));
+        const int data = bytes.indexOf("data");
+        QVERIFY(data > 0);
+        qint16 sample = 0;
+        std::memcpy(&sample, bytes.constData() + data + 8 + 4 * 1000, sizeof(sample));
+        QVERIFY2(std::abs(sample - 2000) < 20, qPrintable(QString::number(sample)));
+        // Edited: another mix.
+        child->layerRef(0).clips[0].audioLevel = -6.0;
+        QVERIFY(mixes.pathFor(*child, media.get()) != mix);
+        QVERIFY(mixes.mixFor(child, media).isEmpty());
+        QVERIFY(ready.wait(60000));
+        QVERIFY(!mixes.mixFor(child, media).isEmpty());
+    }
+    void preRenderCarriesTheShotsAudio() {
+        const QString ffmpeg = QStandardPaths::findExecutable("ffmpeg");
+        const QString ffprobe = QStandardPaths::findExecutable("ffprobe");
+        if (ffmpeg.isEmpty() || ffprobe.isEmpty()) QSKIP("FFmpeg is required");
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString source = dir.filePath("tone.wav");
+        {
+            QFile wave(source); QVERIFY(wave.open(QIODevice::WriteOnly));
+            QDataStream stream(&wave); stream.setByteOrder(QDataStream::LittleEndian);
+            const quint32 frames = 48000;
+            stream.writeRawData("RIFF", 4); stream << quint32(36 + frames * 4);
+            stream.writeRawData("WAVEfmt ", 8);
+            stream << quint32(16) << quint16(1) << quint16(2) << quint32(48000)
+                   << quint32(192000) << quint16(4) << quint16(16);
+            stream.writeRawData("data", 4); stream << quint32(frames * 4);
+            for (quint32 frame = 0; frame < frames; ++frame) stream << qint16(3000) << qint16(3000);
+        }
+        auto media = std::make_shared<media::MediaManager>();
+        QVERIFY(media->importFile(source).isSuccess());
+        auto child = std::make_shared<composition::Composition>();
+        child->setName("Child"); child->setSize(32, 32); child->setDurationSeconds(1.0);
+        child->setAudioSampleRate(48000);
+        composition::Clip leaf; leaf.mediaId = media->assetByFilePath(source).id(); leaf.durationSeconds = 1.0;
+        child->addLayer("Tone").clips.append(leaf);
+        auto parent = std::make_shared<composition::Composition>();
+        parent->setName("Parent"); parent->setSize(32, 32); parent->setDurationSeconds(1.0);
+        parent->setAudioSampleRate(48000);
+        composition::Clip nested; nested.nestedComposition = child; nested.nestedCompositionId = child->id();
+        nested.mediaId = core::Identifier(QStringLiteral("composition:") + child->id().value());
+        nested.durationSeconds = 1.0;
+        parent->addLayer("Nested").clips.append(nested);
+
+        const QString root = dir.filePath("prerenders");
+        QVERIFY(QDir().mkpath(root));
+        QVERIFY(render::preRenderedAudio(root, *child, media.get()).isEmpty());
+        render::PreRenderManager manager;
+        manager.setPreRenderRoot(root);
+        manager.setMediaManager(media);
+        manager.request(child);
+        QTRY_COMPARE_WITH_TIMEOUT(manager.state(child->id().value()), render::PreRenderManager::State::Done, 60000);
+        const QString audio = render::preRenderedAudio(root, *child, media.get());
+        QVERIFY2(!audio.isEmpty(), "no pre-rendered audio");
+        QVERIFY(audio.startsWith(render::preRenderFolder(root, *child)));
+        // A second of 48 kHz 16-bit stereo, about.
+        QVERIFY2(QFileInfo(audio).size() > 190000 && QFileInfo(audio).size() < 200000,
+                 qPrintable(QString::number(QFileInfo(audio).size())));
+        const auto inputsOf = [&](const QString& preRenders) {
+            QTemporaryDir temp;
+            render::ExportAudioRequest request;
+            request.composition = parent.get(); request.media = media.get();
+            request.ffmpeg = ffmpeg; request.ffprobe = ffprobe; request.temporaryDirectory = temp.path();
+            request.frameRate = 30.0; request.exportStart = 0.0; request.exportEnd = 1.0;
+            request.preRenderDirectory = preRenders;
+            QVector<render::ExportAudioInput> inputs; QString error;
+            if (!render::buildExportAudioInputs(request, inputs, &error)) return QStringList {error};
+            QStringList paths;
+            for (const auto& input : inputs) paths << input.path;
+            return paths;
+        };
+        QCOMPARE(inputsOf(root), (QStringList {audio}));
+        // Edited: the old audio no longer matches, the shot is mixed again.
+        child->layerRef(0).clips[0].audioLevel = -6.0;
+        QVERIFY(render::preRenderedAudio(root, *child, media.get()).isEmpty());
+        const QStringList live = inputsOf(root);
+        QVERIFY2(!live.contains(audio), qPrintable(live.join(", ")));
+    }
     void preRendersWaitTheirTurn() {
         QTemporaryDir dir; QVERIFY(dir.isValid());
         const auto makeShot = [](const QString& name, const QColor& color) {
@@ -9717,6 +14257,50 @@ private slots:
             }
         half.save(testArtifactPath(QStringLiteral("half-geometry.png")));
         QVERIFY2(sum / (160.0 * 120.0) < 3.0, qPrintable(QStringLiteral("mean %1").arg(sum / (160.0 * 120.0))));
+
+        // Its shadow is its mesh's: turned edge-on to a light in front, the
+        // extruded "O" still throws its 40-unit walls onto a red floor
+        // behind it, where its flat picture would throw a line.
+        auto lit = std::make_shared<composition::Composition>();
+        lit->setSize(320, 240); lit->setDurationSeconds(1);
+        {
+            auto& floor = lit->addLayer("Floor");
+            composition::Clip plain; plain.durationSeconds = 1;
+            floor.kind = composition::LayerKind::Plane; floor.planeColor = Qt::red;
+            floor.dimension = composition::LayerDimension::ThreeD; floor.clips << plain;
+            floor.transform.positionZ = -100;
+            floor.transform.scalePercent = QPointF(300, 300);
+            auto& word = lit->addLayer("Text");
+            word.kind = composition::LayerKind::Text; word.dimension = composition::LayerDimension::ThreeD;
+            word.clips << clip;
+            word.transform.rotationYDegrees = 90;
+            word.surface.castShadows = true;
+            auto& lamp = lit->addLayer("Lamp");
+            lamp.kind = composition::LayerKind::Light; lamp.dimension = composition::LayerDimension::ThreeD;
+            lamp.transform.position = QPointF(300, 0); lamp.transform.positionZ = 400;
+            lamp.light.castShadows = true; lamp.light.shadowOpacity = 100;
+        }
+        const auto darkInRow = [&](const QString& name) {
+            render::RenderManager shaded; shaded.setComposition(lit);
+            QSignalSpy shadedReady(&shaded, &render::RenderManager::frameReady);
+            shaded.requestFrame(3, 0.0, QSize(320, 240), true, true);
+            if (!QTest::qWaitFor([&] { return shadedReady.count() > 0; }, 10000)) return -1;
+            shaded.cancelAll();
+            const QByteArray shadedBytes = shadedReady[0][1].toByteArray();
+            const QImage frame(reinterpret_cast<const uchar*>(shadedBytes.constData()), 320, 240, 320 * 4,
+                               QImage::Format_RGBA8888);
+            frame.copy().save(testArtifactPath(name));
+            int dark = 0;
+            for (int x = 0; x < 320; ++x) {
+                const QColor c = frame.pixelColor(x, 80);
+                if (c.red() < 60 && c.green() < 60 && c.blue() < 60) ++dark;
+            }
+            return dark;
+        };
+        const int casting = darkInRow(QStringLiteral("geometry-shadow.png"));
+        lit->layerRef(1).surface.castShadows = false;
+        const int none = darkInRow(QStringLiteral("geometry-no-shadow.png"));
+        QVERIFY2(casting > none + 20, qPrintable(QStringLiteral("%1 %2").arg(casting).arg(none)));
     }
     void oversizedParticleTextureWarning() {
         composition::Composition scene; scene.setSize(640, 360);

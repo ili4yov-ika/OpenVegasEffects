@@ -6,6 +6,7 @@
 #include "ui/AutoSave.h"
 #include "ui/Theme.h"
 
+#include "app/PluginFolders.h"
 #include "app/Settings.h"
 #include "app/Translations.h"
 
@@ -298,6 +299,8 @@ OptionsDialog::OptionsDialog(QWidget* parent)
             m_ui->stack->addWidget(buildShortcutsPage());
         } else if (cat == QStringLiteral("Export")) {
             m_ui->stack->addWidget(buildExportPage());
+        } else if (cat == QStringLiteral("Plugins")) {
+            m_ui->stack->addWidget(buildPluginsPage());
         }
     }
 
@@ -366,8 +369,124 @@ const QStringList& OptionsDialog::categoryNames()
         QStringLiteral("Auto Save"),
         QStringLiteral("Shortcuts"),
         QStringLiteral("Export"),
+        // Not the reference's: where its plugins are found, when they are
+        // not where it installs them.
+        QStringLiteral("Plugins"),
     };
     return names;
+}
+
+void OptionsDialog::showCategory(const QString& name)
+{
+    const int row = categoryNames().indexOf(name);
+    if (row >= 0) m_ui->categoryList->setCurrentRow(row);
+}
+
+QWidget* OptionsDialog::buildPluginsPage()
+{
+    auto* page = new QWidget(this);
+    auto* root = new QVBoxLayout(page);
+    root->setContentsMargins(8, 8, 8, 8);
+    root->setSpacing(10);
+
+    auto* installation = new QGroupBox(tr("VEGAS Effects installation"), page);
+    installation->setObjectName(QStringLiteral("widgetInstallationPlugins"));
+    auto* installationLayout = new QVBoxLayout(installation);
+    m_installationPluginStatus = new QLabel(installation);
+    m_installationPluginStatus->setObjectName(QStringLiteral("labelInstallationPluginStatus"));
+    m_installationPluginStatus->setWordWrap(true);
+    m_installationPluginStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    installationLayout->addWidget(m_installationPluginStatus);
+    m_useInstallationPlugins = new QCheckBox(tr("Use the plugins of this installation"), installation);
+    m_useInstallationPlugins->setObjectName(QStringLiteral("checkBoxUseInstallationPlugins"));
+    installationLayout->addWidget(m_useInstallationPlugins);
+    root->addWidget(installation);
+
+    auto* folders = new QGroupBox(tr("Plugin folders"), page);
+    folders->setObjectName(QStringLiteral("widgetPluginFolders"));
+    auto* foldersLayout = new QVBoxLayout(folders);
+    auto* hint = new QLabel(tr("Folders with .hfpl plugins - the Plugins folder of VEGAS Effects installed "
+                               "elsewhere, or of another FXhome program such as HitFilm or Imerge. "
+                               "Their category sub-folders are searched too."), folders);
+    hint->setWordWrap(true);
+    foldersLayout->addWidget(hint);
+    m_pluginFolders = new QListWidget(folders);
+    m_pluginFolders->setObjectName(QStringLiteral("listWidgetPluginFolders"));
+    m_pluginFolders->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    foldersLayout->addWidget(m_pluginFolders, 1);
+    auto* buttons = new QHBoxLayout;
+    auto* add = new QPushButton(tr("Add Folder..."), folders);
+    add->setObjectName(QStringLiteral("pushButtonAddPluginFolder"));
+    auto* remove = new QPushButton(tr("Remove"), folders);
+    remove->setObjectName(QStringLiteral("pushButtonRemovePluginFolder"));
+    auto* find = new QPushButton(tr("Find FXhome Plugins"), folders);
+    find->setObjectName(QStringLiteral("pushButtonFindFxhomePlugins"));
+    buttons->addWidget(add);
+    buttons->addWidget(remove);
+    buttons->addStretch(1);
+    buttons->addWidget(find);
+    foldersLayout->addLayout(buttons);
+    auto* note = new QLabel(tr("Plugins are looked for again when Options is closed with OK."), folders);
+    note->setObjectName(QStringLiteral("labelPluginRescanNote"));
+    note->setWordWrap(true);
+    foldersLayout->addWidget(note);
+    root->addWidget(folders, 1);
+
+    connect(add, &QPushButton::clicked, this, [this] {
+        const QString folder = QFileDialog::getExistingDirectory(this, tr("Plugin Folder"));
+        if (!folder.isEmpty()) addPluginFolder(folder);
+    });
+    connect(remove, &QPushButton::clicked, this, [this] {
+        qDeleteAll(m_pluginFolders->selectedItems());
+    });
+    connect(find, &QPushButton::clicked, this, [this] {
+        const QString installationPlugins = app::PluginFolders::installationPluginFolder();
+        int added = 0;
+        for (const QString& folder : app::PluginFolders::fxhomePluginFolders()) {
+            // The installation's own are the check box above.
+            if (folder.compare(installationPlugins, Qt::CaseInsensitive) == 0) continue;
+            const int before = m_pluginFolders->count();
+            addPluginFolder(folder);
+            added += m_pluginFolders->count() - before;
+        }
+        if (added == 0)
+            QMessageBox::information(this, tr("Find FXhome Plugins"),
+                                     tr("No other FXhome program with plugins was found."));
+    });
+    connect(m_useInstallationPlugins, &QCheckBox::toggled, this, [this] { updatePluginStatus(); });
+    return page;
+}
+
+void OptionsDialog::addPluginFolder(const QString& folder)
+{
+    if (!m_pluginFolders) return;
+    const QString path = QDir::cleanPath(QDir::fromNativeSeparators(folder.trimmed()));
+    if (path.isEmpty()) return;
+    for (int i = 0; i < m_pluginFolders->count(); ++i)
+        if (m_pluginFolders->item(i)->data(Qt::UserRole).toString().compare(path, Qt::CaseInsensitive) == 0) return;
+    const int count = app::PluginFolders::pluginCount(path);
+    auto* item = new QListWidgetItem(tr("%1  (plugins: %2)").arg(QDir::toNativeSeparators(path)).arg(count),
+                                     m_pluginFolders);
+    item->setData(Qt::UserRole, path);
+    item->setToolTip(QDir::toNativeSeparators(path));
+}
+
+void OptionsDialog::updatePluginStatus()
+{
+    if (!m_installationPluginStatus) return;
+    const QString installation = app::PluginFolders::installationFolder();
+    const QString plugins = app::PluginFolders::installationPluginFolder();
+    const int count = app::PluginFolders::pluginCount(plugins);
+    if (count > 0) {
+        m_installationPluginStatus->setText(tr("Plugins found in %1: %2.")
+                                                .arg(QDir::toNativeSeparators(plugins)).arg(count));
+    } else {
+        m_installationPluginStatus->setText(
+            tr("No plugins were found in %1. Add the folder with the plugins below - VEGAS Effects "
+               "installed elsewhere, or another FXhome program.")
+                .arg(QDir::toNativeSeparators(installation)));
+    }
+    m_useInstallationPlugins->setEnabled(count > 0);
 }
 
 QWidget* OptionsDialog::buildGeneralPage()
@@ -1283,6 +1402,9 @@ void OptionsDialog::onRestoreDefaults()
         m_timeFormat->setCurrentIndex(0);
         m_removeExt->setChecked(true);
         m_beepSpeaker->setChecked(true);
+    } else if (name == QStringLiteral("Plugins")) {
+        m_useInstallationPlugins->setChecked(true);
+        m_pluginFolders->clear();
     }
 }
 
@@ -1401,6 +1523,15 @@ bool OptionsDialog::saveSettings()
     s.setValue(kRemoveExt, m_removeExt->isChecked());
     s.setValue(kBeepSpeaker, m_beepSpeaker->isChecked());
     s.sync();
+    // Where plugins are looked for: scanned again when that changed.
+    QStringList folders;
+    for (int i = 0; i < m_pluginFolders->count(); ++i)
+        folders << m_pluginFolders->item(i)->data(Qt::UserRole).toString();
+    const bool foldersChanged = folders != app::PluginFolders::chosenFolders()
+                                || m_useInstallationPlugins->isChecked() != app::PluginFolders::useInstallation();
+    app::PluginFolders::setChosenFolders(folders);
+    app::PluginFolders::setUseInstallation(m_useInstallationPlugins->isChecked());
+    if (foldersChanged) emit pluginFoldersChanged();
     return true;
 }
 
@@ -1541,6 +1672,10 @@ void OptionsDialog::loadSettings()
                     QLatin1String(kShortcutDefinitions[i].defaultSequence)).toString(),
             QKeySequence::PortableText));
     }
+    m_useInstallationPlugins->setChecked(app::PluginFolders::useInstallation());
+    m_pluginFolders->clear();
+    for (const QString& folder : app::PluginFolders::chosenFolders()) addPluginFolder(folder);
+    updatePluginStatus();
 }
 
 void OptionsDialog::updateRestoreLabel()

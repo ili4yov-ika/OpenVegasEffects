@@ -3,6 +3,7 @@
 #include "app/Settings.h"
 #include "app/ProjectDefaults.h"
 #include "app/GpuDriver.h"
+#include "app/PluginFolders.h"
 #include <QTranslator>
 #include <QScopeGuard>
 #include "ui/PromptMessage.h"
@@ -13,6 +14,8 @@
 #include <QComboBox>
 #include <QDir>
 #include <QKeySequenceEdit>
+#include <QLabel>
+#include <QSignalSpy>
 #include <QFontDatabase>
 #include <QLineEdit>
 #include <QListWidget>
@@ -53,10 +56,11 @@ private slots:
         auto* stack = dialog.findChild<QStackedWidget*>(QStringLiteral("stack"));
         QVERIFY(categories);
         QVERIFY(stack);
-        QCOMPARE(categories->count(), 13);
+        QCOMPARE(categories->count(), 14);
         QCOMPARE(stack->count(), categories->count());
         QCOMPARE(categories->item(0)->text(), QStringLiteral("General"));
         QCOMPARE(categories->item(12)->text(), QStringLiteral("Export"));
+        QCOMPARE(categories->item(13)->text(), QStringLiteral("Plugins"));
 
         const QStringList required = {
             QStringLiteral("spinBoxMaxUndo"),
@@ -387,6 +391,97 @@ private slots:
             }
             if (locale != QLatin1String("en")) qApp->installTranslator(&translator);
         }
+    }
+
+    // Where plugins are looked for besides the user's folder: the VEGAS
+    // Effects installation under Program Files (when used), the folders
+    // chosen on the Plugins page - another FXhome program's among them -
+    // each once; Options opens there by itself once, when none has any.
+    // Options > Render's 3D map sizes are what a new project's shadow and
+    // reflection maps are made at (ProjectRenderSettings, which the renderer
+    // and the .vegfx read).
+    void renderMapSizesReachNewProjects()
+    {
+        ui::OptionsDialog dialog;
+        auto* shadows = dialog.findChild<QSpinBox*>(QStringLiteral("spinBoxShadowMapSize"));
+        auto* reflections = dialog.findChild<QSpinBox*>(QStringLiteral("spinBoxReflectionMapSize"));
+        QVERIFY(shadows && reflections);
+        shadows->setValue(1024);
+        reflections->setValue(256);
+        dialog.findChild<QPushButton*>(QStringLiteral("btnOK"))->click();
+        const composition::ProjectRenderSettings settings = app::defaultProjectRenderSettings();
+        QCOMPARE(settings.shadowMapSize, shadows->value());
+        QCOMPARE(settings.reflectionMapSize, reflections->value());
+        QVERIFY(settings.shadowMapSize != 2048 || settings.reflectionMapSize != 512);
+    }
+
+    void pluginsPageChoosesFolders()
+    {
+        QTemporaryDir programFiles;
+        QVERIFY(programFiles.isValid());
+        const QDir root(programFiles.path());
+        const auto touch = [&](const QString& relative) {
+            QVERIFY(root.mkpath(QFileInfo(root.filePath(relative)).path()));
+            QFile file(root.filePath(relative));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+        };
+        touch(QStringLiteral("FXhome/VEGAS Effects/Plugins/Behavior/Fade.hfpl"));
+        touch(QStringLiteral("FXhome/HitFilm Pro/Plugins/Distort/Ripple.hfpl"));
+        touch(QStringLiteral("FXhome/HitFilm Pro/Plugins/Glow.hfpl"));
+        QVERIFY(root.mkpath(QStringLiteral("FXhome/Imerge Pro")));
+        const QStringList roots {programFiles.path()};
+        const QString installation = QDir::cleanPath(root.filePath(QStringLiteral("FXhome/VEGAS Effects/Plugins")));
+        const QString hitfilm = QDir::cleanPath(root.filePath(QStringLiteral("FXhome/HitFilm Pro/Plugins")));
+        QCOMPARE(app::PluginFolders::installationPluginFolder(roots), installation);
+        QCOMPARE(app::PluginFolders::fxhomePluginFolders(roots), (QStringList {installation, hitfilm}));
+        QCOMPARE(app::PluginFolders::pluginCount(installation), 1);
+        QCOMPARE(app::PluginFolders::pluginCount(hitfilm), 2);
+        QCOMPARE(app::PluginFolders::scannedFolders(roots), (QStringList {installation}));
+        QVERIFY(!app::PluginFolders::shouldPrompt(roots));
+        // No installation where it is looked for: nothing to scan, Options
+        // asks - once.
+        const QStringList elsewhere {root.filePath(QStringLiteral("nowhere"))};
+        QVERIFY(app::PluginFolders::scannedFolders(elsewhere).isEmpty());
+        QVERIFY(app::PluginFolders::shouldPrompt(elsewhere));
+        app::PluginFolders::setPromptShown(true);
+        QVERIFY(!app::PluginFolders::shouldPrompt(elsewhere));
+        app::PluginFolders::setPromptShown(false);
+
+        ui::OptionsDialog dialog;
+        dialog.showCategory(QStringLiteral("Plugins"));
+        auto* categories = dialog.findChild<QListWidget*>(QStringLiteral("categoryList"));
+        QCOMPARE(categories->currentItem()->text(), QStringLiteral("Plugins"));
+        auto* list = dialog.findChild<QListWidget*>(QStringLiteral("listWidgetPluginFolders"));
+        auto* use = dialog.findChild<QCheckBox*>(QStringLiteral("checkBoxUseInstallationPlugins"));
+        QVERIFY(list && use);
+        QVERIFY(dialog.findChild<QPushButton*>(QStringLiteral("pushButtonAddPluginFolder")));
+        QVERIFY(dialog.findChild<QPushButton*>(QStringLiteral("pushButtonFindFxhomePlugins")));
+        QVERIFY(dialog.findChild<QLabel*>(QStringLiteral("labelInstallationPluginStatus")));
+        QCOMPARE(list->count(), 0);
+        dialog.addPluginFolder(hitfilm);
+        dialog.addPluginFolder(QDir::toNativeSeparators(hitfilm));   // once
+        QCOMPARE(list->count(), 1);
+        QVERIFY2(list->item(0)->text().contains(QStringLiteral("2")), qPrintable(list->item(0)->text()));
+        QSignalSpy changed(&dialog, &ui::OptionsDialog::pluginFoldersChanged);
+        dialog.findChild<QPushButton*>(QStringLiteral("btnOK"))->click();
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(app::PluginFolders::chosenFolders(), (QStringList {hitfilm}));
+        QCOMPARE(app::PluginFolders::scannedFolders(roots), (QStringList {installation, hitfilm}));
+        // Not using the installation's: only the chosen folder.
+        app::PluginFolders::setUseInstallation(false);
+        QCOMPARE(app::PluginFolders::scannedFolders(roots), (QStringList {hitfilm}));
+        app::PluginFolders::setUseInstallation(true);
+        // Nothing changed: no new scan.
+        dialog.findChild<QPushButton*>(QStringLiteral("btnOK"))->click();
+        QCOMPARE(changed.count(), 1);
+        // The page's defaults: the installation used, no folder of its own.
+        dialog.showCategory(QStringLiteral("Plugins"));
+        dialog.findChild<QPushButton*>(QStringLiteral("btnRestoreDefaults"))->click();
+        QCOMPARE(list->count(), 0);
+        QVERIFY(use->isChecked());
+        dialog.findChild<QPushButton*>(QStringLiteral("btnOK"))->click();
+        QCOMPARE(changed.count(), 2);
+        QVERIFY(app::PluginFolders::chosenFolders().isEmpty());
     }
 
     void nativeAntialiasingModesPersist()

@@ -68,6 +68,11 @@ struct EffectSpec
     // when two files declare the same "com.FXHOME.HitFilm.*" identifier.
     QString guid;
 
+    // What the plugin says of itself (AbstractPlugin::Author/Copyright; a
+    // native module's PluginInfo vendor and copyright), for About.
+    QString author;
+    QString copyright;
+
     // False when the effect can be listed but not run. The recovered native
     // host currently covers 2D, video-transition and audio ABIs; unsupported
     // Geometry/Behavior modules remain visible with an explicit reason.

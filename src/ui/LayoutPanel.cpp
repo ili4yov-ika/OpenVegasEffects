@@ -1,5 +1,6 @@
 #include "ui/LayoutPanel.h"
 #include "ui_Layout.h"
+#include "ui/ScrubberSpinBox.h"
 #include "ui/Theme.h"
 
 #include <QApplication>
@@ -168,6 +169,12 @@ LayoutPanel::LayoutPanel(QWidget* parent)
     connect(m_y, &QDoubleSpinBox::editingFinished, this, [this, onEdited] { onEdited(m_y); });
     connect(m_width, &QDoubleSpinBox::editingFinished, this, [this, onEdited] { onEdited(m_width); });
     connect(m_height, &QDoubleSpinBox::editingFinished, this, [this, onEdited] { onEdited(m_height); });
+    // A scrub is one edit, when the button goes up (DoubleScrubberSpinBox).
+    for (QDoubleSpinBox* field : {m_x, m_y, m_width, m_height}) {
+        if (auto* scrubber = qobject_cast<DoubleScrubberSpinBox*>(field))
+            connect(scrubber, &DoubleScrubberSpinBox::mouseReleased, this,
+                    [onEdited, field] { onEdited(field); });
+    }
 
     clearSelection();
 }

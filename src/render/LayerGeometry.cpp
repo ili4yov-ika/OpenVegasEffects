@@ -6,6 +6,7 @@
 #include <QVector4D>
 
 #include <cmath>
+#include <limits>
 
 #include "composition/Composition.h"
 #include "composition/TextStyle.h"
@@ -21,7 +22,11 @@ model3d::Camera sceneCameraOf(const composition::Composition* composition, const
     model3d::Camera camera = model3d::defaultCameraForCanvas(canvas);
     if (!composition) return camera;
     for (const composition::Layer& layer : composition->layers()) {
-        if (layer.kind != composition::LayerKind::Camera || !layer.visible) continue;
+        // The topmost visible camera whose span holds the frame
+        // (CompositionAsset::ActiveCameraLayer).
+        if (layer.kind != composition::LayerKind::Camera || !layer.visible
+            || !composition::layerSpanCovers(layer, frame, composition->framesPerSecond()))
+            continue;
         // The lens by its zoom against the shot's own frame.
         const QSizeF shot = composition->displaySize().isEmpty() ? QSizeF(canvas) : QSizeF(composition->displaySize());
         const double zoom = layer.camera.zoomAt(frame) > 0.0
@@ -30,13 +35,10 @@ model3d::Camera sceneCameraOf(const composition::Composition* composition, const
         camera.fieldOfViewDegrees = composition::CameraSettings::verticalFieldOfView(zoom, shot.height());
         camera.nearPlane = qMax(0.001, layer.camera.nearClip);
         camera.farPlane = qMax(camera.nearPlane + 1.0, layer.camera.farClip);
-        const composition::LayerTransform& t = layer.transform;
-        const QPointF position = t.positionAt(frame);
-        camera.position = QVector3D(float(position.x()), float(position.y()),
-                                    float(t.positionZAt(frame)));
+        camera.position = layerPositionAt(composition, layer, frame);
         // The camera looks down its own -Z, so its turn aims that axis and
         // the target follows from where it ends up pointing.
-        const QMatrix4x4 aim = layerRotationAt(t, frame);
+        const QMatrix4x4 aim = layerTurnAt(composition, layer, frame);
         const QVector3D forward = aim.map(QVector3D(0.0f, 0.0f, -1.0f));
         camera.target = camera.position + forward;
         camera.up = aim.map(QVector3D(0.0f, 1.0f, 0.0f));
@@ -50,14 +52,16 @@ QVector<model3d::Light> sceneLightsOf(const composition::Composition* compositio
     QVector<model3d::Light> lights;
     if (!composition) return lights;
     for (const composition::Layer& layer : composition->layers()) {
-        if (layer.kind != composition::LayerKind::Light || !layer.visible) continue;
-        const composition::LayerTransform& t = layer.transform;
+        // A light lights only within its span (Flux gathers it in its layer
+        // loop, which skips a layer outside StartFrame .. EndFrame).
+        if (layer.kind != composition::LayerKind::Light || !layer.visible
+            || !composition::layerSpanCovers(layer, frame, composition->framesPerSecond()))
+            continue;
         const composition::LightSettings& settings = layer.light;
         model3d::Light light;
         light.type = model3d::Light::Type(int(settings.type));
-        const QPointF position = t.positionAt(frame);
-        light.position = QVector3D(float(position.x()), float(position.y()), float(t.positionZAt(frame)));
-        light.direction = layerRotationAt(t, frame).mapVector(QVector3D(0.0f, 0.0f, -1.0f)).normalized();
+        light.position = layerPositionAt(composition, layer, frame);
+        light.direction = layerTurnAt(composition, layer, frame).mapVector(QVector3D(0.0f, 0.0f, -1.0f)).normalized();
         light.color = settings.colorAt(frame);
         light.intensity = model3d::Light::intensityOf(settings.intensityAt(frame));
         light.falloff = model3d::Light::Falloff(int(settings.falloff));
@@ -173,14 +177,73 @@ ViewCameraState pannedView(ViewType type, ViewCameraState state, const QPointF& 
     return state;
 }
 
-ViewCameraState orbitedView(ViewType type, ViewCameraState state, const QPointF& pixels)
+namespace {
+
+// The view's rotation (X, Y, Z radians, Z applied first) of an aim.
+QVector3D viewRotationOf(const QMatrix4x4& aim)
+{
+    // aim = Rx(a) * Ry(b) * Rz(c): its (0, 2) is sin b, (1, 2) -sin a cos b,
+    // (2, 2) cos a cos b, (0, 1) -cos b sin c and (0, 0) cos b cos c.
+    const float b = std::asin(qBound(-1.0f, aim(0, 2), 1.0f));
+    const float a = std::atan2(-aim(1, 2), aim(2, 2));
+    const float c = std::atan2(-aim(0, 1), aim(0, 0));
+    return QVector3D(a, b, c);
+}
+
+} // namespace
+
+ViewCameraState orbitedView(ViewType type, ViewCameraState state, const QPointF& pixels, const QVector3D& pivot)
 {
     if (type != ViewType::Perspective) return state;
-    const float distance = state.position.length();
     constexpr float kRadiansPerPixel = 0.0052359878f;   // 0.3 degrees, as the reference orbits
-    state.rotation.setY(state.rotation.y() - float(pixels.x()) * kRadiansPerPixel);
-    state.rotation.setX(qBound(-1.55f, state.rotation.x() - float(pixels.y()) * kRadiansPerPixel, 1.55f));
-    state.position = viewCameraAim(state).map(QVector3D(0.0f, 0.0f, distance));
+    const QVector3D offset = state.position - pivot;
+    if (offset.length() < 1e-4f) return state;
+    const QVector3D up(0.0f, 1.0f, 0.0f);
+    QMatrix4x4 turn;
+    turn.rotate(qRadiansToDegrees(-float(pixels.x()) * kRadiansPerPixel), up);
+    // Up and down about the level axis beside the camera, unless that would
+    // carry it over the top (FluxCamera::OrbitCamera keeps it from crossing).
+    const QVector3D side = QVector3D::crossProduct(up, offset);
+    if (side.length() > 1e-4f) {
+        QMatrix4x4 tilt;
+        tilt.rotate(qRadiansToDegrees(-float(pixels.y()) * kRadiansPerPixel), side.normalized());
+        const QVector3D tilted = (turn * tilt).mapVector(offset).normalized();
+        if (std::abs(QVector3D::dotProduct(tilted, up)) < 0.9999f) turn *= tilt;
+    }
+    state.position = pivot + turn.mapVector(offset);
+    state.rotation = viewRotationOf(turn * viewCameraAim(state));
+    return state;
+}
+
+ViewCameraState dolliedView(ViewType type, ViewCameraState state, const QPointF& pixels)
+{
+    if (type == ViewType::Perspective) {
+        // PerspectiveCameraController slot 12: along its heading, minus the drag.
+        state.position += viewCameraAim(state).map(QVector3D(0.0f, 0.0f, -1.0f)) * float(-pixels.y());
+        return state;
+    }
+    // OrthoCameraController slot 12 is its drag zoom.
+    return dragZoomedView(type, state, pixels);
+}
+
+ViewCameraState turnedView(ViewType type, ViewCameraState state, const QPointF& pixels)
+{
+    if (type != ViewType::Perspective) return state;
+    // PerspectiveCameraController slot 14 (FUN_1409186e0): the turn at the
+    // press times Rx(dy * 0.1 degrees) * Ry(dx * 0.1 degrees).
+    QMatrix4x4 aim = viewCameraAim(state);
+    aim.rotate(float(pixels.y() * 0.1), 1.0f, 0.0f, 0.0f);
+    aim.rotate(float(pixels.x() * 0.1), 0.0f, 1.0f, 0.0f);
+    state.rotation = viewRotationOf(aim);
+    return state;
+}
+
+ViewCameraState dragZoomedView(ViewType type, ViewCameraState state, const QPointF& pixels)
+{
+    if (!viewHasOwnCamera(type)) return state;
+    const double before = state.scale > 0.0 ? state.scale : 1.0;
+    const double factor = type == ViewType::Perspective ? 1.0 + 0.001 * pixels.y() : 1.0 - 0.001 * pixels.y();
+    state.scale = qMax(0.0002, before * factor);
     return state;
 }
 
@@ -199,8 +262,10 @@ model3d::Camera viewCamera(ViewType type, const ViewCameraState& state,
     camera.target = state.position + aim.map(QVector3D(0.0f, 0.0f, -1.0f));
     camera.up = aim.map(QVector3D(0.0f, 1.0f, 0.0f));
     if (type == ViewType::Perspective) {
-        // The reference's perspective view camera: 60 degrees, 0.1 to 100000.
-        camera.fieldOfViewDegrees = 60.0;
+        // The reference's perspective view camera: 60 degrees, 0.1 to 100000;
+        // its zoom (a drag of the Zoom Camera mode) narrows it.
+        const double scale = state.scale > 0.0 ? state.scale : 1.0;
+        camera.fieldOfViewDegrees = qRadiansToDegrees(2.0 * std::atan(std::tan(qDegreesToRadians(30.0)) / scale));
         camera.nearPlane = 0.1;
         camera.farPlane = 100000.0;
     } else {
@@ -229,7 +294,408 @@ QMatrix4x4 layerRotationAt(const composition::LayerTransform& t, int frame)
     return turn;
 }
 
+QMatrix4x4 aimAlong(const QVector3D& direction)
+{
+    if (direction.length() < 1e-6f) return QMatrix4x4();
+    const QVector3D d = direction.normalized();
+    QVector3D up(0.0f, 1.0f, 0.0f);
+    if (QVector3D::crossProduct(d, up).length() < 1e-5f) up = QVector3D(-1.0f, 0.0f, 0.0f);
+    const QVector3D right = QVector3D::crossProduct(d, up).normalized();
+    const QVector3D upright = QVector3D::crossProduct(right, d).normalized();
+    QMatrix4x4 turn;
+    turn.setColumn(0, QVector4D(right, 0.0f));
+    turn.setColumn(1, QVector4D(upright, 0.0f));
+    turn.setColumn(2, QVector4D(-d, 0.0f));
+    return turn;
+}
+
+namespace {
+
+QVector3D positionOf(const composition::LayerTransform& t, int frame)
+{
+    const QPointF position = t.positionAt(frame);
+    return QVector3D(float(position.x()), float(position.y()), float(t.positionZAt(frame)));
+}
+
+// The shot's camera at `frame`: its first visible camera layer whose span
+// holds it, as sceneCameraOf takes.
+const composition::Layer* activeCameraOf(const composition::Composition* composition, int frame)
+{
+    if (!composition) return nullptr;
+    for (const composition::Layer& layer : composition->layers())
+        if (layer.kind == composition::LayerKind::Camera && layer.visible
+            && composition::layerSpanCovers(layer, frame, composition->framesPerSecond()))
+            return &layer;
+    return nullptr;
+}
+
+const composition::Layer* parentLayerOf(const composition::Composition* composition, const composition::Layer& layer)
+{
+    if (!composition || !layer.parentLayerId.isValid()) return nullptr;
+    for (const composition::Layer& candidate : composition->layers())
+        if (candidate.id == layer.parentLayerId && candidate.id != layer.id) return &candidate;
+    return nullptr;
+}
+
+bool inSpace(const composition::Layer& layer)
+{
+    using composition::LayerKind;
+    return layer.dimension == composition::LayerDimension::ThreeD || layer.kind == LayerKind::Camera
+           || layer.kind == LayerKind::Light || layer.kind == LayerKind::Model3D;
+}
+
+QMatrix4x4 parentMatrixAt(const composition::Composition* composition, const composition::Layer& layer, int frame,
+                          int depth);
+
+// What the layer's children are put under (ParentingWorldTransformationAtTime).
+QMatrix4x4 parentingMatrixAt(const composition::Composition* composition, const composition::Layer& layer, int frame,
+                             int depth)
+{
+    using composition::LayerKind;
+    const composition::LayerTransform& t = layer.transform;
+    QMatrix4x4 own;
+    own.translate(positionOf(t, frame));
+    const bool sceneObject = layer.kind == LayerKind::Camera || layer.kind == LayerKind::Light
+                             || layer.kind == LayerKind::Point;
+    if (sceneObject && layer.autoOrient == composition::AutoOrient::TowardsTargetPosition) {
+        QVector3D direction = QVector3D(float(t.targetAt(frame, 0)), float(t.targetAt(frame, 1)),
+                                        float(t.targetAt(frame, 2))) - positionOf(t, frame);
+        if (direction.length() >= 1e-5f) {
+            if (layer.kind == LayerKind::Point) direction = -direction;
+            own *= aimAlong(direction);
+        }
+    }
+    own *= layerRotationAt(t, frame);
+    if (layer.kind != LayerKind::Camera && layer.kind != LayerKind::Light) {
+        const QPointF scale = t.scaleAt(frame);
+        own.scale(float(scale.x() / 100.0), float(scale.y() / 100.0),
+                  inSpace(layer) ? float(t.scaleZAt(frame) / 100.0) : 1.0f);
+    }
+    if (layer.kind == LayerKind::Media || layer.kind == LayerKind::Plane)
+        own.translate(-float(t.anchorPoint.x()), -float(t.anchorPoint.y()), -float(t.anchorPointZ));
+    // Its own Behaviors between its parent and its own placement, as for
+    // itself (ParentTransformationAtTime). A Behavior asks for its layer's
+    // parent in turn, so a parenting loop is cut off here too.
+    // A simulated parent carries its children with its body: its world is
+    // the body's (ParentingWorldTransformationAtTime runs PreAlignToMotion
+    // with the simulation the child's world asks for).
+    QMatrix4x4 behaviors, simulation;
+    static thread_local int behaviorDepth = 0;
+    if (composition && behaviorDepth < 32) {
+        ++behaviorDepth;
+        behaviors = layerOwnBehaviorMatrixAt(*composition, nullptr, layer, frame,
+                                             simulationSuppressed() > 0 ? nullptr : &simulation);
+        --behaviorDepth;
+    }
+    return simulation * parentMatrixAt(composition, layer, frame, depth + 1) * behaviors * own;
+}
+
+QMatrix4x4 parentMatrixAt(const composition::Composition* composition, const composition::Layer& layer, int frame,
+                          int depth)
+{
+    using composition::LayerKind;
+    if (depth > 32) return QMatrix4x4();   // a loop
+    const composition::Layer* parent = parentLayerOf(composition, layer);
+    if (!parent) return QMatrix4x4();
+    const bool flat = !inSpace(layer)
+                      && (layer.kind == LayerKind::Media || layer.kind == LayerKind::Plane
+                          || layer.kind == LayerKind::Text || layer.kind == LayerKind::Grade
+                          || layer.kind == LayerKind::Point);
+    if (flat && inSpace(*parent)) {
+        // Only where the parent's origin shows on the frame (the camera's
+        // own parents not seen through it again).
+        static thread_local int projecting = 0;
+        if (projecting > 0) return QMatrix4x4();
+        const QVector3D origin = parentingMatrixAt(composition, *parent, frame, depth).map(QVector3D());
+        const QSize canvas = composition->displaySize();
+        if (canvas.isEmpty()) return QMatrix4x4();
+        ++projecting;
+        const QVector4D clip = sceneCameraOf(composition, canvas, frame).viewProjection(canvas)
+                               * QVector4D(origin, 1.0f);
+        --projecting;
+        if (clip.w() <= 1e-6f) return QMatrix4x4();
+        const double x = (double(clip.x()) / clip.w() * 0.5 + 0.5) * canvas.width();
+        const double y = (1.0 - (double(clip.y()) / clip.w() * 0.5 + 0.5)) * canvas.height();
+        QMatrix4x4 move;
+        move.translate(float(x - canvas.width() / 2.0), float(canvas.height() / 2.0 - y), 0.0f);
+        return move;
+    }
+    return parentingMatrixAt(composition, *parent, frame, depth);
+}
+
+} // namespace
+
+int& simulationSuppressed()
+{
+    static thread_local int suppressed = 0;
+    return suppressed;
+}
+
+double& behaviorFrameShift()
+{
+    static thread_local double shift = 0.0;
+    return shift;
+}
+
+QMatrix4x4 layerWorldWithoutSimulationAt(const composition::Composition* composition,
+                                         const composition::Layer& layer, int frame)
+{
+    ++simulationSuppressed();
+    const QMatrix4x4 world = parentingMatrixAt(composition, layer, frame, 0);
+    --simulationSuppressed();
+    return world;
+}
+
+QMatrix4x4 layerParentMatrixAt(const composition::Composition* composition, const composition::Layer& layer,
+                               int frame)
+{
+    // A body's world is its body, made from its world without any
+    // simulation: its parents' bodies do not carry it again.
+    if (simulationSuppressed() == 0 && layerIsSimulatedBody(layer)) {
+        ++simulationSuppressed();
+        const QMatrix4x4 parent = parentMatrixAt(composition, layer, frame, 0);
+        --simulationSuppressed();
+        return parent;
+    }
+    return parentMatrixAt(composition, layer, frame, 0);
+}
+
+QVector3D layerPositionAt(const composition::Composition* composition, const composition::Layer& layer, int frame)
+{
+    return layerParentMatrixAt(composition, layer, frame).map(positionOf(layer.transform, frame));
+}
+
+QMatrix4x4 turnOf(const QMatrix4x4& matrix)
+{
+    QVector3D x = matrix.column(0).toVector3D(), y = matrix.column(1).toVector3D();
+    if (x.isNull() || y.isNull()) return QMatrix4x4();
+    x.normalize();
+    y = (y - x * QVector3D::dotProduct(x, y)).normalized();
+    if (y.isNull()) return QMatrix4x4();
+    QMatrix4x4 turn;
+    turn.setColumn(0, QVector4D(x, 0.0f));
+    turn.setColumn(1, QVector4D(y, 0.0f));
+    turn.setColumn(2, QVector4D(QVector3D::crossProduct(x, y), 0.0f));
+    return turn;
+}
+
+QTransform layerCanvasParentAt(const composition::Composition* composition, const composition::Layer& layer,
+                               int frame, const QSizeF& space)
+{
+    const QMatrix4x4 parent = layerParentMatrixAt(composition, layer, frame);
+    if (parent.isIdentity()) return QTransform();
+    // From the canvas to the centred, Y-up plane, through the parent, back.
+    const double a = parent(0, 0), b = parent(0, 1), tx = parent(0, 3);
+    const double c = parent(1, 0), d = parent(1, 1), ty = parent(1, 3);
+    const double w = space.width() / 2.0, h = space.height() / 2.0;
+    return QTransform(a, -c, -b, d, w - a * w + b * h + tx, h + c * w - d * h - ty);
+}
+
+QMatrix4x4 layerModelPlacementAt(const composition::Composition* composition, const composition::Layer& layer,
+                                 int frame)
+{
+    return layerParentMatrixAt(composition, layer, frame) * layerModelMatrixAt(layer.transform, frame);
+}
+
+QMatrix4x4 turnFromTo(const QVector3D& from, const QVector3D& to, const QVector3D& fallbackAxis)
+{
+    QMatrix4x4 turn;
+    if (from.isNull() || to.isNull()) return turn;
+    const QVector3D a = from.normalized(), b = to.normalized();
+    const double angle = std::acos(qBound(-1.0, double(QVector3D::dotProduct(a, b)), 1.0));
+    if (angle == 0.0) return turn;
+    QVector3D axis = QVector3D::crossProduct(a, b);
+    if (axis.length() <= 1e-5f) {
+        // Opposite: half a turn about the fallback axis; merely the same: none.
+        if (QVector3D::dotProduct(a, b) > 0.0f || fallbackAxis.isNull()) return turn;
+        axis = fallbackAxis;
+    }
+    turn.rotate(float(qRadiansToDegrees(angle)), axis.normalized());
+    return turn;
+}
+
+namespace {
+
+const composition::Layer* alignmentLayerOf(const composition::Composition* composition,
+                                           const composition::Layer& layer)
+{
+    if (!composition || !layer.autoOrientLayer.isValid()) return nullptr;
+    for (const composition::Layer& candidate : composition->layers())
+        if (candidate.id == layer.autoOrientLayer && &candidate != &layer) return &candidate;
+    return nullptr;
+}
+
+// The axis Along Motion Path turns (X, Y or the layer's -Z) and the one it
+// turns half about when the motion runs straight against it.
+void motionAxes(int axis, QVector3D* turned, QVector3D* fallback)
+{
+    if (axis == 3) {
+        *turned = QVector3D(0.0f, 0.0f, -1.0f);
+        *fallback = QVector3D(1.0f, 0.0f, 0.0f);
+    } else {
+        *turned = axis == 2 ? QVector3D(0.0f, 1.0f, 0.0f) : QVector3D(1.0f, 0.0f, 0.0f);
+        *fallback = QVector3D(0.0f, 0.0f, -1.0f);
+    }
+}
+
+bool isPicture(const composition::Layer& layer)
+{
+    return layer.kind == composition::LayerKind::Media || layer.kind == composition::LayerKind::Plane
+           || layer.kind == composition::LayerKind::Text;
+}
+
+// The other layer's turn as AlignToTarget reads it
+// (WorldTransformationAtTimePreAlignToMotion): its own, a camera's, a
+// light's or a point's aimed at its Target - not its alignment along its
+// motion or towards a layer, nor a picture's to the camera, which Flux adds
+// when it draws.
+QMatrix4x4 otherTurnOf(const composition::Composition* composition, const composition::Layer& other, int frame)
+{
+    if (other.autoOrient == composition::AutoOrient::TowardsTargetPosition)
+        return layerTurnAt(composition, other, frame);
+    return turnOf(layerParentMatrixAt(composition, other, frame)) * layerRotationAt(other.transform, frame);
+}
+
+// AlignToTarget's second turn, once the layer faces along `way`: about that
+// way, the shortest one bringing the layer's up - its Y, or its -Z where Y
+// lies along the way - seen across the way, to the other layer's
+// (`other`) seen the same way; half a turn about the way when they are
+// opposite.
+QMatrix4x4 upTurn(const QMatrix4x4& turned, const QVector3D& way, const QMatrix4x4& other)
+{
+    const QVector3D d = way.normalized();
+    const auto across = [&](const QMatrix4x4& turn) {
+        QVector3D up = turn.mapVector(QVector3D(0.0f, 1.0f, 0.0f));
+        if (QVector3D::crossProduct(d, up).length() < 1e-5f) up = turn.mapVector(QVector3D(0.0f, 0.0f, -1.0f));
+        return QVector3D::crossProduct(d, QVector3D::crossProduct(d, up)).normalized();
+    };
+    const QVector3D own = across(turned), theirs = across(other);
+    if (own.isNull() || theirs.isNull()) return QMatrix4x4();
+    return turnFromTo(own, theirs, d);
+}
+
+} // namespace
+
+QMatrix4x4 layerTurnAt(const composition::Composition* composition, const composition::Layer& layer, int frame)
+{
+    using composition::AutoOrient;
+    using composition::LayerKind;
+    const composition::LayerTransform& t = layer.transform;
+    // Its parent's turn, then its own.
+    const QMatrix4x4 parentTurn = turnOf(layerParentMatrixAt(composition, layer, frame));
+    const QMatrix4x4 own = parentTurn * layerRotationAt(t, frame);
+    const bool sceneObject = layer.kind == LayerKind::Camera || layer.kind == LayerKind::Light
+                             || layer.kind == LayerKind::Point;
+    if (sceneObject && layer.autoOrient == AutoOrient::TowardsTargetPosition) {
+        const QVector3D to(float(t.targetAt(frame, 0)), float(t.targetAt(frame, 1)), float(t.targetAt(frame, 2)));
+        QVector3D direction = to - positionOf(t, frame);
+        // Where it stands on its target it keeps its own turn.
+        if (direction.length() < 1e-5f) return own;
+        if (layer.kind == LayerKind::Point) direction = -direction;
+        return parentTurn * aimAlong(direction) * layerRotationAt(t, frame);
+    }
+    if (!sceneObject && !(isPicture(layer) && layer.dimension == composition::LayerDimension::ThreeD)) return own;
+    if (layer.autoOrient == AutoOrient::TowardsActiveCamera && isPicture(layer)) {
+        const composition::Layer* camera = activeCameraOf(composition, frame);
+        return camera ? layerTurnAt(composition, *camera, frame) : QMatrix4x4();
+    }
+    if (layer.autoOrient == AutoOrient::AlongMotionPath) {
+        // TransformationHelper::AlignToMotion: the chosen axis turned, the
+        // shortest way, along where the layer goes next.
+        QVector3D axis, fallback;
+        motionAxes(layer.autoOrientAxis, &axis, &fallback);
+        const QVector3D motion = layerPositionAt(composition, layer, frame + 1) - layerPositionAt(composition, layer, frame);
+        if (motion.length() < 1e-5f) return own;
+        return turnFromTo(own.mapVector(axis), motion, own.mapVector(fallback)) * own;
+    }
+    if (layer.autoOrient == AutoOrient::TowardsLayer) {
+        // TransformationHelper::AlignToTarget: the side the layer faces with
+        // (a camera's and a light's -Z, a picture's and a point's +Z) turned
+        // the shortest way to that layer.
+        const composition::Layer* other = alignmentLayerOf(composition, layer);
+        if (!other) return own;
+        const QVector3D direction = layerPositionAt(composition, *other, frame) - layerPositionAt(composition, layer, frame);
+        if (direction.length() < 1e-5f) return own;
+        const bool backwards = layer.kind == LayerKind::Camera || layer.kind == LayerKind::Light;
+        const QVector3D facing(0.0f, 0.0f, backwards ? -1.0f : 1.0f);
+        const QMatrix4x4 faced =
+            turnFromTo(own.mapVector(facing), direction, own.mapVector(QVector3D(1.0f, 0.0f, 0.0f))) * own;
+        // Then its up brought to the other layer's.
+        return upTurn(faced, direction, otherTurnOf(composition, *other, frame)) * faced;
+    }
+    return own;
+}
+
+QMatrix4x4 layerSheetMatrixAt(const composition::Composition* composition, const composition::Layer& layer,
+                              int frame, const media::MediaManager* media)
+{
+    using composition::AutoOrient;
+    const composition::LayerTransform& t = layer.transform;
+    const QMatrix4x4 parent = layerParentMatrixAt(composition, layer, frame);
+    // A simulated body's move comes before all of it: it takes the place of
+    // the world the parent, the Behaviors and the sheet make (FUN_18036c010),
+    // and before AlignToTarget turns it.
+    const auto behaviorsAt = [&](int at, QMatrix4x4* simulation) {
+        return composition ? layerBehaviorMatrixAt(*composition, media, layer, at, simulation) : QMatrix4x4();
+    };
+    QMatrix4x4 simulation;
+    const QMatrix4x4 behaviors = behaviorsAt(frame, &simulation);
+    if (layer.autoOrient != AutoOrient::AlongMotionPath && layer.autoOrient != AutoOrient::TowardsLayer) {
+        // Its turn in the scene, made its own under its parent's.
+        const QMatrix4x4 local = turnOf(parent).transposed() * layerTurnAt(composition, layer, frame);
+        return simulation * parent * behaviors * layerPlaneMatrixAt(t, frame, local);
+    }
+    // Turned about the sheet's own centre, after it is placed (AlignToMotion
+    // and AlignToTarget turn the layer's world transform about its point).
+    const QMatrix4x4 placed = simulation * parent * behaviors * layerPlaneMatrixAt(t, frame);
+    const QVector3D centre = placed.map(QVector3D());
+    QMatrix4x4 turn;
+    if (layer.autoOrient == AutoOrient::AlongMotionPath) {
+        QVector3D axis, fallback;
+        motionAxes(layer.autoOrientAxis, &axis, &fallback);
+        QMatrix4x4 nextSimulation;
+        const QMatrix4x4 nextBehaviors = behaviorsAt(frame + 1, &nextSimulation);
+        const QVector3D motion =
+            (nextSimulation * layerParentMatrixAt(composition, layer, frame + 1) * nextBehaviors
+             * layerPlaneMatrixAt(t, frame + 1)).map(QVector3D())
+            - centre;
+        if (motion.length() < 1e-5f) return placed;
+        turn = turnFromTo(placed.mapVector(axis), motion, placed.mapVector(fallback));
+    } else {
+        const composition::Layer* other = alignmentLayerOf(composition, layer);
+        if (!other) return placed;
+        const QVector3D direction = layerPositionAt(composition, *other, frame) - centre;
+        if (direction.length() < 1e-5f) return placed;
+        turn = turnFromTo(placed.mapVector(QVector3D(0.0f, 0.0f, 1.0f)), direction,
+                          placed.mapVector(QVector3D(1.0f, 0.0f, 0.0f)));
+        turn = upTurn(turn * placed, direction, otherTurnOf(composition, *other, frame)) * turn;
+    }
+    QMatrix4x4 about;
+    about.translate(centre);
+    about *= turn;
+    about.translate(-centre);
+    return about * placed;
+}
+
+double layerAngleAt(const composition::Layer& layer, int frame)
+{
+    const composition::LayerTransform& t = layer.transform;
+    if (layer.dimension != composition::LayerDimension::TwoD || layer.autoOrient != composition::AutoOrient::AlongMotionPath)
+        return t.rotationAt(frame);
+    // Along Motion Path in the plane: its X (or Y) along where it goes next,
+    // whatever its own Rotation.
+    const QPointF motion = t.positionAt(frame + 1) - t.positionAt(frame);
+    if (std::hypot(motion.x(), motion.y()) < 1e-5) return t.rotationAt(frame);
+    return layer.autoOrientAxis == 2 ? qRadiansToDegrees(std::atan2(motion.x(), motion.y()))
+                                     : -qRadiansToDegrees(std::atan2(motion.y(), motion.x()));
+}
+
 QMatrix4x4 layerPlaneMatrixAt(const composition::LayerTransform& t, int frame)
+{
+    return layerPlaneMatrixAt(t, frame, layerRotationAt(t, frame));
+}
+
+QMatrix4x4 layerPlaneMatrixAt(const composition::LayerTransform& t, int frame, const QMatrix4x4& turn)
 {
     // Placement on the layer's plane, as the 2D path places the layer: about
     // the anchor for the turns, about the centre for the scale.
@@ -238,13 +704,18 @@ QMatrix4x4 layerPlaneMatrixAt(const composition::LayerTransform& t, int frame)
     QMatrix4x4 model;
     model.translate(float(position.x()), float(position.y()), float(t.positionZAt(frame)));
     model.translate(float(t.anchorPoint.x()), float(t.anchorPoint.y()), float(t.anchorPointZ));
-    model *= layerRotationAt(t, frame);
+    model *= turn;
     model.translate(float(-t.anchorPoint.x()), float(-t.anchorPoint.y()), float(-t.anchorPointZ));
     model.scale(float(scale.x() / 100.0), float(scale.y() / 100.0), float(t.scaleZAt(frame) / 100.0));
     return model;
 }
 
 QMatrix4x4 layerModelMatrixAt(const composition::LayerTransform& transform, int frame)
+{
+    return layerModelMatrixAt(transform, frame, layerRotationAt(transform, frame));
+}
+
+QMatrix4x4 layerModelMatrixAt(const composition::LayerTransform& transform, int frame, const QMatrix4x4& turn)
 {
     // Order matters and follows the reference: the layer is placed, then aimed
     // by its orientation, then spun about its own three axes, then scaled, and
@@ -255,7 +726,7 @@ QMatrix4x4 layerModelMatrixAt(const composition::LayerTransform& transform, int 
     QMatrix4x4 matrix;
     matrix.translate(float(position.x()), float(position.y()),
                      float(transform.positionZAt(frame)));
-    matrix *= layerRotationAt(transform, frame);
+    matrix *= turn;
     matrix.scale(float(scale.x() / 100.0), float(scale.y() / 100.0),
                  float(transform.scaleZAt(frame) / 100.0));
     matrix.translate(float(-transform.anchorPoint.x()), float(-transform.anchorPoint.y()),
@@ -428,6 +899,71 @@ QPolygonF corners(const QRectF& rect)
 
 } // namespace
 
+std::optional<QVector3D> sceneRayHit(const composition::Composition& composition, const media::MediaManager* media,
+                                     int frame, const QVector3D& origin, const QVector3D& direction)
+{
+    const QVector3D ray = direction.normalized();
+    if (ray.isNull()) return std::nullopt;
+    float nearest = std::numeric_limits<float>::infinity();
+    // Moller-Trumbore, both faces.
+    const auto triangle = [&](const QVector3D& a, const QVector3D& b, const QVector3D& c) {
+        const QVector3D ab = b - a, ac = c - a;
+        const QVector3D p = QVector3D::crossProduct(ray, ac);
+        const float det = QVector3D::dotProduct(ab, p);
+        if (std::abs(det) < 1e-9f) return;
+        const QVector3D s = origin - a;
+        const float u = QVector3D::dotProduct(s, p) / det;
+        if (u < 0.0f || u > 1.0f) return;
+        const QVector3D q = QVector3D::crossProduct(s, ab);
+        const float v = QVector3D::dotProduct(ray, q) / det;
+        if (v < 0.0f || u + v > 1.0f) return;
+        const float t = QVector3D::dotProduct(ac, q) / det;
+        if (t > 1e-4f && t < nearest) nearest = t;
+    };
+    using composition::LayerKind;
+    for (const composition::Layer& layer : composition.layers()) {
+        if (!layer.visible) continue;
+        if (layer.kind == LayerKind::Model3D) {
+            if (!media || !layer.modelAssetId.isValid()) continue;
+            const model3d::Mesh mesh = media->modelMesh(layer.modelAssetId);
+            if (mesh.isEmpty()) continue;
+            const double fps = composition.fpsDenominator() > 0
+                ? double(composition.fpsNumerator()) / composition.fpsDenominator() : 30.0;
+            const model3d::Mesh posed = posedModelMesh(layer, mesh, frame, fps,
+                                                       media->assetById(layer.modelAssetId).sourcePath());
+            const QMatrix4x4 place = layerModelPlacementAt(&composition, layer, frame);
+            for (const model3d::Triangle& t : posed.triangles)
+                triangle(place.map(posed.positions.at(t.position[0])), place.map(posed.positions.at(t.position[1])),
+                         place.map(posed.positions.at(t.position[2])));
+            continue;
+        }
+        if (layer.dimension != composition::LayerDimension::ThreeD
+            || (layer.kind != LayerKind::Media && layer.kind != LayerKind::Plane && layer.kind != LayerKind::Text))
+            continue;
+        // The content's box in the sheet's own units (as the layer has it
+        // flat, whatever the camera sees of it).
+        composition::Layer flat = layer;
+        flat.dimension = composition::LayerDimension::TwoD;
+        const QRectF box = layerGeometry(composition, flat, media, frame).local;
+        if (box.isEmpty()) continue;
+        const QMatrix4x4 sheet = layerSheetMatrixAt(&composition, layer, frame, media);
+        bool invertible = false;
+        const QMatrix4x4 local = sheet.inverted(&invertible);
+        if (!invertible) continue;
+        const QVector3D centre = sheet.map(QVector3D(0.0f, 0.0f, 0.0f));
+        const QVector3D normal = QVector3D::crossProduct(sheet.mapVector(QVector3D(1.0f, 0.0f, 0.0f)),
+                                                         sheet.mapVector(QVector3D(0.0f, 1.0f, 0.0f)));
+        const float along = QVector3D::dotProduct(ray, normal);
+        if (std::abs(along) < 1e-9f) continue;
+        const float t = QVector3D::dotProduct(centre - origin, normal) / along;
+        if (t <= 1e-4f || t >= nearest) continue;
+        const QVector3D onSheet = local.map(origin + ray * t);
+        if (box.contains(QPointF(onSheet.x(), -onSheet.y()))) nearest = t;
+    }
+    if (!std::isfinite(nearest)) return std::nullopt;
+    return origin + ray * nearest;
+}
+
 LayerGeometry layerGeometry(const composition::Composition& composition,
                             const composition::Layer& layer, const media::MediaManager* media,
                             int frame)
@@ -457,7 +993,7 @@ LayerGeometry layerGeometry(const composition::Composition& composition,
         const model3d::Mesh posed = posedModelMesh(layer, mesh, frame, fps,
                                                    media->assetById(layer.modelAssetId).sourcePath());
         const model3d::Camera camera = sceneCameraOf(&composition, canvas, frame);
-        const QMatrix4x4 place = layerModelMatrixAt(layer.transform, frame);
+        const QMatrix4x4 place = layerModelPlacementAt(&composition, layer, frame);
         const QMatrix4x4 viewProjection = camera.viewProjection(canvas);
         const auto toCanvas = [&](const QVector3D& world, QPointF* point) {
             const QVector4D clipPos = viewProjection * QVector4D(world, 1.0f);
@@ -546,7 +1082,7 @@ LayerGeometry layerGeometry(const composition::Composition& composition,
         // renderClipIn3D draws it.
         geometry.inScene = true;
         const QMatrix4x4 mvp = sceneCameraOf(&composition, canvas, frame).viewProjection(canvas)
-                               * layerPlaneMatrixAt(t, frame);
+                               * layerSheetMatrixAt(&composition, layer, frame, media);
         for (const QPointF& corner : corners(geometry.local)) {
             const QVector4D clipPos = mvp * QVector4D(float(corner.x()), float(-corner.y()), 0.0f, 1.0f);
             if (clipPos.w() <= 1e-3f) return LayerGeometry();
@@ -564,7 +1100,7 @@ LayerGeometry layerGeometry(const composition::Composition& composition,
     const QPointF scale = t.scaleAt(frame);
     QTransform toCanvas;
     toCanvas.translate(width / 2.0 + position.x(), height / 2.0 - position.y());
-    const double angle = t.rotationAt(frame);
+    const double angle = layerAngleAt(layer, frame);
     if (anchored) {
         geometry.pivotOffset = QPointF(t.anchorPoint.x(), -t.anchorPoint.y());
         toCanvas.translate(t.anchorPoint.x(), -t.anchorPoint.y());
@@ -574,8 +1110,10 @@ LayerGeometry layerGeometry(const composition::Composition& composition,
         toCanvas.rotate(angle);
     }
     toCanvas.scale(scale.x() / 100.0, scale.y() / 100.0);
-    geometry.toCanvas = toCanvas;
-    geometry.quad = toCanvas.map(corners(geometry.local));
+    // Then where its parent puts it, and where its Behaviors take it.
+    geometry.toCanvas = toCanvas * layerCanvasParentAt(&composition, layer, frame, QSizeF(width, height))
+                        * layerBehaviorTransformAt(composition, media, layer, frame);
+    geometry.quad = geometry.toCanvas.map(corners(geometry.local));
     geometry.valid = true;
     return geometry;
 }
@@ -619,9 +1157,18 @@ bool fitLayerToBox(const composition::Composition& composition, const compositio
             }
         }
     } else {
+        // Under its parent the box turns with it too, and a move on the
+        // canvas is a move in the parent's units: its linear part undone.
+        const QSize display = composition.displaySize();
+        const QTransform parent = layerCanvasParentAt(&composition, layer, frame,
+                                                      QSizeF(display.width(), display.height()));
+        const QTransform parentLinear(parent.m11(), parent.m12(), parent.m21(), parent.m22(), 0.0, 0.0);
+        bool invertible = true;
+        const QTransform intoParent = parentLinear.inverted(&invertible);
+        const double parentAngle = qRadiansToDegrees(std::atan2(parent.m12(), parent.m11()));
         // A box turned by a quarter swaps its axes; any other angle scales
         // evenly by the area.
-        const double angle = std::fmod(std::abs(t.rotationAt(frame)), 180.0);
+        const double angle = std::fmod(std::abs(t.rotationAt(frame) + parentAngle), 180.0);
         if (angle < 0.01 || angle > 179.99) {
             newScale = QPointF(newScale.x() * rx, newScale.y() * ry);
         } else if (std::abs(angle - 90.0) < 0.01) {
@@ -641,7 +1188,7 @@ bool fitLayerToBox(const composition::Composition& composition, const compositio
         scaled.transform.position = newPosition;
         const LayerGeometry after = layerGeometry(composition, scaled, media, frame);
         if (after.valid) {
-            const QPointF shift = box.center() - after.bounds().center();
+            const QPointF shift = (invertible ? intoParent : QTransform()).map(box.center() - after.bounds().center());
             newPosition += QPointF(shift.x(), -shift.y());
         }
     }

@@ -3,6 +3,7 @@
 
 #include <QFileInfo>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QListWidget>
 #include <QToolButton>
@@ -29,6 +30,9 @@ StartPanel::StartPanel(QWidget* parent)
     connect(editScreen, &QToolButton::clicked,
             this, &StartPanel::editScreenRequested);
     QToolButton* newProject = form.toolButtonNew;
+    // The project file's icon (resources/icons/iconfile.svg) beside the label.
+    newProject->setIcon(QIcon(QStringLiteral(":/icons/project-file.svg")));
+    newProject->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     connect(newProject, &QToolButton::clicked, this, &StartPanel::newProjectRequested);
     QToolButton* openProject = form.toolButtonOpen;
     connect(openProject, &QToolButton::clicked, this, &StartPanel::openProjectRequested);

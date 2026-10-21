@@ -57,6 +57,9 @@ bool nativeEffectFrameRenderingVerified(const core::Identifier& id);
 bool isNativeModule(const core::Identifier& id);
 // A 2D effect whose render at a reduced preview's size (NativeFrameTime::
 // renderScale) matches its full render reduced; the others are drawn full.
+// Whether a reduced preview of the module comes out as its full picture
+// reduced, with the host reducing its px values and points; the others are
+// drawn reduced too, with their values as they are, as the reference does.
 bool nativeEffectRendersReduced(const core::Identifier& id);
 bool nativeGeometryRenderingVerified(const core::Identifier& id);
 bool nativeVideoTransitionRenderingVerified(const core::Identifier& id);
@@ -133,6 +136,9 @@ bool evaluateNativeBehavior(NativeBehaviorResult& result, int timelineFrame,
 // Frame-only 102/104 path used before the layer's simulation behaviors are
 // evaluated together. Calling the simulation modules separately would reset
 // velocity between Acceleration, Gravity and Drag.
+// `frameFraction` puts the module between frames (a motion blur sample):
+// its times are milliseconds (tagBiffBehaviorMC +0x08/+0x0c), as the
+// reference's ParentTransformationAtTime hands it the sub-frame's.
 bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame,
                                  int localFrame, int layerDurationFrames,
                                  int canvasWidth, int canvasHeight, double frameRate,
@@ -140,18 +146,57 @@ bool evaluateNativeBehaviorFrame(NativeBehaviorResult& result, int timelineFrame
                                  const QStringList& parameterValues = {},
                                  const composition::Composition* composition = nullptr,
                                  const core::Identifier& sourceLayerId = {},
-                                 const NativeBehaviorLayer& layer = {});
+                                 const NativeBehaviorLayer& layer = {},
+                                 double frameFraction = 0.0);
 bool evaluateNativeSubObjectBehavior(
     NativeSubObjectResult& result, int timelineFrame, int localFrame,
     int layerDurationFrames, int canvasWidth, int canvasHeight,
     double frameRate, const core::Identifier& id,
     const QStringList& parameterValues, const core::Identifier& sourceLayerId);
-bool simulateNativeBehaviorStack(NativeBehaviorResult& result, int timelineFrame,
-                                 int localFrame, int layerDurationFrames,
-                                 int canvasWidth, int canvasHeight, double frameRate,
-                                 const QVector<NativeBehaviorRequest>& behaviors,
-                                 const composition::Composition* composition = nullptr,
-                                 const core::Identifier& sourceLayerId = {});
+// What CompositionAsset::SimulateLayers runs over: the shot's layers by
+// index, each one's world without any simulation at a frame (from the
+// frame's centre, Y up, in the shot's units: PreAlignToMotion(..., false,
+// false)), the simulated Behaviors it has there (none: not a body), whether
+// it is within its range then, and where its range starts and ends.
+struct NativeSimulationScene
+{
+    int layerCount = 0;
+    std::function<QMatrix4x4(int layer, int frame)> worldAt;
+    std::function<QVector<NativeBehaviorRequest>(int layer, int frame)> behaviorsAt;
+    std::function<bool(int layer, int frame)> activeAt;
+    std::function<int(int layer)> startFrame;
+    std::function<int(int layer)> endFrame;
+    // Its parent's index, -1 for none (a body's forces reach the bodies
+    // under it: SimulateLayers' list by ParentLayer).
+    std::function<int(int layer)> parentOf;
+    // The layer records' +0x08 (a 2D layer: Dimensions() == 0) and
+    // +0x0c/+0x10 (footage's or a grade's size, a text box's).
+    std::function<bool(int layer)> flatAt;
+    std::function<QSize(int layer)> sizeOf;
+};
+
+// The bodies of a shot simulated so far (CompositionAsset's cache at
+// +0x228): from `first`, per frame and body, where the body is, its
+// velocity V and the point P its world without the simulation has.
+struct NativeSimulationTrack
+{
+    int first = 0;
+    QVector<int> bodies;
+    QVector<QVector<QVector3D>> positions, velocities, points;
+    QVector<QVector3D> animation;   // A at the last frame, to go on from
+    int last() const { return first + int(positions.size()) - 1; }
+    bool reaches(int frame) const { return !bodies.isEmpty() && frame <= last(); }
+};
+
+// Simulates every body of the shot together up to `toFrame`, going on from
+// what `track` holds (an empty one starts at the first body's start): per
+// frame the animation's velocity carried in (D = A - A'), the modules'
+// forces (Notify 103, each for its own body and the bodies under it)
+// added, damping on the whole velocity, V = k V' + D, body = body' + V dt.
+// False when the shot has no body.
+bool simulateNativeBehaviorScene(NativeSimulationTrack& track, int toFrame, int canvasWidth, int canvasHeight,
+                                 double frameRate, const NativeSimulationScene& scene,
+                                 const composition::Composition* composition);
 
 // Host geometry of the Geometry ABI (PluginGeometryEffect::ProcessGeometry,
 // Notify 101). Flux hands text to these modules as batches of 0x80-byte
@@ -244,6 +289,10 @@ struct NativeCustomUiView
     // the render context's millisecond fields.
     QString instanceKey;
     double frameRate = 30.0;
+    // GetEffectIndex (+0x3d8): where the effect sits among its layer's
+    // effects. AutomaticStabilizer analyses the footage itself only as the
+    // first one.
+    int effectIndex = 0;
     // The overlay drawn and the pointer positions given are in `target`
     // pixels (the canvas; empty = the area itself), and `matrix` takes the
     // layer's pixels there - so it is identity when the layer fills the
@@ -271,6 +320,42 @@ struct NativeCustomUiPointer
     int clicks = 0;
 };
 
+// tagBiffLayerTransform (20 bytes), what AutomaticStabilizer and MotionLock
+// hand CreatePointLayer and ApplyTransformToLayer: the time in milliseconds
+// from the start of the layer they work on, a position, a turn about Z in
+// degrees and a scale in percent - written as they are into "position",
+// "rotationZ" and "scale".
+struct NativeLayerTransform
+{
+    qint32 timeMs = 0;            // +0x00
+    float x = 0.0f;               // +0x04
+    float y = 0.0f;               // +0x08
+    float rotation = 0.0f;        // +0x0c
+    float scale = 100.0f;         // +0x10
+};
+
+// What a module asked of the project from its instance (Tannen
+// PluginHostAPI::CreatePointLayer +0x3a0, 0x180388b30, and
+// ApplyTransformToLayer +0x3a8, 0x180389210):
+//  - CreatePointLayer: a point layer called `name` over the source layer's
+//    frames, its "position"/"rotationZ"/"scale" static for one transform and
+//    keyed at each one's time otherwise (no shift: the layers start
+//    together); the new layer's ID goes back to the module at once
+//    (`targetLayerId`, strcpy_s into its 0x28 bytes).
+//  - ApplyTransformToLayer: the same properties of `targetLayerId`, keyed for
+//    more than one transform, each at its time plus StartTime(target) -
+//    StartTime(source) - the opposite of RelativeTimeToLayerRelativeTime's
+//    shift, as the reference has it.
+struct NativeLayerRequest
+{
+    enum class Kind { CreatePointLayer, ApplyTransform };
+    Kind kind = Kind::ApplyTransform;
+    QString sourceLayerId;
+    QString targetLayerId;
+    QString name;
+    QVector<NativeLayerTransform> transforms;
+};
+
 struct NativeCustomUiResult
 {
     bool handled = false;         // Notify returned 1
@@ -283,6 +368,11 @@ struct NativeCustomUiResult
     // (SetPropertyState +0xa8, byte 0), by key.
     QHash<int, QString> values;
     QHash<QString, bool> enabled;
+    // The project edits asked for, in order, and the name of the step the
+    // module made of them (BeginTransaction +0x1d8 ... EndTransaction +0x1e0:
+    // "Create Point Layer", "Transform Layer").
+    QVector<NativeLayerRequest> layerRequests;
+    QString transaction;
 };
 
 // Modules known to draw viewer custom UI (MotionTrack, BendGeometry).
@@ -365,17 +455,29 @@ struct NativeAssetInfo
     bool valid = false;
     int frameCount = -1;          // +0x00
     double frameRate = 0.0;       // +0x08
-    // +0x10: the footage frame the layer starts on (MotionTrack subtracts it
-    // from the layer offset); +0x14 is left zero.
+    // +0x10/+0x14: AssetLayer::AssetInstanceStart/AssetInstanceEnd - the
+    // footage frame the layer starts on (MotionTrack subtracts it from the
+    // layer offset) and the one its last frame shows, EndFrame - 1 +
+    // (AssetInstanceStart - StartFrame). Tannen's GetAssetInfo (0x18038ab80)
+    // gives no clip speed: the modules take footage frames one to one.
     int startFrame = 0;
+    int endFrame = 0;
     int type = 5;                 // +0x18: 0 video, 3 composite shot, 5 none
     QString key;                  // what the tracked features are stored under
+};
+// A layer of the shot as GetNumberOfLayers/GetLayerID (+0x360/+0x368) list
+// them for a call on an instance.
+struct NativeLayerEntry
+{
+    QString id;
+    QString name;
 };
 struct NativeSourceHost
 {
     std::function<NativeLayerInfo(const QString& layerId)> layerInfo;
     std::function<NativeAssetInfo(const QString& layerId)> assetInfo;
     std::function<QImage(const QString& layerId, int assetFrame)> assetFrame;
+    std::function<QVector<NativeLayerEntry>()> layers;
 };
 void setNativeSourceHost(NativeSourceHost host);
 
@@ -383,11 +485,31 @@ void setNativeSourceHost(NativeSourceHost host);
 // the renderer cannot run them, so the instance's matrices are computed on
 // the GUI thread for every frame of the layer and kept here by instance key.
 bool nativeBehaviorUsesInstance(const core::Identifier& id);
+// Modules that live on an instance of their own, analysing footage in the
+// background and taking the viewer's custom UI there: MotionTrack, and the
+// 2D effects AutomaticStabilizer and MotionLock.
+bool nativeEffectUsesInstance(const core::Identifier& id);
+// Of those, the 2D effects that analyse their own layer's footage. Their
+// analysis starts when the effect is put on a layer: Plugin2DEffect::
+// NotifySetParent (Tannen 0x1803398b0) sends Notify(7) for the key
+// "Effect_Parent_Layer" with the behaviour render context, and the module
+// works out whether its data still covers the layer. They draw the
+// stabilised frame themselves (Notify 10) from the instance's data, so the
+// renderer hands that data to its own instance first (NativeFrameTime).
+bool nativeEffectAnalysesOwnLayer(const core::Identifier& id);
+// The key NotifySetParent sends.
+inline constexpr char kNativeParentLayerKey[] = "Effect_Parent_Layer";
 // The registered module's parameters, in the order of its values.
 QVector<EffectParameterSpec> nativeParameters(const core::Identifier& id);
+// The registered module of that file name ("EnvironmentMapViewer"), or an
+// invalid id when there is none.
+core::Identifier nativeModuleNamed(const QString& baseName);
 void setNativeInstanceTransforms(const QString& instanceKey, int firstFrame,
                                  const QVector<std::array<float, 16>>& matrices);
 bool nativeInstanceTransformAt(const QString& instanceKey, int frame,
+                               std::array<float, 16>* matrix);
+// Between frames: the matrices either side, in between.
+bool nativeInstanceTransformAt(const QString& instanceKey, double frame,
                                std::array<float, 16>* matrix);
 void clearNativeInstanceTransforms(const QString& instanceKey = QString());
 
@@ -466,6 +588,33 @@ struct NativeFrameTime
     // NativeReducedValues flags for this render; -1 takes the module's own
     // (nativeEffectReducedValues).
     int reducedValues = -1;
+    // An effect that keeps its state on an instance (nativeEffectAnalyses-
+    // OwnLayer): the instance it is, its saved data - given to the render
+    // instance with Notify(6) whenever that instance last had other data -,
+    // the layer it is on (RenderContext +0x08) and that layer's footage as
+    // GetAssetInfo describes it.
+    QString instanceKey;
+    QByteArray instanceData;
+    QString layerId;
+    NativeAssetInfo layerAsset;
+    // What the module's layer pickers resolve to when they name another
+    // layer than its own (otherwise its source): the 360 viewer gives
+    // EnvironmentMapViewer the shot's equirectangular frame this way and has
+    // it draw into a frame of the viewport's size.
+    QImage layerImage;
+    // The effect's value of a parameter (by index) at a shot frame between
+    // frames. A module with Motion Blur on (motionBlurMode not Off) reads its
+    // values again at its sub-samples' times - EnvironmentMapViewer at the
+    // layer's milliseconds -250..+125 around the frame for Scale 0.5 - and
+    // gets them from here, so a keyframed turn blurs.
+    std::function<QString(int index, double frame)> valueAt;
+    // A video transition's window: its length and its edit point in it
+    // (0..1; -1 the middle). PluginVideoTransition::Render gives the module
+    // its position, start, edit point and end in milliseconds and the side
+    // it draws (RenderContext +0x08: 2 the outgoing clip before the edit
+    // point, 1 the incoming one after it).
+    double transitionSeconds = 1.0;
+    float transitionCut = -1.0f;
 };
 
 // Executes the 2D BIFF GPU path (Notify 8 once per render thread, Notify 10 per
@@ -480,7 +629,8 @@ bool applyNativeEffectToImage(QImage& image, const core::Identifier& id,
 // RenderContext recovered from PluginVideoTransition::Render.
 bool applyNativeVideoTransition(QImage& output, const QImage& from, const QImage& to,
                                 float progress, const core::Identifier& id,
-                                const QStringList& parameterValues = {});
+                                const QStringList& parameterValues = {},
+                                const NativeFrameTime& time = {});
 
 // Timing of the layer that owns an audio effect, reported through
 // GetLayerInfoV2/GetTimelineInfo. Modules such as AudioReverse derive their
@@ -509,6 +659,11 @@ bool applyNativeAudioEffect(QVector<qint16>& interleavedSamples, int channels,
                             const QVector<qint16>* sourceSamples = nullptr,
                             qint64 sourceStartSample = 0,
                             const NativeAudioLayer& layer = {});
+// Whether the last applyNativeAudioEffect on this thread was asked (by
+// GetSampleRanges) for dry frames of its layer after the ones it was given:
+// the future of a block in playback, a whole-layer request such as
+// AudioReverse's. Those frames were silence; the offline path has them all.
+bool nativeAudioWantedLaterSamples();
 // Offline variant: splits a long buffer into blockFrames-sized renders on one
 // persistent instance, asks parameterValuesAt for the values at each block's
 // first frame offset and keeps the whole unprocessed buffer visible as the

@@ -168,6 +168,63 @@ keys saved - a colour's as whole `<cl>`s under `Type="0"` - and read back.
 `billboardedLightsAndHiddenCasters` lights a sheet from a grazing light with and without Billboarded
 Lights (dim, then the whole diffuse and specular) and checks that a hidden card casts its shadow only
 with Cast Shadows If Visibility Is Off and is still not drawn (`shadow-hidden-caster.png`).
+`ambientOcclusionDarkensWhereSurfacesMeet` checks Flux's SSAO over a G-buffer (a flat surface open, a
+floor beside a raised block darkened along it and open further off, the block's top open, nothing with
+Intensity 0 or too little weight), the G-buffer `renderMesh` notes (the nearer of two meshes, its
+normal turned to the eye), a shot where a floor that receives occlusion darkens round a card in front
+of it only while the card casts it and the floor receives it (`ambient-occlusion-card.png`), the
+Material rows (Receives/Casts Ambient Occlusion, the Ambient Occlusion group with Include Semi
+Transparent Triangles on a model only, an edit and its undo) and the save/load round trip (static
+props, `<i>` counts, `<fl>` values).
+`reflectionsMirrorTheSceneInSheets` checks the lat-long lookup (`ConvertVec2LatLong`, its quirk for a
+direction with x or z 0), the environment colour at the poles and the irradiance of a white and a
+half-red environment, a black mirror sheet showing a green card's mirror image where it falls - at
+full strength, at a quarter with Specular Reflectivity 50, not without Receives or Casts Reflections,
+from a hidden card only with Cast Reflections If Visibility Is Off, never from a card behind the
+mirror (`planar-reflection.png`) - a 3D text taking the colour of its Environment Map's layer
+(`environment-map-layer.png`) or of the shot beneath with Use Composite Shot, the Material rows per
+kind (Environment Map's Layer row once Use Layer is chosen) and the save/load round trip.
+`childrenFollowTheirParents` checks a 2D plane under a hidden, turned and halved 2D parent - its
+position in the scene, the canvas transform, the Layout box and the render (`parented-2d.png`) - a
+plane parent's anchor taken off, a loop of parents, a camera standing where its parent point puts it,
+and a 2D layer under a 3D parent following only where that parent shows.
+`towardsLayerTakesTheOtherLayersUp` checks Towards Layer's second turn: a camera looking at a point
+turned a quarter about Z takes that point's up (half a turn when the point is upside down), a sheet and
+a light above it the same, and a light whose way lies along the point's Y takes the point's -Z.
+`orbitTurnsAboutTheClickedPoint` checks the point of the scene under a ray (the nearest visible 3D sheet
+where its content is, a model's triangle, a hidden layer passed through, nothing beside them, the
+middle of a perspective view meeting the shot's plane where the view stands 100 up) and the Orbit
+button's list - Orbit Around Clicked Point chosen picks the Orbit tool, a press over a perspective
+view reports that mode and the press's place, Alt with the left button the selected layers.
+`modelsReflectTheirSurroundings` checks a reflection map's mip levels, a grey cube with a white
+specular turning red with an Environment Map of a red layer, and green from a hidden card behind the
+camera once it receives reflections and the card casts them (`model-reflection-cube.png`), a flat
+model whose material is Planar showing a card mirrored in its plane (`model-reflection-planar.png`)
+and not when Spherical, and Reflection Mode saved as `<ReflectionType>` and read back.
+`layersTurnByTheirAlignment` aims a light and a camera Towards Target Position (straight down keeps
+(-1, 0, 0) as up; the light's own orientation turns it further after the aim), a point layer's +Z at
+its target, a light Towards Layer, a 3D plane Towards Active Camera turned as the camera is and drawn
+whole where it would be edge-on, checks the Transform rows (Target after Position, the reference's
+Alignment choices per kind, Alignment Axis and Alignment Layer as asked for, one undo step;
+`timeline-alignment.png`) and the save/load round trip of `<AutoOrient>`, `<AutoOrientLayer>` and
+`target`.
+`layersFollowTheirMotionAndOtherLayers` checks Along Motion Path on a 2D bar (its angle from the
+diagonal motion for the X and Y axis, its own Rotation once it stops, the Layout frame and the render
+along the diagonal; `align-motion-2d.png`), on a 3D sheet and a spot, Towards Layer on a sheet (front
+to the layer, turned about its centre) and a camera, and the Viewer's Target handle: a line and a
+handle of its own, dragged parallel to the view while the light stays.
+`textGeometryFillsGlyphsAndRunsGeometryModules` (OpenGL) also turns an extruded "O" edge-on to a
+light in front of a red floor and checks its walls throw a shadow there (`geometry-shadow.png`), none
+once it does not cast.
+`viewerViewsSeeTheScene` also checks the view navigation of the reference's tool modes: the orbit
+about the origin and about another pivot (distance and view kept, upright, never over the top), the
+Dolly, Rotate and Zoom Camera drags (the perspective field of view narrowing with its scale), which
+button and keys pick which (`ui::viewDragFor`) and, in a Viewer, a middle drag turning a perspective
+view's camera, a right drag panning it and nothing moving over the shot's own view.
+`lightWaveProjectedTexturesGetUvs` writes an LWO2 with a planar map along Z and a cylindrical one
+round Y wrapped twice on a hexagonal tube, and an LWOB "Planar Image Map" about Y, and checks the UVs
+are Assimp's GenUVCoords ones - including the two faces across the cylinder's seam with their sides
+swapped as RemoveUVSeams does.
 `modelMaterialsTakeLayers` sets a model material's Diffuse Map Source to Use Layer with a hidden
 magenta plane from the timeline rows, checks the renderer draws the plane's picture on the model
 (`model-material-layer.png`), that None leaves the material's colour, the save/load round trip
@@ -268,10 +325,111 @@ edge and leaves it in place. `motionTrackInstanceMovesItsLayer` (needs SAMPLES' 
 OpenGL) checks the view `NativeInstanceHost` gives the module (footage pixels placed like the
 footage layer), the conversion of the module's motion to the canvas, that the renderer turns a
 baked quarter turn clockwise, and `<InstanceBytes>` through save and load.
+`textFrameFollowsItsParent` turns a text layer's parent a quarter clockwise: the text frame turns with it
+and a canvas move becomes a move in the parent's units.
+`clearCoatBrightensGrazingReflections` renders a rough Metallic-Roughness quad in a white environment
+seen at 80 degrees and square on: a smooth clear coat brightens the grazing view and hardly changes the
+square one. `textGeometryReflectsItsEnvironment` gives 3D text with a (registered-only) Geometry effect a
+red asset as its Environment Map (type 1003): the letters turn red. `modelsReflectTheirSurroundings` also
+checks the asset environment on a model.
+`parentedLayersFitAndPlaceTheirFootage` fits a plane under a point layer turned 90 degrees and scaled
+200% to a box (the box lands where asked) and checks that an instance's footage is placed under its
+parent (30 px right, 20 up).
+`layerBoxFollowsItsBehaviors` gives a plane MotionTrack matrices (50 right, 20 up on frame 1): its
+layout box moves with them, and not once the Behavior is off.
+`layoutFieldsScrubLikeTheReference` checks the reference's `DoubleScrubberSpinBox`: a drag adds one
+step a pixel, Shift snaps to multiples of 10 every five pixels, the range's ends hold, the button going
+up is one edit, a click edits the text and Escape reverts; the Layout panel's fields are such scrubbers.
+`keyTimesAreRelativeToTheLayer` saves a plane starting at 2 s with keys at 2 s and 3 s: the file holds
+0 and 1000 ms (`OpenVegasKeyTimes="layer"`), reading puts them back at frames 60 and 90, a save without
+the attribute (older saves of the port) is read as shot times, and `shiftLayerKeys` keeps key
+identities. `movedLayerTakesItsKeys` drags a clip body a second later: the layer's keys and its effect's
+keys move by as many frames, in one undo step. `sheetBoxFollowsItsBehaviors` gives a turned, half-size 3D plane MotionTrack matrices: its sheet matrix
+becomes the shift times the still one (parent x Behaviors x own), and its box matches the red pixels the
+renderer draws. `behaviorsActInsideTheParent` turns a plane's parent a quarter clockwise: MotionTrack's
+shift to the right moves the plane down, its box and its pixels alike.
+`simulatedBehaviorsMoveInTheWorld` (GL, the reference Gravity.hfpl) parents a falling plane under a point
+turned a quarter: it falls down the frame, not sideways, its box and pixels alike; a child of the falling
+plane falls with it, and a plane keyed across the frame with Drag lags behind its keys; a run read back
+from a later frame matches a fresh one, a body between frames lies between them, a child body with
+Drag falls about as far as its parent (its forces), and a falling plane without keys is motion blurred.
+`behaviorsBlurAtTheirSubFrames` moves a plane without keys 8 pixels a frame with MotionTrack's matrices:
+motion blur smears it along its way about its box, and the module's matrices are read between frames.
+`behaviorsMultiplyInTheReferencesOrder` gives a plane a quarter turn and then a shift to the right: the
+plane goes up (the last Behavior acts first), and a parent's shift carries its child as far; boxes and
+pixels agree. `trimmedLayerKeepsItsKeys` drags a clip's head a quarter
+of the clip on: the end stays, the source in-point follows, the layer's and its effect's keys stay on
+their frames (one now before the layer's start) and still do after a save and a load.
+`layersWithoutClipsKeepTheirSpan` saves a camera spanning 1-2 s (StartFrame 30, EndFrame 60) and a light
+over the whole shot (EndFrame = FrameCount, read back open); an older save's empty span reads as the whole
+shot. `camerasAndLightsTakePartWithinTheirSpan` switches the active camera at the second camera's start
+and lights a light only within its span. `cameraBarMovesAndTrimsItsSpan` drags a camera's timeline bar:
+the body moves the span and its keys, the tail trims it and leaves them, each one undo step.
+`stabilizersSteadyTheirOwnLayer` runs AutomaticStabilizer and MotionLock on a 30-frame image sequence
+shaking up to 6 px: the host tells each it was put on its layer (`Effect_Parent_Layer`), the footage is
+analysed in the background, the renderer's frames - drawn by the effect's own render instance from its
+saved data - must keep under a third of the footage's frame-to-frame jitter; then AutomaticStabilizer's
+"Create Point Layer" (a keyed point layer on top, "Apply To" pointed at it) and "Apply Transform", and
+MotionLock's "Apply Transform" (its own layer keyed with its motion), each one `layersEdited` step
+(OpenGL, `QT_QPA_PLATFORM=windows`). `layerTransformsBecomeKeys` checks how transforms become keys or
+static values.
 `motionTrackHostTracksFootage` runs the whole MotionTrack cycle on a 30-frame image sequence -
 analysis, the lasso, background calls on the timer, matrices, and the same matrices from the
-saved data alone; it needs the OpenGL 4.1 context and skips offscreen (run it alone with
-`QT_QPA_PLATFORM=windows`, it shows no window). `threeDLayersShareOneScene` checks depth order inside a 3D scene and that a 2D layer
+saved data alone, then the same motion with the footage layer moved and turned (the module
+answers in the world `GetLayerInfoV2` gives it, the host takes it back off), and from a host
+whose open shot only nests the tracked one; it needs the OpenGL 4.1 context and skips offscreen
+(run it alone with `QT_QPA_PLATFORM=windows`, it shows no window).
+`projectFilesGetTheirIcon` registers the .vegfx ProgID into an ini stand-in for Software\Classes and
+checks its DefaultIcon (the executable's icon 1), open command, OpenWithProgids and the Applications
+entry, that the extension's own default is left alone and that an unchanged registration writes nothing.
+`layerPanelShowsTheSourceAndItsMasks` checks the Layer panel draws what the reference's
+RenderLayerViewJob does: an asset layer's source and masks on a canvas of its own size, without its
+effects, transform or opacity, and nothing for a text layer.
+`keyFramesBetweenFrames` evaluates keys between frames (a segment's curve, a key on a key, Hold
+holding) and `nativeMotionBlurReadsKeyframesBetweenFrames` (OpenGL) has EnvironmentMapViewer with Motion
+Blur read a keyframed turn at its sub-samples: the stripes smear, and a still turn draws as without blur.
+`nativeEffectsSeeYUp` (OpenGL) checks native modules see Y running up, as Flux's bottom-row-first
+textures give it: 4PointRamp's points at +54 colour the top of the frame.
+`bodiesHideWhatIsBehindTheirSurface` puts a red 3D sheet inside a cube model, between its centre and its
+front face, and checks the face covers it (a body is met where its surface lies, pixel by pixel), while
+the same sheet in front of the cube shows.
+`effectsGrowTheirTarget` (OpenGL) has Drop Shadow asked for its growth with the render's context, drawn into
+the grown target and cut back: the layer stays in place, unscaled, with its shadow beside it.
+`fadeToColorDrawsItsSide` (OpenGL) has Fade to Color told its side of the edit point (RenderContext +0x08)
+and its window in milliseconds: red dips to black before the edit point, green rises out of it after,
+and from nothing the clip rises out of black over the whole window.
+`buildProject3` writes `SAMPLES/vegfx_projects/project_3` when `OPENVEGAS_PROJECT3_OUT` names the folder
+(skipped otherwise) and renders preview frames into `OPENVEGAS_PROJECT3_PREVIEW`.
+`everyShippedModuleRuns` (OpenGL) runs every module of `SAMPLES/VEGAS_Effects/Plugins` through the host as
+its kind is rendered (2D effects, video and audio transitions, audio effects, layer and glyph Behaviors,
+Geometry) with its defaults and expects none to fail.
+`viewer360DrawsThroughEnvironmentMapViewer` (OpenGL) has the 360 viewer draw through the reference's
+EnvironmentMapViewer module and checks its CPU projection against it for both lenses, combined turns,
+Scale and Scale Ratio, the lens mapping both ways, and that Top and Left look where the reference's do.
+`valueGraphFollowsTheReference` checks the value graph's grid steps (the ruler's time steps and
+their parts, value steps of at least 40 px), the channel colours and Auto Zoom over every channel of
+the chosen property with a tenth of its range either side.
+`exportedMoviesKeepTheShotsColours` (FFmpeg) exports a red plane to MP4 and checks the stream is
+tagged BT.709 / limited range and decodes back to the shot's red, where FFmpeg's untagged BT.601
+default made players that take HD video as BT.709 show it brighter than the Viewer.
+`effectPresetsAreWrittenReadAndApplied` writes and reads `.hfpr` effect presets in the reference's
+shape, refuses a newer version and a 3D preset with the reference's words, lists 2D/3D Presets in
+the Effects panel with import (a free "name (N)"), export, rename and remove, and puts a preset on
+a clip through the timeline with its keys moved to the clip's start, as one undoable edit.
+`nativeEffectsGoInTheReferencesLists` writes native effects into the reference's own lists
+(`<Effects>` / `<BehaviorEffects>` with `<Instance Version="8">` and a typed PropertyManager), reads
+them back from a file without the port's extension, keeps an unknown plugin's instance verbatim and
+merges into project_1 without doubling its `<Effects>`.
+`effectsFavoritesAndRecentsAreKept` checks the Effects panel's favourites and recents in the
+reference's settings shape (group Plugins, QDataStream of int 0, the count and the IDs), five
+recents with the newest last, and the panel's Favorites/Recents rows above the categories.
+`clipsAreProcessedWholeForPlayback` (FFmpeg and `OPENVEGAS_HFPL_BALANCE`) processes a 2 s clip
+through AudioReverse as export does - the clip's end comes first, the gain is left to playback - and
+checks that `ProcessedClipAudioCache` makes it once per state of the clip; audio_regression's
+`nativeEffectsNeedingTheWholeClipAreReported` checks which clips playback reports for that (Reverse
+past the look-ahead, an effect after another) and that one the look-ahead covers is not.
+`motionTrackReadsNestedShotsAndWorlds` (offscreen) checks a nested shot as footage of type 3, its
+rendered frame, a layer's world and taking that world off a module's answer. `threeDLayersShareOneScene` checks depth order inside a 3D scene and that a 2D layer
 splits it (`scene-depth.png`). `exportQueueRunsTasksFromSnapshots` covers the Time Format
 strings, queued snapshots, the tasks file, duplicate/remove, and runs two tasks to PNG
 sequences through `render::ExportJob`, checking that later edits do not reach a queued task.
@@ -349,3 +507,25 @@ between composite clips and final MOV PCM against prepared input samples.
 `audioMixUsesSampleDelaysAndPadding` checks a 0.5 ms delay as exactly 22 samples
 at 44.1 kHz and padding to the requested output duration. Nested offline groups
 use PCM16; realtime still flattens groups and omits parent DSP/transitions.
+
+`options_regression::pluginsPageChoosesFolders` lays out a fake Program Files with VEGAS Effects and
+HitFilm Pro plugin trees: the installation's plugins are found and scanned, other FXhome programs' are
+offered, a folder chosen on Options > Plugins is saved with OK (and asks for a new scan only when the
+folders changed), the page's defaults clear it, and Options opens there by itself once when no folder
+has any plugin.
+`nativeGlyphBehaviorsDrawReducedPreviews` also checks the Layout box of the DropInByChar text: while its
+letters drop in, it is the box of the same text without the glyph Behavior, as the reference frames a
+layer by its world transform only.
+`mediaAudioIsConformedOnce` conforms a 44.1 kHz mono WAV to 48 kHz stereo PCM in the media cache: made
+once in the background and recorded, read again from the cache, another rate or a replaced file made
+again. `preRenderCarriesTheShotsAudio` pre-renders a shot with a tone: its pre-render has the shot's mix
+as a WAV, export takes it for the nested shot, and an edited shot no longer matches it.
+`options_regression::renderMapSizesReachNewProjects` sets the shadow and reflection map sizes in
+Options > Render and finds them in a new project's render settings.
+`sliceAndStretchCutAndTrimACameraSpan` slices a camera's bar in two (the copy from the cut on, both
+keeping the key) and rate-stretches its end, which trims it. `multiClipLayersGoOutAsSlices` saves a plane
+with two clips as two layers - the second marked OpenVegasSliceOf, its range its clip's - reads it back as
+one layer with both clips, and without the mark as two layers, as the reference would.
+`nestedShotsAreMixedBeforeTheirClipsProcessThem` finds which composite clips process their mix (an
+enabled native audio effect on them), mixes their shot once in the background at the tone's level,
+reads it back, and mixes an edited shot again.

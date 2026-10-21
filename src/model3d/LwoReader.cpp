@@ -5,10 +5,12 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QMap>
 #include <QtEndian>
 
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 namespace openvegas {
 namespace model3d {
@@ -109,12 +111,25 @@ private:
         float highlights = 0.0f;   // colour highlights
         float smoothing = 0.0f;    // radians; none, faceted
     };
-    // A texture of a surface waiting for its clip, which may come later.
+    // How a texture lies on its surface: LWO2's PROJ (planar 0, cylindrical
+    // 1, spherical 2, cubic 3, front 4, UV 5) about AXIS (X 0, Y 1, Z 2),
+    // and how many times it wraps round (WRPW, WRPH).
+    struct Projection
+    {
+        int mode = 5;
+        int axis = 0;
+        float wrapWidth = 1.0f;
+        float wrapHeight = 1.0f;
+    };
+    // A texture of a surface waiting for its clip, which may come later (an
+    // LWOB texture names its image itself).
     struct PendingMap
     {
         QString surface;
         quint32 channel = 0;
         quint32 clip = 0;
+        QString image;
+        Projection projection;
     };
 
     quint16 u16(qint64 at) const
@@ -313,7 +328,9 @@ private:
                 m_mesh->triangles.append(triangle);
                 m_surfaces.append(surface);
                 m_triangleLayers.append(m_layer.node);
+                m_trianglePolygons.append(m_polygons);
             }
+            ++m_polygons;
         }
         m_layer = Layer();
     }
@@ -347,17 +364,55 @@ private:
     }
 
     // An LWOB surface: one-byte colour, two-byte percentages (of 255), the
-    // glossiness as LightWave 5's exponent and the smoothing flag.
+    // glossiness as LightWave 5's exponent and the smoothing flag - and its
+    // image maps (CTEX, DTEX, STEX, BTEX naming the projection, "Planar
+    // Image Map" and the like, then TIMG the image and TFLG the axis), as
+    // Assimp's LWOB loader reads them (SetupNewTextureLWOB).
     void readOldSurface(qint64 at, qint64 stop)
     {
         qint64 cursor = at;
         const QString name = string(cursor, stop);
         Surface surface;
+        PendingMap texture;
+        bool inTexture = false;
+        const auto keep = [&] {
+            if (inTexture && texture.projection.mode >= 0 && texture.projection.mode <= 3 && !texture.image.isEmpty())
+                m_pending.append(texture);
+            inTexture = false;
+        };
         while (cursor + 6 <= stop) {
             const quint32 id = u32(cursor);
             const qint64 size = u16(cursor + 4);
             const qint64 data = cursor + 6;
             switch (id) {
+            case id4("CTEX"): case id4("DTEX"): case id4("STEX"): case id4("BTEX"): {
+                keep();
+                texture = PendingMap();
+                texture.surface = name;
+                texture.channel = id == id4("CTEX") ? id4("COLR") : id == id4("DTEX") ? id4("DIFF")
+                                : id == id4("STEX") ? id4("SPEC") : id4("BUMP");
+                qint64 kind = data;
+                const QString type = string(kind, qMin(stop, data + size));
+                texture.projection.mode = !type.contains(QLatin1String("Image Map")) ? -1
+                    : type.contains(QLatin1String("Planar")) ? 0
+                    : type.contains(QLatin1String("Cylindrical")) ? 1
+                    : type.contains(QLatin1String("Spherical")) ? 2
+                    : type.contains(QLatin1String("Cubic")) ? 3 : 4;
+                inTexture = true;
+                break;
+            }
+            case id4("TIMG"):
+                if (inTexture) {
+                    qint64 image = data;
+                    texture.image = string(image, qMin(stop, data + size));
+                }
+                break;
+            case id4("TFLG"):
+                if (inTexture) {
+                    const int flags = u16(data);
+                    texture.projection.axis = (flags & 1) ? 0 : (flags & 2) ? 1 : (flags & 4) ? 2 : texture.projection.axis;
+                }
+                break;
             case id4("COLR"):
                 if (size >= 3)
                     surface.colour = QVector3D(uchar(m_data.at(data)) / 255.0f, uchar(m_data.at(data + 1)) / 255.0f,
@@ -379,6 +434,7 @@ private:
             }
             cursor = data + size + (size & 1);
         }
+        keep();
         addSurface(name, surface);
     }
 
@@ -417,13 +473,15 @@ private:
         m_smoothing.insert(name, surface.smoothing);
     }
 
-    // A texture block: kept when it is an image mapped by UVs onto the
-    // colour, bump, specular or luminosity channel.
+    // A texture block: kept when it is an image mapped by UVs, or projected
+    // (planar, cylindrical, spherical, cubic: Assimp's GenUVCoords makes its
+    // UVs), onto a channel; a front projection Assimp leaves unmapped.
     void readBlock(const QString& surface, qint64 at, qint64 stop)
     {
         if (at + 6 > stop || u32(at) != id4("IMAP")) return;
         quint32 channel = id4("COLR");
-        int projection = -1;
+        Projection projection;
+        projection.mode = -1;
         quint32 clip = 0;
         bool hasClip = false;
         qint64 cursor = at;
@@ -443,7 +501,13 @@ private:
                     inner += 6 + subSize + (subSize & 1);
                 }
             } else if (id == id4("PROJ")) {
-                projection = u16(data);
+                projection.mode = u16(data);
+            } else if (id == id4("AXIS")) {
+                projection.axis = u16(data);
+            } else if (id == id4("WRPW")) {
+                projection.wrapWidth = f32(data);
+            } else if (id == id4("WRPH")) {
+                projection.wrapHeight = f32(data);
             } else if (id == id4("IMAG")) {
                 qint64 index = data;
                 clip = vx(index);
@@ -451,7 +515,8 @@ private:
             }
             cursor = data + size + (size & 1);
         }
-        if (projection == 5 && hasClip) m_pending.append({surface, channel, clip});
+        if (hasClip && (projection.mode == 5 || (projection.mode >= 0 && projection.mode <= 3)))
+            m_pending.append({surface, channel, clip, QString(), projection});
     }
 
     void readClip(qint64 at, qint64 stop)
@@ -489,23 +554,160 @@ private:
     void resolve()
     {
         QHash<int, QString> diffuseOnly;   // material -> its diffuse-channel image
+        QHash<int, Projection> diffuseOnlyProjection;
+        // material -> the projection of the map its UVs follow: the diffuse
+        // map's, else the specular map's, else the bump map's.
+        QHash<int, std::pair<int, Projection>> projected;
+        const auto follow = [&](int index, int rank, const Projection& projection) {
+            const auto it = projected.constFind(index);
+            if (it == projected.constEnd() || rank < it->first) projected.insert(index, {rank, projection});
+        };
         for (int t = 0; t < m_mesh->triangles.size() && t < m_surfaces.size(); ++t)
             m_mesh->triangles[t].material = m_materials.value(m_surfaces.at(t), -1);
         for (const PendingMap& map : std::as_const(m_pending)) {
             const int index = m_materials.value(map.surface, -1);
-            if (index < 0 || !m_clips.contains(map.clip)) continue;
+            if (index < 0) continue;
+            if (map.image.isEmpty() && !m_clips.contains(map.clip)) continue;
             Material& material = m_mesh->materials[index];
-            const QString file = clipFile(m_clips.value(map.clip));
+            const QString file = clipFile(map.image.isEmpty() ? m_clips.value(map.clip) : map.image);
             // Colour, else diffuse, as Assimp's diffuse texture; specular;
             // bump as its height map. The reference reads no others.
-            if (map.channel == id4("COLR")) material.diffuseMap = file;
-            else if (map.channel == id4("DIFF") && material.diffuseMap.isEmpty()) diffuseOnly.insert(index, file);
-            else if (map.channel == id4("BUMP")) material.bumpMap = file;
-            else if (map.channel == id4("SPEC")) material.specularMap = file;
+            if (map.channel == id4("COLR")) {
+                material.diffuseMap = file;
+                follow(index, 0, map.projection);
+            } else if (map.channel == id4("DIFF") && material.diffuseMap.isEmpty()) {
+                diffuseOnly.insert(index, file);
+                diffuseOnlyProjection.insert(index, map.projection);
+            } else if (map.channel == id4("BUMP")) {
+                material.bumpMap = file;
+                follow(index, 2, map.projection);
+            } else if (map.channel == id4("SPEC")) {
+                material.specularMap = file;
+                follow(index, 1, map.projection);
+            }
         }
-        for (auto it = diffuseOnly.cbegin(); it != diffuseOnly.cend(); ++it)
-            if (m_mesh->materials[it.key()].diffuseMap.isEmpty()) m_mesh->materials[it.key()].diffuseMap = it.value();
+        for (auto it = diffuseOnly.cbegin(); it != diffuseOnly.cend(); ++it) {
+            if (!m_mesh->materials[it.key()].diffuseMap.isEmpty()) continue;
+            m_mesh->materials[it.key()].diffuseMap = it.value();
+            follow(it.key(), 0, diffuseOnlyProjection.value(it.key()));
+        }
+        for (auto it = projected.cbegin(); it != projected.cend(); ++it)
+            if (it->second.mode != 5) projectUvs(it.key(), it->second);
         makeNormals();
+    }
+
+    // UVs for a projected map, as Assimp's ComputeUVMappingProcess makes them
+    // (the reference reads with aiProcess_GenUVCoords and
+    // aiProcess_TransformUVCoords, ReadFile flags 0x3F9ECB) for each of
+    // Assimp's meshes - a surface's polygons in one layer - from that mesh's
+    // bounds, in the mirrored space the LWO loader leaves: planar from the
+    // bounds across the two other axes; cylindrical round the axis (from
+    // the centre) and along it; spherical by longitude and latitude; seams
+    // where a polygon spans 0 and 1 rounded to one side (RemoveUVSeams);
+    // cylindrical and spherical ones scaled about the middle by the wrap
+    // amounts (TextureTransformStep); cubic is not implemented in Assimp and
+    // leaves (0, 0).
+    void projectUvs(int material, const Projection& projection)
+    {
+        const double pi = 3.14159265358979323846;
+        QHash<int, QVector<int>> byLayer;
+        for (int t = 0; t < m_mesh->triangles.size(); ++t)
+            if (m_mesh->triangles.at(t).material == material) byLayer[m_triangleLayers.value(t)].append(t);
+        for (const QVector<int>& triangles : std::as_const(byLayer)) {
+            QVector3D low(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                          std::numeric_limits<float>::max());
+            QVector3D high = -low;
+            for (int t : triangles)
+                for (int c = 0; c < 3; ++c) {
+                    const QVector3D p = m_mesh->positions.value(m_mesh->triangles.at(t).position[c]);
+                    low = QVector3D(qMin(low.x(), p.x()), qMin(low.y(), p.y()), qMin(low.z(), p.z()));
+                    high = QVector3D(qMax(high.x(), p.x()), qMax(high.y(), p.y()), qMax(high.z(), p.z()));
+                }
+            const QVector3D centre = low + (high - low) * 0.5f;
+            const QVector3D extent = high - low;
+            const auto span = [](float value) { return value != 0.0f ? value : 1.0f; };
+            const int axis = qBound(0, projection.axis, 2);
+            const auto map = [&](const QVector3D& p) -> QVector2D {
+                switch (projection.mode) {
+                case 0: // planar
+                    if (axis == 0) return {(p.z() - low.z()) / span(extent.z()), (p.y() - low.y()) / span(extent.y())};
+                    if (axis == 1) return {(p.x() - low.x()) / span(extent.x()), (p.z() - low.z()) / span(extent.z())};
+                    return {(p.x() - low.x()) / span(extent.x()), (p.y() - low.y()) / span(extent.y())};
+                case 1: { // cylindrical
+                    const QVector3D d = p - centre;
+                    if (axis == 0)
+                        return {float((std::atan2(d.z(), d.y()) + pi) / (2.0 * pi)), (p.x() - low.x()) / span(extent.x())};
+                    if (axis == 1)
+                        return {float((std::atan2(d.x(), d.z()) + pi) / (2.0 * pi)), (p.y() - low.y()) / span(extent.y())};
+                    return {float((std::atan2(d.y(), d.x()) + pi) / (2.0 * pi)), (p.z() - low.z()) / span(extent.z())};
+                }
+                case 2: { // spherical
+                    const QVector3D d = (p - centre).normalized();
+                    const auto latitude = [&](float value) { return float((std::asin(qBound(-1.0f, value, 1.0f)) + pi / 2.0) / pi); };
+                    if (axis == 0) return {float((std::atan2(d.z(), d.y()) + pi) / (2.0 * pi)), latitude(d.x())};
+                    if (axis == 1) return {float((std::atan2(d.x(), d.z()) + pi) / (2.0 * pi)), latitude(d.y())};
+                    return {float((std::atan2(d.y(), d.x()) + pi) / (2.0 * pi)), latitude(d.z())};
+                }
+                default: // cubic
+                    return {0.0f, 0.0f};
+                }
+            };
+            // Per polygon, as Assimp's faces: each corner its own UV.
+            QMap<int, QVector<int>> byPolygon;
+            for (int t : triangles) byPolygon[m_trianglePolygons.value(t)].append(t);
+            for (const QVector<int>& faces : std::as_const(byPolygon)) {
+                QMap<int, QVector2D> corners;   // position -> UV
+                for (int t : faces)
+                    for (int c = 0; c < 3; ++c) {
+                        const int position = m_mesh->triangles.at(t).position[c];
+                        if (!corners.contains(position)) corners.insert(position, map(m_mesh->positions.value(position)));
+                    }
+                if (projection.mode == 1 || projection.mode == 2) removeSeam(&corners);
+                for (QVector2D& uv : corners) {
+                    if (projection.mode == 1 || projection.mode == 2)
+                        uv = QVector2D(0.5f + projection.wrapWidth * (uv.x() - 0.5f),
+                                       0.5f + projection.wrapHeight * (uv.y() - 0.5f));
+                }
+                QHash<int, int> indices;
+                for (auto it = corners.cbegin(); it != corners.cend(); ++it) {
+                    indices.insert(it.key(), m_mesh->uvs.size());
+                    m_mesh->uvs.append(it.value());
+                }
+                for (int t : faces)
+                    for (int c = 0; c < 3; ++c)
+                        m_mesh->triangles[t].uv[c] = indices.value(m_mesh->triangles.at(t).position[c], -1);
+            }
+        }
+    }
+
+    // RemoveUVSeams: a face with one U under 0.1 and one over 0.9 lies on
+    // the seam; its large ones go to 0 unless one is at 0 already, its small
+    // ones to 1 unless one is at 1 - and where it has both, its near-ones and
+    // near-zeros follow whichever side the rest lean to.
+    static void removeSeam(QMap<int, QVector2D>* corners)
+    {
+        constexpr float kLower = 0.1f, kUpper = 0.9f, kLowerEpsilon = 10e-3f, kUpperEpsilon = 1.0f - 10e-3f;
+        bool small = false, large = false, zero = false, one = false, roundToZero = false;
+        for (const QVector2D& uv : std::as_const(*corners)) {
+            if (uv.x() < kLower) {
+                small = true;
+                if (uv.x() <= kLowerEpsilon) zero = true;
+                else roundToZero = true;
+            }
+            if (uv.x() > kUpper) {
+                large = true;
+                if (uv.x() >= kUpperEpsilon) one = true;
+            }
+        }
+        if (!small || !large) return;
+        for (QVector2D& uv : *corners) {
+            if (uv.x() > kUpper && !zero) uv.setX(0.0f);
+            else if (uv.x() < kLower && !one) uv.setX(1.0f);
+            else if (one && zero) {
+                if (roundToZero && uv.x() >= kUpperEpsilon) uv.setX(0.0f);
+                else if (!roundToZero && uv.x() <= kLowerEpsilon) uv.setX(1.0f);
+            }
+        }
     }
 
     // Normals as Assimp's LWO loader makes them (LWOImporter::ComputeNormals):
@@ -569,6 +771,8 @@ private:
     QHash<int, int> m_layerNodes;          // layer number -> node
     QVector<QString> m_surfaces;           // per triangle, until resolved
     QVector<int> m_triangleLayers;         // per triangle, its layer's node
+    QVector<int> m_trianglePolygons;       // per triangle, its polygon (counted over the file)
+    int m_polygons = 0;
     QHash<QString, float> m_smoothing;     // surface -> smoothing angle (radians)
     QHash<QString, int> m_materials;       // surface -> material
     QHash<quint32, QString> m_clips;

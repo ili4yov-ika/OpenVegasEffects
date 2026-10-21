@@ -28,6 +28,18 @@ public:
     // returns how many were deleted.
     int prune(int days, const QDateTime& now = QDateTime::currentDateTime()) const;
 
+    // The reference's encode/decode debug squares (Debug > Show Hardware
+    // Decoding Indicator, Options/ShowHardwareDecodingIndicator, which Flux
+    // reads into Flux::SetUseEncodeDecodeDebugSquares): its viewer cache
+    // draws a 200 px square into a frame as it encodes it - top left, red for
+    // a hardware encoder, blue for FXEncoderH264 (VegasEffects.exe
+    // FUN_140983790) - and as it decodes one - top right, dark red for a
+    // hardware decoder, dark blue for FXVideoFrameDecoder (FUN_140984a10).
+    // This cache's codec is software (zlib), so a frame stored gets the blue
+    // square and a frame read back the dark blue one.
+    static void setDebugSquares(bool on);
+    static bool debugSquares();
+
 private:
     QString pathFor(const QString& key) const;
     QString m_directory;

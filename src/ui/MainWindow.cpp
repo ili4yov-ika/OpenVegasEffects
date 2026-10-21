@@ -65,15 +65,20 @@
 #include "render/AudioExport.h"
 #include "render/VideoEncoder.h"
 #include "render/ExportJob.h"
+#include "render/FrameDiskCache.h"
 #include "ui/ExportQueue.h"
 #include "ui/ExportPresets.h"
 #include "ui/ExportQueueView.h"
 #include "media/ProxyMedia.h"
+#include "media/ConformedAudio.h"
+#include "render/AudioExport.h"
+#include "render/NestedAudioMix.h"
 #include "ui/EffectPlacement.h"
 #include "ui/PromptMessage.h"
 #include "media/VideoProbe.h"
 #include "license/LicenseManager.h"
 #include "media/ExrImage.h"
+#include "project/EffectPresets.h"
 #include "project/VegfxSerializer.h"
 #include "plugin/NativeEffectRender.h"
 #include "ui/AboutDialog.h"
@@ -323,6 +328,8 @@ TextTransformOverlay::Target textTargetAt(composition::Composition& comp, int la
         target.layer = &layer;
         target.frame = frame;
         target.canvasSize = QSizeF(comp.displaySize());
+        target.after = render::layerCanvasParentAt(&comp, layer, frame, target.canvasSize)
+                       * render::layerBehaviorTransformAt(comp, nullptr, layer, frame);
         if (clipIndex) *clipIndex = shown;
         break;
     }
@@ -360,6 +367,8 @@ TextTransformOverlay::Target layerTargetAt(composition::Composition& comp, int l
     target.frame = frame;
     target.canvasSize = QSizeF(comp.displaySize());
     target.geometry = geometry;
+    target.after = render::layerCanvasParentAt(&comp, layer, frame, target.canvasSize)
+                   * render::layerBehaviorTransformAt(comp, media, layer, frame);
     target.text = false;
     if (clipIndex) *clipIndex = shown;
     return target;
@@ -435,6 +444,14 @@ MainWindow::MainWindow(app::AppMain* owner, QWidget* parent)
     connect(m_audio, &media::AudioPlayer::playbackError, this, [this](const QString& error) {
         statusBar()->showMessage(error, 10000);
     }, Qt::QueuedConnection);
+    // A clip's effects wanted dry samples playback lacked: from now on it is
+    // played processed whole, once that is done.
+    connect(m_audio, &media::AudioPlayer::nativeEffectsNeedWholeClip, this, [this](const QString& key) {
+        m_wholeClipAudio.insert(key);
+        const auto request = m_clipProcessRequests.constFind(key);
+        if (request == m_clipProcessRequests.cend() || !m_processedAudio) return;
+        if (!m_processedAudio->processedFor(*request).isEmpty()) restartPlaybackAudio();
+    });
     m_audioScrubTimer.setSingleShot(true);
     connect(&m_audioScrubTimer, &QTimer::timeout, this, [this] {
         if (!m_playing && m_audio) m_audio->stop();
@@ -734,6 +751,10 @@ void MainWindow::buildUi()
 
     // Right column: Effects + Controls + Library + History tabbed.
     m_effectsPanel = new EffectsPanel(this);
+    m_effectFavorites = new EffectsFavorites(QString(), this);
+    m_effectsPanel->setFavoritesManager(m_effectFavorites);
+    m_effectsPanel->setPresetsDirectory(effectPresetsDirectory());
+    connect(m_effectsPanel, &EffectsPanel::presetActivated, this, &MainWindow::applyEffectPreset);
     addDockWidget(Qt::RightDockWidgetArea, m_effectsPanel);
 
     m_controlsPanel = new EffectInspector(this);
@@ -820,6 +841,14 @@ void MainWindow::buildUi()
     // every pushed command adds its row, and clicking a row walks the stack to
     // that point. Its undoRequested / redoRequested signals used to reach
     // nobody at all.
+    m_conformedAudio = new media::ConformedAudioCache(this);
+    m_nestedMixes = new render::NestedAudioMixCache(this);
+    m_nestedMixes->setDirectory(QDir(app::Settings().mediaCacheFilesPath()).filePath(QStringLiteral("Mixes")));
+    m_processedAudio = new render::ProcessedClipAudioCache(this);
+    m_processedAudio->setDirectory(
+        QDir(app::Settings().mediaCacheFilesPath()).filePath(QStringLiteral("Processed")));
+    connect(m_processedAudio, &render::ProcessedClipAudioCache::processedReady, this,
+            [this](const QString&) { restartPlaybackAudio(); });
     m_preRenders = new render::PreRenderManager(this);
     // PreRenderProgressLabel's words, with the frames so far.
     connect(m_preRenders, &render::PreRenderManager::stateChanged, this, [this](const QString& id) {
@@ -1157,6 +1186,12 @@ void MainWindow::configureMenus()
                 m_effectsPanel->raise();
             });
 
+    m_createPresetAction = m_ui->menuEffects->addAction(
+        QCoreApplication::translate("EffectsPanel", "Create Preset..."), this, &MainWindow::createEffectPreset);
+    m_createPresetAction->setObjectName(QStringLiteral("actionCreateEffectPreset"));
+    m_createPresetAction->setVisible(
+        app::Settings::optionSettings().value(QStringLiteral("Options/EnableEffectPresetCreation"), false).toBool()
+        || QSettings().value(QStringLiteral("Debug/EffectPresetCreation"), false).toBool());
     m_effectFavoritesMenu = m_ui->menuEffects->addMenu(tr("Favorites"));
     m_effectFavoritesMenu->setObjectName(QStringLiteral("menuEffectFavorites"));
     m_effectRecentsMenu = m_ui->menuEffects->addMenu(tr("Recents"));
@@ -1183,7 +1218,7 @@ void MainWindow::configureMenus()
             });
     connect(m_effectRecentsMenu, &QMenu::aboutToShow, this,
             [this, populateEffectsMenu] {
-                populateEffectsMenu(m_effectRecentsMenu, m_recentEffectIds);
+                populateEffectsMenu(m_effectRecentsMenu, m_effectFavorites->recents());
             });
 
     connect(m_ui->actionRenderFrame, &QAction::triggered, this, &MainWindow::onRenderRequested);
@@ -1206,8 +1241,22 @@ void MainWindow::configureMenus()
     const QSettings debugSettings;
     m_ui->actionShowRenderTimings->setChecked(
         debugSettings.value(QStringLiteral("Debug/ShowRenderTimings"), false).toBool());
-    m_ui->actionShowHardwareDecodingIndicator->setChecked(
-        debugSettings.value(QStringLiteral("Debug/HardwareDecodingIndicator"), false).toBool());
+    // The reference keeps it as Options/ShowHardwareDecodingIndicator
+    // (VegasEffects.exe FUN_1402a6810/FUN_1402a6e80); the port's earlier key
+    // is taken over once.
+    {
+        QSettings options = app::Settings::optionSettings();
+        QSettings legacy;
+        if (!options.contains(QStringLiteral("Options/ShowHardwareDecodingIndicator"))
+            && legacy.contains(QStringLiteral("Debug/HardwareDecodingIndicator"))) {
+            options.setValue(QStringLiteral("Options/ShowHardwareDecodingIndicator"),
+                             legacy.value(QStringLiteral("Debug/HardwareDecodingIndicator")));
+            legacy.remove(QStringLiteral("Debug/HardwareDecodingIndicator"));
+        }
+        m_ui->actionShowHardwareDecodingIndicator->setChecked(
+            options.value(QStringLiteral("Options/ShowHardwareDecodingIndicator"), false).toBool());
+    }
+    render::FrameDiskCache::setDebugSquares(m_ui->actionShowHardwareDecodingIndicator->isChecked());
     m_ui->actionPrintAnalytics->setChecked(
         debugSettings.value(QStringLiteral("Debug/PrintAnalytics"), false).toBool());
     m_ui->actionEnableEffectPresetCreation->setChecked(
@@ -1218,7 +1267,8 @@ void MainWindow::configureMenus()
     });
     connect(m_ui->actionShowHardwareDecodingIndicator, &QAction::toggled,
             this, [this](bool on) {
-                QSettings().setValue(QStringLiteral("Debug/HardwareDecodingIndicator"), on);
+                app::Settings::optionSettings().setValue(QStringLiteral("Options/ShowHardwareDecodingIndicator"), on);
+                render::FrameDiskCache::setDebugSquares(on);
                 statusBar()->showMessage(on ? tr("Hardware decoding indicator enabled")
                                             : tr("Hardware decoding indicator disabled"));
             });
@@ -1227,8 +1277,11 @@ void MainWindow::configureMenus()
         OV_LOG_INFO(QStringLiteral("Analytics logging %1").arg(on ? QStringLiteral("enabled")
                                                                    : QStringLiteral("disabled")));
     });
-    connect(m_ui->actionEnableEffectPresetCreation, &QAction::toggled, this, [](bool on) {
+    connect(m_ui->actionEnableEffectPresetCreation, &QAction::toggled, this, [this](bool on) {
         QSettings().setValue(QStringLiteral("Debug/EffectPresetCreation"), on);
+        // The reference's own key (FUN_1402a7140), which shows Create Preset.
+        app::Settings::optionSettings().setValue(QStringLiteral("Options/EnableEffectPresetCreation"), on);
+        if (m_createPresetAction) m_createPresetAction->setVisible(on);
     });
     connect(m_ui->actionExportFontList, &QAction::triggered, this, [this] {
         const QString path = QFileDialog::getSaveFileName(
@@ -1685,6 +1738,7 @@ void MainWindow::buildTransportToolbar()
     });
     main->addWidget(logo);
 
+    m_ui->actionNew->setIcon(QIcon(QStringLiteral(":/icons/project-file.svg")));
     m_ui->actionOpen->setIcon(QIcon(QStringLiteral(":/icons/open.svg")));
     m_ui->actionSave->setIcon(QIcon(QStringLiteral(":/icons/save.svg")));
     m_ui->actionOptions->setIcon(QIcon(QStringLiteral(":/icons/settings.svg")));
@@ -1896,6 +1950,10 @@ void MainWindow::wireSignals()
             }
         }
     });
+    connect(m_timeline, &TimelineWidget::effectAdded, this,
+            [this](const QString& pluginId) { m_effectFavorites->addRecent(pluginId); });
+    connect(m_timeline, &TimelineWidget::presetFailed, this,
+            [this](const QString& message) { QMessageBox::warning(window(), QString(), message); });
     connect(m_timeline, &TimelineWidget::clipSelected, this, [this](int layerIndex, int clipIndex) {
         m_selectedLayer = layerIndex;
         m_selectedClip = clipIndex;
@@ -2072,6 +2130,22 @@ void MainWindow::wireSignals()
         if (m_viewer) m_viewer->update();
         requestRenderFrame();
     });
+    connect(m_instanceHost.get(), &NativeInstanceHost::layersEdited, this,
+            [this](const QVector<composition::Layer>& before, const QString& text) {
+        // A module's button made a point layer or keyed one (one step,
+        // named as the module named it); the selection follows its layer,
+        // which a new layer on top moves down.
+        if (!m_composition) return;
+        const core::Identifier selected = m_selectedLayer >= 0 && m_selectedLayer < before.size()
+            ? before.at(m_selectedLayer).id : core::Identifier();
+        m_undoStack->push(new LayerStackCommand(m_composition, before, m_composition->layers(), text,
+                                                [this] { refreshAfterModelChange(); }, true));
+        for (int i = 0; selected.isValid() && i < m_composition->layers().size(); ++i) {
+            if (m_composition->layers().at(i).id == selected) m_selectedLayer = i;
+        }
+        m_projectModified = true;
+        refreshAfterModelChange();
+    });
     // The selected clip's first effect with viewer custom UI (MotionTrack's
     // feature picker, BendGeometry's handles), on top of the text frame.
     m_customUiOverlay = std::make_unique<NativeCustomUiOverlay>([this] {
@@ -2157,7 +2231,9 @@ void MainWindow::wireSignals()
         [this] {
             if (!m_composition) return;
             const QString title = QCoreApplication::translate("openvegas::ui::TimelineWidget", "Set %1")
-                                      .arg(QCoreApplication::translate("Transform", "Position"));
+                                      .arg(m_sceneObjectOverlay && m_sceneObjectOverlay->dragsTarget()
+                                               ? QCoreApplication::translate("Transform", "Target")
+                                               : QCoreApplication::translate("Transform", "Position"));
             m_undoStack->push(new LayerStackCommand(
                 m_composition, m_sceneObjectDragBefore, m_composition->layers(), title, [this] {
                     m_projectModified = true;
@@ -2250,9 +2326,54 @@ void MainWindow::wireSignals()
             return render::pannedView(type, state, delta);
         });
     });
-    connect(m_viewer, &ViewerWidget::viewOrbited, this, [moveView](int view, QPointF delta) {
-        moveView(view, [delta](render::ViewType type, render::ViewCameraState state) {
-            return render::orbitedView(type, state, delta);
+    connect(m_viewer, &ViewerWidget::viewOrbitStarted, this, [this](int view, QPointF where, OrbitPivot pivot) {
+        // OrbitToolMode's pivot (FUN_140955170): Orbit Around Selected
+        // Layers (FUN_140953ce0) - where the selected layers stand, on
+        // average; Orbit Around Clicked Point (FUN_140953ad0) - the point of
+        // the scene under the press (FluxSelect::ClickIntersect); the origin
+        // without either.
+        m_orbitPivot = QVector3D();
+        if (!m_composition || view < 0 || view >= int(m_viewStates.size())) return;
+        const int frame = compositionFrameAt(*m_composition, m_playbackTime);
+        if (pivot == OrbitPivot::ClickedPoint) {
+            const QSize canvas = m_composition->displaySize();
+            const model3d::Camera camera = render::viewCamera(render::ViewType(m_viewer->viewType(view)),
+                                                              m_viewStates[view], m_composition.get(), canvas, frame);
+            bool invertible = false;
+            const QMatrix4x4 unproject = camera.viewProjection(canvas).inverted(&invertible);
+            if (!invertible) return;
+            const float ndcX = float(where.x() * 2.0 - 1.0), ndcY = float(1.0 - where.y() * 2.0);
+            const QVector3D start = unproject.map(QVector3D(ndcX, ndcY, -1.0f));
+            const QVector3D end = unproject.map(QVector3D(ndcX, ndcY, 1.0f));
+            if (const std::optional<QVector3D> hit = render::sceneRayHit(*m_composition, m_mediaManager.get(), frame,
+                                                                          start, end - start))
+                m_orbitPivot = *hit;
+            return;
+        }
+        int counted = 0;
+        for (int index : m_selectedLayers) {
+            if (index < 0 || index >= m_composition->layers().size()) continue;
+            const composition::LayerTransform& t = m_composition->layers().at(index).transform;
+            const QPointF position = t.positionAt(frame);
+            m_orbitPivot += QVector3D(float(position.x()), float(position.y()), float(t.positionZAt(frame)));
+            ++counted;
+        }
+        if (counted > 0) m_orbitPivot /= float(counted);
+    });
+    connect(m_viewer, &ViewerWidget::viewOrbited, this, [this, moveView](int view, QPointF delta) {
+        const QVector3D pivot = m_orbitPivot;
+        moveView(view, [delta, pivot](render::ViewType type, render::ViewCameraState state) {
+            return render::orbitedView(type, state, delta, pivot);
+        });
+    });
+    connect(m_viewer, &ViewerWidget::viewCameraDragged, this, [moveView](int view, int drag, QPointF delta) {
+        moveView(view, [drag, delta](render::ViewType type, render::ViewCameraState state) {
+            switch (ViewDrag(drag)) {
+            case ViewDrag::Dolly: return render::dolliedView(type, state, delta);
+            case ViewDrag::Rotate: return render::turnedView(type, state, delta);
+            case ViewDrag::Zoom: return render::dragZoomedView(type, state, delta);
+            default: return state;
+            }
         });
     });
     for (int view = 0; view < int(m_viewStates.size()); ++view)
@@ -2565,9 +2686,7 @@ void MainWindow::onEffectActivated(const plugin::EffectSpec& spec)
     }
     clip = m_composition->clipAt(m_selectedLayer, m_selectedClip);
     const composition::Effect effect = clip->effects.at(effectIndex);
-    m_recentEffectIds.removeAll(spec.id.value());
-    m_recentEffectIds.prepend(spec.id.value());
-    while (m_recentEffectIds.size() > 10) m_recentEffectIds.removeLast();
+    m_effectFavorites->addRecent(spec.id.value());
 
     m_projectModified = true;
     updateWindowTitle();
@@ -2590,7 +2709,10 @@ void MainWindow::requestRenderFrame()
     }
     // Tracked layers whose effects moved or whose data an undo put back get
     // their matrices again before the frame is drawn.
-    if (m_instanceHost) m_instanceHost->sync();
+    if (m_instanceHost) {
+        m_instanceHost->setPreRenderDirectory(preRenderRoot());
+        m_instanceHost->sync();
+    }
     updateProxyPreview();
     m_renderManager->setPreRenderDirectory(preRenderRoot());
     m_viewer->setTimecode(m_playbackTime);
@@ -2730,6 +2852,23 @@ void MainWindow::onLayerOrbited(const QPointF& delta)
     requestRenderFrame();
 }
 
+namespace {
+
+// A move in the shot (Y up) made the layer's own under its parent.
+QPointF underParent(const composition::Composition* composition, const composition::Layer& layer, int frame,
+                    const QPointF& delta)
+{
+    const QMatrix4x4 parent = render::layerParentMatrixAt(composition, layer, frame);
+    if (parent.isIdentity()) return delta;
+    bool invertible = false;
+    const QMatrix4x4 back = parent.inverted(&invertible);
+    if (!invertible) return delta;
+    const QVector3D local = back.mapVector(QVector3D(float(delta.x()), float(delta.y()), 0.0f));
+    return QPointF(local.x(), local.y());
+}
+
+} // namespace
+
 void MainWindow::onLayerMoved(const QPointF& delta)
 {
     if (!m_composition || m_selectedLayer < 0
@@ -2746,7 +2885,7 @@ void MainWindow::onLayerMoved(const QPointF& delta)
     for (int index : layers) {
         if (index < 0 || index >= m_composition->layers().size()) continue;
         composition::Layer& layer = m_composition->layerRef(index);
-        if (!layer.locked) moveLayerAtFrame(layer, modelDelta, frame);
+        if (!layer.locked) moveLayerAtFrame(layer, underParent(m_composition.get(), layer, frame, modelDelta), frame);
     }
     m_projectModified = true;
     updateWindowTitle();
@@ -2772,7 +2911,7 @@ void MainWindow::onLayerNudged(const QPointF& delta)
     for (int index : layers) {
         if (index < 0 || index >= m_composition->layers().size()) continue;
         composition::Layer& layer = m_composition->layerRef(index);
-        if (!layer.locked) moveLayerAtFrame(layer, delta, frame);
+        if (!layer.locked) moveLayerAtFrame(layer, underParent(m_composition.get(), layer, frame, delta), frame);
     }
     m_projectModified = true;
     updateWindowTitle();
@@ -2830,8 +2969,12 @@ void MainWindow::updateMotionPathOverlay()
     // that same canvas space so the viewer only has to scale it to the view.
     const double halfWidth = m_composition->displaySize().width() / 2.0;
     const double halfHeight = m_composition->displaySize().height() / 2.0;
-    const auto toCanvas = [&](const QPointF& position) {
-        return QPointF(halfWidth + position.x(), halfHeight - position.y());
+    // Under its parent, at each frame.
+    const auto toCanvas = [&](int frame) {
+        const QPointF position = transform.positionAt(frame);
+        const QVector3D placed = render::layerParentMatrixAt(m_composition.get(), layer, frame)
+                                     .map(QVector3D(float(position.x()), float(position.y()), 0.0f));
+        return QPointF(halfWidth + placed.x(), halfHeight - placed.y());
     };
 
     // Only as many keys as the reference's own MotionPathKeyFrames allows, so a
@@ -2855,7 +2998,7 @@ void MainWindow::updateMotionPathOverlay()
     QVector<QPointF> keys;
     keys.reserve(keyFrames.size());
     for (int frame : keyFrames) {
-        keys.append(toCanvas(transform.positionAt(frame)));
+        keys.append(toCanvas(frame));
     }
 
     // Sampled between the first and last key so curved interpolation shows as a
@@ -2867,7 +3010,7 @@ void MainWindow::updateMotionPathOverlay()
     path.reserve(steps);
     for (int i = 0; i < steps; ++i) {
         const int frame = first + (last - first) * i / (steps - 1);
-        path.append(toCanvas(transform.positionAt(frame)));
+        path.append(toCanvas(frame));
     }
 
     m_viewer->setMotionPath(path, keys);
@@ -3423,10 +3566,24 @@ void MainWindow::makeCompositeShotFromSelection()
             firstTime = qMin(firstTime, clip.startSeconds);
             lastTime = qMax(lastTime, clip.endSeconds());
         }
+        // A layer without clips by its span.
+        if (composition::layerHasSpan(copy)) {
+            firstTime = qMin(firstTime, copy.spanStartSeconds);
+            lastTime = qMax(lastTime, composition::layerSpanEnd(copy, m_composition->durationSeconds()));
+        }
     }
     if (firstTime == std::numeric_limits<double>::max()) firstTime = 0.0;
-    for (composition::Layer& layer : childLayers)
+    // The layers start that much earlier in the new shot, their keys too.
+    const int firstFrame = int(std::lround(firstTime * double(child->fpsNumerator())
+                                           / qMax(1, child->fpsDenominator())));
+    for (composition::Layer& layer : childLayers) {
         for (composition::Clip& clip : layer.clips) clip.startSeconds -= firstTime;
+        if (composition::layerHasSpan(layer)) {
+            layer.spanStartSeconds = qMax(0.0, layer.spanStartSeconds - firstTime);
+            if (layer.spanEndSeconds >= 0.0) layer.spanEndSeconds -= firstTime;
+        }
+        composition::shiftLayerKeys(layer, -firstFrame);
+    }
     const double frameDuration = double(qMax(1, child->fpsDenominator()))
         / qMax(1, child->fpsNumerator());
     const double childDuration = qMax(frameDuration, lastTime - firstTime);
@@ -3744,6 +3901,11 @@ void MainWindow::onOptions()
         connect(m_optionsDialog, &OptionsDialog::preRendersAboutToBeDeleted, this, [this] {
             if (m_preRenders) m_preRenders->cancelAll();
         });
+        // Other plugin folders: looked through again, the menus rebuilt.
+        connect(m_optionsDialog, &OptionsDialog::pluginFoldersChanged, this, [this] {
+            if (m_pluginRescan) m_pluginRescan();
+            statusBar()->showMessage(tr("Plugins looked for again"));
+        });
         // Viewer preferences take effect when the dialog closes, so the
         // widgets that honour them re-read once rather than polling.
         connect(m_optionsDialog, &QDialog::finished, this, [this] {
@@ -3792,6 +3954,12 @@ void MainWindow::onOptions()
     m_optionsDialog->show();
     m_optionsDialog->raise();
     m_optionsDialog->activateWindow();
+}
+
+void MainWindow::showPluginOptions()
+{
+    onOptions();
+    if (m_optionsDialog) m_optionsDialog->showCategory(QStringLiteral("Plugins"));
 }
 
 void MainWindow::applyInterfacePreferences()
@@ -5361,6 +5529,7 @@ double MainWindow::prepareAudioSource()
     QVector<media::AudioClip> sources;
     QVector<media::AudioTransition> transitions;
     QSet<const composition::Composition*> visited;
+    m_clipProcessRequests.clear();
     // Linear gain by timeline second of everything a shot plays: the levels
     // of the layers and clips it is nested through. `animated` stays false
     // while all of them are constant, so plain clips keep one gain value.
@@ -5387,8 +5556,23 @@ double MainWindow::prepareAudioSource()
             for (int clipIndex = 0; clipIndex < layer.clips.size(); ++clipIndex) {
                 const auto& clip = layer.clips.at(clipIndex);
                 const double speed = clip.speed > 0 ? clip.speed : 1;
+                // A nested shot pre-rendered as it is now plays its
+                // pre-render's audio, as footage would; one whose composite
+                // clip processes what it plays (native audio effects, an
+                // audio transition) plays the shot's mix, the processing put
+                // on that - after the child mix, as the reference and export
+                // have it. Until the mix is there, the shot is expanded.
+                QString childAudio = clip.nestedComposition
+                    ? render::preRenderedAudio(preRenderRoot(), *clip.nestedComposition, m_mediaManager.get())
+                    : QString();
+                if (clip.nestedComposition && childAudio.isEmpty() && m_nestedMixes
+                    && render::nestedClipProcessesItsMix(layer, clipIndex, shotFps)) {
+                    m_nestedMixes->setPreRenderDirectory(preRenderRoot());
+                    childAudio = m_nestedMixes->mixFor(clip.nestedComposition, m_mediaManager);
+                }
+                const QString& preRendered = childAudio;
                 double clipStart = clip.startSeconds, clipEnd = clip.endSeconds();
-                if (!clip.nestedComposition) {
+                if (!clip.nestedComposition || !childAudio.isEmpty()) {
                     for (const auto& window : windows) {
                         if (window.toClip == clipIndex) clipStart = qMin(clipStart, window.start);
                         if (window.fromClip == clipIndex) clipEnd = qMax(clipEnd, window.end);
@@ -5408,15 +5592,26 @@ double MainWindow::prepareAudioSource()
                         staticDb, curve, (t - origin) * rate, shotFps);
                     return outerAt(t) * qPow(10.0, (layerDb + clipDb) / 20.0);
                 };
-                if (clip.nestedComposition) {
+                if (clip.nestedComposition && preRendered.isEmpty()) {
                     const double childOrigin = origin + clip.startSeconds / rate
                         - clip.sourceStartSeconds / (rate * speed);
                     collect(*clip.nestedComposition, childOrigin, rate * speed, first, last, gain);
                     continue;
                 }
                 const auto asset = m_mediaManager->assetById(clip.mediaId);
-                if (asset.kind() != media::MediaKind::Audio && asset.kind() != media::MediaKind::Video) continue;
-                if (asset.filePath().isEmpty() || asset.isImageSequence()) continue; // stills are silent
+                if (preRendered.isEmpty()) {
+                    if (asset.kind() != media::MediaKind::Audio && asset.kind() != media::MediaKind::Video) continue;
+                    if (asset.filePath().isEmpty() || asset.isImageSequence()) continue; // stills are silent
+                }
+                // The media's audio conformed to the shot's rate when it has
+                // been (MediaCacheFiles/Conformed); the first playback asks
+                // for it and reads the media meanwhile.
+                const QString conformedAudio = preRendered.isEmpty() && m_conformedAudio
+                    ? m_conformedAudio->conformed(asset.filePath(), asset.audioStreamIndex(),
+                                                  media::normalizedAudioSampleRate(m_composition->audioSampleRate()))
+                    : QString();
+                const QString sourcePath = !preRendered.isEmpty() ? preRendered
+                    : !conformedAudio.isEmpty() ? conformedAudio : asset.filePath();
                 double source = clip.sourceStartSeconds
                     + (first - origin - clip.startSeconds / rate) * rate * speed;
                 if (source < 0.0) {
@@ -5425,10 +5620,11 @@ double MainWindow::prepareAudioSource()
                     source = 0.0;
                     if (last <= first) continue;
                 }
-                media::AudioClip audioClip {asset.filePath(), first, last,
+                media::AudioClip audioClip {sourcePath, first, last,
                                             source, speed * rate,
                                             gain.animated ? 1.0 : gain.at(first)};
-                audioClip.audioStreamIndex = asset.audioStreamIndex();
+                audioClip.audioStreamIndex = preRendered.isEmpty() && conformedAudio.isEmpty()
+                    ? asset.audioStreamIndex() : -1;
                 if (gain.animated) {
                     // 10 ms samples; the mixer interpolates between them.
                     constexpr double step = 0.01;
@@ -5469,6 +5665,36 @@ double MainWindow::prepareAudioSource()
                         audioClip.nativeEffects.append(std::move(module));
                     }
                 }
+                if (!audioClip.nativeEffects.isEmpty() && m_processedAudio) {
+                    // What the clip would be processed whole from, as export
+                    // processes it; one whose effects asked for more than
+                    // realtime has plays that once it is made.
+                    render::ProcessedClipAudioCache::Request request;
+                    request.layer = std::make_shared<composition::Layer>(layer);
+                    request.clipIndex = clipIndex;
+                    request.frameRate = shotFps;
+                    request.sampleRate = media::normalizedAudioSampleRate(m_composition->audioSampleRate());
+                    request.spanStart = qMax(clipStart, clip.startSeconds - clip.sourceStartSeconds / speed);
+                    request.spanEnd = clipEnd;
+                    request.source = sourcePath;
+                    request.audioStreamIndex = audioClip.audioStreamIndex;
+                    const QString key = shot.id().value() + QLatin1Char('/') + layer.id.value()
+                                        + QLatin1Char('/') + QString::number(clipIndex);
+                    audioClip.processKey = key;
+                    m_clipProcessRequests.insert(key, request);
+                    const QString processed = m_wholeClipAudio.contains(key)
+                        ? m_processedAudio->processedFor(request) : QString();
+                    // The file holds the span from spanStart, in the shot's seconds.
+                    const double fileStart = (audioClip.start - origin) * rate - request.spanStart;
+                    if (!processed.isEmpty() && fileStart >= 0.0) {
+                        audioClip.path = processed;
+                        audioClip.sourceStart = fileStart;
+                        audioClip.speed = rate;
+                        audioClip.audioStreamIndex = -1;
+                        audioClip.nativeEffects.clear();
+                        audioClip.processKey.clear();
+                    }
+                }
                 sourceOfClip.insert(clipIndex, sources.size());
                 sources.append(std::move(audioClip));
             }
@@ -5499,6 +5725,87 @@ double MainWindow::prepareAudioSource()
                       m_composition->audioSampleRate());
     m_audioClipStart = sources.isEmpty() ? -1 : 0;
     return m_audioClipStart;
+}
+
+QString MainWindow::effectPresetsDirectory() const
+{
+    // FUN_140230140: Options/PresetsPath when it names a folder that can be
+    // written to, else the Presets folder of the user data (written back).
+    QSettings settings = app::Settings::optionSettings();
+    const QString chosen = settings.value(QStringLiteral("Options/PresetsPath")).toString();
+    const QFileInfo info(chosen);
+    if (!chosen.isEmpty() && info.exists() && info.isDir() && info.isWritable())
+        return QDir::toNativeSeparators(chosen);
+    const QString folder = m_owner
+        ? m_owner->userDataPaths().pathFor(app::UserDataFolder::Presets)
+        : QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("Presets"));
+    QDir().mkpath(folder);
+    settings.setValue(QStringLiteral("Options/PresetsPath"), QDir::toNativeSeparators(folder));
+    return QDir::toNativeSeparators(folder);
+}
+
+void MainWindow::applyEffectPreset(const QString& presetPath)
+{
+    if (!m_composition || !m_timeline) return;
+    if (!m_composition->clipAt(m_selectedLayer, m_selectedClip)) {
+        statusBar()->showMessage(tr("Select a clip on the timeline first"));
+        return;
+    }
+    QString error;
+    const int added = m_timeline->addPreset(m_selectedLayer, m_selectedClip, presetPath, &error);
+    if (added < 0) {
+        statusBar()->showMessage(tr("The layer is locked"));
+        return;
+    }
+    if (added == 0) {
+        QMessageBox::warning(this, QString(), error);
+        return;
+    }
+    m_projectModified = true;
+    updateWindowTitle();
+    m_controlsPanel->setSelection(m_selectedLayer, m_selectedClip);
+    m_timeline->setComposition(m_composition);
+    m_timeline->update();
+    requestRenderFrame();
+    statusBar()->showMessage(tr("Applied %1").arg(QFileInfo(presetPath).completeBaseName()));
+}
+
+void MainWindow::createEffectPreset()
+{
+    // The reference's Create Preset (FUN_14056a4e0): the chosen effects, a
+    // file name in the presets folder, the preset written (FUN_14038da20).
+    const composition::Clip* clip = m_composition ? m_composition->clipAt(m_selectedLayer, m_selectedClip) : nullptr;
+    if (!clip) {
+        statusBar()->showMessage(tr("Select a clip on the timeline first"));
+        return;
+    }
+    const double fps = m_composition->fpsDenominator() > 0
+        ? double(m_composition->fpsNumerator()) / m_composition->fpsDenominator() : 30.0;
+    const int start = int(std::lround(clip->startSeconds * fps));
+    QVector<composition::Effect> effects;
+    for (composition::Effect effect : clip->effects) {
+        if (effect.isTransition()) continue;
+        for (auto it = effect.animation.begin(); it != effect.animation.end(); ++it) it->shift(-start);
+        effects.append(effect);
+    }
+    const QString path = QFileDialog::getSaveFileName(
+        this, QCoreApplication::translate("QObject", "Save Preset"), effectPresetsDirectory(),
+        QStringLiteral("%1 (*.hfpr)")
+            .arg(QCoreApplication::translate("biff::ui::BiffFileFilter", "Presets")));
+    if (path.isEmpty()) return;
+    const int result = project::writeEffectPreset(path, effects, fps);
+    if (result != project::PresetOk) {
+        QMessageBox::warning(window(), QString(), project::effectPresetError(result));
+        return;
+    }
+    m_effectsPanel->reloadPresets();
+}
+
+void MainWindow::restartPlaybackAudio()
+{
+    if (!m_playing || !m_audio) return;
+    const double clipStart = prepareAudioSource();
+    if (clipStart >= 0.0) m_audio->play(m_playbackTime - clipStart);
 }
 
 void MainWindow::beginPlayback()
