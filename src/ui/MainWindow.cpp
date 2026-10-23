@@ -5027,7 +5027,7 @@ void MainWindow::onNewProject()
     if (m_rootComposition != m_composition) activateComposition(m_rootComposition);
     m_undoStack->clear();
     m_rootComposition->clear();
-    m_rootComposition->setName(QStringLiteral("Untitled"));
+    m_rootComposition->setName(QCoreApplication::translate("Composition", "Untitled"));
     app::applyNewProjectDefaults(*m_rootComposition);
     m_openCompositions = {m_rootComposition};
     m_mediaManager->clear();

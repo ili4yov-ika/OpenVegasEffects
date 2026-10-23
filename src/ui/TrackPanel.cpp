@@ -76,9 +76,11 @@ void TrackPanel::refresh()
             item->setCheckState(1, layer.visible ? Qt::Checked : Qt::Unchecked);
             item->setCheckState(2, layer.muted ? Qt::Checked : Qt::Unchecked);
             item->setText(4, QStringLiteral("%1%").arg(qRound(layer.opacity * 100.0)));
-            auto* blend = new QComboBox(m_tree); blend->addItems(blendModes());
-            blend->setCurrentText(layer.blendMode);
-            connect(blend, &QComboBox::currentTextChanged, this, [this, i] { onItemChanged(i, 3); });
+            auto* blend = new QComboBox(m_tree);
+            for (const QString& mode : blendModes())
+                blend->addItem(composition::blendModeDisplayName(mode), mode);
+            blend->setCurrentIndex(blend->findData(layer.blendMode));
+            connect(blend, &QComboBox::currentIndexChanged, this, [this, i] { onItemChanged(i, 3); });
             m_tree->setItemWidget(item, 3, blend);
         }
     }
@@ -143,7 +145,7 @@ void TrackPanel::onItemChanged(int row, int column)
     case 2: layer.muted = item->checkState(2) == Qt::Checked; break;
     case 3:
         if (auto* combo = qobject_cast<QComboBox*>(m_tree->itemWidget(item, 3)))
-            layer.blendMode = combo->currentText();
+            layer.blendMode = combo->currentData().toString();
         break;
     case 4: {
         QString value = item->text(4).trimmed(); value.remove(QLatin1Char('%'));

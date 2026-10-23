@@ -66,6 +66,7 @@
 #include "ui/ExportQueueView.h"
 #include "app/AVTemplates.h"
 #include "ui/PromptMessage.h"
+#include "UntranslatedText.h"
 #include "model3d/ModelLoader.h"
 #include "ui/ModelAnimationDialog.h"
 #include "ui/Model3DSettingsDialog.h"
@@ -87,6 +88,7 @@
 #include <QtEndian>
 #include <QTemporaryDir>
 #include <QTranslator>
+#include <QLibraryInfo>
 #include <QSqlDatabase>
 #include <QBuffer>
 #include <QJsonArray>
@@ -2865,6 +2867,85 @@ private slots:
         const QColor middle = at(none, green, 0.5f, 0.0f, &ok);
         QVERIFY(ok);
         QVERIFY2(middle.green() > 80 && middle.green() < 120, qPrintable(middle.name(QColor::HexArgb)));
+    }
+
+    // In another language the panels show nothing in English but names -
+    // the layers' blend modes among what they once showed as stored - with a
+    // layer of every kind selected in Controls and Layer.
+    void panelsShowNoEnglishInOtherLanguages_data() {
+        QTest::addColumn<QString>("locale");
+        for (const auto* locale : {"ru", "ja", "zh_CN"}) QTest::newRow(locale) << QString::fromLatin1(locale);
+    }
+
+    void panelsShowNoEnglishInOtherLanguages() {
+        QFETCH(QString, locale);
+        QTranslator app, plugins, qt;
+        QVERIFY(app.load(QStringLiteral(TRANSLATION_TEST_ROOT) + "/" + locale + "/openvegaseffects_" + locale + ".qm"));
+        QVERIFY(plugins.load(QStringLiteral(TRANSLATION_TEST_ROOT) + "/" + locale + "/openvegaseffects_plugins_" + locale + ".qm"));
+        qt.load(QStringLiteral("qt_") + locale, QLibraryInfo::path(QLibraryInfo::TranslationsPath));
+        qApp->installTranslator(&app); qApp->installTranslator(&plugins); qApp->installTranslator(&qt);
+        auto cleanup = qScopeGuard([&] { qApp->removeTranslator(&app); qApp->removeTranslator(&plugins); qApp->removeTranslator(&qt); });
+        // The project's own names, file names and template names.
+        const QStringList data {
+            QStringLiteral("labelBreadCrumbTrail"), QStringLiteral("layerID"),
+            QStringLiteral("treeRecoveredProjects"), QStringLiteral("comboBoxTemplate"),
+            QStringLiteral("comboBoxAspectRatio"),
+        };
+        QStringList english;
+        const auto audit = [&](const char* name, QWidget* widget) {
+            for (const QString& line : tests::englishShownIn(widget, data))
+                english << QString::fromLatin1(name) + QLatin1Char(' ') + line;
+        };
+        { ui::TimelineWidget w; audit("Timeline", &w); }
+        { ui::EffectInspector w; audit("Controls", &w); }
+        {
+            auto shot = std::make_shared<composition::Composition>(); shot->setSize(320, 180);
+            using K = composition::LayerKind;
+            for (K kind : {K::Plane, K::Text, K::Point, K::Grade, K::Light, K::Camera, K::Media}) {
+                auto& layer = shot->addLayer(QStringLiteral("L"));
+                layer.kind = kind;
+                if (kind == K::Light || kind == K::Camera) layer.dimension = composition::LayerDimension::ThreeD;
+                composition::Clip clip; clip.durationSeconds = 2; layer.clips << clip;
+            }
+            ui::EffectInspector controls; controls.setComposition(shot); controls.resize(460, 760); controls.show();
+            ui::LayerPanel inspector; inspector.bindModel(shot); inspector.setMediaManager(std::make_shared<media::MediaManager>());
+            ui::TrackPanel track; track.bindModel(shot);
+            for (int i = 0; i < shot->layers().size(); ++i) {
+                controls.setSelection(i, 0); inspector.setSelection(i);
+                QTest::qWait(10);
+                const QByteArray kind = composition::layerKindName(shot->layers().at(i).kind);
+                audit(("Controls " + kind).constData(), &controls);
+                audit(("Layer " + kind).constData(), &inspector);
+            }
+            audit("Track", &track);
+        }
+        { ui::LayerPanel w; audit("Layer", &w); }
+        { ui::TrackPanel w; audit("Track", &w); }
+        { ui::Preview360VideoPanel w; audit("Preview360", &w); }
+        { ui::TrimmerPanel w; audit("Trimmer", &w); }
+        { ui::HistoryPanel w; audit("History", &w); }
+        { ui::StartPanel w; audit("Start", &w); }
+        { ui::LibraryPanel w; audit("Library", &w); }
+        { ui::MediaPanel w; audit("Media", &w); }
+        { ui::AudioMetersPanel w; audit("Meters", &w); }
+        {
+            // With its bar of view options, quality and zoom and their menus.
+            ui::ViewerWidget w; QWidget bar; w.createViewOptionsBar(&bar);
+            audit("Viewer", &w); audit("ViewerBar", &bar);
+        }
+        { ui::LayoutPanel w; audit("Layout", &w); }
+        { ui::EffectsPanel w; audit("Effects", &w); }
+        { ui::LearnSidebar w; audit("Learn", &w); }
+        { ui::RecoveredProjectsDialog w; audit("Recovered", &w); }
+        { ui::ExportQueue queue; ui::ExportQueueView w(&queue); audit("ExportQueue", &w); }
+        {
+            ui::CompositionSettingsDialog::Values values;
+            values.name = "Shot"; values.width = 1920; values.height = 1080;
+            values.fpsNumerator = 30; values.fpsDenominator = 1;
+            ui::CompositionSettingsDialog w(values, values); audit("CompositionSettings", &w);
+        }
+        english.removeDuplicates();
+        QVERIFY2(english.isEmpty(), qPrintable(english.join(QLatin1Char('\n'))));
     }
 
     // 2D effects that move by themselves get the time (RenderContext

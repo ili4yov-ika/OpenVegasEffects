@@ -132,7 +132,7 @@ CompositionSettingsDialog::CompositionSettingsDialog(const Values& values, const
     top->addRow(QCoreApplication::translate("CompositionSettingsDialog", "Template:"), templateRow);
     m_name = new QLineEdit(values.name, main);
     m_name->setObjectName(QStringLiteral("lineEditName"));
-    m_name->setPlaceholderText(QStringLiteral("<MyComp>"));
+    m_name->setPlaceholderText(QCoreApplication::translate("CompositionSettingsDialog", "<MyComp>"));
     top->addRow(QCoreApplication::translate("CompositionSettingsDialog", "Name:"), m_name);
     m_duration = new QDoubleSpinBox(main);
     m_duration->setObjectName(QStringLiteral("spinBoxDuration"));

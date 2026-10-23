@@ -106,7 +106,8 @@ LayerPanel::LayerPanel(QWidget* parent) : QDockWidget(parent)
     m_planeColorLabel = form.planeColorLabel;
     m_planeColor = form.layerPlaneColor;
     m_id = form.layerID;
-    m_blend->addItems(composition::blendModeNames());
+    for (const QString& mode : composition::blendModeNames())
+        m_blend->addItem(composition::blendModeDisplayName(mode), mode);
     m_dimension->setItemData(0, int(composition::LayerDimension::TwoD));
     m_dimension->setItemData(1, int(composition::LayerDimension::ThreeD));
     buildEditor(form.form);
@@ -131,7 +132,8 @@ void LayerPanel::buildEditor(QFormLayout* form)
     connect(m_locked, &QCheckBox::toggled, this, [this](bool on) {
         if (!m_updating) editLayer(on ? tr("Lock Layer") : tr("Unlock Layer"), [on](auto& l) { l.locked = on; }, true);
     });
-    connect(m_blend, &QComboBox::currentTextChanged, this, [this](const QString& value) {
+    connect(m_blend, &QComboBox::currentIndexChanged, this, [this] {
+        const QString value = m_blend->currentData().toString();
         if (!m_updating) editLayer(tr("Set Layer Blend Mode"), [value](auto& l) { l.blendMode = value; });
     });
     connect(m_opacity, &QDoubleSpinBox::editingFinished, this, [this] {
@@ -218,7 +220,7 @@ void LayerPanel::refresh()
     m_breadcrumb->setText(tr("%1 > %2").arg(m_composition->name(), layer.name));
     m_kind->setText(kindText(layer.kind)); m_name->setText(layer.name);
     m_visible->setChecked(layer.visible); m_muted->setChecked(layer.muted); m_locked->setChecked(layer.locked);
-    m_blend->setCurrentText(layer.blendMode); m_opacity->setValue(layer.opacity * 100.0);
+    m_blend->setCurrentIndex(m_blend->findData(layer.blendMode)); m_opacity->setValue(layer.opacity * 100.0);
     m_dimension->setCurrentIndex(m_dimension->findData(int(layer.dimension)));
     m_parent->clear(); m_parent->addItem(tr("None"), -1);
     int parentIndex = 0;

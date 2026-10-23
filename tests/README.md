@@ -239,6 +239,13 @@ the translated name, labels and unit, and combo items shown in Russian while the
 stored values stay the module's own. Run
 `python tools/validate_translations.py` to check all active TS messages for empty
 translations, placeholders, plural forms, markup and file filters.
+`optionsShowNoEnglishInOtherLanguages` (options) and `panelsShowNoEnglishInOtherLanguages`
+(timeline) open Options and the panels - Controls and Layer with a layer of every kind
+selected, the Viewer's bar with its menus - in Russian, Japanese and Chinese with Qt's own
+catalogue, and fail on any label, button, list, combo, tab, header, placeholder, tooltip or
+action that still shows an English word (`tests/UntranslatedText.h`; names of formats,
+devices, files and the project's own data are skipped). Text shown by code instead of
+`tr()` never reaches the catalogues, so `validate_translations.py` cannot see it.
 
 The `timeline_regression` target covers aligned tree/canvas rows, search, editable
 parameters, colors and presets, keyframes and interpolation, layer controls,

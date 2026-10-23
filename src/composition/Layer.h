@@ -7,6 +7,7 @@
 #include <array>
 
 #include <QColor>
+#include <QCoreApplication>
 #include <QPointF>
 #include <QRectF>
 #include <QString>
@@ -83,18 +84,25 @@ struct LayerMask
 // Blend modes offered for a layer. The list lives beside the model because a
 // Layer stores its mode by name; RenderManager maps each of these onto a
 // QPainter composition mode. Keep the two in step - a name with no mapping
-// composites as plain source-over.
+// composites as plain source-over. Shown translated (blendModeDisplayName).
 inline QStringList blendModeNames()
 {
     return QStringList{
-        QStringLiteral("None"),        QStringLiteral("Normal"),
-        QStringLiteral("Add"),         QStringLiteral("Screen"),
-        QStringLiteral("Multiply"),    QStringLiteral("Overlay"),
-        QStringLiteral("Lighten"),     QStringLiteral("Darken"),
-        QStringLiteral("Color Dodge"), QStringLiteral("Color Burn"),
-        QStringLiteral("Hard Light"),  QStringLiteral("Soft Light"),
-        QStringLiteral("Difference"),  QStringLiteral("Exclusion"),
+        QT_TRANSLATE_NOOP("BlendMode", "None"),        QT_TRANSLATE_NOOP("BlendMode", "Normal"),
+        QT_TRANSLATE_NOOP("BlendMode", "Add"),         QT_TRANSLATE_NOOP("BlendMode", "Screen"),
+        QT_TRANSLATE_NOOP("BlendMode", "Multiply"),    QT_TRANSLATE_NOOP("BlendMode", "Overlay"),
+        QT_TRANSLATE_NOOP("BlendMode", "Lighten"),     QT_TRANSLATE_NOOP("BlendMode", "Darken"),
+        QT_TRANSLATE_NOOP("BlendMode", "Color Dodge"), QT_TRANSLATE_NOOP("BlendMode", "Color Burn"),
+        QT_TRANSLATE_NOOP("BlendMode", "Hard Light"),  QT_TRANSLATE_NOOP("BlendMode", "Soft Light"),
+        QT_TRANSLATE_NOOP("BlendMode", "Difference"),  QT_TRANSLATE_NOOP("BlendMode", "Exclusion"),
     };
+}
+
+// The name a blend mode is shown by; the mode itself stays stored by its
+// English name above.
+inline QString blendModeDisplayName(const QString& mode)
+{
+    return QCoreApplication::translate("BlendMode", mode.toUtf8().constData());
 }
 
 // Whether a layer lives in the composition's plane or in its 3D scene.
