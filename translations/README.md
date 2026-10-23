@@ -1,52 +1,70 @@
-# Переводы интерфейса
+# Interface translations
 
-Каталоги `openvegaseffects_ru.ts`, `openvegaseffects_ja.ts` и
-`openvegaseffects_zh_CN.ts` содержат русский, японский и упрощённый китайский
-переводы. `.qm` собираются и встраиваются в приложение через CMake или qmake.
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README.zh.md">简体中文</a> |
+  <a href="README.ja.md">日本語</a> |
+  <a href="README.ru.md">Русский</a>
+</p>
 
-После добавления переводимых строк выполните в окружении Qt и компилятора:
+The catalogs `openvegaseffects_ru.ts`, `openvegaseffects_ja.ts` and
+`openvegaseffects_zh_CN.ts` hold the Russian, Japanese and Simplified Chinese
+translations. The `.qm` files are built and embedded into the application by CMake or
+qmake.
+
+After adding translatable strings, run in an environment with Qt and a compiler:
 
 ```powershell
 lupdate OpenVegasEffects.pro -no-obsolete
 python tools/validate_translations.py
 ```
 
-Заполните новые строки перед сборкой. Сохраняйте подстановки `%1`, `%n`,
-переносы строк, HTML-ссылки и шаблоны файлов `(*.ext)`. Русские сообщения с `%n`
-требуют трёх форм, японские и китайские — одной. Имена ресурсов и служебные
-ключи стилей в `.ui` помечайте `notr="true"`.
+Fill in the new strings before building. Keep the placeholders `%1` and `%n`, line
+breaks, HTML links and file patterns `(*.ext)`. Russian messages with `%n` need three
+forms, Japanese and Chinese ones a single form. Mark resource names and style keys in
+`.ui` files with `notr="true"`.
 
-## Строки плагинов
+Text the interface shows has to go through `tr()` (or `QT_TRANSLATE_NOOP` and
+`QCoreApplication::translate` for lists kept as English keys, such as the Options
+categories or the blend modes). A string shown directly never reaches the catalogs,
+and `validate_translations.py` cannot see it: the tests
+`optionsShowNoEnglishInOtherLanguages` and `panelsShowNoEnglishInOtherLanguages` open
+Options and the panels in each language and fail on any text still showing an English
+word.
 
-`openvegaseffects_plugins_<язык>.ts` — собственные строки нативных плагинов в
-контекстах `Effect_<ShortName>`, как в референсе: название, категория, подписи
-параметров, единицы, пункты списков, группы, ключевые слова поиска и сообщения,
-которые модули строят во время работы. В исходниках этих строк нет, поэтому
-lupdate эти каталоги не обновляет: они только компилируются и встраиваются
-(`qt_add_lrelease` в CMake, `EXTRA_TRANSLATIONS` в qmake) и загружаются вторым
-переводчиком (`app::Translations::install`).
+## Plugin strings
 
-Каталоги пишет `tools/plugin_translations.py`:
+`openvegaseffects_plugins_<language>.ts` hold the native plugins' own strings in
+`Effect_<ShortName>` contexts, as in the reference: name, category, control labels,
+units, list items, groups, search keywords and the messages the modules build while
+running. These strings are not in the sources, so lupdate does not update these
+catalogs: they are only compiled and embedded (`qt_add_lrelease` in CMake,
+`EXTRA_TRANSLATIONS` in qmake) and loaded by a second translator
+(`app::Translations::install`).
+
+The catalogs are written by `tools/plugin_translations.py`:
 
 ```powershell
 python tools/plugin_translations.py [--ru-dictionary ru.json]
 ```
 
-Контексты и исходные строки, а также японские и китайские переводы берутся из
-каталогов референса (`SAMPLES/VEGAS_Effects/Translations/<язык>/VegasEffects_<язык>.qm`).
-Три перевода, где референс потерял переносы строк, исправлены в скрипте. Русского
-каталога у референса нет: скрипт сохраняет переводы, которые уже есть в
-`openvegaseffects_plugins_ru.ts`, и добавляет новые из JSON-словаря
-`{исходная строка: перевод}`. Строки без перевода записываются как unfinished,
-их покажет `validate_translations.py`. Ключевые слова поиска в русском каталоге
-содержат и русские, и английские слова, чтобы поиск работал на обоих языках.
+The contexts and source strings, as well as the Japanese and Chinese translations, come
+from the reference's catalogs
+(`SAMPLES/VEGAS_Effects/Translations/<language>/VegasEffects_<language>.qm`). Three
+translations where the reference lost line breaks are fixed in the script. The
+reference has no Russian catalog: the script keeps the translations already in
+`openvegaseffects_plugins_ru.ts` and adds new ones from a JSON dictionary
+`{source string: translation}`. Strings without a translation are written as
+unfinished, and `validate_translations.py` reports them. The search keywords in the
+Russian catalog hold both Russian and English words, so search works in both
+languages.
 
-Проверка скомпилированных каталогов в настроенной сборке тестов:
+Checking the compiled catalogs in a configured test build:
 
 ```powershell
-cmake --build build/timeline-tests --target translation_regression
-ctest --test-dir build/timeline-tests -R translation_regression --output-on-failure
+cmake --build build/ci-local-test --target translation_regression
+ctest --test-dir build/ci-local-test -R translation_regression --output-on-failure
 ```
 
-Тест проверяет загрузку всех трёх языков, возврат к английскому, контексты
-диалога выбора цвета и статусов сплеша, а также формы множественного числа.
+The test checks that all three languages load, the return to English, the contexts of
+the color picker dialog and of the splash statuses, and the plural forms.
