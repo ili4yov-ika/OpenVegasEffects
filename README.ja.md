@@ -220,13 +220,27 @@ tools\msvc_build.cmd build windows-msvc-debug
 `tools\msvc_build.cmd clean windows-msvc-release` は CMake 経由で Release の結果
 だけをクリーンし、ビルド構成を保持します。
 
-インストーラーの場合は、まず Release をビルドし、アプリを一時プレフィックスに
-インストールして Qt の依存関係を配置します。プロジェクトルートから：
+インストーラーは 1 つのスクリプトでビルドでき、任意のフォルダーから実行できます：
+
+```bat
+tools\build_windows_installer.bat
+```
+
+スクリプトは Visual Studio 2022（vswhere）と Qt の `msvc2022_64` キットを自動で見つけ、
+`build\windows-installer` で Ninja により Release をビルドし、新しいプレフィックスに
+インストールし、windeployqt で Qt を配置し、MSVC ランタイムの DLL を EXE の隣に
+コピーして `tools\OpenVegasEffects_Setup.exe` を作成します。`CMAKE_PREFIX_PATH` で
+別の Qt キットを、`OPENVEGAS_VLC_RUNTIME_DIR` で別の libVLC ランタイムを指定できます。
+別のジェネレーター、コンパイラー、Qt キットで構成されたビルドツリーは作り直されます。
+
+手動では同じ手順は次のとおりです（`copy` の行には `VCToolsRedistDir` を設定する
+Developer Command Prompt for VS 2022 が必要です）。プロジェクトルートから：
 
 ```bat
 tools\msvc_build.cmd buildall windows-msvc-release
 cmake --install build\Windows_MSVC-x64-Release --prefix build\installer-stage
-"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release build\installer-stage\bin\OpenVegasEffects.exe
+"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release --no-compiler-runtime build\installer-stage\bin\OpenVegasEffects.exe
+copy "%VCToolsRedistDir%x64\Microsoft.VC143.CRT\*.dll" build\installer-stage\bin\
 "C:\Program Files (x86)\NSIS\makensis.exe" /DBUILD_DIR=build\installer-stage /DOUTPUT_FILE=build\OpenVegasEffects_Setup.exe tools\nsis_installer.nsi
 ```
 

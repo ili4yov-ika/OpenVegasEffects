@@ -214,13 +214,27 @@ The script can be run from any directory. Without arguments it performs
 `clean` are also available. For example, `tools\msvc_build.cmd clean windows-msvc-release`
 cleans only the Release results via CMake, preserving the build configuration.
 
-For the installer, first build Release, install the application into a temporary
-prefix and deploy the Qt dependencies. From the project root:
+The installer is built by one script from any directory:
+
+```bat
+tools\build_windows_installer.bat
+```
+
+It finds Visual Studio 2022 (vswhere) and the Qt `msvc2022_64` kit itself, builds
+Release with Ninja in `build\windows-installer`, installs it into a fresh prefix,
+deploys Qt with windeployqt, copies the MSVC runtime DLLs next to the EXE and writes
+`tools\OpenVegasEffects_Setup.exe`. `CMAKE_PREFIX_PATH` chooses another Qt kit and
+`OPENVEGAS_VLC_RUNTIME_DIR` another libVLC runtime; a build tree configured with
+another generator, compiler or Qt kit is started over.
+
+By hand the same steps are (the `copy` line needs a Developer Command Prompt for
+VS 2022, which sets `VCToolsRedistDir`). From the project root:
 
 ```bat
 tools\msvc_build.cmd buildall windows-msvc-release
 cmake --install build\Windows_MSVC-x64-Release --prefix build\installer-stage
-"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release build\installer-stage\bin\OpenVegasEffects.exe
+"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release --no-compiler-runtime build\installer-stage\bin\OpenVegasEffects.exe
+copy "%VCToolsRedistDir%x64\Microsoft.VC143.CRT\*.dll" build\installer-stage\bin\
 "C:\Program Files (x86)\NSIS\makensis.exe" /DBUILD_DIR=build\installer-stage /DOUTPUT_FILE=build\OpenVegasEffects_Setup.exe tools\nsis_installer.nsi
 ```
 

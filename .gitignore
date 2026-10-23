@@ -9,3 +9,6 @@
 /Release/
 /RelWithDebInfo/
 /MinSizeRel/
+
+# Built by tools/build_windows_installer.bat
+tools/OpenVegasEffects_Setup.exe

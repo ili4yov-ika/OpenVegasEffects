@@ -194,13 +194,26 @@ tools\msvc_build.cmd build windows-msvc-debug
 `tools\msvc_build.cmd clean windows-msvc-release` 仅通过 CMake 清理 Release 结果，
 同时保留构建配置。
 
-对于安装程序，先构建 Release，将应用安装到临时前缀并部署 Qt 依赖。在项目根目录
-下：
+安装程序由一个脚本构建，可在任意目录运行：
+
+```bat
+tools\build_windows_installer.bat
+```
+
+脚本会自动找到 Visual Studio 2022（vswhere）和 Qt 的 `msvc2022_64` 套件，在
+`build\windows-installer` 中用 Ninja 构建 Release，安装到全新的前缀，用 windeployqt
+部署 Qt，把 MSVC 运行时 DLL 复制到 EXE 旁边，并生成 `tools\OpenVegasEffects_Setup.exe`。
+`CMAKE_PREFIX_PATH` 可选择其他 Qt 套件，`OPENVEGAS_VLC_RUNTIME_DIR` 可选择其他 libVLC
+运行时；用其他生成器、编译器或 Qt 套件配置的构建目录会重新创建。
+
+手动执行时步骤相同（`copy` 一行需要设置了 `VCToolsRedistDir` 的
+Developer Command Prompt for VS 2022）。在项目根目录下：
 
 ```bat
 tools\msvc_build.cmd buildall windows-msvc-release
 cmake --install build\Windows_MSVC-x64-Release --prefix build\installer-stage
-"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release build\installer-stage\bin\OpenVegasEffects.exe
+"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release --no-compiler-runtime build\installer-stage\bin\OpenVegasEffects.exe
+copy "%VCToolsRedistDir%x64\Microsoft.VC143.CRT\*.dll" build\installer-stage\bin\
 "C:\Program Files (x86)\NSIS\makensis.exe" /DBUILD_DIR=build\installer-stage /DOUTPUT_FILE=build\OpenVegasEffects_Setup.exe tools\nsis_installer.nsi
 ```
 

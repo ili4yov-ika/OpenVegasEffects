@@ -1,6 +1,5 @@
-openvegas (0.1.0-1) unstable; urgency=low
+openvegaseffects (0.1.0-1) unstable; urgency=low
 
-  * Первый релиз OpenVegas (адаптация упаковки)
-  * MVP оболочка и VegReader v0
+  * First package of OpenVegas Effects.
 
- -- OpenVegas contributors <maintainer@example.com>  Wed, 29 Jul 2026 04:00:00 +0000
+ -- OpenVegas Effects contributors <maintainer@example.com>  Fri, 23 Oct 2026 12:00:00 +0300

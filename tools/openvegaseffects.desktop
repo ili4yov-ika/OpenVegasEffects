@@ -2,7 +2,7 @@
 Version=0.1
 Type=Application
 Name=OpenVegas Effects
-Name[ru]=OpenVegas
+Name[ru]=OpenVegas Effects
 Comment=Open-source video effects editor
 Comment[ru]=Открытый редактор видеоэффектов
 Comment[en]=Open-source video FX editor
