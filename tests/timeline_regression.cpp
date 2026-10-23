@@ -2738,6 +2738,7 @@ private slots:
             plugin::NativeFrameTime time; time.frame = 10; time.layerFrame = 10; time.layerFrames = 60;
             if (!plugin::applyEffectToImage(image, id, values, time))
                 QSKIP("No OpenGL 4.1 context for native modules on this platform");
+            image.save(testArtifactPath(wide ? "drop-shadow-wide.png" : "drop-shadow.png"));
             // The layer where it was, its corners included.
             for (const QPoint at : {QPoint(100, 40), QPoint(159, 40), QPoint(100, 99), QPoint(159, 99), QPoint(130, 70)})
                 QCOMPARE(image.pixelColor(at), QColor(250, 200, 50));
@@ -2748,6 +2749,39 @@ private slots:
                     if ((x < 100 || x >= 160 || y < 40 || y >= 100) && image.pixelColor(x, y).alpha() > 40) ++shadow;
             QVERIFY2(shadow > (wide ? 600 : 100), qPrintable(QString::number(shadow)));
         }
+    }
+
+    // Outer Glow grows its target by its size and draws the layer's quad
+    // over the whole grown target - from 0 to RenderContext +0x60/+0x64 - with
+    // its texture coordinates spread by the margins, as Drop Shadow does; at
+    // the layer's size there the glow came out moved and squeezed. Around a
+    // square in the middle it is as strong on each side. Needs the OpenGL 4.1
+    // context native modules run in.
+    void outerGlowStaysAroundItsLayer() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/OuterGlow.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference OuterGlow.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("test.native.outerglow");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        QImage image(160, 120, QImage::Format_RGBA8888);
+        image.fill(Qt::transparent);
+        for (int y = 50; y < 70; ++y) for (int x = 70; x < 90; ++x) image.setPixelColor(x, y, Qt::white);
+        QStringList values;
+        for (const auto& p : metadata.parameters) values << p.defaultValue;
+        plugin::NativeFrameTime time; time.frame = 10; time.layerFrame = 10; time.layerFrames = 60;
+        if (!plugin::applyEffectToImage(image, id, values, time))
+            QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        image.save(testArtifactPath("outer-glow.png"));
+        QCOMPARE(image.pixelColor(80, 60), QColor(Qt::white));
+        const int left = image.pixelColor(64, 60).alpha(), right = image.pixelColor(95, 60).alpha();
+        const int top = image.pixelColor(80, 44).alpha(), bottom = image.pixelColor(80, 75).alpha();
+        const QString seen = QStringLiteral("left %1 right %2 top %3 bottom %4").arg(left).arg(right).arg(top).arg(bottom);
+        QVERIFY2(left > 20 && top > 20, qPrintable(seen));
+        QVERIFY2(qAbs(left - right) <= 12 && qAbs(top - bottom) <= 12, qPrintable(seen));
+        // Nothing far from it.
+        QCOMPARE(image.pixelColor(5, 5).alpha(), 0);
     }
 
     // Native modules see Y running up, as Flux's GL textures run bottom row

@@ -3490,10 +3490,22 @@ public:
             };
             std::memcpy(frameBlock.data() + 0x38, transforms.data(),
                         sizeof(transforms));
-            // The texture's own size, reduced with it (the full size here
-            // drew 204 of the 241 modules wrong).
-            std::memcpy(frameBlock.data() + 0x60, &frameWidth, sizeof(frameWidth));
-            std::memcpy(frameBlock.data() + 0x64, &frameHeight, sizeof(frameHeight));
+            // The target's size: the texture's own, reduced with it (the
+            // full size here drew 204 of the 241 modules wrong), grown by the
+            // margins the module asked for. Outer Glow and Drop Shadow draw
+            // the layer's quad from 0 to this size with its texture
+            // coordinates spread over it less the margins, which they read
+            // through +0x78..+0x90 as GetRenderGrowth gave them (Drop Shadow
+            // keeps the layer's own size from then for its pivot).
+            const qint32 targetWidth = canvasWidth, targetHeight = canvasHeight;
+            std::memcpy(frameBlock.data() + 0x60, &targetWidth, sizeof(targetWidth));
+            std::memcpy(frameBlock.data() + 0x64, &targetHeight, sizeof(targetHeight));
+            if (canvasWidth != width || canvasHeight != height) {
+                for (int i = 0; i < 4; ++i) {
+                    qint32* value = &growth[i];
+                    std::memcpy(frameBlock.data() + 0x78 + 8 * i, &value, sizeof(value));
+                }
+            }
             // The time: milliseconds at +0x6c/+0x70, frames at +0x98/+0x9c,
             // the layer's length at +0xa0. Plugin2DEffect::Render holds a
             // layer frame past the end on the last one, scaling its time.

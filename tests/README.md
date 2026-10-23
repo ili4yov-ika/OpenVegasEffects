@@ -402,6 +402,9 @@ front face, and checks the face covers it (a body is met where its surface lies,
 the same sheet in front of the cube shows.
 `effectsGrowTheirTarget` (OpenGL) has Drop Shadow asked for its growth with the render's context, drawn into
 the grown target and cut back: the layer stays in place, unscaled, with its shadow beside it.
+`outerGlowStaysAroundItsLayer` (OpenGL) has Outer Glow drawn on its grown target - the target's size at
+RenderContext +0x60/+0x64 and its margins through +0x78..+0x90 - around a square in the middle: the
+square stays and the glow is as strong on each side.
 `fadeToColorDrawsItsSide` (OpenGL) has Fade to Color told its side of the edit point (RenderContext +0x08)
 and its window in milliseconds: red dips to black before the edit point, green rises out of it after,
 and from nothing the clip rises out of black over the whole window.
