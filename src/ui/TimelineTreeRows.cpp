@@ -9,6 +9,7 @@
 #include "model3d/ModelLoader.h"
 #include "composition/CompositionState.h"
 #include <QCheckBox>
+#include <utility>
 #include <QCoreApplication>
 #include <QColorDialog>
 #include <QComboBox>
@@ -150,6 +151,22 @@ void TimelineWidget::rebuildTree()
     const QString selection = m_tree->currentItem() ? itemPath(m_tree->currentItem()) : QString();
     const int scroll = m_tree->verticalScrollBar()->value();
     for (QTreeWidgetItemIterator it(m_tree); *it; ++it) expanded.insert(itemPath(*it), (*it)->isExpanded());
+    // After a move of layers the saved paths still start with the layers'
+    // old rows; they are renumbered so each layer keeps its own state.
+    const QVector<int> movedRows = std::exchange(m_movedLayerRows, {});
+    const QVector<int> movedSelection = std::exchange(m_movedLayerSelection, {});
+    const auto renumbered = [&movedRows](const QString& path) {
+        const int slash = path.indexOf(QLatin1Char('/'));
+        bool ok = false;
+        const int row = path.left(slash < 0 ? path.size() : slash).toInt(&ok);
+        if (!ok || row < 0 || row >= movedRows.size()) return path;
+        return QString::number(movedRows.at(row)) + (slash < 0 ? QString() : path.mid(slash));
+    };
+    if (!movedRows.isEmpty()) {
+        QHash<QString, bool> moved;
+        for (auto it = expanded.cbegin(); it != expanded.cend(); ++it) moved.insert(renumbered(it.key()), it.value());
+        expanded = moved;
+    }
     m_valueReaders.clear(); m_tree->clear();
     if (!m_comp) { m_rebuilding = false; syncLanes(); return; }
     for (int i = 0; i < m_comp->layers().size(); ++i) {
@@ -485,9 +502,24 @@ void TimelineWidget::rebuildTree()
         if (expanded.contains(path)) row->setExpanded(expanded.value(path));
         if (path == selection) m_tree->setCurrentItem(row);
     }
+    // The moved layers come back selected where they landed.
+    if (!movedSelection.isEmpty()) {
+        m_tree->clearSelection();
+        for (int row : movedSelection)
+            if (auto* item = m_tree->topLevelItem(row)) item->setSelected(true);
+        if (auto* item = m_tree->topLevelItem(movedSelection.first()))
+            m_tree->setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
+    }
     m_tree->verticalScrollBar()->setValue(scroll);
     m_rebuilding = false;
     applySearch(); refreshValues(); syncLanes();
+    if (!movedSelection.isEmpty() && m_comp) {
+        // The tree's own signals were blocked while it was rebuilt.
+        const int current = movedSelection.first();
+        emit layersSelected(movedSelection);
+        emit clipSelected(current, m_comp->layers().at(current).clips.size() == 1 ? 0 : -1);
+        m_canvas->setSelection(current, m_comp->layers().at(current).clips.size() == 1 ? 0 : -1);
+    }
 }
 
 // One property row of a layer group: its label, an editor of `spec`'s kind

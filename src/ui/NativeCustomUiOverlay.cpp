@@ -5,10 +5,17 @@
 
 #include "ui/ViewerWidget.h"
 
+// The Viewer overlay of a native module's own interface (MotionTrack's
+// lasso and track points, a 360 effect's handles): while the selected effect
+// has a custom UI, the overlay draws the image the module renders and hands
+// it the Viewer's pointer, keys and focus in canvas pixels, the way the
+// reference's viewer passes its events to a plugin.
 namespace openvegas::ui {
 
 namespace {
 
+// The bit masks the module's event records use: Shift 1, Ctrl 2, Alt 4 and
+// left 1, right 2, middle 4.
 int modifierMask(Qt::KeyboardModifiers modifiers)
 {
     return (modifiers.testFlag(Qt::ShiftModifier) ? 1 : 0)
@@ -43,6 +50,8 @@ void NativeCustomUiOverlay::shutdown()
     m_pressed = false;
 }
 
+// Follows the selection: when the effect instance shown changes, the old
+// one's UI is shut down (Notify teardown) and the new one's set up.
 NativeCustomUiOverlay::Target NativeCustomUiOverlay::sync()
 {
     Target target = m_provider ? m_provider() : Target();
@@ -59,6 +68,7 @@ NativeCustomUiOverlay::Target NativeCustomUiOverlay::sync()
     return target;
 }
 
+// Not in the 360 view: the module draws over the flat canvas only.
 bool NativeCustomUiOverlay::isActive() const
 {
     const ViewerWidget* owner = viewer();
@@ -72,6 +82,8 @@ bool NativeCustomUiOverlay::acceptsTool(int tool) const
     return tool == int(ViewerWidget::ViewerTool::Select);
 }
 
+// A Viewer pointer event as the module's record: the position in canvas
+// pixels, the button that changed (1 left, 2 right, 3 middle) and the masks.
 plugin::NativeCustomUiPointer NativeCustomUiOverlay::pointerFor(const ViewerPointerEvent& event,
                                                                 bool pressed) const
 {
@@ -87,6 +99,9 @@ plugin::NativeCustomUiPointer NativeCustomUiOverlay::pointerFor(const ViewerPoin
     return pointer;
 }
 
+// What the module answered: changed property values (or a request for
+// background work) go to the owner to store as an edit, a redraw repaints the
+// Viewer, and the cursor it asked for replaces the Viewer's.
 void NativeCustomUiOverlay::apply(const plugin::NativeCustomUiResult& result,
                                   ViewerPointerEvent* event)
 {
@@ -104,6 +119,8 @@ void NativeCustomUiOverlay::apply(const plugin::NativeCustomUiResult& result,
     }
 }
 
+// The module renders its overlay at the Viewer's zoom; it is drawn over the
+// frame's rectangle.
 void NativeCustomUiOverlay::paint(QPainter& painter, const ViewerMapping& mapping)
 {
     if (mapping.isSpherical() || mapping.imageRect.isEmpty()) return;

@@ -9,6 +9,10 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+// Import Composite Shot: the reference's dialog for File > Import of another
+// project's composite shots. It names the project file and lists its shots,
+// all checked; Import is enabled while at least one stays checked, and the
+// caller takes the checked shots' IDs (selectedIds).
 namespace openvegas {
 namespace ui {
 

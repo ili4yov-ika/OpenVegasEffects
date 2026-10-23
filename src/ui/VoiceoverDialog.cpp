@@ -9,6 +9,10 @@
 #include <QSlider>
 #include <QVBoxLayout>
 
+// The Record Voiceover dialog: counts down, records the microphone chosen in
+// Options > Voiceover through libVLC (media::AudioCapture) into a PCM buffer
+// and, on Stop and save, writes that buffer as a WAV file at the path the
+// caller gave. The caller imports the file; the dialog only records it.
 namespace openvegas::ui {
 VoiceoverDialog::VoiceoverDialog(const QString& path, QWidget* parent)
     : QDialog(parent), m_outputPath(path)
@@ -23,6 +27,7 @@ VoiceoverDialog::VoiceoverDialog(const QString& path, QWidget* parent)
     m_status->setObjectName(QStringLiteral("voiceoverStatus"));
     m_status->setWordWrap(true);
     layout->addWidget(m_status);
+    // Input volume, kept in Options and applied to a running capture at once.
     auto* gainLabel = new QLabel(this);
     auto* gain = new QSlider(Qt::Horizontal, this);
     gain->setObjectName(QStringLiteral("voiceoverInputVolume"));
@@ -45,6 +50,8 @@ VoiceoverDialog::VoiceoverDialog(const QString& path, QWidget* parent)
     connect(buttons, &QDialogButtonBox::rejected, this, &VoiceoverDialog::reject);
     connect(m_record, &QPushButton::clicked, this, &VoiceoverDialog::start);
     connect(m_stop, &QPushButton::clicked, this, &VoiceoverDialog::finish);
+    // One tick a second: the countdown before recording, then the elapsed
+    // time, and a capture that failed on the device's side stops here.
     connect(&m_timer, &QTimer::timeout, this, [this] {
         if (!m_recording) {
             if (--m_countdown <= 0) capture();
@@ -57,6 +64,10 @@ VoiceoverDialog::VoiceoverDialog(const QString& path, QWidget* parent)
     resize(460, 140);
 }
 VoiceoverDialog::~VoiceoverDialog() { stopCapture(); }
+
+// Record: checks libVLC and the format chosen in Options (16-bit PCM, the
+// channels and sample rate there), empties the buffer and starts the
+// countdown; capture() begins when it runs out.
 void VoiceoverDialog::start()
 {
     const QSettings settings = app::Settings::optionSettings();
@@ -77,6 +88,8 @@ void VoiceoverDialog::start()
     if (m_countdown == 0) capture();
     else m_status->setText(tr("Recording starts in %1…").arg(m_countdown));
 }
+// Starts the device after the countdown. recordingStarted lets the caller
+// play the timeline while the voice is recorded over it.
 void VoiceoverDialog::capture()
 {
     m_recording = true;
@@ -99,6 +112,8 @@ void VoiceoverDialog::stopCapture()
     if (wasRecording && recordingStopped) recordingStopped();
     m_record->setEnabled(true); m_stop->setEnabled(false);
 }
+// Stop and save: the recorded PCM goes out as a WAV through QSaveFile, so an
+// existing file at the path is replaced only by a complete recording.
 void VoiceoverDialog::finish()
 {
     stopCapture();

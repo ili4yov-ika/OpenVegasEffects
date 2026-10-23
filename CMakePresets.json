@@ -160,7 +160,7 @@
         {
             "name": "Visual Studio Community 2022 Release - x86_amd64",
             "displayName": "Visual Studio Community 2022 Release - x86_amd64",
-            "description": "Использование компиляторов для Visual Studio 17 2022 (архитектура x86_x64).",
+            "description": "Uses the Visual Studio 17 2022 compilers (x86_x64 architecture).",
             "generator": "Visual Studio 17 2022",
             "toolset": "host=x86",
             "architecture": "x64",

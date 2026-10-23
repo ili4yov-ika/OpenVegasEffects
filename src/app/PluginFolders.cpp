@@ -7,6 +7,10 @@
 #include <QFileInfo>
 #include <QSettings>
 
+// Where the native .hfpl plugins are looked for (Options > Plugins): the
+// Plugins folder of an installed VEGAS Effects when it is used, and the
+// folders the user chose - another FXhome program's plugins among them. The
+// choices are kept in the options settings under Plugins/.
 namespace openvegas {
 namespace app {
 namespace PluginFolders {
@@ -33,6 +37,7 @@ void appendOnce(QStringList& list, const QString& folder)
 
 } // namespace
 
+// The Program Files folders of this machine (64-bit, default and x86).
 QStringList programFilesRoots()
 {
     QStringList roots;
@@ -121,6 +126,7 @@ void setPromptShown(bool shown)
     settings.setValue(kPromptShown, shown);
 }
 
+// The folders the plugin scan reads, each once and only when it exists.
 QStringList scannedFolders(const QStringList& roots)
 {
     QStringList folders;
@@ -130,6 +136,8 @@ QStringList scannedFolders(const QStringList& roots)
     return folders;
 }
 
+// Options opens on its Plugins page by itself once, when no folder it
+// would scan holds a plugin.
 bool shouldPrompt(const QStringList& roots)
 {
     if (promptShown()) return false;

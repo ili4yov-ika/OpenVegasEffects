@@ -1,8 +1,13 @@
 #include "license/OpenLicenseManager.h"
 
+// The port's license manager. The reference checks an activated license and
+// its edition before it enables features; the port is free software, so this
+// manager always reports a valid free license of the Vegas edition, every
+// feature enabled, and never contacts a server.
 namespace openvegas {
 namespace license {
 
+// Names of the editions and states for logs and the About dialog.
 QString toString(HostEdition edition)
 {
     switch (edition) {

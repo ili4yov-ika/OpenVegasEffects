@@ -8,6 +8,10 @@
 
 #include <memory>
 
+// The Effects panel's Favorites and Recents, kept where and as the reference
+// keeps them: group Plugins of the settings, each list a QDataStream (Qt 5.11
+// format) of an int 0, the count and the plugin IDs - so the lists carry over
+// between the two programs.
 namespace openvegas {
 namespace ui {
 namespace {
@@ -86,6 +90,8 @@ void EffectsFavorites::setFavorite(const QString& id, bool favorite)
     emit favoritesChanged();
 }
 
+// An effect just applied goes to the end of Recents (once; the newest is
+// last) and the oldest drop off past kMaximumRecents.
 void EffectsFavorites::addRecent(const QString& id)
 {
     if (id.isEmpty() || (!m_recents.isEmpty() && m_recents.last() == id)) return;

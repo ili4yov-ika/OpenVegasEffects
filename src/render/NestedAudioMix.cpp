@@ -13,6 +13,15 @@
 #include <QDir>
 #include <QFileInfo>
 
+// Audio that realtime playback cannot mix block by block and takes from WAV
+// files made in the background instead:
+// - NestedAudioMixCache: the whole mix of a nested composite shot, for a
+//   composite clip whose own native audio effects process that mix;
+// - ProcessedClipAudioCache: one clip run through its native audio effects as
+//   export does, for effects that need the whole clip (AudioReverse past its
+//   look-ahead, an effect after another).
+// Both name a file by a hash of everything that shapes the sound, so an edit
+// makes a new file and an unchanged state reuses the old one.
 namespace openvegas {
 namespace render {
 
@@ -37,6 +46,10 @@ QString NestedAudioMixCache::pathFor(const composition::Composition& shot, const
     return QDir(m_directory).filePath(key + QStringLiteral(".wav"));
 }
 
+// The shot's mix when it is ready (a WAV with more than its 44-byte header);
+// otherwise empty, and the mix is started on a thread of its own from a copy
+// of the shot - mixReady tells when it is there. A shot that mixes to nothing
+// is remembered and not tried again.
 QString NestedAudioMixCache::mixFor(const std::shared_ptr<composition::Composition>& shot,
                                     const std::shared_ptr<media::MediaManager>& media)
 {
@@ -85,6 +98,8 @@ ProcessedClipAudioCache::~ProcessedClipAudioCache()
         if (thread) thread->wait();
 }
 
+// The file name: a hash of the layer's state, the clip, the rates, the span
+// and the source file's identity (path, size, modification time, stream).
 QString ProcessedClipAudioCache::pathFor(const Request& request) const
 {
     if (m_directory.isEmpty() || !request.layer) return {};
@@ -105,6 +120,8 @@ QString ProcessedClipAudioCache::readyFor(const Request& request) const
     return !path.isEmpty() && QFileInfo(path).isFile() && QFileInfo(path).size() > 44 ? path : QString();
 }
 
+// As mixFor: the processed clip when it is ready, else it is made on a
+// thread and processedReady tells when.
 QString ProcessedClipAudioCache::processedFor(const Request& request)
 {
     const QString ready = readyFor(request);

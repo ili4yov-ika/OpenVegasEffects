@@ -7,11 +7,16 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QMenu>
+#include <QMetaMethod>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QToolButton>
 #include <QVBoxLayout>
 
+// The Track panel: a compact list of the composition's layers with their
+// visibility, mute, blend mode and opacity editable in place, and buttons to
+// add, reorder and remove layers. The main window keeps it in step with the
+// timeline (refresh, setSelectedLayer).
 namespace openvegas::ui {
 namespace {
 const QStringList& blendModes()
@@ -61,6 +66,9 @@ TrackPanel::TrackPanel(QWidget* parent) : QDockWidget(parent)
 void TrackPanel::bindModel(std::shared_ptr<composition::Composition> composition)
 { m_composition = std::move(composition); refresh(); }
 
+// Rebuilds the rows from the composition, one per layer in stacking order,
+// keeping the selected row. Each row's blend mode is a combo box shown
+// translated with the stored English name as its data.
 void TrackPanel::refresh()
 {
     if (!m_tree) return;
@@ -89,6 +97,7 @@ void TrackPanel::refresh()
     setSelectedLayer(selected);
 }
 
+// The timeline's search text: rows whose name does not contain it are hidden.
 void TrackPanel::applyFilter(const QString& filter)
 {
     m_filter = filter;
@@ -114,6 +123,8 @@ int TrackPanel::selectedRow() const
     return item ? item->data(0, Qt::UserRole).toInt() : -1;
 }
 
+// Remove Layer: a locked layer stays; removing the last camera of a 3D shot
+// asks first and then turns the shot 2D, as the reference does.
 void TrackPanel::onDeleteLayer()
 {
     const int row = selectedRow();
@@ -127,13 +138,22 @@ void TrackPanel::onDeleteLayer()
     }
 }
 
+// Move Layer Up (-1) and Down (+1): the selected layer trades places with
+// its neighbour. Up puts it before the layer above; down before the layer
+// two rows below, which is just after its lower neighbour.
 void TrackPanel::onMoveLayer(int delta)
 {
     const int row = selectedRow(), target = row + delta;
     if (!m_composition || row < 0 || target < 0 || target >= m_composition->layers().size()) return;
+    if (isSignalConnected(QMetaMethod::fromSignal(&TrackPanel::moveLayersRequested))) {
+        emit moveLayersRequested({row}, delta < 0 ? target : target + 1);
+        return;
+    }
     if (m_composition->swapLayers(row, target)) { refresh(); setSelectedLayer(target); emitModified(); }
 }
 
+// An edit in a row's cell: 0 name, 1 visible, 2 muted, 3 blend mode,
+// 4 opacity in percent (clamped to 0..100 and shown again as typed back).
 void TrackPanel::onItemChanged(int row, int column)
 {
     if (m_updating || !m_composition || row < 0 || row >= m_composition->layers().size()) return;

@@ -1929,6 +1929,10 @@ void MainWindow::wireSignals()
     connect(m_timeline, &TimelineWidget::keyFramesChanged, this, [this] {
         m_projectModified = true;
         updateWindowTitle();
+        // Timeline edits can add, remove or reorder layers ("Move Layer(s)"),
+        // which the Track list beside it shows too; the Layer panel follows
+        // the selection (clipSelected).
+        if (m_trackPanel) m_trackPanel->refresh();
         m_controlsPanel->refresh();
         updateTextPanelSelection();
         updateLayoutPanelSelection();
@@ -2566,6 +2570,8 @@ void MainWindow::bindModel(std::shared_ptr<composition::Composition> composition
         updateWindowTitle();
         requestRenderFrame();
     });
+    connect(m_trackPanel, &TrackPanel::moveLayersRequested, this,
+            [this](const QVector<int>& rows, int dropRow) { m_timeline->moveLayers(rows, dropRow); });
     connect(m_trackPanel, &TrackPanel::layersModified, this, [this] {
         m_projectModified = true;
         updateWindowTitle();

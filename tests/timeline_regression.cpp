@@ -1471,6 +1471,100 @@ private slots:
         QVERIFY(std::abs(fov - qRadiansToDegrees(2 * std::atan(canvas.height() / 2.0 / 2000.0))) < 1e-6);
         QCOMPARE(render::sceneCameraOf(&loaded, canvas, 10).nearPlane, 5.0);
     }
+    // Layers are reordered by dragging their rows in the timeline's tree, as
+    // the reference's TreeDropDelegate does with one MoveLayerCmd per layer
+    // ("Move Layer(s)"): the dragged layers keep their order and go before the
+    // layer under the drop, as one undoable edit, and come back selected.
+    // Track's Move Layer Up/Down take the same way.
+    void layersAreReorderedByDraggingTheirRows() {
+        const auto names = [](const composition::Composition& comp) {
+            QStringList list;
+            for (const auto& layer : comp.layers()) list << layer.name;
+            return list.join(QString());
+        };
+        // The model: before the drop row, in their own order.
+        {
+            composition::Composition comp;
+            for (const char* name : {"A", "B", "C", "D"}) comp.addLayer(name);
+            QVector<int> newRows;
+            QVERIFY(comp.moveLayers({0}, 3, &newRows));
+            QCOMPARE(names(comp), QString("BCAD"));
+            QCOMPARE(newRows, (QVector<int>{2, 0, 1, 3}));
+            QVERIFY(comp.moveLayers({1, 3}, 0));
+            QCOMPARE(names(comp), QString("CDBA"));
+            QVERIFY(comp.moveLayers({0}, 4));
+            QCOMPARE(names(comp), QString("DBAC"));
+            QVERIFY(!comp.moveLayers({1}, 1));
+            QVERIFY(!comp.moveLayers({1}, 2));
+            QVERIFY(!comp.moveLayers({7}, 0));
+            for (int i = 0; i < comp.layers().size(); ++i) QCOMPARE(comp.layers()[i].zIndex, i);
+        }
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setDurationSeconds(2);
+        for (const char* name : {"A", "B", "C"}) {
+            auto& layer = shot->addLayer(name);
+            layer.kind = composition::LayerKind::Plane;
+            composition::Clip clip; clip.durationSeconds = 2; layer.clips << clip;
+        }
+        const core::Identifier cId = shot->layers()[2].id;
+        QUndoStack stack;
+        ui::TimelineWidget timeline; timeline.resize(1000, 600);
+        timeline.setUndoStack(&stack); timeline.setComposition(shot);
+        timeline.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&timeline));
+        auto* tree = timeline.findChild<ui::TimelineTree*>("timelineLayerTree");
+        QVERIFY(tree);
+        tree->collapseAll();
+        QApplication::processEvents();
+        QSignalSpy selected(&timeline, &ui::TimelineWidget::layersSelected);
+        // Drag C's row over the upper half of A's.
+        QWidget* viewport = tree->viewport();
+        const QPoint from = tree->visualItemRect(tree->topLevelItem(2)).center();
+        const QPoint to = tree->visualItemRect(tree->topLevelItem(0)).topLeft() + QPoint(40, 3);
+        QCOMPARE(tree->layerDropRow(to), 0);
+        QTest::mousePress(viewport, Qt::LeftButton, {}, from);
+        for (int step = 1; step <= 4; ++step) {
+            const QPoint at = from + (to - from) * step / 4;
+            QMouseEvent move(QEvent::MouseMove, at, viewport->mapToGlobal(at), Qt::NoButton,
+                             Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(viewport, &move);
+        }
+        QTest::mouseRelease(viewport, Qt::LeftButton, {}, to);
+        QCOMPARE(names(*shot), QString("CAB"));
+        QCOMPARE(stack.undoText(), QString("Move Layer(s)"));
+        // The tree is rebuilt with C first, and C is selected there.
+        QTRY_VERIFY(tree->topLevelItem(0)->text(0).contains(QStringLiteral("C [")));
+        QVERIFY(!selected.isEmpty());
+        QCOMPARE(selected.last().at(0).value<QVector<int>>(), QVector<int>{0});
+        QVERIFY(tree->topLevelItem(0)->isSelected());
+        QCOMPARE(shot->layers()[0].id, cId);
+        stack.undo();
+        QCOMPARE(names(*shot), QString("ABC"));
+        stack.redo();
+        QCOMPARE(names(*shot), QString("CAB"));
+        // A press without a drag only selects.
+        const QPoint still = tree->visualItemRect(tree->topLevelItem(1)).center();
+        QTest::mouseClick(viewport, Qt::LeftButton, {}, still);
+        QCOMPARE(names(*shot), QString("CAB"));
+        // Track's buttons: Down puts the layer after its lower neighbour,
+        // through the timeline when they are connected...
+        ui::TrackPanel track; track.bindModel(shot);
+        QObject::connect(&track, &ui::TrackPanel::moveLayersRequested, &timeline,
+                         [&timeline](const QVector<int>& rows, int dropRow) { timeline.moveLayers(rows, dropRow); });
+        track.setSelectedLayer(0);
+        track.findChild<QToolButton*>("toolButtonMoveLayerDown")->click();
+        QCOMPARE(names(*shot), QString("ACB"));
+        QCOMPARE(stack.undoText(), QString("Move Layer(s)"));
+        track.setSelectedLayer(2);
+        track.findChild<QToolButton*>("toolButtonMoveLayerUp")->click();
+        QCOMPARE(names(*shot), QString("ABC"));
+        // ...and by themselves when nothing is.
+        ui::TrackPanel alone; alone.bindModel(shot);
+        alone.setSelectedLayer(0);
+        alone.findChild<QToolButton*>("toolButtonMoveLayerDown")->click();
+        QCOMPARE(names(*shot), QString("BAC"));
+    }
+
     // A camera's Lens group in the timeline edits its zoom (by key when it
     // is animated) and the Layer panel its Near and Far Clip Distance.
     void cameraLensAndClippingAreEdited() {

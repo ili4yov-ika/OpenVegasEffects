@@ -13,6 +13,10 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+// One meter column: two LED bars (left and right channel) of 20 segments -
+// green, then amber from the 16th, red from the 19th - lit up to the level,
+// with a hold-peak line above them. The colours of the background and of the
+// peak line are the theme's (Theme/meterBackgroundColor, holdPeakLineColor).
 class AudioMeterDisplay : public QWidget
 {
 public:
@@ -28,6 +32,7 @@ public:
                                             QStringLiteral("#eeeeee")).toString());
     }
 
+    // Levels are linear 0..1 per channel; the peaks only rise until reset.
     void setLevels(double left, double right)
     {
         m_left = qBound(0.0, left, 1.0);
@@ -81,6 +86,9 @@ private:
 namespace openvegas {
 namespace ui {
 
+// The Audio Meters panel: input and output columns (the form's placeholders
+// are replaced by AudioMeterDisplay), Hold Peaks kept in Options and Reset
+// Peaks. The main window feeds the output column the master mix's RMS.
 AudioMetersPanel::AudioMetersPanel(QWidget* parent) : QDockWidget(parent)
 {
     Ui::AudioMetersPanel form;

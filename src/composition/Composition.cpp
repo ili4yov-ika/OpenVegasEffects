@@ -1,5 +1,6 @@
 #include "composition/Composition.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace openvegas {
@@ -71,6 +72,37 @@ bool Composition::swapLayers(int a, int b)
     m_layers.swapItemsAt(a, b);
     for (int i = 0; i < m_layers.size(); ++i) {
         m_layers[i].zIndex = i;
+    }
+    return true;
+}
+
+bool Composition::moveLayers(QVector<int> rows, int dropRow, QVector<int>* newRows)
+{
+    const int count = m_layers.size();
+    std::sort(rows.begin(), rows.end());
+    rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+    if (rows.isEmpty() || rows.first() < 0 || rows.last() >= count) return false;
+    dropRow = qBound(0, dropRow, count);
+    // The moved layers come out in their order and go back in before the
+    // first layer at or after the drop row that is not moved itself.
+    QVector<int> order;
+    order.reserve(count);
+    for (int i = 0; i < count; ++i)
+        if (!rows.contains(i)) order.append(i);
+    int insertAt = 0;
+    while (insertAt < order.size() && order.at(insertAt) < dropRow) ++insertAt;
+    for (int k = 0; k < rows.size(); ++k) order.insert(insertAt + k, rows.at(k));
+    bool changed = false;
+    for (int i = 0; i < count && !changed; ++i) changed = order.at(i) != i;
+    if (!changed) return false;
+    QVector<Layer> moved;
+    moved.reserve(count);
+    for (int oldIndex : std::as_const(order)) moved.append(m_layers.at(oldIndex));
+    m_layers = moved;
+    for (int i = 0; i < m_layers.size(); ++i) m_layers[i].zIndex = i;
+    if (newRows) {
+        newRows->fill(-1, count);
+        for (int i = 0; i < count; ++i) (*newRows)[order.at(i)] = i;
     }
     return true;
 }
