@@ -10,6 +10,10 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
+// Text Properties: a text layer's text, point or paragraph mode, font, size
+// and - for paragraph text only - the box size. It edits a copy of the
+// layer's TextStyle; style() returns that copy with the dialog's values, and
+// the rest of the style (colours, strokes, alignment) passes through as it was.
 namespace openvegas {
 namespace ui {
 

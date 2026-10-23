@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Сборка OpenVegas Effects на macOS (CMake Presets + Ninja).
+# Builds OpenVegas Effects on macOS (CMake presets + Ninja).
 #
-# Использование:
+# Usage:
 #   bash tools/macos_build.sh              # Debug
 #   bash tools/macos_build.sh release      # Release
-#   bash tools/macos_build.sh debug test   # Debug + ctest (если есть тесты)
+#   bash tools/macos_build.sh debug test   # Debug + ctest (when there are tests)
 #   bash tools/macos_build.sh release deploy  # Release + macdeployqt
 
 set -euo pipefail
@@ -29,8 +29,8 @@ for arg in "$@"; do
         test) RUN_TEST=1 ;;
         deploy) DEPLOY=1 ;;
         *)
-            echo "Неизвестный аргумент: $arg"
-            echo "Использование: $0 [debug|release] [test] [deploy]"
+            echo "Unknown argument: $arg"
+            echo "Usage: $0 [debug|release] [test] [deploy]"
             exit 1
             ;;
     esac
@@ -51,11 +51,11 @@ cmake --build --preset "${PRESET}" --parallel
 
 APP_BIN="${BUILD_DIR}/OpenVegasEffects"
 if [[ ! -x "$APP_BIN" ]]; then
-    echo "[ОШИБКА] Исполняемый файл не найден: $APP_BIN"
+    echo "[ERROR] Executable not found: $APP_BIN"
     exit 1
 fi
 
-echo "Собрано: $APP_BIN"
+echo "Built: $APP_BIN"
 
 if [[ "$RUN_TEST" -eq 1 ]]; then
     echo "=== CTest (QT_QPA_PLATFORM=offscreen) ==="
@@ -68,17 +68,17 @@ if [[ "$DEPLOY" -eq 1 ]]; then
         MACDEPLOYQT="${CMAKE_PREFIX_PATH}/bin/macdeployqt"
     fi
     if [[ ! -x "$MACDEPLOYQT" ]]; then
-        echo "[ПРЕДУПРЕЖДЕНИЕ] macdeployqt не найден — пропуск deploy"
+        echo "[WARN] macdeployqt not found - skipping deploy"
     else
         APP_DIR="${BUILD_DIR}/OpenVegasEffects.app"
         mkdir -p "${APP_DIR}/Contents/MacOS"
         cp "$APP_BIN" "${APP_DIR}/Contents/MacOS/OpenVegasEffects"
 
-        # Bundle собирается здесь вручную, потому что CMakeLists не выставляет
-        # MACOSX_BUNDLE и цель линкуется обычным исполняемым файлом. Без Info.plist
-        # такой каталог .app не запускается из Finder и macdeployqt ругается —
-        # поэтому минимальный plist пишем сами. Правильное решение — включить
-        # MACOSX_BUNDLE в CMakeLists и убрать этот блок.
+        # The bundle is put together here by hand: CMakeLists.txt does not set
+        # MACOSX_BUNDLE, so the target links as a plain executable. Without an
+        # Info.plist such a .app does not start from Finder and macdeployqt
+        # complains, so a minimal plist is written here. The proper fix is
+        # MACOSX_BUNDLE in CMakeLists.txt and dropping this block.
         cat >"${APP_DIR}/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -101,6 +101,6 @@ PLIST
             cp -R "${BUILD_DIR}/vlc" "${APP_DIR}/Contents/MacOS/"
         fi
         "$MACDEPLOYQT" "$APP_DIR"
-        echo "Развёрнуто: $APP_DIR"
+        echo "Deployed: $APP_DIR"
     fi
 fi

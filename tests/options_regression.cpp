@@ -7,6 +7,7 @@
 #include <QTranslator>
 #include <QScopeGuard>
 #include "ui/PromptMessage.h"
+#include "UntranslatedText.h"
 
 #include <QAction>
 #include <QApplication>
@@ -15,6 +16,7 @@
 #include <QDir>
 #include <QKeySequenceEdit>
 #include <QLabel>
+#include <QLibraryInfo>
 #include <QSignalSpy>
 #include <QFontDatabase>
 #include <QLineEdit>
@@ -319,6 +321,47 @@ private slots:
         ui::OptionsDialog reopened;
         QCOMPARE(reopened.findChild<QComboBox*>("comboBoxTemplate")->currentData().toString(), QStringLiteral("uhd30"));
         QMetaObject::invokeMethod(&reopened, "reject", Qt::DirectConnection);
+    }
+
+    // In another language Options shows nothing in English but names: its
+    // categories (once kept as the pages' keys), quality profiles and
+    // downsample modes, the Restore button's category among them. Qt's own
+    // strings come from Qt's catalogue, as the application loads it.
+    void optionsShowNoEnglishInOtherLanguages_data()
+    {
+        QTest::addColumn<QString>("locale");
+        for (const auto* locale : {"ru", "ja", "zh_CN"})
+            QTest::newRow(locale) << QString::fromLatin1(locale);
+    }
+
+    void optionsShowNoEnglishInOtherLanguages()
+    {
+        QFETCH(QString, locale);
+        QTranslator translator, qt;
+        QVERIFY(translator.load(QDir(QString::fromUtf8(TRANSLATION_TEST_ROOT))
+            .filePath(locale + "/openvegaseffects_" + locale + ".qm")));
+        qt.load(QStringLiteral("qt_") + locale, QLibraryInfo::path(QLibraryInfo::TranslationsPath));
+        qApp->installTranslator(&translator);
+        qApp->installTranslator(&qt);
+        const auto removeTranslators = qScopeGuard([&] {
+            qApp->removeTranslator(&translator);
+            qApp->removeTranslator(&qt);
+        });
+        ui::OptionsDialog dialog;
+        auto* categories = dialog.findChild<QListWidget*>(QStringLiteral("categoryList"));
+        QVERIFY(categories);
+        QCOMPARE(categories->item(0)->text(),
+                 QCoreApplication::translate("openvegas::ui::OptionsDialog", "General"));
+        QVERIFY(categories->item(0)->text() != QStringLiteral("General"));
+        // Device and template names, the installation's path, colours.
+        const QStringList data {
+            QStringLiteral("comboBoxVoiceoverDevice"), QStringLiteral("comboBoxOverrideLanguage"),
+            QStringLiteral("comboBoxTemplate"), QStringLiteral("labelInstallationPluginStatus"),
+            QStringLiteral("lineEditSnapshotDirectory"),
+        };
+        const QStringList english = tests::englishShownIn(&dialog, data);
+        QVERIFY2(english.isEmpty(), qPrintable(english.join(QLatin1Char('\n'))));
+        QMetaObject::invokeMethod(&dialog, "reject", Qt::DirectConnection);
     }
 
     void localizedOptionValues_data()

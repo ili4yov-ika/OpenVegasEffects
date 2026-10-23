@@ -27,6 +27,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMouseEvent>
+#include <QKeyEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPaintEvent>
@@ -2228,6 +2229,8 @@ TimelineWidget::TimelineWidget(QWidget* parent)
     connect(m_compositionTabs, &QTabBar::tabCloseRequested, this, &TimelineWidget::compositionTabCloseRequested);
     connect(m_splitter, &QSplitter::splitterMoved, this, [this](int, int) { syncHeaderToTree(); });
     connect(m_tree, &TimelineTree::decorationClicked, this, [this](QTreeWidgetItem* item) { toggleKeyFrame(item); });
+    connect(m_tree, &TimelineTree::layerRowsDropped, this,
+            [this](const QVector<int>& rows, int dropRow) { moveLayers(rows, dropRow); });
     connect(m_tree, &QTreeWidget::itemExpanded, this, [this] { syncLanes(); });
     connect(m_tree, &QTreeWidget::itemCollapsed, this, [this] { syncLanes(); });
     connect(m_tree, &TimelineTree::layoutShifted, this, [this] { syncLanes(); });
@@ -2576,7 +2579,144 @@ void TimelineTree::mousePressEvent(QMouseEvent* event)
             return;
         }
     }
+    if (event->button() == Qt::LeftButton && item && !item->parent()) {
+        m_pressedLayer = indexOfTopLevelItem(item);
+        m_pressPos = event->pos();
+    } else {
+        m_pressedLayer = -1;
+    }
     QTreeWidget::mousePressEvent(event);
+}
+
+int TimelineTree::layerDropRow(const QPoint& pos) const
+{
+    const int count = topLevelItemCount();
+    for (int row = 0; row < count; ++row) {
+        const QRect header = visualItemRect(topLevelItem(row));
+        if (header.isEmpty()) continue; // scrolled out or hidden by the search
+        // Over the upper half of a layer's own row: before it. Over its lower
+        // half or the rows it holds: before the next layer.
+        if (pos.y() < header.center().y()) return row;
+        const QTreeWidgetItem* next = nullptr;
+        for (int n = row + 1; n < count && !next; ++n)
+            if (!topLevelItem(n)->isHidden()) next = topLevelItem(n);
+        if (!next || pos.y() < visualItemRect(next).top()) return row + 1;
+    }
+    return count;
+}
+
+QVector<int> TimelineTree::draggedLayerRows() const
+{
+    QVector<int> rows;
+    if (m_pressedLayer < 0 || m_pressedLayer >= topLevelItemCount()) return rows;
+    if (topLevelItem(m_pressedLayer)->isSelected()) {
+        for (int row = 0; row < topLevelItemCount(); ++row)
+            if (topLevelItem(row)->isSelected()) rows.append(row);
+    }
+    if (rows.isEmpty()) rows.append(m_pressedLayer);
+    return rows;
+}
+
+void TimelineTree::mouseMoveEvent(QMouseEvent* event)
+{
+    if (m_pressedLayer >= 0 && (event->buttons() & Qt::LeftButton)) {
+        if (!m_draggingLayers
+            && (event->pos() - m_pressPos).manhattanLength() >= QApplication::startDragDistance()) {
+            m_draggingLayers = true;
+            setCursor(Qt::ClosedHandCursor);
+        }
+        if (m_draggingLayers) {
+            // Scroll when the pointer is held at the top or bottom edge.
+            const int edge = 12;
+            if (event->pos().y() < edge)
+                verticalScrollBar()->setValue(verticalScrollBar()->value() - verticalScrollBar()->singleStep());
+            else if (event->pos().y() > viewport()->height() - edge)
+                verticalScrollBar()->setValue(verticalScrollBar()->value() + verticalScrollBar()->singleStep());
+            const int dropRow = layerDropRow(event->pos());
+            if (dropRow != m_dropRow) {
+                m_dropRow = dropRow;
+                viewport()->update();
+            }
+            event->accept();
+            return; // no rubber-band selection while layers are dragged
+        }
+    }
+    QTreeWidget::mouseMoveEvent(event);
+}
+
+void TimelineTree::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (m_draggingLayers && event->button() == Qt::LeftButton) {
+        const QVector<int> rows = draggedLayerRows();
+        const int dropRow = layerDropRow(event->pos());
+        endLayerDrag();
+        event->accept();
+        if (!rows.isEmpty()) emit layerRowsDropped(rows, dropRow);
+        return;
+    }
+    m_pressedLayer = -1;
+    QTreeWidget::mouseReleaseEvent(event);
+}
+
+void TimelineTree::keyPressEvent(QKeyEvent* event)
+{
+    // Escape drops the drag without moving anything.
+    if (m_draggingLayers && event->key() == Qt::Key_Escape) {
+        endLayerDrag();
+        event->accept();
+        return;
+    }
+    QTreeWidget::keyPressEvent(event);
+}
+
+void TimelineTree::endLayerDrag()
+{
+    m_draggingLayers = false;
+    m_pressedLayer = -1;
+    m_dropRow = -1;
+    unsetCursor();
+    viewport()->update();
+}
+
+void TimelineTree::paintEvent(QPaintEvent* event)
+{
+    QTreeWidget::paintEvent(event);
+    if (!m_draggingLayers || m_dropRow < 0) return;
+    // The insertion line: at the top of the layer row the layers go before,
+    // or under the last visible row when they go to the bottom.
+    int y = -1;
+    if (m_dropRow < topLevelItemCount()) {
+        y = visualItemRect(topLevelItem(m_dropRow)).top();
+    } else {
+        for (QTreeWidgetItemIterator it(const_cast<TimelineTree*>(this)); *it; ++it) {
+            const QRect rect = visualItemRect(*it);
+            if (!rect.isEmpty()) y = qMax(y, rect.bottom() + 1);
+        }
+    }
+    if (y < 0) return;
+    QPainter painter(viewport());
+    painter.setPen(QPen(QColor(QStringLiteral("#4f9be8")), 2));
+    painter.drawLine(0, y, viewport()->width(), y);
+}
+
+bool TimelineWidget::moveLayers(const QVector<int>& rows, int dropRow)
+{
+    if (!m_comp) return false;
+    beginModelEdit();
+    QVector<int> newRows;
+    if (!m_comp->moveLayers(rows, dropRow, &newRows)) {
+        m_editPending = false;
+        m_editBefore.clear();
+        return false;
+    }
+    m_movedLayerRows = newRows;
+    QVector<int> landed;
+    for (int row : rows)
+        if (row >= 0 && row < newRows.size() && !landed.contains(newRows.at(row))) landed.append(newRows.at(row));
+    std::sort(landed.begin(), landed.end());
+    m_movedLayerSelection = landed;
+    finishModelEdit(tr("Move Layer(s)"), true);
+    return true;
 }
 
 // Reference layer tree: each layer expands into Tracks / Masks / Effects /

@@ -26,6 +26,10 @@ signals:
     void layersModified();
     void layerSelected(int row);
     void newLayerRequested(composition::LayerKind kind);
+    // Move Layer Up/Down: the layers at `rows` go before the layer at
+    // `dropRow`. The main window makes it the timeline's undoable "Move
+    // Layer(s)" edit; with nothing connected the panel swaps the rows itself.
+    void moveLayersRequested(const QVector<int>& rows, int dropRow);
 
 private:
     int selectedRow() const;

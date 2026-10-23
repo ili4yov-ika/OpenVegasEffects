@@ -349,8 +349,12 @@ copy_vegas_effects_runtime {
 }
 
 DISTFILES += \
-    translations/README.md \
-    ui/panels/README.md \
+    README.md README.ru.md README.ja.md README.zh.md \
+    translations/README.md translations/README.ru.md \
+    translations/README.ja.md translations/README.zh.md \
+    ui/panels/README.md ui/panels/README.ru.md \
+    ui/panels/README.ja.md ui/panels/README.zh.md \
+    tests/README.md tests/README.ru.md tests/README.ja.md tests/README.zh.md \
     tools/validate_translations.py
 
 # Desktop deployment hints

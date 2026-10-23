@@ -66,6 +66,7 @@
 #include "ui/ExportQueueView.h"
 #include "app/AVTemplates.h"
 #include "ui/PromptMessage.h"
+#include "UntranslatedText.h"
 #include "model3d/ModelLoader.h"
 #include "ui/ModelAnimationDialog.h"
 #include "ui/Model3DSettingsDialog.h"
@@ -87,6 +88,7 @@
 #include <QtEndian>
 #include <QTemporaryDir>
 #include <QTranslator>
+#include <QLibraryInfo>
 #include <QSqlDatabase>
 #include <QBuffer>
 #include <QJsonArray>
@@ -1469,6 +1471,100 @@ private slots:
         QVERIFY(std::abs(fov - qRadiansToDegrees(2 * std::atan(canvas.height() / 2.0 / 2000.0))) < 1e-6);
         QCOMPARE(render::sceneCameraOf(&loaded, canvas, 10).nearPlane, 5.0);
     }
+    // Layers are reordered by dragging their rows in the timeline's tree, as
+    // the reference's TreeDropDelegate does with one MoveLayerCmd per layer
+    // ("Move Layer(s)"): the dragged layers keep their order and go before the
+    // layer under the drop, as one undoable edit, and come back selected.
+    // Track's Move Layer Up/Down take the same way.
+    void layersAreReorderedByDraggingTheirRows() {
+        const auto names = [](const composition::Composition& comp) {
+            QStringList list;
+            for (const auto& layer : comp.layers()) list << layer.name;
+            return list.join(QString());
+        };
+        // The model: before the drop row, in their own order.
+        {
+            composition::Composition comp;
+            for (const char* name : {"A", "B", "C", "D"}) comp.addLayer(name);
+            QVector<int> newRows;
+            QVERIFY(comp.moveLayers({0}, 3, &newRows));
+            QCOMPARE(names(comp), QString("BCAD"));
+            QCOMPARE(newRows, (QVector<int>{2, 0, 1, 3}));
+            QVERIFY(comp.moveLayers({1, 3}, 0));
+            QCOMPARE(names(comp), QString("CDBA"));
+            QVERIFY(comp.moveLayers({0}, 4));
+            QCOMPARE(names(comp), QString("DBAC"));
+            QVERIFY(!comp.moveLayers({1}, 1));
+            QVERIFY(!comp.moveLayers({1}, 2));
+            QVERIFY(!comp.moveLayers({7}, 0));
+            for (int i = 0; i < comp.layers().size(); ++i) QCOMPARE(comp.layers()[i].zIndex, i);
+        }
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(320, 180); shot->setDurationSeconds(2);
+        for (const char* name : {"A", "B", "C"}) {
+            auto& layer = shot->addLayer(name);
+            layer.kind = composition::LayerKind::Plane;
+            composition::Clip clip; clip.durationSeconds = 2; layer.clips << clip;
+        }
+        const core::Identifier cId = shot->layers()[2].id;
+        QUndoStack stack;
+        ui::TimelineWidget timeline; timeline.resize(1000, 600);
+        timeline.setUndoStack(&stack); timeline.setComposition(shot);
+        timeline.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&timeline));
+        auto* tree = timeline.findChild<ui::TimelineTree*>("timelineLayerTree");
+        QVERIFY(tree);
+        tree->collapseAll();
+        QApplication::processEvents();
+        QSignalSpy selected(&timeline, &ui::TimelineWidget::layersSelected);
+        // Drag C's row over the upper half of A's.
+        QWidget* viewport = tree->viewport();
+        const QPoint from = tree->visualItemRect(tree->topLevelItem(2)).center();
+        const QPoint to = tree->visualItemRect(tree->topLevelItem(0)).topLeft() + QPoint(40, 3);
+        QCOMPARE(tree->layerDropRow(to), 0);
+        QTest::mousePress(viewport, Qt::LeftButton, {}, from);
+        for (int step = 1; step <= 4; ++step) {
+            const QPoint at = from + (to - from) * step / 4;
+            QMouseEvent move(QEvent::MouseMove, at, viewport->mapToGlobal(at), Qt::NoButton,
+                             Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(viewport, &move);
+        }
+        QTest::mouseRelease(viewport, Qt::LeftButton, {}, to);
+        QCOMPARE(names(*shot), QString("CAB"));
+        QCOMPARE(stack.undoText(), QString("Move Layer(s)"));
+        // The tree is rebuilt with C first, and C is selected there.
+        QTRY_VERIFY(tree->topLevelItem(0)->text(0).contains(QStringLiteral("C [")));
+        QVERIFY(!selected.isEmpty());
+        QCOMPARE(selected.last().at(0).value<QVector<int>>(), QVector<int>{0});
+        QVERIFY(tree->topLevelItem(0)->isSelected());
+        QCOMPARE(shot->layers()[0].id, cId);
+        stack.undo();
+        QCOMPARE(names(*shot), QString("ABC"));
+        stack.redo();
+        QCOMPARE(names(*shot), QString("CAB"));
+        // A press without a drag only selects.
+        const QPoint still = tree->visualItemRect(tree->topLevelItem(1)).center();
+        QTest::mouseClick(viewport, Qt::LeftButton, {}, still);
+        QCOMPARE(names(*shot), QString("CAB"));
+        // Track's buttons: Down puts the layer after its lower neighbour,
+        // through the timeline when they are connected...
+        ui::TrackPanel track; track.bindModel(shot);
+        QObject::connect(&track, &ui::TrackPanel::moveLayersRequested, &timeline,
+                         [&timeline](const QVector<int>& rows, int dropRow) { timeline.moveLayers(rows, dropRow); });
+        track.setSelectedLayer(0);
+        track.findChild<QToolButton*>("toolButtonMoveLayerDown")->click();
+        QCOMPARE(names(*shot), QString("ACB"));
+        QCOMPARE(stack.undoText(), QString("Move Layer(s)"));
+        track.setSelectedLayer(2);
+        track.findChild<QToolButton*>("toolButtonMoveLayerUp")->click();
+        QCOMPARE(names(*shot), QString("ABC"));
+        // ...and by themselves when nothing is.
+        ui::TrackPanel alone; alone.bindModel(shot);
+        alone.setSelectedLayer(0);
+        alone.findChild<QToolButton*>("toolButtonMoveLayerDown")->click();
+        QCOMPARE(names(*shot), QString("BAC"));
+    }
+
     // A camera's Lens group in the timeline edits its zoom (by key when it
     // is animated) and the Layer panel its Near and Far Clip Distance.
     void cameraLensAndClippingAreEdited() {
@@ -2736,6 +2832,7 @@ private slots:
             plugin::NativeFrameTime time; time.frame = 10; time.layerFrame = 10; time.layerFrames = 60;
             if (!plugin::applyEffectToImage(image, id, values, time))
                 QSKIP("No OpenGL 4.1 context for native modules on this platform");
+            image.save(testArtifactPath(wide ? "drop-shadow-wide.png" : "drop-shadow.png"));
             // The layer where it was, its corners included.
             for (const QPoint at : {QPoint(100, 40), QPoint(159, 40), QPoint(100, 99), QPoint(159, 99), QPoint(130, 70)})
                 QCOMPARE(image.pixelColor(at), QColor(250, 200, 50));
@@ -2746,6 +2843,39 @@ private slots:
                     if ((x < 100 || x >= 160 || y < 40 || y >= 100) && image.pixelColor(x, y).alpha() > 40) ++shadow;
             QVERIFY2(shadow > (wide ? 600 : 100), qPrintable(QString::number(shadow)));
         }
+    }
+
+    // Outer Glow grows its target by its size and draws the layer's quad
+    // over the whole grown target - from 0 to RenderContext +0x60/+0x64 - with
+    // its texture coordinates spread by the margins, as Drop Shadow does; at
+    // the layer's size there the glow came out moved and squeezed. Around a
+    // square in the middle it is as strong on each side. Needs the OpenGL 4.1
+    // context native modules run in.
+    void outerGlowStaysAroundItsLayer() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/OuterGlow.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference OuterGlow.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("test.native.outerglow");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        QImage image(160, 120, QImage::Format_RGBA8888);
+        image.fill(Qt::transparent);
+        for (int y = 50; y < 70; ++y) for (int x = 70; x < 90; ++x) image.setPixelColor(x, y, Qt::white);
+        QStringList values;
+        for (const auto& p : metadata.parameters) values << p.defaultValue;
+        plugin::NativeFrameTime time; time.frame = 10; time.layerFrame = 10; time.layerFrames = 60;
+        if (!plugin::applyEffectToImage(image, id, values, time))
+            QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        image.save(testArtifactPath("outer-glow.png"));
+        QCOMPARE(image.pixelColor(80, 60), QColor(Qt::white));
+        const int left = image.pixelColor(64, 60).alpha(), right = image.pixelColor(95, 60).alpha();
+        const int top = image.pixelColor(80, 44).alpha(), bottom = image.pixelColor(80, 75).alpha();
+        const QString seen = QStringLiteral("left %1 right %2 top %3 bottom %4").arg(left).arg(right).arg(top).arg(bottom);
+        QVERIFY2(left > 20 && top > 20, qPrintable(seen));
+        QVERIFY2(qAbs(left - right) <= 12 && qAbs(top - bottom) <= 12, qPrintable(seen));
+        // Nothing far from it.
+        QCOMPARE(image.pixelColor(5, 5).alpha(), 0);
     }
 
     // Native modules see Y running up, as Flux's GL textures run bottom row
@@ -2865,6 +2995,85 @@ private slots:
         const QColor middle = at(none, green, 0.5f, 0.0f, &ok);
         QVERIFY(ok);
         QVERIFY2(middle.green() > 80 && middle.green() < 120, qPrintable(middle.name(QColor::HexArgb)));
+    }
+
+    // In another language the panels show nothing in English but names -
+    // the layers' blend modes among what they once showed as stored - with a
+    // layer of every kind selected in Controls and Layer.
+    void panelsShowNoEnglishInOtherLanguages_data() {
+        QTest::addColumn<QString>("locale");
+        for (const auto* locale : {"ru", "ja", "zh_CN"}) QTest::newRow(locale) << QString::fromLatin1(locale);
+    }
+
+    void panelsShowNoEnglishInOtherLanguages() {
+        QFETCH(QString, locale);
+        QTranslator app, plugins, qt;
+        QVERIFY(app.load(QStringLiteral(TRANSLATION_TEST_ROOT) + "/" + locale + "/openvegaseffects_" + locale + ".qm"));
+        QVERIFY(plugins.load(QStringLiteral(TRANSLATION_TEST_ROOT) + "/" + locale + "/openvegaseffects_plugins_" + locale + ".qm"));
+        qt.load(QStringLiteral("qt_") + locale, QLibraryInfo::path(QLibraryInfo::TranslationsPath));
+        qApp->installTranslator(&app); qApp->installTranslator(&plugins); qApp->installTranslator(&qt);
+        auto cleanup = qScopeGuard([&] { qApp->removeTranslator(&app); qApp->removeTranslator(&plugins); qApp->removeTranslator(&qt); });
+        // The project's own names, file names and template names.
+        const QStringList data {
+            QStringLiteral("labelBreadCrumbTrail"), QStringLiteral("layerID"),
+            QStringLiteral("treeRecoveredProjects"), QStringLiteral("comboBoxTemplate"),
+            QStringLiteral("comboBoxAspectRatio"),
+        };
+        QStringList english;
+        const auto audit = [&](const char* name, QWidget* widget) {
+            for (const QString& line : tests::englishShownIn(widget, data))
+                english << QString::fromLatin1(name) + QLatin1Char(' ') + line;
+        };
+        { ui::TimelineWidget w; audit("Timeline", &w); }
+        { ui::EffectInspector w; audit("Controls", &w); }
+        {
+            auto shot = std::make_shared<composition::Composition>(); shot->setSize(320, 180);
+            using K = composition::LayerKind;
+            for (K kind : {K::Plane, K::Text, K::Point, K::Grade, K::Light, K::Camera, K::Media}) {
+                auto& layer = shot->addLayer(QStringLiteral("L"));
+                layer.kind = kind;
+                if (kind == K::Light || kind == K::Camera) layer.dimension = composition::LayerDimension::ThreeD;
+                composition::Clip clip; clip.durationSeconds = 2; layer.clips << clip;
+            }
+            ui::EffectInspector controls; controls.setComposition(shot); controls.resize(460, 760); controls.show();
+            ui::LayerPanel inspector; inspector.bindModel(shot); inspector.setMediaManager(std::make_shared<media::MediaManager>());
+            ui::TrackPanel track; track.bindModel(shot);
+            for (int i = 0; i < shot->layers().size(); ++i) {
+                controls.setSelection(i, 0); inspector.setSelection(i);
+                QTest::qWait(10);
+                const QByteArray kind = composition::layerKindName(shot->layers().at(i).kind);
+                audit(("Controls " + kind).constData(), &controls);
+                audit(("Layer " + kind).constData(), &inspector);
+            }
+            audit("Track", &track);
+        }
+        { ui::LayerPanel w; audit("Layer", &w); }
+        { ui::TrackPanel w; audit("Track", &w); }
+        { ui::Preview360VideoPanel w; audit("Preview360", &w); }
+        { ui::TrimmerPanel w; audit("Trimmer", &w); }
+        { ui::HistoryPanel w; audit("History", &w); }
+        { ui::StartPanel w; audit("Start", &w); }
+        { ui::LibraryPanel w; audit("Library", &w); }
+        { ui::MediaPanel w; audit("Media", &w); }
+        { ui::AudioMetersPanel w; audit("Meters", &w); }
+        {
+            // With its bar of view options, quality and zoom and their menus.
+            ui::ViewerWidget w; QWidget bar; w.createViewOptionsBar(&bar);
+            audit("Viewer", &w); audit("ViewerBar", &bar);
+        }
+        { ui::LayoutPanel w; audit("Layout", &w); }
+        { ui::EffectsPanel w; audit("Effects", &w); }
+        { ui::LearnSidebar w; audit("Learn", &w); }
+        { ui::RecoveredProjectsDialog w; audit("Recovered", &w); }
+        { ui::ExportQueue queue; ui::ExportQueueView w(&queue); audit("ExportQueue", &w); }
+        {
+            ui::CompositionSettingsDialog::Values values;
+            values.name = "Shot"; values.width = 1920; values.height = 1080;
+            values.fpsNumerator = 30; values.fpsDenominator = 1;
+            ui::CompositionSettingsDialog w(values, values); audit("CompositionSettings", &w);
+        }
+        english.removeDuplicates();
+        QVERIFY2(english.isEmpty(), qPrintable(english.join(QLatin1Char('\n'))));
     }
 
     // 2D effects that move by themselves get the time (RenderContext

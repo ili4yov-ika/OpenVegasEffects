@@ -21,6 +21,11 @@
 
 #include <cmath>
 
+// The export queue's view in the Export panel: one row per task (name,
+// preset, output, progress, duration, elapsed), the reference's empty-queue
+// hint when there are none, Start/Suspend Exporting and the context menu.
+// The strings keep the reference's translation contexts, so its catalogs'
+// wording applies.
 namespace openvegas {
 namespace ui {
 namespace {
@@ -62,6 +67,8 @@ QString action(const char* text)
 
 } // namespace
 
+// Options > General > Time Format, as the queue shows durations: the
+// reference stores the name or its index (0 Timecode, 1 Natural, 2 Seconds).
 ExportTimeFormat exportTimeFormatFromSettings()
 {
     const QString stored = app::Settings::optionSettings()
@@ -71,6 +78,8 @@ ExportTimeFormat exportTimeFormatFromSettings()
     return ExportTimeFormat::Timecode;
 }
 
+// A duration as the chosen format shows it: "12.5 s", "1m 05s" or the
+// timecode HH:MM:SS:FF counted in whole frames at the shot's rate.
 QString formatExportTime(double seconds, double frameRate, ExportTimeFormat format)
 {
     seconds = qMax(0.0, seconds);
@@ -172,6 +181,8 @@ QStringList ExportQueueView::selectedIds() const
     return ids;
 }
 
+// Recreates the rows from the queue, keeping the selection by task ID, and
+// shows the empty-queue hint instead of the tree when there is no task.
 void ExportQueueView::rebuild()
 {
     const QStringList selected = selectedIds();
@@ -189,6 +200,7 @@ void ExportQueueView::rebuild()
     updateStartButton();
 }
 
+// Refreshes one row's cells; a running task shows its progress in percent.
 void ExportQueueView::updateRow(int row)
 {
     if (!m_queue || row < 0 || row >= m_queue->tasks().size() || row >= m_tree->topLevelItemCount()) return;
@@ -209,6 +221,7 @@ void ExportQueueView::updateRow(int row)
                                      : QString());
 }
 
+// Start Exporting needs a Ready task; while the queue runs the button suspends it.
 void ExportQueueView::updateStartButton()
 {
     const bool running = m_queue && m_queue->isRunning();
@@ -221,6 +234,9 @@ void ExportQueueView::updateStartButton()
     m_start->setEnabled(running || anyReady);
 }
 
+// Remove Task(s): asks first unless "Prompt me before removing export
+// tasks" was turned off (prompt RemovingExportTasks); a running task is
+// cancelled with its removal.
 void ExportQueueView::removeSelected()
 {
     const QStringList ids = selectedIds();

@@ -775,8 +775,9 @@ void ViewerWidget::updateQualityButtonText()
     // The face shows the resolution actually in force, which is the playback
     // one only while the transport is running - the reference keeps a separate
     // paused setting precisely so the two differ.
-    m_qualityButton->setText(
-        downsampleLabel(m_playing ? m_playbackResolution : m_pausedResolution));
+    // downsampleLabel() is the stored name; the face shows it as its menu does.
+    m_qualityButton->setText(tr(
+        downsampleLabel(m_playing ? m_playbackResolution : m_pausedResolution).toUtf8().constData()));
 }
 
 bool ViewerWidget::fullScreenPreviewActive() const

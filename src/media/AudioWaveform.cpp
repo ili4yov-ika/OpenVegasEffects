@@ -14,6 +14,11 @@
 #include <cmath>
 #include <cstdlib>
 
+// Audio waveforms for the timeline's clips. FFmpeg decodes a file's audio to
+// mono 16-bit PCM at 8 kHz in the background; WaveformBuilder reduces it to a
+// peak and an RMS level per 10 ms bucket, and WaveformCache keeps the result
+// in memory and on disk (the media cache's waveform folder), keyed by the
+// file's path, size, modification time and audio stream.
 namespace openvegas {
 namespace media {
 
@@ -30,6 +35,7 @@ WaveformBuilder::WaveformBuilder(int sampleRate)
 {
 }
 
+// Adds PCM samples; every full bucket appends its peak and RMS, both 0..1.
 void WaveformBuilder::feed(const qint16* samples, qsizetype count)
 {
     for (qsizetype i = 0; i < count; ++i) {
@@ -56,6 +62,10 @@ WaveformPeaks WaveformBuilder::finish()
     return std::move(m_result);
 }
 
+// The heights a clip's waveform is drawn with: the source span
+// [sourceStart, sourceEnd] in seconds split into `columns`, each the highest
+// peak or RMS level of its buckets (Options > Audio Waveforms) - on a 60 dB
+// scale when logarithmic scaling is on.
 QVector<float> waveformColumns(const WaveformPeaks& peaks, double sourceStart, double sourceEnd,
                                int columns, WaveformStyle style, bool logarithmic)
 {
@@ -132,6 +142,9 @@ QString WaveformCache::keyFor(const QString& filePath, int audioStreamIndex)
         QCryptographicHash::hash(identity, QCryptographicHash::Sha1).toHex());
 }
 
+// The file's levels when they are known (in memory or on disk); otherwise
+// null, and the file is queued for decoding - peaksReady tells when it is done.
+// A file that failed once is not tried again in this session.
 const WaveformPeaks* WaveformCache::peaks(const QString& filePath, int audioStreamIndex)
 {
     const QString key = keyFor(filePath, audioStreamIndex);
@@ -147,6 +160,8 @@ const WaveformPeaks* WaveformCache::peaks(const QString& filePath, int audioStre
     return nullptr;
 }
 
+// Decodes the next queued file, one FFmpeg process at a time, feeding its
+// standard output to the builder as it arrives.
 void WaveformCache::startNext()
 {
     if (m_process || m_queue.isEmpty()) return;
@@ -208,6 +223,9 @@ void WaveformCache::finishDecode(const QString& key, const QString& filePath, bo
     startNext();
 }
 
+// The ".peaks" file: magic "OVWF", version, then the peak and RMS lists as
+// little-endian floats. A stored file read back counts as used for the media
+// cache's DaysToKeep.
 bool WaveformCache::loadFromDisk(const QString& key)
 {
     if (m_store.directory.isEmpty()) return false;

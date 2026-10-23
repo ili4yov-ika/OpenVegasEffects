@@ -266,7 +266,8 @@ OptionsDialog::OptionsDialog(QWidget* parent)
     setObjectName(QStringLiteral("optionsDialog"));
     resize(900, 640);
 
-    m_ui->categoryList->addItems(categoryNames());
+    for (const QString& name : categoryNames())
+        m_ui->categoryList->addItem(tr(name.toUtf8().constData()));
     m_ui->categoryList->setCurrentRow(0);
 
     // Pages stay in code: which page a row gets depends on categoryNames().
@@ -355,23 +356,25 @@ void OptionsDialog::applyShortcuts(QWidget* root)
 
 const QStringList& OptionsDialog::categoryNames()
 {
+    // Keys of the pages (showCategory, the stack below); the list shows them
+    // translated.
     static const QStringList names = {
-        QStringLiteral("General"),
-        QStringLiteral("Interface"),
-        QStringLiteral("Display"),
-        QStringLiteral("Render"),
-        QStringLiteral("Quality Profiles"),
-        QStringLiteral("Prompts & Warnings"),
-        QStringLiteral("Labels"),
-        QStringLiteral("Cache"),
-        QStringLiteral("Voiceover"),
-        QStringLiteral("Proxies & Pre-Renders"),
-        QStringLiteral("Auto Save"),
-        QStringLiteral("Shortcuts"),
-        QStringLiteral("Export"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "General"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Interface"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Display"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Render"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Quality Profiles"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Prompts & Warnings"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Labels"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Cache"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Voiceover"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Proxies & Pre-Renders"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Auto Save"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Shortcuts"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Export"),
         // Not the reference's: where its plugins are found, when they are
         // not where it installs them.
-        QStringLiteral("Plugins"),
+        QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog", "Plugins"),
     };
     return names;
 }
@@ -970,18 +973,18 @@ QWidget* OptionsDialog::buildQualityProfilesPage()
     auto makeQuality = [page](const QString& name) {
         auto* combo = new QComboBox(page);
         combo->setObjectName(name);
-        for (const QString& value : {QStringLiteral("Final"), QStringLiteral("Draft"),
-                                     QStringLiteral("Quick"), QStringLiteral("Fastest")}) {
-            combo->addItem(value, value);
+        // The settings keep the English names; the list shows them translated.
+        for (const char* value : {QT_TR_NOOP("Final"), QT_TR_NOOP("Draft"),
+                                  QT_TR_NOOP("Quick"), QT_TR_NOOP("Fastest")}) {
+            combo->addItem(tr(value), QString::fromLatin1(value));
         }
         return combo;
     };
     auto makeResolution = [page](const QString& name) {
         auto* combo = new QComboBox(page);
         combo->setObjectName(name);
-        for (const QString& value : {QStringLiteral("Antialiased"), QStringLiteral("Full"),
-                                     QStringLiteral("1/2"), QStringLiteral("1/4")}) {
-            combo->addItem(value, value);
+        for (const char* value : {QT_TR_NOOP("Antialiased"), QT_TR_NOOP("Full"), "1/2", "1/4"}) {
+            combo->addItem(tr(value), QString::fromLatin1(value));
         }
         return combo;
     };
@@ -1683,7 +1686,7 @@ void OptionsDialog::updateRestoreLabel()
     const int idx = currentIndex();
     if (m_ui->btnRestoreDefaults && idx >= 0 && idx < categoryNames().size()) {
         m_ui->btnRestoreDefaults->setText(
-            tr("Restore '%1' Defaults").arg(categoryNames().at(idx)));
+            tr("Restore '%1' Defaults").arg(tr(categoryNames().at(idx).toUtf8().constData())));
     }
 }
 

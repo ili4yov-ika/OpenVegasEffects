@@ -204,6 +204,13 @@ public:
     Layer layerCopy(int index) const;
     void setLayers(const QVector<Layer>& layers);
     bool swapLayers(int a, int b);
+    // Moves the layers at `rows` so that they stand, in their present order,
+    // where the layer at `dropRow` stands now (dropRow == layer count: the
+    // bottom of the stack) - the timeline's drag of layer rows, which the
+    // reference makes of one MoveLayerCmd per layer ("Move Layer(s)").
+    // `newRows`, when given, receives each layer's new index by its old one.
+    // Returns false when nothing moves.
+    bool moveLayers(QVector<int> rows, int dropRow, QVector<int>* newRows = nullptr);
     Layer& layerRef(int index);
 
     Clip* addClip(const QString& layerName, const core::Identifier& mediaId, double startSeconds,

@@ -380,7 +380,8 @@ void AppMain::initializePlugins()
 void AppMain::initializeProject()
 {
     m_composition = std::make_shared<composition::Composition>();
-    m_composition->setName(QStringLiteral("Untitled"));
+    // A new project's composite shot, named in the interface's language.
+    m_composition->setName(QCoreApplication::translate("Composition", "Untitled"));
     applyNewProjectDefaults(*m_composition);
 
     m_mediaManager = std::make_shared<media::MediaManager>();

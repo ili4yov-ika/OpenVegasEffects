@@ -1,3 +1,7 @@
+// The VLC 4 side of the libVLC loader: VLC 4 renamed and reshaped several
+// calls (media from callbacks, asynchronous stop, the parser, track lists),
+// so bindVlc4 resolves them from the loaded library and fills VlcApi with
+// adapters that keep VlcBackend on one interface for VLC 3 and VLC 4.
 // Signatures and callback layouts are taken from the vendored VLC 4 headers.
 #include <vlc/vlc.h>
 #include "media/VlcBackend.h"

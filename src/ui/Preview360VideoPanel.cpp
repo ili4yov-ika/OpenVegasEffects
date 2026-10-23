@@ -18,6 +18,11 @@
 #include <QWheelEvent>
 #include <QtGlobal>
 
+// The 360 Viewer panel. Preview360VideoWidget shows the shot's
+// equirectangular frame as a perspective view through Viewer360View (which
+// draws it with the reference's EnvironmentMapViewer module when it is there)
+// and turns the view by drag, wheel and arrow keys; the panel adds the view
+// presets, the properties dialog, and can host the Viewer page in its place.
 namespace openvegas::ui {
 
 Preview360VideoWidget::Preview360VideoWidget(QWidget* parent, Viewer360View* view)
@@ -57,6 +62,8 @@ void Preview360VideoWidget::paintEvent(QPaintEvent*)
     painter.drawImage(rect(), projectedFrame(size()));
 }
 
+// A left drag turns the view a quarter of a degree a pixel: right turns it
+// left (yaw), up looks up (pitch).
 void Preview360VideoWidget::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
@@ -92,6 +99,7 @@ void Preview360VideoWidget::mouseReleaseEvent(QMouseEvent* event)
     QWidget::mouseReleaseEvent(event);
 }
 
+// The wheel narrows or widens the field of view: one notch (120) is 5 degrees.
 void Preview360VideoWidget::wheelEvent(QWheelEvent* event)
 {
     if (event->angleDelta().y() == 0) {
@@ -102,6 +110,7 @@ void Preview360VideoWidget::wheelEvent(QWheelEvent* event)
     event->accept();
 }
 
+// Arrow keys turn by a degree (ten with Shift); Home looks to the front.
 void Preview360VideoWidget::keyPressEvent(QKeyEvent* event)
 {
     const double step = event->modifiers().testFlag(Qt::ShiftModifier) ? 10.0 : 1.0;
@@ -163,6 +172,9 @@ Preview360VideoPanel::Preview360VideoPanel(QWidget* parent) : QDockWidget(parent
 
 void Preview360VideoPanel::setFrame(const QImage& frame) { m_video->setFrame(frame); }
 
+// Puts the main Viewer page in the panel instead of the 360 view, as the
+// reference does when the 360 viewer is the active one; releaseViewer gives
+// the page back and shows the 360 view again.
 void Preview360VideoPanel::hostViewer(QWidget* page)
 {
     if (!page || m_hosted == page) return;
@@ -185,6 +197,10 @@ QWidget* Preview360VideoPanel::releaseViewer()
     return page;
 }
 
+// The view's properties: yaw, pitch, roll, field of view (or the shot
+// camera's), fisheye lens, texture scale and ratio and the wrap modes, as the
+// reference's EnvironmentMapViewer takes them. OK applies them and keeps them
+// in the settings; the view preset follows the new direction.
 void Preview360VideoPanel::showProperties()
 {
     QDialog dialog(this);

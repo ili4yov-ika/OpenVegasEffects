@@ -410,6 +410,12 @@ private:
 
 // QTreeWidget with a public top inset, so its first row can start below the
 // canvas ruler and the two columns stay aligned.
+//
+// Layer rows (the top-level items) are dragged up and down to reorder the
+// layers, as the reference's TreeDropDelegate does ("Move Layer(s)"): a press
+// on a layer's row and a drag past the start distance shows a line where the
+// layers would go, and the release asks for the move. The selected layers
+// move together when the pressed one is among them.
 class TimelineTree : public QTreeWidget
 {
     Q_OBJECT
@@ -418,15 +424,24 @@ public:
     explicit TimelineTree(QWidget* parent = nullptr) : QTreeWidget(parent) {}
 
     void setTopInset(int px) { setViewportMargins(0, px, 0, 0); }
+    // Where a drop at viewport position `pos` puts dragged layers: the index
+    // of the layer they go before (the layer count: after the last one).
+    int layerDropRow(const QPoint& pos) const;
 
 signals:
     void layoutShifted();
     // The reference puts a small round toggle left of an animatable property;
     // clicking it (rather than the row) is what arms the keyframe.
     void decorationClicked(QTreeWidgetItem* item);
+    // A drag of layer rows ended: the layers at `rows` go before `dropRow`.
+    void layerRowsDropped(const QVector<int>& rows, int dropRow);
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
 
     void scrollContentsBy(int dx, int dy) override
     {
@@ -438,6 +453,17 @@ protected:
         QTreeWidget::resizeEvent(event);
         emit layoutShifted();
     }
+
+private:
+    // The layers the drag carries: the selected top-level rows when the
+    // pressed one is selected, else the pressed one alone.
+    QVector<int> draggedLayerRows() const;
+    void endLayerDrag();
+
+    int m_pressedLayer = -1;      // top-level row pressed, -1 when none
+    QPoint m_pressPos;
+    bool m_draggingLayers = false;
+    int m_dropRow = -1;           // where the drag would put the layers
 };
 
 class TimelineWidget : public QDockWidget
@@ -458,6 +484,11 @@ public:
     // selection. The tree then emits the usual clipSelected signal, keeping
     // every inspector on the same path.
     void selectLayer(int layerIndex);
+    // Moves the layers at `rows` before the layer at `dropRow` (the layer
+    // count: to the bottom) as one undoable "Move Layer(s)" edit, keeps their
+    // rows expanded or collapsed as they were and selects them where they
+    // land. Returns false when nothing moves.
+    bool moveLayers(const QVector<int>& rows, int dropRow);
     // Makes a model node's row current (the layer's row for an empty path).
     void selectModelNode(int layerIndex, const QString& path);
 
@@ -614,6 +645,11 @@ private:
     QVector<composition::KeyFrameList*> selectedCurves();
     QUndoStack* m_undoStack = nullptr;
     QVector<composition::Layer> m_editBefore;
+    // Set by moveLayers until the tree is rebuilt: each layer's new index by
+    // its old one, so expanded rows and the selection follow the layers.
+    QVector<int> m_movedLayerRows;
+    // The moved layers' new indices, selected once the tree is rebuilt.
+    QVector<int> m_movedLayerSelection;
     bool m_editPending = false;
     bool m_rebuilding = false;
     int m_treeGeneration = 0;

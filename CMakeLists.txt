@@ -521,6 +521,14 @@ include(GNUInstallDirs)
 install(TARGETS OpenVegasEffects
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     BUNDLE  DESTINATION .)
+# The desktop entry and its icon, which the .deb and .rpm packages ship.
+if(UNIX AND NOT APPLE)
+    install(FILES tools/openvegaseffects.desktop
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES resources/icons/logo.svg
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
+        RENAME openvegaseffects.svg)
+endif()
 
 # Incremental linking is off for MSVC.
 #

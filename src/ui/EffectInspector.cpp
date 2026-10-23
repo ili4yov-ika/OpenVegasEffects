@@ -391,10 +391,13 @@ void EffectInspector::buildLayerProperties(const composition::Layer& layer)
             if (self) self->setLayerDimension(index);
         });
     });
-    auto* blend = new QComboBox(m_tree); blend->addItems(composition::blendModeNames());
-    blend->setCurrentText(layer.blendMode); blend->setEnabled(editable);
+    auto* blend = new QComboBox(m_tree);
+    for (const QString& mode : composition::blendModeNames())
+        blend->addItem(composition::blendModeDisplayName(mode), mode);
+    blend->setCurrentIndex(blend->findData(layer.blendMode)); blend->setEnabled(editable);
     addRow(tr("Blend"), blend, "controlsLayerBlend");
-    connect(blend, &QComboBox::currentTextChanged, this, [this](const QString& value) {
+    connect(blend, &QComboBox::currentIndexChanged, this, [this, blend] {
+        const QString value = blend->currentData().toString();
         editModel(tr("Layer blend mode"), "layer-blend", [=](composition::Layer& l) { l.blendMode = value; });
     });
 }

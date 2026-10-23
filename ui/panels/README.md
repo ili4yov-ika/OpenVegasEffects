@@ -1,106 +1,112 @@
-# Рапорт по переносу панель-окон в *.ui
+# Panel windows moved into *.ui forms
 
-Документ описывает формы панелей Qt Designer и их связь с рабочими классами.
-Все перечисленные формы подключены к CMake и qmake; конструкторы панелей вызывают
-`setupUi()`, а динамические списки, меню, рисование и сигналы остаются в C++.
-`ui/panels/Export.ui` сохранён как справочная копия: рабочий Export использует
-ранее существовавшую подключённую форму `ui/ExportPanel.ui`.
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README.zh.md">简体中文</a> |
+  <a href="README.ja.md">日本語</a> |
+  <a href="README.ru.md">Русский</a>
+</p>
 
-## 1. Что изучалось
+This document describes the Qt Designer forms of the panels and how they connect to the
+working classes. All the forms listed are part of the CMake and qmake builds; the panel
+constructors call `setupUi()`, while dynamic lists, menus, painting and signals stay in
+C++. `ui/panels/Export.ui` is kept as a reference copy: the working Export panel uses the
+form that was already connected, `ui/ExportPanel.ui`.
 
-| Исходник | Что дал |
-|----------|---------|
-| `src/ui/MainWindow.cpp` (`buildUi`) | Сборка общей dock-группы Viewer / Trimmer / Export / Layer / 360 Viewer; `viewerPage` → канвас + inline transport bar |
-| `src/ui/ViewerWidget.{h,cpp}` | Сам канвас (`graphicsViewViewer`), лейаут-менеджер (Single/Row/TwoOverOne/Four/RowFour), тул-стрип (`viewer-tool-strip`, кнопки), `createViewOptionsBar()` → `toolButtonView`, `toolButtonOption`, `toolButtonPlaybackQuality` |
-| `src/ui/ViewerTransportBar.{h,cpp}` | Именование `ViewerPlaybackWidget`, прогресс `progressBarRender`, строка скраббинга (`spinBoxCurrentTime`, `sliderCurrentFrame`, редактируемый `spinBoxFrameCount`/Timeline Duration с Undo/Redo), ряд кнопок (cluster order), `addTrailingWidget(...)` для view-options |
-| `src/ui/ViewScaleButton.{h,cpp}` | Зум-лесенка (Fit, 12%…200%): «−», ярлык `viewScaleLabel`, «+»; перекрытие objectName на `toolButtonZoom` |
-| `resources/icons.qrc` | Набор доступных иконок `/icons/*` |
-| `ui/ExportPanel.ui`, `ui/MainWindow.ui` | Стиль .ui проекта: `<class>` = класс владельца, имя корневого виджета, явные margins/spacing, `<string notr="true">` для нетранслируемого |
+## 1. What was studied
 
-## 2. Что перенесено
+| Source | What it gave |
+|--------|--------------|
+| `src/ui/MainWindow.cpp` (`buildUi`) | The shared dock group Viewer / Trimmer / Export / Layer / 360 Viewer; `viewerPage` → canvas + inline transport bar |
+| `src/ui/ViewerWidget.{h,cpp}` | The canvas itself (`graphicsViewViewer`), the layout manager (Single/Row/TwoOverOne/Four/RowFour), the tool strip (`viewer-tool-strip`, buttons), `createViewOptionsBar()` → `toolButtonView`, `toolButtonOption`, `toolButtonPlaybackQuality` |
+| `src/ui/ViewerTransportBar.{h,cpp}` | The `ViewerPlaybackWidget` naming, the `progressBarRender` progress, the scrub row (`spinBoxCurrentTime`, `sliderCurrentFrame`, the editable `spinBoxFrameCount`/Timeline Duration with Undo/Redo), the button row (cluster order), `addTrailingWidget(...)` for the view options |
+| `src/ui/ViewScaleButton.{h,cpp}` | The zoom ladder (Fit, 12%…200%): "−", the `viewScaleLabel` label, "+"; the objectName overridden to `toolButtonZoom` |
+| `resources/icons.qrc` | The set of available icons `/icons/*` |
+| `ui/ExportPanel.ui`, `ui/MainWindow.ui` | The project's .ui style: `<class>` = owner class, root widget name, explicit margins/spacing, `<string notr="true">` for text that is not translated |
 
-`Viewer.ui` владеет компоновкой центральной вкладки и использует два
-промотированных рабочих виджета:
+## 2. What was moved
+
+`Viewer.ui` owns the layout of the central tab and uses two promoted working widgets:
 
 ```
-ViewerPanel (QWidget, форма класса openvegas::ui::ViewerPanel)
+ViewerPanel (QWidget, form of class openvegas::ui::ViewerPanel)
 └── rootLayout (QVBoxLayout, margins 0, spacing 0)
     ├── graphicsViewViewer (ViewerWidget; min 320×180)
     └── ViewerPlaybackWidget (ViewerTransportBar)
 ```
 
-Класс формы — `openvegas::ui::ViewerPanel`. Вложенные `ViewerWidget` и
-`ViewerTransportBar` сохраняют собственные reference object names, tooltips,
-спец-стили и рабочие соединения. `ViewerPanel` получает оба указателя из формы
-и добавляет панель опций Viewer в хвост `ViewerTransportBar`.
+The form class is `openvegas::ui::ViewerPanel`. The nested `ViewerWidget` and
+`ViewerTransportBar` keep their own reference object names, tooltips, special styles
+and working connections. `ViewerPanel` takes both pointers from the form and appends
+the Viewer options bar to the end of `ViewerTransportBar`.
 
-## 3. Что осталось в коде (динамика)
+## 3. What stays in code (dynamic parts)
 
-В .ui **намеренно не** перенесено — эти части не являются статическим деревом:
+These parts were **deliberately not** moved into .ui — they are not a static tree:
 
-- **Канвас** — промотированный `ViewerWidget`; кадр, motion path, таймкод и
-  координаты мыши рисуются в его `paintEvent`.
-- **Тул-стрип** — ширина 24 px и позиция слева задаются кодом (`toolStripRect`);
-  кнопки 22×22 px выровнены по общей оси с однопиксельными полями, а локальный
-  стиль изолирует их от общих отступов `QToolButton`,
-  курсорные шорткаты (V/H/T/R/E/F/B), flyout фигур на `toolButtonMaskShape`
-  (Rec/RRect/Ellipse/Polygon/Star) и выпадающие меню.
-- **Меню буттонов** transport/options: «View» (лейауты), «Options» (Show Motion
+- **The canvas** — the promoted `ViewerWidget`; the frame, motion path, timecode and
+  mouse coordinates are painted in its `paintEvent`.
+- **The tool strip** — its 24 px width and left position are set in code
+  (`toolStripRect`); the 22×22 px buttons are aligned on a common axis with one-pixel
+  margins, and a local style isolates them from the general `QToolButton` padding; the
+  cursor shortcuts (V/H/T/R/E/F/B), the shape flyout on `toolButtonMaskShape`
+  (Rec/RRect/Ellipse/Polygon/Star) and the drop-down menus.
+- **The button menus** of transport/options: "View" (layouts), "Options" (Show Motion
   Path, Background Color, Checkerboard, Color Channels, Full Screen Preview,
-  Scale/Fit/In/Out), Quality (4 профиля × playback/paused), zoom-лесенка.
-- **Иконки** — ставятся в коде (`makeButton`) с фолбэком на текст, когда SVG не
-  растеризуется; в .ui ресурсы не подключены, чтобы не тащить `icons.qrc`.
-- **Сигналы/слоты** — весь воркинг (`scrubRequested`, `playPauseRequested`, …).
+  Scale/Fit/In/Out), Quality (4 profiles × playback/paused), the zoom ladder.
+- **Icons** — set in code (`makeButton`) with a text fallback when an SVG does not
+  rasterize; the forms do not reference the resources, so they do not pull in
+  `icons.qrc`.
+- **Signals/slots** — all the wiring (`scrubRequested`, `playPauseRequested`, …).
 
-## 4. Реализованное подключение
+## 4. How they are connected
 
-1. `ViewerWidget` и `ViewerTransportBar` объявлены в `<customwidgets>` формы.
-2. `ViewerPanel` вызывает `setupUi()` и отдаёт рабочие указатели `MainWindow`.
-3. `CMAKE_AUTOUIC_SEARCH_PATHS` включает `ui/panels`; формы перечислены также в
+1. `ViewerWidget` and `ViewerTransportBar` are declared in the form's `<customwidgets>`.
+2. `ViewerPanel` calls `setupUi()` and hands the working pointers to `MainWindow`.
+3. `CMAKE_AUTOUIC_SEARCH_PATHS` includes `ui/panels`; the forms are also listed in
    `OpenVegasEffects.pro`.
-4. Timeline использует промотированные `TimelineTree`, `TimelineCanvas` и
-   `TimelineValueGraphView`; Trimmer, Preview360 и Meters заменяют только
-   рисуемые заглушки на рабочие custom widgets после `setupUi()`.
+4. The Timeline uses the promoted `TimelineTree`, `TimelineCanvas` and
+   `TimelineValueGraphView`; Trimmer, Preview360 and Meters replace only the painted
+   placeholders with working custom widgets after `setupUi()`.
 
-## 5. Наблюдения
+## 5. Observations
 
-- `audioMeterIcon` — компактный рисуемый двухканальный LED-индикатор без подписи.
-  Он получает master RMS из `AudioPlayer`, расположен перед Options и открывает
-  полную панель Audio Meters по щелчку.
-- `toolButtonZoom` — составной виджет: в коде `ViewScaleButton` сперва получает
-  собственное имя `ViewScaleButton`, затем перекрывается на `toolButtonZoom`.
-  В форме оставлено итоговое (reference) имя, чтобы темы/тесты не сломались.
-- `sliderCurrentFrame` в коде неактивен, пока `duration == 0` (enable включается
-  в `setDuration`). В форме флаг `enabled=false` соответствует начальному
-  состоянию нового проекта.
-- Порядок кнопок в левом и центре-кластере — порядок конструктора референса
-  (Export Frame → Loop → In → Out → Meters | First → Prev → Next → Play), не
-  выдуман заново.
+- `audioMeterIcon` — a compact painted two-channel LED indicator without a label. It
+  gets the master RMS from `AudioPlayer`, sits before Options and opens the full Audio
+  Meters panel on a click.
+- `toolButtonZoom` — a composite widget: in code `ViewScaleButton` first gets its own
+  name `ViewScaleButton`, then it is overridden to `toolButtonZoom`. The form keeps the
+  final (reference) name so that themes and tests do not break.
+- `sliderCurrentFrame` is disabled in code while `duration == 0` (it is enabled in
+  `setDuration`). In the form `enabled=false` matches the initial state of a new
+  project.
+- The button order in the left and center clusters is the reference constructor's order
+  (Export Frame → Loop → In → Out → Meters | First → Prev → Next → Play), not invented
+  anew.
 
 ---
 
-# 6. Прочие панели MainWindow
+# 6. The other MainWindow panels
 
-Аналогичные формы используются всеми остальными док-панелями/вкладками главного окна.
-Класс формы — класс владельца дерева (`openvegas::ui::…`),
-имена виджетов — **reference object names** (темы и тесты ходят по ним),
-динамика (paintEvent, попапы, списки, иконки) перенесена в комментарии и в
-статический каркас. Для **Export** в `ui/panels/` создана spec-копия
-(`Export.ui`), но рабочая реализация остаётся на существующей подключённой
-форме `ui/ExportPanel.ui` (см. 6.15).
+All the other dock panels and tabs of the main window use similar forms. The form
+class is the class owning the tree (`openvegas::ui::…`), the widget names are the
+**reference object names** (themes and tests look them up), and the dynamic parts
+(paintEvent, popups, lists, icons) are described in comments over a static skeleton.
+For **Export** a spec copy (`Export.ui`) was created in `ui/panels/`, but the working
+implementation stays on the existing connected form `ui/ExportPanel.ui` (see 6.15).
 
-Дерево доков по `src/ui/MainWindow.cpp` (≈486–660), screen «Effects»:
+The dock tree in `src/ui/MainWindow.cpp`, screen "Effects":
 
-- **Left:** Media (`mediaPanel`) + Text (`textPanel`, оба в левом доке)
-- **Center:** стек `stackedWidgetScreens` — вкладки Viewer / Trimmer / Export
-- **Right:** Controls / Effects / Layout / Track / Layer / Library / History
-  и 360 Viewer (`Preview360VideoPanel`, скрыт) + Learn (нативный док, скрыт)
-- **Bottom:** Timeline (`timelinePanel`) с общей полосой Start/композиций +
-  AudioMeters (`AudioMetersPanel`, скрыт по умолчанию). Форма Start встроена
-  второй страницей Timeline, поэтому отдельной системной dock-полосы нет.
+- **Left:** Media (`mediaPanel`) + Text (`textPanel`, both in the left dock)
+- **Center:** the shared dock group Viewer / Trimmer / Export / Layer / 360 Viewer
+- **Right:** Controls / Effects / Layout / Track / Library / History + Learn (a native
+  dock, hidden)
+- **Bottom:** Timeline (`timelinePanel`) with the shared Start/compositions strip +
+  AudioMeters (`AudioMetersPanel`, hidden by default). The Start form is embedded as
+  the Timeline's second page, so there is no separate system dock strip.
 
-| # | Исходник | Форма | Корневой виджет / objectName |
-|---|----------|-------|------------------------------|
+| # | Source | Form | Root widget / objectName |
+|---|--------|------|--------------------------|
 | 6.1 | `MediaPanel.cpp` | `Media.ui` | `MediaPanel` / `media-panel` (QWidget) |
 | 6.2 | `TextPanel.cpp` | `Text.ui` | `TextPanel` / `textPanel` (QWidget) |
 | 6.3 | `EffectsPanel.cpp` | `Effects.ui` | `EffectsPanel` / `effectsPanel` (QWidget) |
@@ -119,197 +125,202 @@ ViewerPanel (QWidget, форма класса openvegas::ui::ViewerPanel)
 
 ## 6.1 Media — `Media.ui`
 
-`media-panel` повторяет вертикальный порядок эталонных скриншотов: верхняя
-строка `toolButtonImport` / `MediaPanelNewFolderButton` и две кнопки вида,
-`media-panel-search` («Search in Project Media»), отдельная строка
-`mediaArrangeButton` / `mediaGroupButton`, `QListWidget listView` (drag-drop) и
-нижняя строка `MediaPanelFolderButton` / `MediaPanelCompositeShotButton` /
-`MediaPanelTrashButton` со счётчиком `media-panel-count`. Все меню сортировки,
-группировки и видов подключены; обе команды создания папки работают, а
-Composite Shot использует общий проверенный путь создания вложенной композиции
-из выделенных слоёв. Контекстное меню и drag/drop остаются в коде.
+`media-panel` follows the vertical order of the reference screenshots: a top row with
+`toolButtonImport` / `MediaPanelNewFolderButton` and two view buttons,
+`media-panel-search` ("Search in Project Media"), a separate row with
+`mediaArrangeButton` / `mediaGroupButton`, the `QListWidget listView` (drag and drop) and
+a bottom row with `MediaPanelFolderButton` / `MediaPanelCompositeShotButton` /
+`MediaPanelTrashButton` and the `media-panel-count` counter. All the sort, group and
+view menus are connected; both folder commands work, and Composite Shot uses the shared,
+tested path that creates a nested composition from the selected layers. The context
+menu and drag and drop stay in code.
 
 ## 6.2 Text — `Text.ui`
 
-`textPanel` — три группы: `groupBoxCharacter` (шрифт, `spinBoxFontSize`, цвет
-`QColorDialog`-кнопка, жирный/курсив/подчёркивание/зачёркивание, дистанция/
-блур/направление/растение обводок `strokeColor`, `strokeWidth`, метрики
-`tracking`/`leading`), `groupBoxParagraph` (выравнивание
-`toolButtonAlignLeft/Center/Right`, vertical-align, отступы `left/right/top/
-bottom`-спинбоксы), `groupBoxBackground` (`checkBoxBackground`, цвет, радиус).
-Форма подключена через `setupUi()`. Код назначает извлечённые SVG всем toggle-кнопкам,
-подключает к designer-спинбоксам горизонтальный scrub жест, создаёт дополнительные
-обводки и color-picker строки; корневой layout допускает сжатие до ширины dock без
-скрытого горизонтального диапазона прокрутки.
+`textPanel` has three groups: `groupBoxCharacter` (font, `spinBoxFontSize`, a color
+button with `QColorDialog`, bold/italic/underline/strikethrough, stroke distance, blur,
+direction and spread, `strokeColor`, `strokeWidth`, the `tracking`/`leading` metrics),
+`groupBoxParagraph` (alignment `toolButtonAlignLeft/Center/Right`, vertical alignment,
+the `left/right/top/bottom` margin spin boxes) and `groupBoxBackground`
+(`checkBoxBackground`, color, radius). The form is connected through `setupUi()`. The
+code assigns the extracted SVGs to all toggle buttons, adds a horizontal scrub gesture
+to the designer spin boxes, creates the extra strokes and color picker rows; the root
+layout can shrink to the dock's width without a hidden horizontal scroll range.
 
 ## 6.3 Effects — `Effects.ui`
 
-`effectsPanel` — `effects-panel-search` «Search field», чек «show all types»
-`effects-panel-show-all`, `QTreeWidget` (2 колонки, заголовки скрыты:
-эффекты/переходы), `effects-panel-count`. Дерево наполняется из
-`EffectsPanel::EffectsListModel`; показ `toolButtonOptions` в строке поиска —
-код.
+`effectsPanel` — the `effects-panel-search` "Search field", the "show all types" check
+box `effects-panel-show-all`, a `QTreeWidget` (2 columns, headers hidden:
+effects/transitions) and `effects-panel-count`. The tree is filled from
+`EffectsPanel::EffectsListModel`; showing `toolButtonOptions` in the search row is code.
 
 ## 6.4 Controls (EffectInspector) — `Controls.ui`
 
-QDockWidget `controlsPanel` с root-виджетом `ControlsPanel` (spacer из инспектора,
-клик по пину скрывает панель). Внутри: `controlsSelectionTitle` + `controlsPin`;
-`controlsCurrentTime` (кликабельный таймкод) + иконка часов; `controlsSearch` +
-`controlsCollapseAll` + `controlsExpandAll`; `controlsTree` — `QTreeWidget`
-(2 колонки, hidden header, indentation 14). Инспектор собирает/удаляет листы
-свойств для выбранных операций на лету — в форме только каркас.
+The QDockWidget `controlsPanel` with the root widget `ControlsPanel` (a spacer from the
+inspector; clicking the pin hides the panel). Inside: `controlsSelectionTitle` +
+`controlsPin`; `controlsCurrentTime` (a clickable timecode) + a clock icon;
+`controlsSearch` + `controlsCollapseAll` + `controlsExpandAll`; `controlsTree` — a
+`QTreeWidget` (2 columns, hidden header, indentation 14). The inspector builds and
+removes the property rows of the selected items on the fly — the form holds only the
+skeleton.
 
 ## 6.5 Layout — `Layout.ui`
 
-QDockWidget `LayoutPanel`: форма подключена к `LayoutPanel.cpp`. Внутри прокрутки —
-`TransformWidget`: две кнопки отражения, промежуток, два поворота на 90°,
-опорная точка 3×3 с оригинальными значками, X/Y/Width/Height и связка размеров.
-Далее `AlignmentWidget`: заголовок Alignment, Selection/Timeline, шесть
-выравниваний и шесть распределений с промежутком между тройками.
-Оригинальные PNG-состояния и @2x находятся в `resources/icons/layout`.
-Все выбранные незаблокированные слои редактируются одной операцией Undo;
-анимированные свойства меняются в текущем кадре с сохранением ключей.
-Точные границы восстановления и адреса Ghidra: `MARKDOWN/RE_wnd_Layout.md`.
+The QDockWidget `LayoutPanel`: the form is connected to `LayoutPanel.cpp`. Inside the
+scroll area — `TransformWidget`: two mirror buttons, a gap, two 90° rotations, a 3×3
+pivot with the original icons, X/Y/Width/Height and the size link. Then
+`AlignmentWidget`: the Alignment title, Selection/Timeline, six alignments and six
+distributions with a gap between the triples. The original PNG states and @2x variants
+are in `resources/icons/layout`. All selected unlocked layers are edited in one Undo
+step; animated properties change at the current frame and keep their keys. The exact
+limits of the recovery and the Ghidra addresses: `MARKDOWN/RE_wnd_Layout.md`.
 
 ## 6.6 Track — `Track.ui`
 
-QDockWidget `trackPanel`: `widgetLayerHeader` (QFrame с кнопками
+The QDockWidget `trackPanel`: `widgetLayerHeader` (a QFrame with the buttons
 `toolButtonNewLayer`, `toolButtonMoveLayerUp`, `toolButtonMoveLayerDown`,
-`toolButtonRemoveLayer`) и `composition-layers-header` — QTreeWidget, колонки
-Name / Visible / Muted / Blend / Opacity (PosX/PosY в опциях). В форме —
-статичный шапка-грид; строки слоёв строятся отдельным классом.
+`toolButtonRemoveLayer`) and `composition-layers-header` — a QTreeWidget with the
+columns Name / Visible / Muted / Blend / Opacity (PosX/PosY in the options). The form
+holds a static header grid; the layer rows are built by a separate class.
 
 ## 6.7 Layer — `Layer.ui`
 
-QDockWidget `layerPanel` → `stackedWidget`: `pageLayer` с `labelBreadCrumbTrail`
-с отдельным просмотром `layerPreview` и формой `layerPropertiesWidget` (rows: `layerType` readonly, `layerName`,
-`layerVisible`, `layerMuted`, `layerLocked`, `layerBlendMode`, `layerOpacity`,
-`layerDimension`, `layerParent`, `layerLabelColor`, `layerPlaneColor`,
-`layerCameraFov`, `layerID`) и `pageNoLayer` (`dummyWidget` — «no layer selected»). Свойства
-растущей формы и изменение по selection — код.
+The QDockWidget `layerPanel` → `stackedWidget`: `pageLayer` with `labelBreadCrumbTrail`,
+a separate `layerPreview` view and the `layerPropertiesWidget` form (rows: `layerType`
+read-only, `layerName`, `layerVisible`, `layerMuted`, `layerLocked`, `layerBlendMode`,
+`layerOpacity`, `layerDimension`, `layerParent`, `layerLabelColor`, `layerPlaneColor`,
+`layerCameraFov`, `layerID`) and `pageNoLayer` (`dummyWidget` — "no layer selected").
+The growing form's properties and the changes on selection are code. `layerPreview`
+shows the layer's source and its masks without its effects, transform and opacity, as
+the reference's `RenderLayerViewJob` does (`MARKDOWN/RE_wnd_Layer.md`); a text layer has
+no preview.
 
 ## 6.8 History — `History.ui`
 
-QDockWidget `History` → `HistoryDockWidget` (root): тул-бар
-`toolButtonUndo`/`toolButtonRedo`/`toolButtonClear` + `listViewHistory`
-(recent actions, клик = revert). История лежит в `MainWindow`; форма — каркас.
+The QDockWidget `History` → `HistoryDockWidget` (root): a tool bar
+`toolButtonUndo`/`toolButtonRedo`/`toolButtonClear` + `listViewHistory` (recent actions,
+a click reverts). The history lives in `MainWindow`; the form is a skeleton.
 
 ## 6.9 Library — `Library.ui`
 
-QDockWidget `libraryPanel` → root `LibraryPanel`: `libraryStatus` (QLabel
-«Library»), `toolButtonReloadLibrary`, `libraryList` (QListWidget). Заливка
-из диров/СДК — код.
+The QDockWidget `libraryPanel` → root `LibraryPanel`: `libraryStatus` (a QLabel
+"Library"), `toolButtonReloadLibrary`, `libraryList` (QListWidget). Filling it from the
+folders is code.
 
 ## 6.10 Preview360 — `Preview360.ui`
 
-QDockWidget `Preview360VideoPanel` → `Preview360VideoPanelWidget` (обвязка
-`360-viewer`): тул-бар с `comboBoxCurrentView` (7 направлений: Front/Back/Left/
-Right/Top/Bottom/Custom), `toolButtonProperties` открывает редактор Yaw/Pitch/Roll/FOV,
-камеры и wrap; `glWidget` заменяется CPU-канвасом перспективной проекции. Рендер/интеракция —
-в коде.
+The QDockWidget `Preview360VideoPanel` → `Preview360VideoPanelWidget` (the `360-viewer`
+wrapper): a tool bar with `comboBoxCurrentView` (7 directions: Front/Back/Left/Right/
+Top/Bottom/Custom), `toolButtonProperties` opens the Yaw/Pitch/Roll/FOV, camera and wrap
+editor; `glWidget` is `Viewer360View`, which draws the frame through the reference's
+EnvironmentMapViewer module and, without it, with its own perspective projection on the
+CPU (`MARKDOWN/RE_wnd_Viewer360.md`). Rendering and interaction are code.
 
 ## 6.11 AudioMeters — `AudioMeters.ui`
 
-QDockWidget `AudioMetersPanel` → `AudioMetersWidget`: `AudioMetersHoldPeaks`
-(QCheckBox «Hold Peaks», из QSettings), `toolButtonResetPeaks`, колонки
-`InputLevels` / `OutputLevels` (LED-колонки, `AudioMeterDisplay`, min 32×90;
-цвета `Theme/meterBackgroundColor` #111111, hold-peak #eeeeee). Печать колонок —
-paintEvent, в форме слот-заглушки.
-Уровни поступают из общего PCM observer в `AudioPlayer`: `MainWindow` обновляет
-обе колонки и встроенный Viewer-индикатор одним сигналом `levelsChanged`.
+The QDockWidget `AudioMetersPanel` → `AudioMetersWidget`: `AudioMetersHoldPeaks` (a
+QCheckBox "Hold Peaks", from QSettings), `toolButtonResetPeaks`, the `InputLevels` /
+`OutputLevels` columns (LED columns, `AudioMeterDisplay`, min 32×90; colors
+`Theme/meterBackgroundColor` #111111, hold peak #eeeeee). The columns are painted in
+paintEvent; the form has placeholder slots. The levels come from the shared PCM
+observer in `AudioPlayer`: `MainWindow` updates both columns and the inline Viewer
+indicator from one `levelsChanged` signal.
 
 ## 6.12 Start — `Start.ui`
 
-QDockWidget `StartPanel` → `StartPanelWidget`: `action`-кнопки «New Composite
-Shot» (`toolButtonNewComp`), «New Composite Shots From Footage»
-(`toolButtonNewCompsFromMedia`), «Import File» (`AddMedia`), «Edit Screen»
-(`toolButtonEditScreen`) — все minHeight 46, text-only; справа
-`ProjectSideBarWidget` с «Jump back in» (`toolButtonNew`, `toolButtonOpen`,
-`toolButtonClearRecents`) и `listViewRecentProjects`; снизу learning strip.
-Список недавних — код.
+The QDockWidget `StartPanel` → `StartPanelWidget`: the action buttons "New Composite
+Shot" (`toolButtonNewComp`), "New Composite Shots From Footage"
+(`toolButtonNewCompsFromMedia`), "Import File" (`AddMedia`), "Edit Screen"
+(`toolButtonEditScreen`) — all minHeight 46, text only; on the right
+`ProjectSideBarWidget` with "Jump back in" (`toolButtonNew`, `toolButtonOpen`,
+`toolButtonClearRecents`) and `listViewRecentProjects`; a learning strip below. The
+recent list is code.
 
 ## 6.13 Trimmer — `Trimmer.ui`
 
-Виджет `trimmer-panel` внутри дока `TrimmerDock` общей группы Viewer (QWidget, drop-
-enabled). Тул-бар «trimmer-toolbar-top»: `trimmerSetIn`/`trimmerSetOut`,
-`trimmerPosition` (таймкод), `trimmerInsert`, `trimmerOverlay`; кадр
-`trimmer-frame` (класс `TrimmerWidget`, draw strip); «trimmer-toolbar-bottom»:
-`TrimmerSlider` (0..1000), `trimmerRange`; `trimmerSourceList` (QListWidget,
-maxHeight 90). Канвас — paintEvent, в форме заглушка.
+The `trimmer-panel` widget inside the `TrimmerDock` dock of the shared Viewer group
+(QWidget, drops enabled). The "trimmer-toolbar-top" tool bar: `trimmerSetIn`/
+`trimmerSetOut`, `trimmerPosition` (timecode), `trimmerInsert`, `trimmerOverlay`; the
+`trimmer-frame` frame (class `TrimmerWidget`, draw strip); "trimmer-toolbar-bottom":
+`TrimmerSlider` (0..1000), `trimmerRange`; `trimmerSourceList` (QListWidget, maxHeight
+90). The canvas is paintEvent; the form has a placeholder.
 
 ## 6.14 Timeline — `Timeline.ui`
 
-QDockWidget `timelinePanel` → `TimelinePanelWidget` (тёмный QSS #272727).
-`timelineToolStrip` (23px, тулы Select/Hand/Slice/Rate Stretch + stretch-menu
-для Slip/Slide/Ripple/Roll/TrackSelect + `timelineSnap` + `timelineSettings`).
-Хедер: `timelineClock`, `timelineTimecode`, `timelineNewLayer`,
-`toolButtonMakeCompositeShot`, keyframe-бар (`timelinePreviousKeyframe`,
-`timelineToggleKeyframe`, `timelineNextKeyframe`, `timelineKeyFrameType*` на все
-интерполяции), `timelineValueGraph`, `timelineGraphAutoZoom`,
-`timelineRenderCache`, `timelineExport`. Тело: `QSplitter` → `leftColumn`
-(строка `timelineSearch` + `timelineLayerTree` + `timelineZoomOut/Slider/In`)
-и `stackedWidgetTimelines` (трид-канвас / value-graph); справа `timelineVScroll`
-(зеркальный). Внешний `timelinePanelPages` переключает Editor/Start, а единый
-25-px футер содержит соседние `timelineStartTab` и
-`timelineCompositionTabs`, затем меню панели справа. Нативная рамка QDockWidget и QStatusBar
-скрыты, чтобы не создавать вторую строку под футером. Дерево-слои/канвас — заглушки
-(в живые страницы промоты при wiring), структура rows и `timelinePreset_*` /
-`timelineTrackEnabled_*` / `timelineMask*` генерируются в коде.
+The QDockWidget `timelinePanel` → `TimelinePanelWidget` (dark QSS #272727).
+`timelineToolStrip` (23 px, the Select/Hand/Slice/Rate Stretch tools + a stretch menu
+for Slip/Slide/Ripple/Roll/TrackSelect + `timelineSnap` + `timelineSettings`). The
+header: `timelineClock`, `timelineTimecode`, `timelineNewLayer`,
+`toolButtonMakeCompositeShot`, the keyframe bar (`timelinePreviousKeyframe`,
+`timelineToggleKeyframe`, `timelineNextKeyframe`, `timelineKeyFrameType*` for all
+interpolations), `timelineValueGraph`, `timelineGraphAutoZoom`, `timelineRenderCache`,
+`timelineExport`. The body: a `QSplitter` → `leftColumn` (the `timelineSearch` row +
+`timelineLayerTree` + `timelineZoomOut/Slider/In`) and `stackedWidgetTimelines` (tree
+canvas / value graph); on the right `timelineVScroll` (mirrored). The outer
+`timelinePanelPages` switches Editor/Start, and a single 25 px footer holds
+`timelineStartTab` and `timelineCompositionTabs` side by side, then the panel menu on
+the right. The native QDockWidget frame and the QStatusBar are hidden so that no second
+row appears under the footer. The layer tree, the canvas and the value graph are the
+promoted `TimelineTree`, `TimelineCanvas` and `TimelineValueGraphView`; the row
+structure and `timelinePreset_*` / `timelineTrackEnabled_*` / `timelineMask*` are
+generated in code.
 
-## 6.15 Export — `Export.ui` (spec-копия)
+## 6.15 Export — `Export.ui` (spec copy)
 
-Виджет `export-panel` внутри дока `ExportDock` общей группы Viewer. **Важно:** рабочая
-форма уже существует и **подключена** в сборку — `ui/ExportPanel.ui`; класс
-`ExportPanel` строит её через `Ui::ExportPanel` (`setupUi`), а конструктор
-оборачивает её во внешний виджет `objectName "export-panel"` с нулевыми
-margins. Остальная динамика в `ExportPanel.cpp`: выбор директории, восстановление
-`Options/ExportDirectory` из QSettings, вывод пути кадра в `plainTextProgress`,
-сигналы `exportFrameRequested` / `exportContentsRequested`.
+The `export-panel` widget inside the `ExportDock` dock of the shared Viewer group.
+**Important:** the working form already exists and **is connected** to the build —
+`ui/ExportPanel.ui`; the `ExportPanel` class builds it through `Ui::ExportPanel`
+(`setupUi`), and the constructor wraps it in an outer widget with `objectName
+"export-panel"` and zero margins. The rest of the dynamics is in `ExportPanel.cpp`:
+choosing the directory, restoring `Options/ExportDirectory` from QSettings, writing the
+frame path to `plainTextProgress`, the `exportFrameRequested` /
+`exportContentsRequested` signals.
 
-`ui/panels/Export.ui` — **спецификация, не подключена и не загружается**, создана
-для единообразия остальных форматов. Корень переделан в `QDockWidget`
-(`objectName "export-panel"`), как у остальных панель-окон, чтобы на рамке были
-стандартные кнопки дока: **отстыковка в полноценное окно**
-(`QDockWidget::DockWidgetFloatable`) и **закрытие** (`DockWidgetClosable`;
-вместе с `DockWidgetMovable` в свойстве `features`). Внутри — виджет-тело
-`ExportPanel` с деревом, повторяющим подключённую форму 1-в-1 по reference
-object-именам: `lineEditExportDirectory`, `toolButtonExportDirectory` («…»),
-`comboBoxPreset` (H.264 (.mp4) / PNG / JPEG / OpenEXR / ProRes),
-`pushButtonExportFrame` («Export Frame»), `pushButtonExportContents` («Export
-Contents»), `plainTextProgress` (readonly).
-Правило на будущее: держать обе формы в синхроне по objectName (тесты ходят по
-именам подключённой формы), либо удалить spec, если она разойдётся, — чтобы не
-плодить дубликаты reference-имён. Обратите внимание: в живом коде ExportPanel —
-это QWidget внутри рабочего `ExportDock`: перемещение, отсоединение и закрытие
-обеспечивает оболочка QDockWidget в MainWindow, форма тела остаётся прежней.
+`ui/panels/Export.ui` is **a specification, not connected and not loaded**, created for
+consistency with the other forms. Its root is a `QDockWidget`
+(`objectName "export-panel"`), as in the other panel windows, so that the frame has the
+standard dock buttons: **undocking into a full window**
+(`QDockWidget::DockWidgetFloatable`) and **closing** (`DockWidgetClosable`; together with
+`DockWidgetMovable` in the `features` property). Inside is the `ExportPanel` body widget
+with a tree matching the connected form one to one by reference object names:
+`lineEditExportDirectory`, `toolButtonExportDirectory` ("…"), `comboBoxPreset`
+(H.264 (.mp4) / PNG / JPEG / OpenEXR / ProRes), `pushButtonExportFrame` ("Export
+Frame"), `pushButtonExportContents` ("Export Contents"), `plainTextProgress`
+(read-only). A rule for the future: keep both forms in sync by objectName (tests look up
+the connected form's names), or delete the spec if it drifts away, so as not to
+duplicate reference names. Note that in the working code ExportPanel is a QWidget
+inside the working `ExportDock`: moving, detaching and closing are provided by the
+QDockWidget shell in MainWindow, and the body form stays the same.
 
-## 7. Общие наблюдения для панелей
+## 7. General observations for the panels
 
-- **Reference object names** во всех формах 1-в-1 из конструкторов, включая
-  суффиксные (например `timelineKeyFrameType` + имя иконки ключевого фрейма).
-- **Кастомная отрисовка** (`TimelineCanvas`, `TimelineValueGraphView`,
-  `TrimmerWidget`, `AudioMeterDisplay`, 360-канвас, шахматка) — это
-  `paintEvent`; в формах соответствующие виджеты — пустые placeholder-ы с
-  минимальными размерами, реальные классы помечены в комментариях формы для
-  будущего `promote`.
-- **Иконки** ставятся в коде с фолбэком на текст (`makeButton`); в .ui иконки
-  не записаны, ресурсы не подключены (`icons.qrc` не тащим в формы).
-- **Динамика** (заполнение списков, меню, драг-н-дроп, сигналы/слоты,
-  синхронизация с selection) остаётся в коде — формы описывают только статичный
-  каркас.
-- **Валидация:** все 16 форм (`panels/*.ui` + `Viewer.ui`) проходят сканирование
-  `[xml]` PowerShell без ошибок; `uic` на panels-формы при сборке не вызывается.
-- Проверить при будущем подключении: `timeline_regression.cpp` завязан на
-  objectName лейаутов/кнопок/кнопок тул-стрипа — имена сохранены в `Timeline.ui`.
+- **Reference object names** in all forms match the constructors one to one,
+  including suffixed ones (for example `timelineKeyFrameType` + the keyframe icon name).
+- **Custom painting** (`TimelineCanvas`, `TimelineValueGraphView`, `TrimmerWidget`,
+  `AudioMeterDisplay`, the 360 canvas, the checkerboard) is `paintEvent`; in the forms
+  these widgets are either promoted to the working classes (Timeline, Viewer) or
+  replaced by them after `setupUi()` (Trimmer, Preview360, AudioMeters).
+- **Icons** are set in code with a text fallback (`makeButton`); the forms hold no
+  icons and do not reference the resources (`icons.qrc` is not pulled into the forms).
+- **Dynamic parts** (filling lists, menus, drag and drop, signals/slots, syncing with
+  the selection) stay in code — the forms describe only the static skeleton.
+- **Build:** `uic` compiles the 15 connected forms (`panels/*.ui` except `Export.ui`;
+  AUTOUIC in CMake, `FORMS` in qmake); `Export.ui` is a specification and is not built.
+- `timeline_regression.cpp` and the other tests look up the objectNames of layouts,
+  buttons and tool strip buttons — keep these names when editing the forms.
 
-## 8. Расположение по умолчанию (27.09.2026)
+## 8. Default layout (27.09.2026)
 
-Центральный ряд вкладок: **Viewer / Trimmer / Export / Layer / 360 Viewer**.
-Все пять панелей находятся в одной нативной dock-группе, вкладки расположены снизу.
-Layer и 360 Viewer доступны сразу; активна вкладка Viewer. Слева остаются Media/Text,
-справа — Effects/Controls/Layout/Track/Library/History, ниже всех групп — Timeline.
-QMainWindow работает без отдельного centralWidget; это сохраняет нативные drag,
-split/tab targets, float/dock и меню панелей. Состояние раскладки имеет версию 4:
-устаревшие сохранения не восстанавливают прежнее расположение справа.
+The central tab row: **Viewer / Trimmer / Export / Layer / 360 Viewer**. All five
+panels are in one native dock group with the tabs at the bottom. Layer and 360 Viewer
+are available right away; the Viewer tab is active. Media/Text stay on the left,
+Effects/Controls/Layout/Track/Library/History on the right, and the Timeline below all
+groups. QMainWindow works without a separate centralWidget; this keeps the native drag,
+split/tab targets, float/dock and the panel menus. The layout state has version 4:
+outdated saves do not restore the former arrangement on the right.
 
-Панель `widgetQuickActions` под главным меню по умолчанию видима: Logo/Open/Save/Options/Cut/Copy/Paste/Undo/Redo. `Options/QuickActionsLayoutVersion=1` однократно исправляет прежнее скрытие; дальнейший выбор `ShowMenuBarQuickActions` применяется без сброса. Кнопка `timelineGraphAutoZoom` использует IconOnly и сохраняет tooltip, accessible name и существующий toggled-handler.
+The `widgetQuickActions` bar under the main menu is visible by default:
+Logo/Open/Save/Options/Cut/Copy/Paste/Undo/Redo. `Options/QuickActionsLayoutVersion=1`
+fixes the former hiding once; after that the `ShowMenuBarQuickActions` choice applies
+without a reset. The `timelineGraphAutoZoom` button uses IconOnly and keeps its tooltip,
+accessible name and existing toggled handler.

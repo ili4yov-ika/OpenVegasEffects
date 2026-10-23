@@ -5,11 +5,20 @@
 #include <QImage>
 #include <cmath>
 
+// The built-in effects the port draws itself (Blur, Color Correction Wheels
+// and the simple color effects) over an RGBA8888 frame. Every other effect id
+// is handed to the native .hfpl host (applyNativeEffectToImage).
 namespace openvegas {
 namespace plugin {
 
 namespace {
 
+// One box-blur pass along rows (horizontal) or columns. A running sum over the
+// line makes each pixel's average constant time; a fractional radius blends
+// the averages of floor(radius) and floor(radius) + 1. Colour is averaged
+// premultiplied by alpha so transparent pixels do not darken the edges, and
+// with `clamp` the line's end pixels are repeated past its ends instead of
+// fading to transparent.
 void blurAxis(QImage& image, double radius, bool horizontal, bool clamp)
 {
     const int length = horizontal ? image.width() : image.height();
@@ -49,6 +58,11 @@ void blurAxis(QImage& image, double radius, bool horizontal, bool clamp)
     image = out;
 }
 
+// Color Correction Wheels, by parameter index: 0 saturation, 1 exposure in
+// stops, 2 white balance; then Highlights, Midtones and Shadows as
+// (strength, hue, saturation) triples from 3. Each band's tint is weighted by
+// the pixel's luminance - L^2 for highlights, 4L(1-L) for midtones, (1-L)^2
+// for shadows - so the three overlap smoothly.
 void applyColorWheels(QImage& image, const QStringList& p)
 {
     const double saturation = p.value(0, "1").toDouble();
@@ -75,6 +89,8 @@ void applyColorWheels(QImage& image, const QStringList& p)
     }
 }
 
+// Parameter readers of the simple effects: a missing or unreadable value
+// falls back to the effect's default (green tint, 100 % brightness).
 void parseTintColor(const QStringList& parameters, QColor& tint)
 {
     tint = QColor(0, 255, 0);
@@ -99,6 +115,8 @@ double parseBrightness(const QStringList& parameters)
     return qBound(0.0, level, 200.0) / 100.0;
 }
 
+// The simple color effects work on RGB in place and leave alpha alone.
+// Grayscale and Tint use the Rec. 601 luma weights (30/59/11).
 void applyGrayscale(QImage& image)
 {
     uchar* bits = image.bits();
@@ -176,6 +194,9 @@ void applyBrightness(QImage& image, double factor)
 
 } // namespace
 
+// Draws one effect over `image` with its values as strings, in the order of
+// its EffectSpec parameters. Returns false when the frame is not RGBA8888 or
+// the native host cannot run the effect.
 bool applyEffectToImage(QImage& image, const core::Identifier& pluginId, const QStringList& parameters,
                         const NativeFrameTime& time)
 {
@@ -220,6 +241,9 @@ bool applyEffectToImage(QImage& image, const core::Identifier& pluginId, const Q
     return applyNativeEffectToImage(image, pluginId, parameters, time);
 }
 
+// The specs of the two built-in effects the timeline lists beside the native
+// ones: their parameters' names, ranges, units and groups, which the Controls
+// panel and the .vegfx serializer use.
 QVector<EffectSpec> timelineBuiltinSpecs()
 {
     const auto parameter = [](QString name, QString label, QString type, QString value, double min, double max, QString unit = QString()) {

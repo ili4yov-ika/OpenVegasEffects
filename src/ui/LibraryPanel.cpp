@@ -13,6 +13,9 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+// The Library panel: a native list in place of the reference's web Library.
+// It shows the files of the media and template library folders under a
+// header row each; activating a file reports its library and path.
 namespace openvegas {
 namespace ui {
 
@@ -61,6 +64,9 @@ void LibraryPanel::setLibraryPaths(const QString& mediaPath, const QString& temp
     reload();
 }
 
+// Lists the two folders again, recursively. The scan runs on the next turn
+// of the event loop so "Loading Library..." shows before a large folder is
+// walked; a missing folder keeps its header with the path as its tooltip.
 void LibraryPanel::reload()
 {
     m_list->clear();
