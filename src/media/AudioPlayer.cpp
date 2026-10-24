@@ -450,6 +450,11 @@ struct AudioPlayer::Engine {
         output = api.libvlc_media_player_new_from_media(media);
         api.libvlc_media_release(media);
         if (!output || api.libvlc_media_player_play(output) != 0) return false;
+        // On Windows VLC's output sets the volume and mute of the process's
+        // audio session, which Windows keeps between runs: earlier builds
+        // muted it through their video decoders. The master output takes it
+        // back unmuted at full volume each time it starts.
+        api.libvlc_audio_set_mute(output, 0);
         api.libvlc_audio_set_volume(output, 100);
         return true;
     }

@@ -14,6 +14,37 @@
 namespace openvegas {
 namespace media {
 
+const QStringList& videoFileExtensions()
+{
+    static const QStringList extensions = {
+        QStringLiteral("mp4"), QStringLiteral("mov"), QStringLiteral("avi"), QStringLiteral("mkv"),
+        QStringLiteral("mxf"), QStringLiteral("webm"), QStringLiteral("m4v"), QStringLiteral("mpg"),
+        QStringLiteral("mpeg"), QStringLiteral("ts"), QStringLiteral("mts"), QStringLiteral("m2ts"),
+        QStringLiteral("wmv"), QStringLiteral("flv"), QStringLiteral("3gp"), QStringLiteral("ogv")};
+    return extensions;
+}
+
+const QStringList& imageFileExtensions()
+{
+    static const QStringList extensions = {
+        QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("bmp"),
+        QStringLiteral("tga"), QStringLiteral("exr"), QStringLiteral("dpx")};
+    return extensions;
+}
+
+const QStringList& audioFileExtensions()
+{
+    // FLAC, Ogg, Opus, M4A and AIFF were missing and so were taken for video:
+    // a video decoder was opened on them, whose muting silenced the whole
+    // application (see VideoDecoder::open).
+    static const QStringList extensions = {
+        QStringLiteral("wav"), QStringLiteral("mp3"), QStringLiteral("aac"), QStringLiteral("wma"),
+        QStringLiteral("flac"), QStringLiteral("ogg"), QStringLiteral("oga"), QStringLiteral("opus"),
+        QStringLiteral("m4a"), QStringLiteral("aif"), QStringLiteral("aiff"), QStringLiteral("aifc"),
+        QStringLiteral("ac3"), QStringLiteral("mka"), QStringLiteral("caf"), QStringLiteral("wv")};
+    return extensions;
+}
+
 void MediaAsset::setPixelAspectOverride(bool enabled, int pixelAspect)
 {
     using composition::Composition;
@@ -46,13 +77,9 @@ void MediaAsset::setFilePath(const QString& path)
     m_streams = {};
 
     const QString suffix = QFileInfo(path).suffix().toLower();
-    const QStringList videoExts = {QStringLiteral("mp4"), QStringLiteral("mov"), QStringLiteral("avi"),
-                                   QStringLiteral("mkv"), QStringLiteral("mxf"), QStringLiteral("webm")};
-    const QStringList imageExts = {QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
-                                   QStringLiteral("bmp"), QStringLiteral("tga"), QStringLiteral("exr"),
-                                   QStringLiteral("dpx")};
-    const QStringList audioExts = {QStringLiteral("wav"), QStringLiteral("mp3"), QStringLiteral("aac"),
-                                   QStringLiteral("wma")};
+    const QStringList& videoExts = videoFileExtensions();
+    const QStringList& imageExts = imageFileExtensions();
+    const QStringList& audioExts = audioFileExtensions();
 
     if (videoExts.contains(suffix)) {
         m_kind = MediaKind::Video;

@@ -20,20 +20,10 @@ MediaAsset* MediaManager::assetByIdForEdit(const core::Identifier& id)
     return nullptr;
 }
 
-namespace {
-const QStringList kVideoExtensions = {QStringLiteral("mp4"), QStringLiteral("mov"), QStringLiteral("avi"),
-                                      QStringLiteral("mkv"), QStringLiteral("mxf"), QStringLiteral("webm")};
-const QStringList kImageExtensions = {QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
-                                      QStringLiteral("bmp"), QStringLiteral("tga"), QStringLiteral("exr"),
-                                      QStringLiteral("dpx")};
-const QStringList kAudioExtensions = {QStringLiteral("wav"), QStringLiteral("mp3"), QStringLiteral("aac"),
-                                      QStringLiteral("wma")};
-} // namespace
-
 MediaManager::MediaManager()
 {
-    m_supportedExtensions =
-        kVideoExtensions + kImageExtensions + kAudioExtensions + model3d::modelExtensions();
+    m_supportedExtensions = videoFileExtensions() + imageFileExtensions() + audioFileExtensions()
+                            + model3d::modelExtensions();
 }
 
 MediaAsset MediaManager::assetById(const core::Identifier& id) const
@@ -71,13 +61,13 @@ MediaAsset* MediaManager::assetByFilePathForEdit(const QString& filePath)
 MediaKind MediaManager::kindForPath(const QString& filePath)
 {
     const QString suffix = QFileInfo(filePath).suffix().toLower();
-    if (kVideoExtensions.contains(suffix)) {
+    if (videoFileExtensions().contains(suffix)) {
         return MediaKind::Video;
     }
-    if (kImageExtensions.contains(suffix)) {
+    if (imageFileExtensions().contains(suffix)) {
         return MediaKind::Image;
     }
-    if (kAudioExtensions.contains(suffix)) {
+    if (audioFileExtensions().contains(suffix)) {
         return MediaKind::Audio;
     }
     return MediaKind::Video;
@@ -150,6 +140,12 @@ core::Result MediaManager::importFile(const QString& filePath)
     if (asset.kind() == MediaKind::Video || asset.kind() == MediaKind::Audio) {
         const VideoInfo probed = probeVideo(asset.filePath(), 4000, asset.kind() == MediaKind::Video);
         asset.setFileStreams(probed.streams);
+        // An extension the lists do not know: a file with sound and no
+        // picture is audio, not a video without frames.
+        if (asset.kind() == MediaKind::Video && probed.valid && !probed.streams.hasVideo
+            && !probed.streams.audio.isEmpty()) {
+            asset.setAudioOnly();
+        }
         if (probed.valid) {
             asset.setDurationSeconds(probed.durationSeconds);
             if (probed.frameSize.isValid() && !probed.frameSize.isEmpty()) {

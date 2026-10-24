@@ -1476,6 +1476,35 @@ private slots:
     // ("Move Layer(s)"): the dragged layers keep their order and go before the
     // layer under the drop, as one undoable edit, and come back selected.
     // Track's Move Layer Up/Down take the same way.
+    // Sound files are audio by their extension - FLAC, Ogg, Opus, M4A and
+    // AIFF were taken for video, so a video decoder was opened on project_3's
+    // MakeMe.flac, and its muting silenced the whole application on Windows -
+    // and a file of an unknown extension with sound and no picture is audio
+    // once probed.
+    void soundFilesAreAudio() {
+        for (const char* name : {"a.flac", "a.ogg", "a.opus", "a.m4a", "a.aiff", "a.wav", "a.mp3"}) {
+            media::MediaAsset asset; asset.setFilePath(QDir::temp().filePath(QString::fromLatin1(name)));
+            QCOMPARE(int(asset.kind()), int(media::MediaKind::Audio));
+        }
+        for (const char* name : {"a.mp4", "a.m4v", "a.mts", "a.wmv"}) {
+            media::MediaAsset asset; asset.setFilePath(QDir::temp().filePath(QString::fromLatin1(name)));
+            QCOMPARE(int(asset.kind()), int(media::MediaKind::Video));
+        }
+        const QString flac = QStringLiteral(OPENVEGAS_SOURCE_DIR)
+            + "/SAMPLES/vegfx_projects/project_3/TameAnderson - MakeMe.flac";
+        if (!QFileInfo::exists(flac)) QSKIP("project_3's FLAC is not in SAMPLES");
+        media::MediaManager manager;
+        QVERIFY(manager.importFile(flac).isSuccess());
+        QCOMPARE(int(manager.assetByFilePath(flac).kind()), int(media::MediaKind::Audio));
+        // The same sound under an extension the lists do not know.
+        QTemporaryDir dir;
+        const QString unknown = dir.filePath(QStringLiteral("song.sound"));
+        QVERIFY(QFile::copy(flac, unknown));
+        QVERIFY(manager.importFile(unknown).isSuccess());
+        if (!manager.assetByFilePath(unknown).fileStreams().audio.isEmpty())
+            QCOMPARE(int(manager.assetByFilePath(unknown).kind()), int(media::MediaKind::Audio));
+    }
+
     void layersAreReorderedByDraggingTheirRows() {
         const auto names = [](const composition::Composition& comp) {
             QStringList list;

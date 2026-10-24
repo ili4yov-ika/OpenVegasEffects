@@ -12,6 +12,13 @@
 namespace openvegas {
 namespace media {
 
+// The file extensions (lower case, no dot) of each kind of media. Files of
+// other extensions are taken for video until a probe says otherwise
+// (MediaManager::importFile: no picture but sound makes it audio).
+const QStringList& videoFileExtensions();
+const QStringList& imageFileExtensions();
+const QStringList& audioFileExtensions();
+
 enum class MediaKind
 {
     Video = 0,
@@ -82,6 +89,8 @@ public:
     QString filePath() const { return m_filePath; }
     QString fileName() const { return m_fileName; }
     MediaKind kind() const { return m_kind; }
+    // A file of an unknown extension that turned out to hold sound only.
+    void setAudioOnly() { if (m_kind == MediaKind::Video) m_kind = MediaKind::Audio; }
     // Length on the timeline: the file's own, stretched when the frame rate
     // is overridden (its frames play at the new rate).
     double durationSeconds() const;

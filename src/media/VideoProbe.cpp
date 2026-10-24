@@ -73,6 +73,8 @@ QSize readFrameSize(const QString& filePath, int timeoutMs)
     if (!media) {
         return QSize();
     }
+    // Pictures only: no audio output is opened (see VideoDecoder::open).
+    api.libvlc_media_add_option(media, ":no-audio");
     libvlc_media_player_t* player = api.libvlc_media_player_new_from_media(media);
     api.libvlc_media_release(media);
     if (!player) {
@@ -86,7 +88,6 @@ QSize readFrameSize(const QString& filePath, int timeoutMs)
     sink.buffer.resize(64 * 64 * 4);
     api.libvlc_video_set_format(player, kChroma, 64, 64, 64 * 4);
     api.libvlc_video_set_callbacks(player, discardLock, discardUnlock, discardDisplay, &sink);
-    api.libvlc_audio_set_mute(player, 1);
 
     QSize size;
     if (api.libvlc_media_player_play(player) == 0) {
@@ -240,6 +241,7 @@ bool VideoDecoder::open()
     const int threads = qBound(0, settings.value(QStringLiteral("Options/RenderThreads"), 0).toInt(), 64);
     const QByteArray threadOption = QByteArray(":avcodec-threads=") + QByteArray::number(threads);
     api.libvlc_media_add_option(media, threadOption.constData());
+    api.libvlc_media_add_option(media, ":no-audio");
     m_player = api.libvlc_media_player_new_from_media(media);
     api.libvlc_media_release(media);
     if (!m_player) {
@@ -254,9 +256,12 @@ bool VideoDecoder::open()
     api.libvlc_video_set_callbacks(m_player, &VideoDecoder::lockCallback,
                                    &VideoDecoder::unlockCallback, &VideoDecoder::displayCallback,
                                    this);
-    // A decoder, not a player: the sound belongs to AudioPlayer.
-    api.libvlc_audio_set_mute(m_player, 1);
-    api.libvlc_audio_set_volume(m_player, 0);
+    // A decoder, not a player: the sound belongs to AudioPlayer, so the media
+    // is opened without its audio (":no-audio", above). It used to be muted
+    // and turned down instead - but VLC's Windows output (mmdevice) applies
+    // mute and volume to the audio session of the whole process, so every
+    // video decoder silenced AudioPlayer too, and Windows kept that session
+    // state for the next run.
     return true;
 }
 
