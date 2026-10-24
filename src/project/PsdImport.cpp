@@ -472,10 +472,10 @@ QVector<composition::Effect> psdSmartFilterEffects(const QVariantMap& smartObjec
                 // filtered, so that it looks as it does there.
                 QStringList unconverted = cameraRawUnconverted(filter);
                 // Settings carried as XMP rather than descriptor keys.
-                for (const auto& [key, name] : {std::pair{"Clarity2012", "Clarity"}, std::pair{"Texture", "Texture"},
-                                                std::pair{"Temperature", "Temperature"}, std::pair{"Tint", "Tint"}}) {
-                    if (!qFuzzyIsNull(raw.value(QLatin1String(key))) && !unconverted.contains(translated(name)))
-                        unconverted.append(translated(name));
+                for (const auto& [key, setting] : {std::pair{"Clarity2012", "Clarity"}, std::pair{"Texture", "Texture"},
+                                                   std::pair{"Temperature", "Temperature"}, std::pair{"Tint", "Tint"}}) {
+                    if (!qFuzzyIsNull(raw.value(QLatin1String(key))) && !unconverted.contains(translated(setting)))
+                        unconverted.append(translated(setting));
                 }
                 if (!unconverted.isEmpty()) {
                     all = false;
