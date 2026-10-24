@@ -268,6 +268,10 @@ private:
     // Export panel "Add to Queue": the shot in front, its In/Out or contents.
     void queueContentsForExport(const QString& path);
     void importFiles(const QStringList& files);
+    // A Photoshop document by its layers: a composite shot of them, placed
+    // in the open shot as one layer at `cursor` (moved past it). False when
+    // the document has no layers to import, which then comes in flattened.
+    bool importPhotoshopLayers(const QString& file, double& cursor, QStringList* notes);
     // Imports a model and puts a 3D layer on the timeline for it. Reached from
     // importFiles(), which is where every route into the project ends up - the
     // Import command, a drop on the Media panel, a drop on the window.

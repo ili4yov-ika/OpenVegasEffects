@@ -519,6 +519,21 @@ AutomaticStabilizer と MotionLock を実行します：ホストはそれぞれ
 
 ## メディア、キャッシュ、プロキシ、プリレンダー
 
+Photoshop ドキュメント：`photoshopDocumentReadsLayers` はファイル形式の仕様どおりに
+ドキュメントを書き出し（`tests/PsdTestWriter.h`）、そのレイヤーを読み戻します。非圧縮、
+RLE、ZIP、予測付き ZIP のチャンネル、描画モードのキー、不透明度、グループ、クリッピング、
+ラスターマスクとベクトルマスク、Unicode の名前、露光量の調整レイヤー、PNG を埋め込んだ
+スマートオブジェクト、統合画像を確認します。`photoshopDocumentImportsAsCompositeShot` は
+それをコンポジットショットとして読み込み（上からのレイヤー順、グループの不透明度、Grade
+レイヤー、レイヤースタイルの光彩（外側）とドロップシャドウ、四隅で配置されたソースとしての
+スマートオブジェクトと Exposure Pro としての Camera Raw）、描画します。
+`photoshopSamplesImportByLayers` は `SAMPLES/vegfx_projects/project_1` の PSD（Photoshop で
+作成、git 外）を読み込み、Photoshop 自身の統合画像と比較します（`psd-<名前>.png`、
+`psd-<名前>-photoshop.png`）。`photoshopLayersSurviveSave` は絶対パスと相対パスで保存して
+開き直します。OpenGL とリファレンスのプラグインがあれば、`psdDropShadowFallsAwayFromTheLight`
+が光源の角度と Drop Shadow の角度の対応を、`psdCameraRawRendersWithExposurePro` が +0.5 EV で
+スマートオブジェクトのソースが明るくなることを確認します。
+
 `mediaOverridesReinterpretFrames` は Media Properties の残りを確認します：30 fps のファイルの
 15 fps への上書き（ソースの時刻と長さ）、NTSC のレート、白を 235 に圧縮する Computer
 （Full）、HD での Rec. 601 の行列の強制、静止画から取り除くプリマルチプライドアルファ、その

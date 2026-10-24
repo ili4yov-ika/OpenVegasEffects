@@ -24,6 +24,7 @@
 
 #include "core/Identifier.h"
 #include "core/Log.h"
+#include "media/PsdDocument.h"
 #include "composition/TextStyle.h"
 #include "composition/Transition.h"
 #include "plugin/EffectRender.h"
@@ -344,7 +345,8 @@ QImage RenderWorker::loadImageMedia(const core::Identifier& mediaId) const
     if (m_mediaManager) {
         const media::MediaAsset asset = m_mediaManager->assetById(mediaId);
         if (asset.kind() == media::MediaKind::Image) {
-            img.load(asset.filePath());
+            // Photoshop layers and documents too (media/PsdDocument).
+            img = media::readStillImage(asset.filePath());
         }
     }
     m_imageCache.insert(key, img);

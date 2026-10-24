@@ -79,6 +79,9 @@
 #include "render/VideoEncoder.h"
 #include "plugin/NativePlugin.h"
 #include "media/ProxyMedia.h"
+#include "media/PsdDocument.h"
+#include "project/PsdImport.h"
+#include "PsdTestWriter.h"
 #include <QProcess>
 #include <QDirIterator>
 #include <QMessageBox>
@@ -130,6 +133,119 @@ using namespace openvegas;
 static QString testArtifactPath(const QString& fileName)
 {
     return QDir(QDir::tempPath()).filePath(QStringLiteral("openvegas-") + fileName);
+}
+
+// The reference plug-ins a Photoshop import maps onto, with the parameters
+// they declare (by name and default), for importing without them installed.
+static plugin::EffectSpec psdTestSpec(const QString& identifier)
+{
+    static const QHash<QString, QStringList> parameters = {
+        {"com.FXHOME.HitFilm.DropShadow", {"angle=180", "distance=5", "distance_f=5", "shadowColor=#000000",
+                                           "opacity=0.5", "scale=1", "pivot=0,0", "radius=2", "radius_f=2",
+                                           "isShadowOnly=false"}},
+        {"com.FXHOME.HitFilm.OuterGlow", {"color=#808080", "opacity=0.5", "size=10", "spread=0", "offset=0,0"}},
+        {"com.FXHOME.HitFilm.InnerGlow", {"color=#808080", "opacity=0.5", "size=10", "spread=50", "offset=0,0"}},
+        {"com.FXHOME.HitFilm.Fill", {"fillColor=#ffffff", "blendAmount=100"}},
+        {"com.FXHOME.HitFilm.ColorGradient", {"startPoint=-300,200", "endPoint=200,-300", "startColor=#000000",
+                                              "endColor=#ffffff", "isRadial=false", "blendStrength=75",
+                                              "tansferMode=Add"}},
+        {"com.FXHOME.HitFilm.ExposurePro", {"exposure=0", "contrast=0", "shadows=0", "midtones=0", "highlights=0",
+                                            "whites=0", "blacks=0", "vibrance=0", "saturation=0"}},
+        {"com.FXHOME.HitFilm.Exposure", {"exposure=0", "offset=0", "gamma=1"}},
+        {"com.FXHOME.HitFilm.Dehaze", {"amount=0", "offset=0"}},
+        {"com.FXHOME.HitFilm.Blur", {"radius=5", "radius_f=5", "iterations=2"}},
+    };
+    plugin::EffectSpec spec;
+    if (!parameters.contains(identifier)) return spec;
+    spec.id = plugin::PluginId(identifier);
+    for (const QString& entry : parameters.value(identifier)) {
+        plugin::EffectParameterSpec parameter;
+        parameter.name = entry.section('=', 0, 0);
+        parameter.defaultValue = entry.section('=', 1);
+        spec.parameters.append(parameter);
+    }
+    return spec;
+}
+
+// An effect's value by its parameter name, for the spec above.
+static QString psdTestValue(const composition::Effect& effect, const QString& name)
+{
+    const plugin::EffectSpec spec = psdTestSpec(effect.pluginId.value());
+    for (int i = 0; i < spec.parameters.size(); ++i)
+        if (spec.parameters.at(i).name == name) return effect.parameterValues.value(i);
+    return {};
+}
+
+// A document with one of everything the import handles (200 x 100): see
+// photoshopDocumentReadsLayers for what each layer is.
+static QByteArray psdTestDocument(QString* sourceId = nullptr, const QColor& sourceColour = Qt::magenta)
+{
+    using namespace psdtest;
+    const QSize size(200, 100);
+    QVector<Layer> layers;
+    Layer background; background.name = "Background"; background.id = 1; background.rect = QRect(0, 0, 200, 100);
+    background.pixels = filled(background.rect.size(), Qt::red);
+    layers.append(background);
+    Layer multiply; multiply.name = "Multiply"; multiply.id = 2; multiply.rect = QRect(20, 10, 40, 30);
+    multiply.pixels = filled(multiply.rect.size(), Qt::blue); multiply.blend = "mul "; multiply.opacity = 128;
+    multiply.compression = 1;
+    layers.append(multiply);
+    Layer divider; divider.name = "</Layer group>"; divider.id = 3; divider.section = 3;
+    layers.append(divider);
+    Layer inside; inside.name = "Inside"; inside.id = 4; inside.rect = QRect(100, 20, 30, 30);
+    inside.pixels = filled(inside.rect.size(), Qt::green); inside.compression = 2;
+    const QVariantMap shadow{{"_class", "DrSh"}, {"enab", true}, {"uglg", false}, {"lagl", unit("#Ang", 90)},
+                             {"Dstn", unit("#Pxl", 10)}, {"blur", unit("#Pxl", 2)}, {"Opct", unit("#Prc", 75)},
+                             {"Clr ", rgb(Qt::black)}, {"Md  ", enumValue("BlnM", "Mltp")}};
+    const QVariantMap glow{{"_class", "OrGl"}, {"enab", true}, {"Clr ", rgb(Qt::yellow)}, {"Opct", unit("#Prc", 50)},
+                           {"blur", unit("#Pxl", 6)}, {"Ckmt", unit("#Prc", 0)}, {"Md  ", enumValue("BlnM", "Scrn")}};
+    const QVariantMap style{{"_class", "null"}, {"masterFXSwitch", true}, {"Scl ", unit("#Prc", 100)},
+                            {"DrSh", shadow}, {"OrGl", glow}};
+    inside.blocks.append({"lfx2", descriptorBlock(style)});
+    layers.append(inside);
+    Layer clipped; clipped.name = "Clipped"; clipped.id = 5; clipped.rect = QRect(90, 10, 60, 60);
+    clipped.pixels = QImage(clipped.rect.size(), QImage::Format_RGBA8888);
+    for (int y = 0; y < 60; ++y) for (int x = 0; x < 60; ++x) clipped.pixels.setPixelColor(x, y, QColor(x * 4, x * 4, x * 4));
+    clipped.clipping = true; clipped.compression = 3;
+    layers.append(clipped);
+    Layer group; group.name = QString::fromUtf8("Группа"); group.id = 6; group.section = 1; group.opacity = 128;
+    group.blend = "pass";
+    layers.append(group);
+    Layer exposure; exposure.name = "Exposure 1"; exposure.id = 7;
+    Bytes expA; expA.u16(1); expA.f32(1.0f); expA.f32(0.0f); expA.f32(1.0f);
+    exposure.blocks.append({"expA", expA.data});
+    layers.append(exposure);
+    const QString uid = "4a1f0c2e-0b8a-4c45-9b1e-7d1d2f9a3c11";
+    Layer photo; photo.name = "Photo"; photo.id = 8; photo.rect = QRect(10, 60, 60, 30);
+    photo.pixels = filled(photo.rect.size(), Qt::yellow);
+    const QVariantList corners{10.0, 60.0, 70.0, 60.0, 70.0, 90.0, 10.0, 90.0};
+    const QVariantMap cameraRaw{{"_class", "Adobe Camera Raw Filter"}, {"Ex12", 0.5}, {"Cr12", 10}, {"Vibr", 20}};
+    const QVariantMap filter{{"_class", "filterFX"}, {"Nm  ", "Camera Raw Filter..."}, {"enab", true},
+                             {"blendOptions", QVariantMap{{"_class", "blendOptions"}, {"Opct", unit("#Prc", 100)},
+                                                          {"Md  ", enumValue("BlnM", "Nrml")}}},
+                             {"Fltr", cameraRaw}};
+    const QVariantMap smart{{"_class", "null"}, {"Idnt", uid}, {"Trnf", corners}, {"nonAffineTransform", corners},
+                            {"filterFX", QVariantMap{{"_class", "filterFXStyle"}, {"enab", true},
+                                                     {"filterFXList", QVariantList{filter}}}}};
+    photo.blocks.append({"SoLd", descriptorBlock(smart, "soLD")});
+    layers.append(photo);
+    Layer masked; masked.name = "Masked"; masked.id = 9; masked.rect = QRect(150, 50, 40, 40);
+    masked.pixels = filled(masked.rect.size(), Qt::white); masked.maskRect = QRect(150, 50, 20, 40);
+    masked.mask = QImage(20, 40, QImage::Format_Grayscale8); masked.mask.fill(255); masked.maskDefault = 0;
+    layers.append(masked);
+    Layer vector; vector.name = QString::fromUtf8("Вектор Ü"); vector.id = 10; vector.rect = QRect(0, 0, 200, 100);
+    vector.pixels = filled(vector.rect.size(), Qt::cyan);
+    vector.vectorMask = rectangleVectorMask(QRectF(160, 5, 30, 20), size);
+    layers.append(vector);
+
+    QByteArray png;
+    {
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        filled(QSize(30, 15), sourceColour).save(&buffer, "PNG");
+    }
+    if (sourceId) *sourceId = uid;
+    return document(size, layers, filled(size, Qt::red), {{"lnk2", linkedFiles(uid, "photo.png", "png ", png)}});
 }
 
 class TestPlugins : public plugin::PluginManager {
@@ -1476,6 +1592,332 @@ private slots:
     // ("Move Layer(s)"): the dragged layers keep their order and go before the
     // layer under the drop, as one undoable edit, and come back selected.
     // Track's Move Layer Up/Down take the same way.
+    // A Photoshop document's layers as the specification lays them out:
+    // pixels in every compression (raw, RLE, ZIP, ZIP with prediction),
+    // blend keys, opacity, groups, clipping, a raster and a vector mask, a
+    // Unicode name, an adjustment layer, a smart object with its embedded
+    // source, and the flattened image.
+    void photoshopDocumentReadsLayers() {
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        QString uid;
+        const QString path = dir.filePath("layers.psd");
+        { QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write(psdTestDocument(&uid)); }
+        media::PsdDocument document;
+        QVERIFY2(document.load(path), qPrintable(document.errorString()));
+        QCOMPARE(document.size(), QSize(200, 100));
+        QCOMPARE(document.globalLightAngle(), 90);
+        const auto& layers = document.layers();
+        QCOMPARE(layers.size(), 10);
+        QCOMPARE(layers.at(1).blendKey, QString("mul "));
+        QCOMPARE(int(layers.at(1).opacity), 128);
+        QCOMPARE(layers.at(2).kind, media::PsdLayer::Kind::GroupEnd);
+        QCOMPARE(layers.at(5).kind, media::PsdLayer::Kind::GroupStart);
+        QCOMPARE(layers.at(5).name, QString::fromUtf8("Группа"));
+        QVERIFY(layers.at(4).clipping);
+        QCOMPARE(layers.at(6).kind, media::PsdLayer::Kind::Adjustment);
+        QCOMPARE(layers.at(6).adjustmentKey, QString("expA"));
+        QCOMPARE(layers.at(7).kind, media::PsdLayer::Kind::SmartObject);
+        QCOMPARE(layers.at(7).smartObject.value("Idnt").toString(), uid);
+        QVERIFY(layers.at(3).effects.contains("DrSh"));
+        QCOMPARE(layers.at(9).name, QString::fromUtf8("Вектор Ü"));
+        QVERIFY(layers.at(9).hasVectorMask);
+        QVERIFY(document.linkedFiles().contains(uid));
+
+        QCOMPARE(document.layerImage(1).pixelColor(5, 5), QColor(Qt::blue));          // RLE
+        QCOMPARE(document.layerImage(3).pixelColor(5, 5), QColor(Qt::green));         // ZIP
+        QCOMPARE(document.layerImage(4).pixelColor(10, 3).red(), 40);                 // ZIP with prediction
+        QCOMPARE(document.layerImage(4).pixelColor(59, 3).red(), 236);
+        const QImage masked = document.layerImage(8);
+        QCOMPARE(masked.pixelColor(5, 5).alpha(), 255);
+        QCOMPARE(masked.pixelColor(30, 5).alpha(), 0);
+        const QImage vector = document.layerImage(9);
+        QVERIFY(vector.pixelColor(175, 15).alpha() > 250);
+        QCOMPARE(vector.pixelColor(100, 50).alpha(), 0);
+        QCOMPARE(document.compositeImage().pixelColor(3, 3), QColor(Qt::red));
+
+        // Clipped: only where the layer below it is.
+        const QImage clipped = media::readStillImage(path + "#psdlayer:5:clip:4");
+        QCOMPARE(clipped.size(), QSize(60, 60));
+        QCOMPARE(clipped.pixelColor(5, 15).alpha(), 0);
+        QCOMPARE(clipped.pixelColor(20, 20).alpha(), 255);
+        const QImage source = media::readStillImage(path + "#psdsource:" + uid);
+        QCOMPARE(source.size(), QSize(30, 15));
+        QCOMPARE(source.pixelColor(3, 3), QColor(Qt::magenta));
+        QCOMPARE(media::stillImageSize(path + "#psdlayer:2"), QSize(40, 30));
+        QCOMPARE(media::stillImageSize(path), QSize(200, 100));
+        QCOMPARE(media::psdLayerName(path + "#psdlayer:10"), QString::fromUtf8("Вектор Ü"));
+        // A media item of a layer is a still of its own.
+        media::MediaAsset asset; asset.setFilePath(path + "#psdlayer:2");
+        QCOMPARE(int(asset.kind()), int(media::MediaKind::Image));
+        QCOMPARE(asset.frameSize(), QSize(40, 30));
+        QCOMPARE(asset.sourcePath(), path);
+        QCOMPARE(asset.fileName(), QString("layers.psd - Multiply"));
+    }
+
+    // The import builds a composite shot of the document's size with its
+    // layers in order: blend modes, opacity with the group's, a clipped
+    // layer, a Grade layer for the adjustment, layer style effects, and the
+    // smart object as its unfiltered source, placed where Photoshop has it,
+    // with Camera Raw as an Exposure Pro effect. The shot draws the layers
+    // where they are in the document.
+    void photoshopDocumentImportsAsCompositeShot() {
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString path = dir.filePath("layers.psd");
+        { QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write(psdTestDocument()); }
+        auto media = std::make_shared<media::MediaManager>();
+        project::PsdImportOptions options; options.durationSeconds = 2.0;
+        const project::PsdImportResult result = project::importPsdComposition(path, *media, psdTestSpec, options);
+        QVERIFY2(result.shot, qPrintable(result.error));
+        const auto& shot = *result.shot;
+        QCOMPARE(shot.name(), QString("layers"));
+        QCOMPARE(QSize(shot.width(), shot.height()), QSize(200, 100));
+        QCOMPARE(result.layerCount, 8);
+        QStringList names;
+        for (const auto& layer : shot.layers()) names << layer.name;
+        // Top first, as the timeline lists them.
+        QCOMPARE(names, (QStringList{QString::fromUtf8("Вектор Ü"), "Masked", "Photo", "Exposure 1", "Clipped",
+                                     "Inside", "Multiply", "Background"}));
+        const auto& layers = shot.layers();
+        QCOMPARE(layers.at(7).transform.position, QPointF(0, 0));
+        QCOMPARE(layers.at(6).blendMode, QString("Multiply"));
+        QVERIFY(qAbs(layers.at(6).opacity - 128.0 / 255.0) < 1e-6);
+        QCOMPARE(layers.at(6).transform.position, QPointF(-60, 25));       // (40, 25) in the document
+        QVERIFY(qAbs(layers.at(5).opacity - 128.0 / 255.0) < 1e-6);        // its group's 50 %
+        const auto& insideEffects = layers.at(5).clips.first().effects;
+        QCOMPARE(insideEffects.size(), 2);
+        QCOMPARE(insideEffects.at(0).name, QString("Outer Glow"));
+        QCOMPARE(psdTestValue(insideEffects.at(0), "color"), QString("#ffff00"));
+        QCOMPARE(psdTestValue(insideEffects.at(0), "size"), QString("6"));
+        QCOMPARE(insideEffects.at(1).name, QString("Drop Shadow"));
+        QCOMPARE(psdTestValue(insideEffects.at(1), "distance_f"), QString("10"));
+        QCOMPARE(psdTestValue(insideEffects.at(1), "opacity"), QString("0.75"));
+        QCOMPARE(psdTestValue(insideEffects.at(1), "angle"), QString("180"));   // light from above: below
+        const media::MediaAsset clippedAsset = media->assetById(layers.at(4).clips.first().mediaId);
+        QVERIFY2(clippedAsset.filePath().endsWith("#psdlayer:5:clip:4"), qPrintable(clippedAsset.filePath()));
+        QCOMPARE(layers.at(3).kind, composition::LayerKind::Grade);
+        QCOMPARE(layers.at(3).clips.first().effects.first().pluginId.value(), QString("com.FXHOME.HitFilm.Exposure"));
+        QCOMPARE(psdTestValue(layers.at(3).clips.first().effects.first(), "exposure"), QString("1"));
+        const auto& photo = layers.at(2);
+        QVERIFY(media->assetById(photo.clips.first().mediaId).filePath().contains("#psdsource:"));
+        QCOMPARE(photo.transform.position, QPointF(-60, -25));
+        QCOMPARE(photo.transform.scalePercent, QPointF(200, 200));
+        QCOMPARE(photo.clips.first().effects.size(), 1);
+        const auto& raw = photo.clips.first().effects.first();
+        QCOMPARE(raw.name, QString("Camera Raw"));
+        QCOMPARE(psdTestValue(raw, "exposure"), QString("0.5"));
+        QCOMPARE(psdTestValue(raw, "contrast"), QString("10"));
+        QCOMPARE(psdTestValue(raw, "vibrance"), QString("20"));
+        QCOMPARE(psdTestValue(raw, "highlights"), QString("0"));
+        QVERIFY2(result.notes.isEmpty(), qPrintable(result.notes.join('\n')));
+
+        // Drawn without the plug-ins: the effects leave the pixels alone.
+        const QImage frame = render::renderCompositionFrame(result.shot, media, 0.5);
+        QCOMPARE(frame.size(), QSize(200, 100));
+        frame.save(testArtifactPath("psd-import.png"));
+        const auto near = [](const QColor& c, int r, int g, int b) {
+            return qAbs(c.red() - r) < 30 && qAbs(c.green() - g) < 30 && qAbs(c.blue() - b) < 30;
+        };
+        QVERIFY2(near(frame.pixelColor(5, 95), 255, 0, 0), qPrintable(frame.pixelColor(5, 95).name()));
+        // Blue multiplied over red at half opacity: half the red.
+        QVERIFY2(near(frame.pixelColor(30, 20), 128, 0, 0), qPrintable(frame.pixelColor(30, 20).name()));
+        // The smart object's source, not its yellow pixels, where it is placed.
+        QVERIFY2(near(frame.pixelColor(40, 75), 255, 0, 255), qPrintable(frame.pixelColor(40, 75).name()));
+        // The masked layer's left half, the vector-masked one's rectangle.
+        QVERIFY2(near(frame.pixelColor(160, 70), 255, 255, 255), qPrintable(frame.pixelColor(160, 70).name()));
+        QVERIFY2(near(frame.pixelColor(180, 70), 255, 0, 0), qPrintable(frame.pixelColor(180, 70).name()));
+        QVERIFY2(near(frame.pixelColor(175, 15), 0, 255, 255), qPrintable(frame.pixelColor(175, 15).name()));
+        QVERIFY2(near(frame.pixelColor(175, 40), 255, 0, 0), qPrintable(frame.pixelColor(175, 40).name()));
+        // Clipped to "Inside": a grey ramp over its green at half opacity only there.
+        const QColor outsideClip = frame.pixelColor(95, 25), insideClip = frame.pixelColor(125, 40);
+        QVERIFY2(near(outsideClip, 255, 0, 0), qPrintable(outsideClip.name()));
+        QVERIFY2(!near(insideClip, 255, 0, 0), qPrintable(insideClip.name()));
+
+        // What has no equivalent is listed, not dropped silently.
+        const project::PsdImportResult bare = project::importPsdComposition(path, *media, {}, options);
+        QVERIFY(bare.shot);
+        QVERIFY2(bare.notes.join('\n').contains("DropShadow"), qPrintable(bare.notes.join('\n')));
+    }
+
+    // The sample documents Photoshop made (SAMPLES/vegfx_projects/project_1,
+    // kept out of git): every layer decodes, and the imported shot looks
+    // like Photoshop's own flattened image.
+    void photoshopSamplesImportByLayers() {
+        const QString root = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects/project_1";
+        QStringList files;
+        QDirIterator it(root, {"*.psd"}, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) files << it.next();
+        if (files.isEmpty()) QSKIP("No sample PSD in SAMPLES/vegfx_projects/project_1");
+        for (const QString& path : files) {
+            media::PsdDocument document;
+            QVERIFY2(document.load(path), qPrintable(path + ": " + document.errorString()));
+            for (int i = 0; i < document.layers().size(); ++i) {
+                const media::PsdLayer& layer = document.layers().at(i);
+                if (layer.rect.isEmpty() || layer.kind == media::PsdLayer::Kind::Adjustment) continue;
+                QVERIFY2(!document.layerImage(i).isNull(), qPrintable(path + ": " + layer.name));
+            }
+            const QImage flat = document.compositeImage();
+            QVERIFY2(!flat.isNull(), qPrintable(path));
+            auto media = std::make_shared<media::MediaManager>();
+            const project::PsdImportResult result = project::importPsdComposition(path, *media, psdTestSpec, {});
+            QVERIFY2(result.shot && result.layerCount > 0, qPrintable(path + ": " + result.error));
+            const QImage frame = render::renderCompositionFrame(result.shot, media, 0.5);
+            QCOMPARE(frame.size(), flat.size());
+            frame.save(testArtifactPath(QStringLiteral("psd-%1.png").arg(QFileInfo(path).completeBaseName())));
+            flat.save(testArtifactPath(QStringLiteral("psd-%1-photoshop.png").arg(QFileInfo(path).completeBaseName())));
+            // The mean difference over the colour channels, on what
+            // Photoshop shows over white (its flattened image has no alpha
+            // where the document has a background).
+            double total = 0.0;
+            qint64 samples = 0;
+            for (int y = 0; y < flat.height(); y += 4) {
+                for (int x = 0; x < flat.width(); x += 4) {
+                    const QColor a = flat.pixelColor(x, y), b = frame.pixelColor(x, y);
+                    const auto over = [](const QColor& c, int channel) {
+                        return c.alphaF() * channel + (1.0 - c.alphaF()) * 255.0;
+                    };
+                    total += qAbs(over(a, a.red()) - over(b, b.red())) + qAbs(over(a, a.green()) - over(b, b.green()))
+                             + qAbs(over(a, a.blue()) - over(b, b.blue()));
+                    samples += 3;
+                }
+            }
+            const double mean = total / qMax<qint64>(1, samples);
+            qInfo().noquote() << QFileInfo(path).fileName() << "layers" << result.layerCount << "mean difference"
+                              << mean << "notes" << result.notes;
+            QVERIFY2(mean < 6.0, qPrintable(QStringLiteral("%1: mean difference %2").arg(path).arg(mean)));
+        }
+    }
+
+    // A project of an imported document, saved and opened again (with
+    // absolute and with relative paths), shows the same layers from the
+    // .psd: the layers' marked paths survive, as do their effects.
+    void photoshopLayersSurviveSave() {
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString path = dir.filePath("layers.psd");
+        { QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write(psdTestDocument()); }
+        auto media = std::make_shared<media::MediaManager>();
+        project::PsdImportOptions options; options.durationSeconds = 2.0;
+        const project::PsdImportResult result = project::importPsdComposition(path, *media, psdTestSpec, options);
+        QVERIFY(result.shot);
+        const QImage before = render::renderCompositionFrame(result.shot, media, 0.5);
+        for (const bool relative : {false, true}) {
+            const QString projectPath = dir.filePath(relative ? "relative.vegfx" : "absolute.vegfx");
+            project::ProjectSaveOptions save;
+            save.useRelativePaths = relative;
+            QVERIFY(project::VegfxSerializer::saveToFile(projectPath, *result.shot, *media, save).isSuccess());
+            auto loaded = std::make_shared<composition::Composition>();
+            auto loadedMedia = std::make_shared<media::MediaManager>();
+            QVERIFY(project::VegfxSerializer::loadFromFile(projectPath, loaded.get(), loadedMedia.get()).isSuccess());
+            QCOMPARE(loaded->layers().size(), result.shot->layers().size());
+            for (int i = 0; i < loaded->layers().size(); ++i) {
+                const auto& was = result.shot->layers().at(i);
+                const auto& now = loaded->layers().at(i);
+                QCOMPARE(now.name, was.name);
+                QCOMPARE(now.blendMode, was.blendMode);
+                QCOMPARE(now.clips.first().effects.size(), was.clips.first().effects.size());
+                if (!was.clips.first().mediaId.isValid()) continue;
+                const QString wasPath = media->assetById(was.clips.first().mediaId).filePath();
+                const QString nowPath = loadedMedia->assetById(now.clips.first().mediaId).filePath();
+                QCOMPARE(QFileInfo(media::psdFileOfPath(nowPath)).canonicalFilePath(),
+                         QFileInfo(media::psdFileOfPath(wasPath)).canonicalFilePath());
+                QCOMPARE(nowPath.mid(nowPath.indexOf('#')), wasPath.mid(wasPath.indexOf('#')));
+            }
+            const QImage after = render::renderCompositionFrame(loaded, loadedMedia, 0.5);
+            QCOMPARE(after.pixelColor(40, 75), before.pixelColor(40, 75));
+            QCOMPARE(after.pixelColor(175, 15), before.pixelColor(175, 15));
+            QCOMPARE(after.pixelColor(30, 20), before.pixelColor(30, 20));
+        }
+    }
+
+    // Camera Raw's settings work through the reference Exposure Pro on the
+    // smart object's source: +0.5 EV brightens a grey (OpenGL, the plug-in
+    // from SAMPLES).
+    void psdCameraRawRendersWithExposurePro() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/ExposurePro.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference ExposurePro.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("com.FXHOME.HitFilm.ExposurePro");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString path = temp.filePath("raw.psd");
+        { QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write(psdTestDocument(nullptr, QColor(100, 100, 100))); }
+        const auto specOf = [&](const QString& identifier) {
+            plugin::EffectSpec spec;
+            if (identifier != id.value()) return psdTestSpec(identifier);
+            spec.id = id;
+            spec.parameters = metadata.parameters;
+            return spec;
+        };
+        auto media = std::make_shared<media::MediaManager>();
+        const project::PsdImportResult result = project::importPsdComposition(path, *media, specOf, {});
+        QVERIFY(result.shot);
+        // The smart object alone, with and without its Camera Raw.
+        composition::Layer photo;
+        for (const auto& layer : result.shot->layers()) if (layer.name == "Photo") photo = layer;
+        QCOMPARE(photo.clips.first().effects.size(), 1);
+        auto shot = std::make_shared<composition::Composition>(*result.shot);
+        shot->setLayers({photo});
+        const QImage graded = render::renderCompositionFrame(shot, media, 0.5);
+        photo.clips.first().effects.clear();
+        shot->setLayers({photo});
+        const QImage plain = render::renderCompositionFrame(shot, media, 0.5);
+        graded.save(testArtifactPath("psd-camera-raw.png"));
+        const QColor a = plain.pixelColor(40, 75), b = graded.pixelColor(40, 75);
+        if (a == b && b.red() == 100) QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        QVERIFY2(qAbs(a.red() - 100) <= 2, qPrintable(a.name()));
+        QVERIFY2(b.red() > a.red() + 15 && qAbs(b.red() - b.blue()) <= 4, qPrintable(a.name() + " " + b.name()));
+    }
+
+    // A drop shadow from a light above the layer falls below it: Photoshop's
+    // light angle turned into the reference Drop Shadow's own (OpenGL, the
+    // plug-in from SAMPLES).
+    void psdDropShadowFallsAwayFromTheLight() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/DropShadow.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference DropShadow.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("com.FXHOME.HitFilm.DropShadow");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        const auto specOf = [&](const QString& identifier) {
+            plugin::EffectSpec spec;
+            if (identifier != id.value()) return spec;
+            spec.id = id;
+            spec.parameters = metadata.parameters;
+            return spec;
+        };
+        QStringList seen;
+        bool right = true;
+        for (const double light : {90.0, 0.0}) {
+            const QVariantMap shadow{{"_class", "DrSh"}, {"enab", true}, {"uglg", false},
+                                     {"lagl", QVariantMap{{"_unit", "#Ang"}, {"value", light}}},
+                                     {"Dstn", QVariantMap{{"_unit", "#Pxl"}, {"value", 20.0}}},
+                                     {"blur", QVariantMap{{"_unit", "#Pxl"}, {"value", 0.0}}},
+                                     {"Opct", QVariantMap{{"_unit", "#Prc"}, {"value", 100.0}}}};
+            QStringList notes;
+            const auto effects = project::psdLayerStyleEffects(
+                QVariantMap{{"_class", "null"}, {"DrSh", shadow}}, 120, QSizeF(20, 20), specOf, "Square", &notes);
+            QCOMPARE(effects.size(), 1);
+            QImage image(160, 120, QImage::Format_RGBA8888);
+            image.fill(Qt::transparent);
+            for (int y = 50; y < 70; ++y) for (int x = 70; x < 90; ++x) image.setPixelColor(x, y, Qt::white);
+            plugin::NativeFrameTime time; time.frame = 0; time.layerFrame = 0; time.layerFrames = 60;
+            if (!plugin::applyEffectToImage(image, id, effects.first().parameterValues, time))
+                QSKIP("No OpenGL 4.1 context for native modules on this platform");
+            image.save(testArtifactPath(QStringLiteral("psd-drop-shadow-%1.png").arg(light)));
+            // Light from above (90): the shadow below; from the right (0): to the left.
+            const QPoint shadowAt = light == 90.0 ? QPoint(80, 80) : QPoint(60, 60);
+            const QPoint awayAt = light == 90.0 ? QPoint(80, 40) : QPoint(100, 60);
+            const auto side = [&image](const QPoint& at) { return image.pixelColor(at).alpha(); };
+            seen << QStringLiteral("light %1 (angle %2): below %3 above %4 left %5 right %6")
+                        .arg(light).arg(effects.first().parameterValues.value(0))
+                        .arg(side({80, 80})).arg(side({80, 40})).arg(side({60, 60})).arg(side({100, 60}));
+            right = right && side(shadowAt) > 128 && side(awayAt) < 30;
+        }
+        QVERIFY2(right, qPrintable(seen.join("; ")));
+    }
+
     // Sound files are audio by their extension - FLAC, Ogg, Opus, M4A and
     // AIFF were taken for video, so a video decoder was opened on project_3's
     // MakeMe.flac, and its muting silenced the whole application on Windows -

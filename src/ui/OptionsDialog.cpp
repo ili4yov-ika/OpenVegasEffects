@@ -154,6 +154,10 @@ const PromptDefinition kPromptDefinitions[] = {
     {"checkBoxShowProjectSettings", "ShowProjectSettings",
      QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog",
                        "Prompt me for the project settings to use before creating a new project"), true},
+    // Not the reference's: it imports Photoshop documents only flattened.
+    {"checkBoxPsdImportNotes", "PsdImportNotes",
+     QT_TRANSLATE_NOOP("openvegas::ui::OptionsDialog",
+                       "Tell me what a Photoshop document's import could not carry over"), true},
 };
 
 // A command that can be given a shortcut: the action's object name (found
@@ -724,7 +728,7 @@ void OptionsDialog::browseDirectory(QLineEdit* target)
 {
     const QString start = target->text().trimmed();
     const QString dir = QFileDialog::getExistingDirectory(
-        this, QStringLiteral("Select Folder"),
+        this, tr("Select Folder"),
         start.isEmpty() ? QDir::homePath() : start);
     if (!dir.isEmpty()) {
         target->setText(QDir::toNativeSeparators(dir));

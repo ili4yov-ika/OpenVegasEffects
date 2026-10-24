@@ -23,6 +23,7 @@
 #include <QUndoStack>
 #include <QUndoCommand>
 #include <QPainter>
+#include "media/PsdDocument.h"
 #include "ui/Theme.h"
 #include "ui/EffectPlacement.h"
 #include "ui/MediaSettingsDialog.h"
@@ -617,9 +618,17 @@ void MediaPanel::rebuildList()
             && (asset.kind() == media::MediaKind::Image || asset.isImageSequence())) {
             const QFileInfo info(asset.sourcePath());
             const QString key = QStringLiteral("media-thumb:%1:%2:%3")
-                .arg(info.absoluteFilePath()).arg(info.lastModified().toMSecsSinceEpoch()).arg(info.size());
+                .arg(asset.isImageSequence() ? info.absoluteFilePath() : asset.filePath())
+                .arg(info.lastModified().toMSecsSinceEpoch()).arg(info.size());
             QPixmap thumbnail;
-            if (!QPixmapCache::find(key, &thumbnail)) {
+            if (!QPixmapCache::find(key, &thumbnail) && media::isPsdFile(asset.sourcePath())) {
+                // Photoshop layers and documents are not something QImageReader reads.
+                const QImage image = media::readStillImage(asset.filePath());
+                if (!image.isNull())
+                    thumbnail = QPixmap::fromImage(image.scaled(QSize(72, 48), Qt::KeepAspectRatio,
+                                                                Qt::SmoothTransformation));
+                if (!thumbnail.isNull()) QPixmapCache::insert(key, thumbnail);
+            } else if (thumbnail.isNull()) {
                 QImageReader reader(asset.sourcePath());
                 reader.setAutoTransform(true);
                 const QSize size = reader.size();

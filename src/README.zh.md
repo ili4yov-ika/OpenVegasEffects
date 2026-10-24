@@ -17,8 +17,8 @@
 | [`app/`](app/) | 启动 (`AppMain`)、用户数据文件夹、设置、翻译、AV 模板、项目默认值、插件文件夹、文件关联、GPU 驱动检查 |
 | [`license/`](license/) | 许可证接口，以及始终报告有效许可证的免费管理器 |
 | [`composition/`](composition/) | 模型：合成镜头、图层、片段、特效、关键帧、蒙版、文字样式、转场、Behaviors 及其模拟、运动跟踪 |
-| [`project/`](project/) | 以参考程序的格式读写 `.vegfx` 项目和 `.vegfxcs` 合成镜头、合并项目、特效预设 (`.hfpr`) |
-| [`media/`](media/) | 媒体导入与探测、libVLC (`VlcBackend`、`Vlc4Adapter`)、视频解码、实时音频混音器 (`AudioPlayer`)、旁白录制、波形、规整音频、代理、已解码帧缓存 |
+| [`project/`](project/) | 以参考程序的格式读写 `.vegfx` 项目和 `.vegfxcs` 合成镜头、合并项目、特效预设 (`.hfpr`)、按图层导入 Photoshop 文档 (`PsdImport`) |
+| [`media/`](media/) | 媒体导入与探测、libVLC (`VlcBackend`、`Vlc4Adapter`)、视频解码、实时音频混音器 (`AudioPlayer`)、旁白录制、波形、规整音频、代理、已解码帧缓存、Photoshop 文档 (`PsdDocument`) |
 | [`plugin/`](plugin/) | 插件注册表和原生 `.hfpl` 模块的宿主 (`NativeEffectRender`、`NativePlugin`)：2D 特效、转场、音频、Behaviors、Geometry、查看器中的自定义界面 |
 | [`model3d/`](model3d/) | 3D 模型读取 (OBJ、FBX、glTF、3DS、LWO、Alembic)、网格和 3D 渲染器 |
 | [`render/`](render/) | 帧渲染 (`RenderManager`)、文字、图层几何、导出及其预设、通过 FFmpeg 进行音视频编码、预渲染、帧磁盘缓存 |

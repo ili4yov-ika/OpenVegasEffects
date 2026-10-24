@@ -17,8 +17,8 @@
 | [`app/`](app/) | 起動 (`AppMain`)、ユーザーデータのフォルダー、設定、翻訳、AV テンプレート、プロジェクトの既定値、プラグインフォルダー、ファイルの関連付け、GPU ドライバーの確認 |
 | [`license/`](license/) | ライセンスのインターフェースと、常に有効なライセンスを報告するフリーのマネージャー |
 | [`composition/`](composition/) | モデル: コンポジットショット、レイヤー、クリップ、エフェクト、キーフレーム、マスク、テキストスタイル、トランジション、Behaviors とそのシミュレーション、モーショントラッキング |
-| [`project/`](project/) | リファレンス形式の `.vegfx` プロジェクトと `.vegfxcs` コンポジットショットの読み書き、プロジェクトの統合、エフェクトプリセット (`.hfpr`) |
-| [`media/`](media/) | メディアの読み込みとプローブ、libVLC (`VlcBackend`、`Vlc4Adapter`)、動画のデコード、リアルタイムオーディオミキサー (`AudioPlayer`)、ナレーション録音、波形、コンフォームしたオーディオ、プロキシ、デコード済みフレームのキャッシュ |
+| [`project/`](project/) | リファレンス形式の `.vegfx` プロジェクトと `.vegfxcs` コンポジットショットの読み書き、プロジェクトの統合、エフェクトプリセット (`.hfpr`)、Photoshop ドキュメントのレイヤー単位の読み込み (`PsdImport`) |
+| [`media/`](media/) | メディアの読み込みとプローブ、libVLC (`VlcBackend`、`Vlc4Adapter`)、動画のデコード、リアルタイムオーディオミキサー (`AudioPlayer`)、ナレーション録音、波形、コンフォームしたオーディオ、プロキシ、デコード済みフレームのキャッシュ、Photoshop ドキュメント (`PsdDocument`) |
 | [`plugin/`](plugin/) | プラグインレジストリとネイティブ `.hfpl` モジュールのホスト (`NativeEffectRender`、`NativePlugin`): 2D エフェクト、トランジション、オーディオ、Behaviors、Geometry、ビューアー上の独自 UI |
 | [`model3d/`](model3d/) | 3D モデルの読み込み (OBJ、FBX、glTF、3DS、LWO、Alembic)、メッシュ、3D レンダラー |
 | [`render/`](render/) | フレームのレンダリング (`RenderManager`)、テキスト、レイヤーのジオメトリ、書き出しとそのプリセット、FFmpeg による映像と音声のエンコード、プリレンダー、フレームのディスクキャッシュ |

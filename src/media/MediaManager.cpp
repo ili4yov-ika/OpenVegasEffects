@@ -7,6 +7,7 @@
 #include <QStringList>
 
 #include "core/Log.h"
+#include "media/PsdDocument.h"
 #include "media/VideoProbe.h"
 #include "media/VlcBackend.h"
 #include "model3d/ModelLoader.h"
@@ -124,6 +125,26 @@ core::Result MediaManager::importFile(const QString& filePath)
         }
         const QString first = filePath.chopped(int(qstrlen(kImageSequenceMarker)));
         return importImageSequence(findImageSequence(first), 30.0);
+    }
+    // A layer of a Photoshop document (MainWindow's import, or a project).
+    if (isPsdMarkerPath(filePath)) {
+        const QFileInfo document(psdFileOfPath(filePath));
+        if (!document.exists()) {
+            return core::Result::fail(core::ResultStatus::MissingResource,
+                                      QStringLiteral("File not found: %1").arg(document.filePath()));
+        }
+        const QString path = document.absoluteFilePath() + filePath.mid(int(psdFileOfPath(filePath).size()));
+        for (const MediaAsset& existing : m_assets) {
+            if (existing.filePath() == path) return core::Result::ok();
+        }
+        if (!stillImageSize(path).isValid()) {
+            return core::Result::fail(core::ResultStatus::InvalidArgument,
+                                      QStringLiteral("The layer is not in %1").arg(document.fileName()));
+        }
+        MediaAsset asset;
+        asset.setFilePath(path);
+        m_assets.push_back(asset);
+        return core::Result::ok();
     }
     const QFileInfo info(filePath);
     if (!info.exists()) {

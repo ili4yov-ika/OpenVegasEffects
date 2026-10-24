@@ -78,7 +78,9 @@
 #include "media/VideoProbe.h"
 #include "license/LicenseManager.h"
 #include "media/ExrImage.h"
+#include "media/PsdDocument.h"
 #include "project/EffectPresets.h"
+#include "project/PsdImport.h"
 #include "project/VegfxSerializer.h"
 #include "plugin/NativeEffectRender.h"
 #include "ui/AboutDialog.h"
@@ -3098,6 +3100,7 @@ void MainWindow::importFiles(const QStringList& files)
             }) == QMessageBox::Yes;
     }
     QSet<QString> importedSequences;
+    QStringList photoshopNotes;
     const double sequenceRate = m_composition->fpsDenominator() > 0
         ? double(m_composition->fpsNumerator()) / m_composition->fpsDenominator() : 30.0;
     for (const QString& file : files) {
@@ -3142,6 +3145,10 @@ void MainWindow::importFiles(const QStringList& files)
             }
             continue;
         }
+        if (media::isPsdFile(file) && importPhotoshopLayers(file, cursor, &photoshopNotes)) {
+            ++imported;
+            continue;
+        }
         const core::Result r = m_mediaManager->importFile(file);
         if (r.isFailure()) {
             OV_LOG_WARN(QStringLiteral("Import failed for %1: %2").arg(file, r.message()));
@@ -3173,6 +3180,58 @@ void MainWindow::importFiles(const QStringList& files)
     }
     statusBar()->showMessage(summary);
     requestRenderFrame();
+    if (!photoshopNotes.isEmpty()) {
+        for (const QString& note : photoshopNotes) OV_LOG_INFO(QStringLiteral("Photoshop import: ") + note);
+        showPrompt(this, QStringLiteral("PsdImportNotes"), QMessageBox::Information, tr("Import"),
+                   tr("Some parts of the Photoshop document could not be carried over:\n\n%1")
+                       .arg(photoshopNotes.join(QLatin1Char('\n'))),
+                   QMessageBox::Ok, QMessageBox::Ok);
+    }
+}
+
+bool MainWindow::importPhotoshopLayers(const QString& file, double& cursor, QStringList* notes)
+{
+    if (!m_rootComposition || !m_composition || !m_mediaManager) return false;
+    project::PsdImportOptions options;
+    options.fpsNumerator = m_composition->fpsNumerator();
+    options.fpsDenominator = qMax(1, m_composition->fpsDenominator());
+    options.durationSeconds = app::Settings::compositeShotDefaultDurationSeconds();
+    options.audioSampleRate = m_composition->audioSampleRate();
+    plugin::PluginManager* plugins = m_owner ? m_owner->pluginManager() : nullptr;
+    const project::EffectSpecLookup specOf = [plugins](const QString& identifier) {
+        return plugins ? plugins->spec(plugin::PluginId(identifier)) : plugin::EffectSpec();
+    };
+    const project::PsdImportResult result =
+        project::importPsdComposition(file, *m_mediaManager, specOf, options);
+    if (!result.error.isEmpty())
+        OV_LOG_WARN(QStringLiteral("Photoshop import failed for %1: %2").arg(file, result.error));
+    if (!result.shot || result.layerCount == 0) return false;
+    const std::shared_ptr<composition::Composition> shot = result.shot;
+    // A name of its own among the project's shots.
+    QStringList names;
+    for (const auto& existing : allProjectShots()) names.append(existing->name());
+    const QString base = shot->name();
+    for (int n = 2; names.contains(shot->name()); ++n) shot->setName(QStringLiteral("%1 %2").arg(base).arg(n));
+    m_rootComposition->addCompositeShot(shot);
+
+    composition::Clip clip;
+    clip.mediaId = core::Identifier(QStringLiteral("composition:") + shot->id().value());
+    clip.nestedCompositionId = shot->id();
+    clip.nestedComposition = shot;
+    clip.startSeconds = cursor;
+    clip.durationSeconds = shot->durationSeconds();
+    composition::Layer layer;
+    layer.name = shot->name();
+    layer.kind = composition::LayerKind::Media;
+    layer.clips.append(clip);
+    m_composition->insertLayer(0, layer);         // on top, as a new layer goes
+    if (m_composition->durationSeconds() < cursor + clip.durationSeconds)
+        m_composition->setDurationSeconds(cursor + clip.durationSeconds);
+    cursor += clip.durationSeconds;
+    for (const QString& note : result.notes)
+        notes->append(QStringLiteral("%1 - %2").arg(QFileInfo(file).fileName(), note));
+    projectShotsChanged();
+    return true;
 }
 
 void MainWindow::onAddTextLayer(const QString& text, int fontSize)
@@ -5505,8 +5564,8 @@ void MainWindow::onLayoutRotate(int degrees)
 bool MainWindow::confirmDiscard()
 {
     const QMessageBox::StandardButton btn = QMessageBox::question(
-        this, QStringLiteral("Unsaved Changes"),
-        QStringLiteral("The current project has unsaved changes. Discard them?"),
+        this, tr("Unsaved Changes"),
+        tr("The current project has unsaved changes. Discard them?"),
         QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
     return btn == QMessageBox::Yes;
 }

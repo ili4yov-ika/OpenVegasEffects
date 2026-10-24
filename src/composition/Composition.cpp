@@ -4,15 +4,16 @@
 #include <cmath>
 
 // The composition: a project's (or a composite shot's) layers and settings.
-// Layers are kept in drawing order - index 0 is the bottom one - and every
-// change to that order renumbers zIndex so that it always equals the index.
+// Layers are kept as the timeline lists them - index 0 is the top one, drawn
+// last - and every change to that order renumbers zIndex so that it always
+// equals the index.
 // A project's composition also owns its composite shots, each a composition
 // of its own.
 
 namespace openvegas {
 namespace composition {
 
-// Appends a layer on top.
+// Appends a layer at the bottom of the stack.
 Layer& Composition::addLayer(const QString& name)
 {
     Layer layer;

@@ -195,7 +195,7 @@ QString ExportPanel::outputPath() const
 void ExportPanel::chooseDirectory()
 {
     const QString dir = QFileDialog::getExistingDirectory(
-        this, QStringLiteral("Export directory"), exportDirectory());
+        this, tr("Export directory"), exportDirectory());
     if (!dir.isEmpty()) {
         m_ui->lineEditExportDirectory->setText(QDir::toNativeSeparators(dir));
     }
@@ -206,7 +206,7 @@ void ExportPanel::exportFrame()
     const QString path = outputPath();
     emit exportFrameRequested(path);
     m_ui->plainTextProgress->appendPlainText(
-        QStringLiteral("Exporting frame... %1").arg(path));
+        tr("Exporting frame... %1").arg(path));
 
     QSettings settings = exportSettings();
     settings.setValue(kSettingKey, exportDirectory());

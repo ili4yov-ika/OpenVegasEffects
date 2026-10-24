@@ -11,6 +11,7 @@ add_executable(textpanel_regression textpanel_regression.cpp
     ../src/composition/TextStyle.cpp ../src/render/TextRender.cpp
     ../src/composition/Composition.cpp ../src/composition/KeyFrame.cpp
     ../src/project/VegfxSerializer.cpp ../src/project/VegfxMerge.cpp ../src/project/EffectPresets.cpp ../src/media/MediaManager.cpp ../src/media/MediaAsset.cpp
+    ../src/media/PsdDocument.cpp ../src/project/PsdImport.cpp
     ../src/media/VideoProbe.cpp ../src/media/Vlc4Adapter.cpp ../src/media/VlcBackend.cpp ../src/core/Log.cpp
     ../src/model3d/ModelLoader.cpp ../src/model3d/ModelImportSettings.cpp
     ../src/model3d/AlembicReader.cpp ../src/model3d/FbxReader.cpp ../src/model3d/GltfReader.cpp ../src/model3d/LwoReader.cpp ../src/model3d/ThreeDsReader.cpp

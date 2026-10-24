@@ -245,6 +245,8 @@ add_executable(OpenVegasEffects WIN32
     src/media/MediaAsset.h
     src/media/MediaStreamInfo.h
     src/media/MediaAsset.cpp
+    src/media/PsdDocument.h
+    src/media/PsdDocument.cpp
     src/media/AudioCapture.h
     src/media/AudioPlayer.h
     src/media/AudioFormat.h
@@ -283,6 +285,8 @@ add_executable(OpenVegasEffects WIN32
     src/cache/CacheDB.cpp
     src/project/EffectPresets.h
     src/project/EffectPresets.cpp
+    src/project/PsdImport.h
+    src/project/PsdImport.cpp
     src/project/NativeEffectCatalog.h
     src/project/VegfxSerializer.h
     src/project/VegfxSerializer.cpp

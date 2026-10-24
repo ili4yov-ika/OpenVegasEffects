@@ -36,6 +36,7 @@ inline const QSet<QString>& untranslatedWordsAllowed()
     static const QSet<QString> words = {
         QStringLiteral("VEGAS"), QStringLiteral("Effects"), QStringLiteral("OpenVegas"),
         QStringLiteral("FXhome"), QStringLiteral("HitFilm"), QStringLiteral("Imerge"),
+        QStringLiteral("Photoshop"), QStringLiteral("PSD"),
         QStringLiteral("hfpl"), QStringLiteral("HFPL"), QStringLiteral("hfpr"), QStringLiteral("vegfx"),
         QStringLiteral("GPU"), QStringLiteral("CPU"), QStringLiteral("RAM"), QStringLiteral("MSAA"),
         QStringLiteral("RMS"), QStringLiteral("OpenGL"), QStringLiteral("HDR"), QStringLiteral("SDR"),

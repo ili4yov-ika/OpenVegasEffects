@@ -9,6 +9,7 @@
 #include <cmath>
 
 #include "composition/Composition.h"
+#include "media/PsdDocument.h"
 #include "model3d/ModelLoader.h"
 
 // A media item of the project: a file (or an image sequence, or a model's
@@ -34,7 +35,10 @@ const QStringList& imageFileExtensions()
 {
     static const QStringList extensions = {
         QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("bmp"),
-        QStringLiteral("tga"), QStringLiteral("exr"), QStringLiteral("dpx")};
+        QStringLiteral("tga"), QStringLiteral("exr"), QStringLiteral("dpx"),
+        // Photoshop documents: flattened, or by layers (MainWindow's import
+        // and media/PsdDocument).
+        QStringLiteral("psd"), QStringLiteral("psb")};
     return extensions;
 }
 
@@ -88,6 +92,21 @@ void MediaAsset::setFilePath(const QString& path)
     m_fileName = QFileInfo(path).fileName();
     m_streams = {};
 
+    // One layer, or a smart object's source, of a Photoshop document.
+    if (isPsdMarkerPath(path)) {
+        m_kind = MediaKind::Image;
+        m_streams.videoFormat = QStringLiteral("PSD");
+        m_streams.videoCodec = m_streams.videoFormat;
+        const QSize size = stillImageSize(path);
+        if (size.isValid() && !size.isEmpty()) m_frameSize = size;
+        const QString layer = psdLayerName(path);
+        m_fileName = QFileInfo(psdFileOfPath(path)).fileName()
+                     + (layer.isEmpty() ? QString() : QStringLiteral(" - ") + layer);
+        m_fileHasAlpha = true;
+        m_id = core::Identifier(QStringLiteral("media:") + m_filePath);
+        return;
+    }
+
     const QString suffix = QFileInfo(path).suffix().toLower();
     const QStringList& videoExts = videoFileExtensions();
     const QStringList& imageExts = imageFileExtensions();
@@ -95,6 +114,13 @@ void MediaAsset::setFilePath(const QString& path)
 
     if (videoExts.contains(suffix)) {
         m_kind = MediaKind::Video;
+    } else if (imageExts.contains(suffix) && isPsdFile(path)) {
+        m_kind = MediaKind::Image;
+        m_streams.videoFormat = QStringLiteral("PSD");
+        m_streams.videoCodec = m_streams.videoFormat;
+        const QSize size = stillImageSize(path);
+        if (size.isValid() && !size.isEmpty()) m_frameSize = size;
+        m_fileHasAlpha = true;
     } else if (imageExts.contains(suffix)) {
         m_kind = MediaKind::Image;
         const QImageReader reader(m_filePath);
@@ -331,6 +357,7 @@ QString MediaAsset::sourcePath() const
 {
     if (m_kind == MediaKind::Model3DAnimation && m_filePath.endsWith(QLatin1String(kModelAnimationMarker)))
         return m_filePath.chopped(int(qstrlen(kModelAnimationMarker)));
+    if (isPsdMarkerPath(m_filePath)) return psdFileOfPath(m_filePath);
     return isImageSequence() ? m_sequenceFiles.first() : m_filePath;
 }
 

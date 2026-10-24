@@ -511,6 +511,21 @@ keyed point layer on top, "Apply To" pointed at it) and "Apply Transform", and M
 
 ## Media, caches, proxies and pre-renders
 
+Photoshop documents: `photoshopDocumentReadsLayers` writes a document by the file format
+specification (`tests/PsdTestWriter.h`) and reads its layers back - raw, RLE, ZIP and ZIP
+with prediction channels, blend keys, opacity, a group, clipping, a raster and a vector
+mask, a Unicode name, an Exposure adjustment layer, a smart object with an embedded PNG and
+the flattened image. `photoshopDocumentImportsAsCompositeShot` imports it as a composite
+shot (layers top first, the group's opacity, a Grade layer, Outer Glow and Drop Shadow from
+the layer style, the smart object as its source placed by its corners with Camera Raw as
+Exposure Pro) and draws it. `photoshopSamplesImportByLayers` imports the PSDs in
+`SAMPLES/vegfx_projects/project_1` (made by Photoshop, kept out of git) and compares the
+shot with Photoshop's own flattened image (`psd-<name>.png`, `psd-<name>-photoshop.png`).
+`photoshopLayersSurviveSave` saves and reopens the shot with absolute and relative paths.
+With OpenGL and the reference plug-ins, `psdDropShadowFallsAwayFromTheLight` checks the
+light angle against Drop Shadow's own and `psdCameraRawRendersWithExposurePro` that +0.5 EV
+brightens the smart object's source.
+
 `mediaOverridesReinterpretFrames` checks the rest of Media Properties: a 15 fps override of
 a 30 fps file (source time and length), NTSC rates, Computer (Full) squeezing white to 235,
 a forced Rec. 601 matrix on HD, premultiplied alpha divided out of a still, its dialog and

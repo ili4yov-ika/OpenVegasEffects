@@ -411,6 +411,18 @@ AutomaticStabilizer 和 MotionLock：宿主告诉每个特效它被放在了自�
 
 ## 媒体、缓存、代理与预渲染
 
+Photoshop 文档：`photoshopDocumentReadsLayers` 按文件格式规范写出文档
+（`tests/PsdTestWriter.h`）并读回其图层：未压缩、RLE、ZIP 及带预测的 ZIP 通道，混合模式键、
+不透明度、组、剪贴、栅格与矢量蒙版、Unicode 名称、曝光度调整图层、嵌入 PNG 的智能对象以及
+合并图像。`photoshopDocumentImportsAsCompositeShot` 将其导入为合成镜头（图层自上而下、组的
+不透明度、Grade 图层、图层样式中的外发光与投影、按四角放置的源图作为智能对象，以及转为
+Exposure Pro 的 Camera Raw）并进行绘制。`photoshopSamplesImportByLayers` 导入
+`SAMPLES/vegfx_projects/project_1` 中的 PSD（由 Photoshop 制作，不在 git 中），并与
+Photoshop 自身的合并图像比较（`psd-<名称>.png`、`psd-<名称>-photoshop.png`）。
+`photoshopLayersSurviveSave` 以绝对路径和相对路径保存并重新打开。具备 OpenGL 和参考插件时，
+`psdDropShadowFallsAwayFromTheLight` 检查光源角度到 Drop Shadow 角度的换算，
+`psdCameraRawRendersWithExposurePro` 检查 +0.5 EV 会提亮智能对象的源图。
+
 `mediaOverridesReinterpretFrames` 检查 Media Properties 的其余部分：把 30 fps 文件覆盖为 15 fps
 （源时间和长度）、NTSC 帧率、把白色压缩到 235 的 Computer（Full）、对 HD 强制使用 Rec. 601 矩阵、
 从静止图像中除去预乘 alpha、其对话框，以及通过项目保存静止图像的 alpha 覆盖。

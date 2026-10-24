@@ -204,7 +204,7 @@ void TrimmerWidget::paintEvent(QPaintEvent* event)
 
     if (!m_asset.isValid()) {
         p.setPen(palette().placeholderText().color());
-        p.drawText(rect(), Qt::AlignCenter, QStringLiteral("No media selected"));
+        p.drawText(rect(), Qt::AlignCenter, tr("No media selected"));
         return;
     }
 
@@ -239,7 +239,7 @@ void TrimmerWidget::paintEvent(QPaintEvent* event)
     // Labels.
     p.setPen(palette().text().color());
     p.drawText(QRect(4, strip.bottom() + 2, width() - 8, 18), Qt::AlignLeft | Qt::AlignVCenter,
-               QStringLiteral("%1  |  trim %2..%3 / %4")
+               tr("%1  |  trim %2..%3 / %4")
                    .arg(m_asset.fileName())
                    .arg(m_trimIn)
                    .arg(m_trimOut)

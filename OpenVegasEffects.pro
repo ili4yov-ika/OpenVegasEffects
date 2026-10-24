@@ -70,6 +70,7 @@ HEADERS += \
     src/license/LicenseTypes.h \
     src/license/OpenLicenseManager.h \
     src/media/MediaAsset.h \
+    src/media/PsdDocument.h \
     src/media/MediaStreamInfo.h \
     src/media/AudioCapture.h \
     src/media/AudioPlayer.h \
@@ -91,6 +92,7 @@ HEADERS += \
     src/plugin/PluginId.h \
     src/plugin/PluginManager.h \
     src/project/EffectPresets.h \
+    src/project/PsdImport.h \
     src/project/NativeEffectCatalog.h \
     src/project/VegfxSerializer.h \
     src/project/VegfxMerge.h \
@@ -191,6 +193,7 @@ SOURCES += \
     src/core/Log.cpp \
     src/license/OpenLicenseManager.cpp \
     src/media/MediaAsset.cpp \
+    src/media/PsdDocument.cpp \
     src/media/AudioCapture.cpp \
     src/media/AudioPlayer.cpp \
     src/media/AudioWaveform.cpp \
@@ -207,6 +210,7 @@ SOURCES += \
     src/plugin/NativePlugin.cpp \
     src/plugin/PluginManager.cpp \
     src/project/EffectPresets.cpp \
+    src/project/PsdImport.cpp \
     src/project/VegfxSerializer.cpp \
     src/project/VegfxMerge.cpp \
     src/model3d/AlembicReader.cpp \

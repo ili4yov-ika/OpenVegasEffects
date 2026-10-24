@@ -521,6 +521,21 @@ AutomaticStabilizer (точечный слой с ключами сверху, �
 
 ## Медиа, кэши, прокси и предрендеры
 
+Документы Photoshop: `photoshopDocumentReadsLayers` пишет документ по спецификации формата
+(`tests/PsdTestWriter.h`) и читает его слои - каналы без сжатия, RLE, ZIP и ZIP с
+предсказанием, ключи режимов наложения, непрозрачность, группу, обтравку, растровую и
+векторную маски, имя в Юникоде, корректирующий слой «Экспозиция», смарт-объект со
+встроенным PNG и плоское изображение. `photoshopDocumentImportsAsCompositeShot`
+импортирует его как композицию (слои сверху вниз, непрозрачность группы, слой Grade,
+внешнее свечение и тень из стиля слоя, смарт-объект как его исходник, размещённый по
+углам, с Camera Raw как Exposure Pro) и рисует её. `photoshopSamplesImportByLayers`
+импортирует PSD из `SAMPLES/vegfx_projects/project_1` (сделаны в Photoshop, не в git) и
+сравнивает композицию с плоским изображением самого Photoshop (`psd-<имя>.png`,
+`psd-<имя>-photoshop.png`). `photoshopLayersSurviveSave` сохраняет и открывает её с
+абсолютными и относительными путями. С OpenGL и плагинами эталона
+`psdDropShadowFallsAwayFromTheLight` проверяет перевод угла света в угол Drop Shadow, а
+`psdCameraRawRendersWithExposurePro` - что +0.5 EV осветляет исходник смарт-объекта.
+
 `mediaOverridesReinterpretFrames` проверяет остальные Media Properties: переопределение
 15 к/с для файла 30 к/с (время и длина источника), частоты NTSC, Computer (Full), сжимающий
 белый до 235, принудительную матрицу Rec. 601 для HD, премультиплицированную альфу,

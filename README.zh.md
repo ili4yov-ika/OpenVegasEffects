@@ -34,6 +34,7 @@ VEGAS Effects 的原生 `.hfpl` 插件、音频和导出。未完成的事项列
 | 文本图层：样式、3D 挤出、逐字 Behavior、Text 面板 | 已完成 |
 | 3D：模型（OBJ、带蒙皮和混合形状的 FBX、glTF、3DS、LWO，Alembic 可选）、摄像机、灯光、阴影、逐像素深度 | 已完成 |
 | 蒙版、运动跟踪（MotionTrack）、稳定 | 已完成 |
+| 按图层导入 Photoshop 文档（`.psd`、`.psb`）：混合模式、组、蒙版、剪贴、图层样式、调整图层，以及将 Camera Raw 和高斯模糊智能滤镜转为可编辑效果的智能对象 | 已完成 |
 | 带叠加层和缩小预览的查看器、360 查看器、Layer、Trimmer 和 Layout 面板 | 已完成 |
 | 音频：libVLC 播放、主混音、Audio Meters、实时原生音频特效、画外音录制 | 在 Windows 上已完成 |
 | 导出：通过 FFmpeg 导出视频、图像序列和音频，导出队列与预设，OpenEXR（可选） | 已完成 |

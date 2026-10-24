@@ -13,6 +13,7 @@
 
 #include "composition/KeyFrame.h"
 #include "composition/TextStyle.h"
+#include "media/PsdDocument.h"
 #include "project/NativeEffectCatalog.h"
 #include "project/VegfxMerge.h"
 #include <QTextStream>
@@ -3015,10 +3016,13 @@ static core::Result loadProjectImpl(const QString& filePath,
             continue;
         }
         QString filename = elemText(a, QStringLiteral("Filename"));
+        // A layer (or smart object source) of a Photoshop document: the
+        // document is the Filename, the part of it this port's own element.
+        const QString psdPart = elemText(a, QStringLiteral("OpenVegasPsdPart"));
         if (!filename.isEmpty()) {
             const QString stored = QDir::cleanPath(filename);
             bool relinked = false;
-            filename = resolveAssetPath(stored, projectDir, &relinked);
+            filename = resolveAssetPath(stored, projectDir, &relinked) + psdPart;
             if (relinked) {
                 OV_LOG_INFO(QStringLiteral("VEGFX media relinked beside the project: %1 -> %2")
                                 .arg(stored, filename));
@@ -3053,6 +3057,8 @@ static core::Result loadProjectImpl(const QString& filePath,
                 // alone stays the single image it is.
                 resolvedMediaPaths.insert(stored + QLatin1String(media::kImageSequenceMarker),
                                           filename);
+            } else if (!psdPart.isEmpty()) {
+                resolvedMediaPaths.insert(stored + psdPart, filename);
             } else {
                 resolvedMediaPaths.insert(stored, filename);
             }
@@ -4038,6 +4044,10 @@ static QDomDocument projectDocument(const QString& filePath,
         const bool sequence = recorded.isImageSequence();
         addText(doc, m, QStringLiteral("Filename"),
                 storedPath(recorded.isValid() ? recorded.sourcePath() : path));
+        // One layer of a Photoshop document: the reference opens the
+        // document itself, flattened; this port the layer again.
+        if (media::isPsdMarkerPath(path))
+            addText(doc, m, QStringLiteral("OpenVegasPsdPart"), path.mid(media::psdFileOfPath(path).size()));
         if (mediaAsset) {
             addText(doc, m, QStringLiteral("IsImageSequence"),
                     sequence ? QStringLiteral("1") : QStringLiteral("0"));
