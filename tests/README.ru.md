@@ -544,9 +544,14 @@ AutomaticStabilizer (точечный слой с ключами сверху, �
 импортирует его как композицию (слои сверху вниз, непрозрачность группы, слой Grade,
 внешнее свечение и тень из стиля слоя, смарт-объект как его исходник, размещённый по
 углам, с Camera Raw как Exposure Pro) и рисует её. `photoshopSamplesImportByLayers`
-импортирует PSD из `SAMPLES/vegfx_projects/project_1` (сделаны в Photoshop, не в git) и
-сравнивает композицию с плоским изображением самого Photoshop (`psd-<имя>.png`,
-`psd-<имя>-photoshop.png`). `photoshopLayersSurviveSave` сохраняет и открывает её с
+импортирует PSD из `SAMPLES/vegfx_projects/project_*` (сделаны в Photoshop, не в git; в
+project_4 смарт-объект с Camera Raw, выходящим за тоновые настройки) и сравнивает композицию
+с плоским изображением самого Photoshop (`psd-<имя>.png`, `psd-<имя>-photoshop.png`).
+`photoshopFlattenedImageTransparency` проверяет, что дополнительный канал плоского
+изображения - его прозрачность только при отрицательном числе слоёв (иначе это сохранённое
+выделение), а `photoshopCameraRawBeyondToneKeepsPixels` - что Camera Raw сверх тоновых
+настроек оставляет пиксели, обработанные Photoshop, и называет эти настройки, а нейтральные
+значения не учитываются. `photoshopLayersSurviveSave` сохраняет и открывает её с
 абсолютными и относительными путями. С OpenGL и плагинами эталона
 `psdDropShadowFallsAwayFromTheLight` проверяет перевод угла света в угол Drop Shadow, а
 `psdCameraRawRendersWithExposurePro` - что +0.5 EV осветляет исходник смарт-объекта.

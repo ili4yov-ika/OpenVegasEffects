@@ -1734,15 +1734,74 @@ private slots:
         QVERIFY2(bare.notes.join('\n').contains("DropShadow"), qPrintable(bare.notes.join('\n')));
     }
 
-    // The sample documents Photoshop made (SAMPLES/vegfx_projects/project_1,
+    // The flattened image's first extra channel is its transparency only
+    // when the layer count is negative; with a positive count the extra
+    // channels are saved selections and the image is opaque (project_4's
+    // document has two, a shadow's, and is opaque in Photoshop).
+    void photoshopFlattenedImageTransparency() {
+        QImage flat(4, 2, QImage::Format_RGBA8888);
+        flat.fill(Qt::transparent);
+        flat.setPixelColor(0, 0, Qt::red);
+        psdtest::Layer layer; layer.name = "Layer"; layer.id = 1; layer.rect = QRect(0, 0, 4, 2); layer.pixels = flat;
+        QByteArray data = psdtest::document(QSize(4, 2), {layer}, flat);
+        // Four channels in the header: the writer puts the alpha plane after
+        // the colour planes.
+        qToBigEndian<quint16>(4, data.data() + 12);
+        const qint64 resources = qFromBigEndian<quint32>(data.constData() + 30);
+        const qint64 countAt = 26 + 4 + 4 + resources + 4 + 4;
+        QCOMPARE(qFromBigEndian<qint16>(data.constData() + countAt), qint16(-1));
+        media::PsdDocument document;
+        QVERIFY(document.loadData(data));
+        QCOMPARE(document.compositeImage().pixelColor(0, 0), QColor(Qt::red));
+        QCOMPARE(document.compositeImage().pixelColor(1, 0).alpha(), 0);
+        qToBigEndian<qint16>(1, data.data() + countAt);
+        QVERIFY(document.loadData(data));
+        QCOMPARE(document.compositeImage().pixelColor(0, 0), QColor(Qt::red));
+        QCOMPARE(document.compositeImage().pixelColor(1, 0).alpha(), 255);
+    }
+
+    // Camera Raw converts while it uses the tone controls Exposure Pro has
+    // (and Dehaze); any other setting off its neutral value - grain, a
+    // toned split, a bent point curve - keeps the pixels Photoshop
+    // filtered, and the note names the settings. Neutral ones (a hue whose
+    // saturation is zero, Color Grading's blending, a straight curve) do
+    // not count.
+    void photoshopCameraRawBeyondToneKeepsPixels() {
+        const auto run = [](const QVariantMap& extra, QStringList* notes) {
+            QVariantMap raw{{"_class", "Adobe Camera Raw Filter"}, {"Ex12", 0.5}, {"Cr12", 10}, {"Vibr", 20}};
+            for (auto it = extra.cbegin(); it != extra.cend(); ++it) raw.insert(it.key(), it.value());
+            const QVariantMap filter{{"_class", "filterFX"}, {"Nm  ", "Camera Raw Filter..."}, {"enab", true},
+                                     {"Fltr", raw}};
+            const QVariantMap smart{{"_class", "null"},
+                                    {"filterFX", QVariantMap{{"_class", "filterFXStyle"}, {"enab", true},
+                                                             {"filterFXList", QVariantList{filter}}}}};
+            bool complete = false;
+            const auto effects = project::psdSmartFilterEffects(smart, psdTestSpec, "Photo", &complete, notes);
+            return complete && effects.size() == 1;
+        };
+        QStringList notes;
+        QVERIFY(run({}, &notes));
+        QVERIFY(run({{"STSH", 30}, {"STSS", 0}, {"CgBl", 50}, {"CgMH", 120}, {"GRNS", 25}, {"PC_2", 51},
+                     {"Crv ", QVariantList{0, 0, 255, 255}}, {"CrVe", "13.4"}, {"PrVN", 5}}, &notes));
+        QVERIFY(notes.isEmpty());
+        QVERIFY(!run({{"GRNA", 20}}, &notes));
+        QVERIFY2(notes.join('\n').contains("Grain"), qPrintable(notes.join('\n')));
+        notes.clear();
+        QVERIFY(!run({{"CrvR", QVariantList{0, 0, 130, 150, 255, 255}}, {"STSS", 21}, {"Temp", 19}}, &notes));
+        const QString text = notes.join('\n');
+        QVERIFY2(text.contains("Point Curve") && text.contains("Split Toning") && text.contains("Temperature"),
+                 qPrintable(text));
+    }
+
+    // The sample documents Photoshop made (SAMPLES/vegfx_projects/project_*,
     // kept out of git): every layer decodes, and the imported shot looks
     // like Photoshop's own flattened image.
     void photoshopSamplesImportByLayers() {
-        const QString root = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects/project_1";
+        const QString root = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects";
         QStringList files;
         QDirIterator it(root, {"*.psd"}, QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) files << it.next();
-        if (files.isEmpty()) QSKIP("No sample PSD in SAMPLES/vegfx_projects/project_1");
+        if (files.isEmpty()) QSKIP("No sample PSD in SAMPLES/vegfx_projects");
         for (const QString& path : files) {
             media::PsdDocument document;
             QVERIFY2(document.load(path), qPrintable(path + ": " + document.errorString()));

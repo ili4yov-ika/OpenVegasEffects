@@ -534,8 +534,13 @@ the flattened image. `photoshopDocumentImportsAsCompositeShot` imports it as a c
 shot (layers top first, the group's opacity, a Grade layer, Outer Glow and Drop Shadow from
 the layer style, the smart object as its source placed by its corners with Camera Raw as
 Exposure Pro) and draws it. `photoshopSamplesImportByLayers` imports the PSDs in
-`SAMPLES/vegfx_projects/project_1` (made by Photoshop, kept out of git) and compares the
-shot with Photoshop's own flattened image (`psd-<name>.png`, `psd-<name>-photoshop.png`).
+`SAMPLES/vegfx_projects/project_*` (made by Photoshop, kept out of git; project_4's is a
+smart object whose Camera Raw goes beyond the tone controls) and compares the shot with
+Photoshop's own flattened image (`psd-<name>.png`, `psd-<name>-photoshop.png`).
+`photoshopFlattenedImageTransparency` checks that the flattened image's extra channel is its
+transparency only when the layer count is negative (otherwise a saved selection), and
+`photoshopCameraRawBeyondToneKeepsPixels` that Camera Raw beyond the tone controls keeps
+Photoshop's filtered pixels, naming the settings, while neutral values do not count.
 `photoshopLayersSurviveSave` saves and reopens the shot with absolute and relative paths.
 With OpenGL and the reference plug-ins, `psdDropShadowFallsAwayFromTheLight` checks the
 light angle against Drop Shadow's own and `psdCameraRawRendersWithExposurePro` that +0.5 EV

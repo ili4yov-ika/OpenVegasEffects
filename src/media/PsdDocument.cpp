@@ -503,6 +503,7 @@ bool PsdDocument::loadData(const QByteArray& data)
     m_data = data;
     m_layers.clear();
     m_linked.clear();
+    m_mergedTransparency = false;
     m_error.clear();
     if (!parse()) {
         if (m_error.isEmpty()) m_error = QStringLiteral("The Photoshop document is damaged.");
@@ -636,7 +637,9 @@ void PsdDocument::parseLinkedFiles(qint64 begin, qint64 end)
 bool PsdDocument::parseLayerInfo(qint64 begin, qint64 end, bool wide)
 {
     Reader r(m_data, begin, end);
-    const int count = std::abs(int(r.i16()));
+    const int signedCount = r.i16();
+    if (signedCount < 0) m_mergedTransparency = true;
+    const int count = std::abs(signedCount);
     QVector<PsdLayer> layers;
     layers.reserve(count);
     for (int i = 0; i < count && r.ok(); ++i) {
@@ -981,10 +984,11 @@ QImage PsdDocument::compositeImage() const
     QVector<QByteArray> colour;
     for (int c = 0; c < qMin(colours, int(planes.size())); ++c)
         colour.append(toEightBit(planes.at(c), width, height, m_depth, true));
-    // An extra channel is the document's transparency when it has layers
-    // (the flattened image of a document without them has none).
+    // The first extra channel is the document's transparency only when the
+    // layer count says so; otherwise the extra channels are saved
+    // selections (project_4's has two: a shadow's) and the image is opaque.
     QByteArray alpha;
-    if (planes.size() > colours && !m_layers.isEmpty())
+    if (planes.size() > colours && m_mergedTransparency)
         alpha = toEightBit(planes.at(colours), width, height, m_depth, false);
     return planesToImage(colour, alpha, width, height);
 }

@@ -8,12 +8,14 @@
 #include <QHash>
 #include <QLineF>
 #include <QRegularExpression>
+#include <QSet>
 #include <QtEndian>
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <optional>
+#include <utility>
 
 // How a Photoshop document becomes a composite shot. Layer records are read
 // bottom to top and the composition lists its layers top first (index 0 is
@@ -195,6 +197,80 @@ CameraRaw cameraRawSettings(const QVariantMap& filter)
             raw.values.insert(name, media::psdNumber(it.value()));
     }
     return raw;
+}
+
+// The Camera Raw settings of a filter that change the picture and that the
+// port does not reproduce (it reproduces the Basic panel's tone controls,
+// Vibrance, Saturation and Dehaze through Exposure Pro and Dehaze), by name.
+// A setting at its neutral value does not count: a hue whose saturation is
+// zero, curve splits without amounts, a straight tone curve.
+QStringList cameraRawUnconverted(const QVariantMap& filter)
+{
+    static const QSet<QString> converted = {
+        QStringLiteral("Ex12"), QStringLiteral("Cr12"), QStringLiteral("Hi12"), QStringLiteral("Sh12"),
+        QStringLiteral("Wh12"), QStringLiteral("Bk12"), QStringLiteral("Vibr"), QStringLiteral("Strt"),
+        QStringLiteral("Dhze"), QStringLiteral("Dhz "),
+    };
+    // Version and bookkeeping keys, and settings that only shape others.
+    static const QSet<QString> ignored = {
+        QStringLiteral("_class"), QStringLiteral("CrVe"), QStringLiteral("PrVN"), QStringLiteral("PrVe"),
+        QStringLiteral("WBal"), QStringLiteral("filterID"), QStringLiteral("comp"), QStringLiteral("compInfo"),
+        QStringLiteral("PC_1"), QStringLiteral("PC_2"), QStringLiteral("PC_3"),
+        QStringLiteral("STSH"), QStringLiteral("STHH"), QStringLiteral("STB "),
+        QStringLiteral("GRNS"), QStringLiteral("GRNF"),
+        QStringLiteral("PCVM"), QStringLiteral("PCVF"), QStringLiteral("PCVR"), QStringLiteral("PCVS"),
+        QStringLiteral("PCVH"),
+    };
+    // Settings by the panel they belong to, for the note.
+    const auto panel = [](const QString& key) -> const char* {
+        if (key == QLatin1String("Temp")) return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Temperature");
+        if (key == QLatin1String("Tint")) return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Tint");
+        if (key == QLatin1String("Cl12")) return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Clarity");
+        if (key == QLatin1String("CrTx") || key == QLatin1String("Txtr"))
+            return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Texture");
+        if (key.startsWith(QLatin1String("PC_"))) return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Parametric Curve");
+        if (key.startsWith(QLatin1String("Crv"))) return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Point Curve");
+        if (key.startsWith(QLatin1String("HA_")) || key.startsWith(QLatin1String("SA_"))
+            || key.startsWith(QLatin1String("LA_")))
+            return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "HSL");
+        if (key.startsWith(QLatin1String("ST"))) return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Split Toning");
+        if (key.startsWith(QLatin1String("Cg"))) return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Color Grading");
+        if (key.startsWith(QLatin1String("GRN"))) return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Grain");
+        if (key.startsWith(QLatin1String("PCV"))) return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Vignette");
+        if (key == QLatin1String("RHue") || key == QLatin1String("RSat") || key == QLatin1String("GHue")
+            || key == QLatin1String("GSat") || key == QLatin1String("BHue") || key == QLatin1String("BSat")
+            || key == QLatin1String("BlkB"))
+            return QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Calibration");
+        return nullptr;
+    };
+    QStringList names;
+    const auto add = [&names](const QString& name) { if (!names.contains(name)) names.append(name); };
+    for (auto it = filter.cbegin(); it != filter.cend(); ++it) {
+        const QString& key = it.key();
+        if (converted.contains(key) || ignored.contains(key)) continue;
+        bool changes = false;
+        if (it.value().typeId() == QMetaType::QVariantList) {
+            // A point curve: (input, output) pairs; straight when every
+            // point is on the diagonal.
+            const QVariantList points = it.value().toList();
+            for (int i = 0; i + 1 < points.size(); i += 2)
+                if (points.at(i).toInt() != points.at(i + 1).toInt()) changes = true;
+        } else if (key.startsWith(QLatin1String("Cg"))) {
+            // Color Grading: a wheel's hue alone and the blending do nothing.
+            changes = !key.endsWith(QLatin1Char('H')) && key != QLatin1String("CgBl")
+                      && media::psdNumber(it.value()) != 0.0;
+        } else if (it.value().typeId() == QMetaType::Bool || it.value().typeId() == QMetaType::QString
+                   || (it.value().typeId() == QMetaType::QVariantMap
+                       && !it.value().toMap().contains(QStringLiteral("value")))) {
+            continue;
+        } else {
+            changes = media::psdNumber(it.value()) != 0.0;
+        }
+        if (!changes) continue;
+        const char* name = panel(key);
+        add(name ? translated(name) : key.trimmed());
+    }
+    return names;
 }
 
 bool isCameraRawFilter(const QVariantMap& item, const QVariantMap& filter)
@@ -387,10 +463,19 @@ QVector<composition::Effect> psdSmartFilterEffects(const QVariantMap& smartObjec
                                                    {{QStringLiteral("amount"), v("Dehaze")}}, notes);
                     if (dehaze) effects.append(*dehaze);
                 }
-                for (const char* key : {"Clarity2012", "Texture", "Temperature", "Tint"}) {
-                    if (!qFuzzyIsNull(raw.value(QLatin1String(key))))
-                        addNote(notes, PsdImportText::tr("%1: Camera Raw's %2 is not converted.")
-                                           .arg(layerName, QString::fromLatin1(key).remove(QStringLiteral("2012"))));
+                // Anything more and the layer keeps the pixels Photoshop
+                // filtered, so that it looks as it does there.
+                QStringList unconverted = cameraRawUnconverted(filter);
+                // Settings carried as XMP rather than descriptor keys.
+                for (const auto& [key, name] : {std::pair{"Clarity2012", "Clarity"}, std::pair{"Texture", "Texture"},
+                                                std::pair{"Temperature", "Temperature"}, std::pair{"Tint", "Tint"}}) {
+                    if (!qFuzzyIsNull(raw.value(QLatin1String(key))) && !unconverted.contains(translated(name)))
+                        unconverted.append(translated(name));
+                }
+                if (!unconverted.isEmpty()) {
+                    all = false;
+                    addNote(notes, PsdImportText::tr("%1: Camera Raw's %2 is not converted.")
+                                       .arg(layerName, unconverted.join(QStringLiteral(", "))));
                 }
             } else if (filter.value(QStringLiteral("_class")).toString() == QLatin1String("GsnB")) {
                 // Three passes of a box blur come close to a Gaussian of

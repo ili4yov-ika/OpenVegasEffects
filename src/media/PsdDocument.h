@@ -148,6 +148,10 @@ private:
     int m_colorMode = 3;
     int m_globalAngle = 120;
     qint64 m_imageDataOffset = -1;
+    // A negative layer count: the flattened image's first extra channel is
+    // its transparency. Otherwise the extra channels are saved selections
+    // (alpha and spot channels) and the flattened image is opaque.
+    bool m_mergedTransparency = false;
     QVector<PsdLayer> m_layers;
     QHash<QString, PsdLinkedFile> m_linked;
 };

@@ -542,9 +542,13 @@ RLE、ZIP、予測付き ZIP のチャンネル、描画モードのキー、不
 それをコンポジットショットとして読み込み（上からのレイヤー順、グループの不透明度、Grade
 レイヤー、レイヤースタイルの光彩（外側）とドロップシャドウ、四隅で配置されたソースとしての
 スマートオブジェクトと Exposure Pro としての Camera Raw）、描画します。
-`photoshopSamplesImportByLayers` は `SAMPLES/vegfx_projects/project_1` の PSD（Photoshop で
-作成、git 外）を読み込み、Photoshop 自身の統合画像と比較します（`psd-<名前>.png`、
-`psd-<名前>-photoshop.png`）。`photoshopLayersSurviveSave` は絶対パスと相対パスで保存して
+`photoshopSamplesImportByLayers` は `SAMPLES/vegfx_projects/project_*` の PSD（Photoshop で
+作成、git 外。project_4 のものはトーン以外の Camera Raw 設定を持つスマートオブジェクト）を読み込み、
+Photoshop 自身の統合画像と比較します（`psd-<名前>.png`、`psd-<名前>-photoshop.png`）。
+`photoshopFlattenedImageTransparency` は統合画像の追加チャンネルがレイヤー数が負のときだけ透明度で
+あること（それ以外は保存された選択範囲）を、`photoshopCameraRawBeyondToneKeepsPixels` はトーン以外の
+Camera Raw 設定があると Photoshop がフィルターを適用したピクセルを保ち、その設定名を示すこと、
+ニュートラルな値は数えないことを確認します。`photoshopLayersSurviveSave` は絶対パスと相対パスで保存して
 開き直します。OpenGL とリファレンスのプラグインがあれば、`psdDropShadowFallsAwayFromTheLight`
 が光源の角度と Drop Shadow の角度の対応を、`psdCameraRawRendersWithExposurePro` が +0.5 EV で
 スマートオブジェクトのソースが明るくなることを確認します。
