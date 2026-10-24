@@ -88,6 +88,7 @@ HEADERS += \
     src/plugin/EffectSpec.h \
     src/plugin/NativeEffectRender.h \
     src/plugin/NativePlugin.h \
+    src/plugin/OfxHost.h \
     src/plugin/Plugin.h \
     src/plugin/PluginId.h \
     src/plugin/PluginManager.h \
@@ -209,6 +210,7 @@ SOURCES += \
     src/plugin/NativeEffectRender.cpp \
     src/plugin/NativePlugin.cpp \
     src/plugin/PluginManager.cpp \
+    src/plugin/OfxHost.cpp \
     src/project/EffectPresets.cpp \
     src/project/PsdImport.cpp \
     src/project/VegfxSerializer.cpp \
@@ -359,6 +361,7 @@ DISTFILES += \
     ui/panels/README.md ui/panels/README.ru.md \
     ui/panels/README.ja.md ui/panels/README.zh.md \
     tests/README.md tests/README.ru.md tests/README.ja.md tests/README.zh.md \
+    tests/ofx/README.md tests/ofx/README.ru.md tests/ofx/README.ja.md tests/ofx/README.zh.md \
     MARKDOWN/README.md MARKDOWN/README.ru.md MARKDOWN/README.ja.md MARKDOWN/README.zh.md \
     SAMPLES/README.md SAMPLES/README.ru.md SAMPLES/README.ja.md SAMPLES/README.zh.md \
     cmake/README.md cmake/README.ru.md cmake/README.ja.md cmake/README.zh.md \
@@ -384,6 +387,8 @@ unix:!macx {
 }
 
 INCLUDEPATH += $$PWD/thirdparty/vlc/include
+# The OpenFX headers (the API only): the OpenFX host includes them.
+INCLUDEPATH += $$PWD/thirdparty/openfx/include
 win32:LIBS += -lole32 -loleaut32 -lstrmiids
 macx:LIBS += -framework CoreAudio -framework CoreFoundation
 macx:QMAKE_INFO_PLIST = $$PWD/resources/macos/Info.plist

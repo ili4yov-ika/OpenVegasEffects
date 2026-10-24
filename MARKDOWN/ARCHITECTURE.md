@@ -46,9 +46,10 @@ plan; concrete decisions live in code.
    - `createPluginManager()` factory,
    - `plugin::Callbacks` (folder resolver + log sink) wired in `AppMain`,
    - native discovery of `.vfx` effect definitions in `Plugins/`.
-   The next step is an OFX host: loading `.ofx/.dll` plugins found in the
-   `Plugins` folder and exposing their effects in the Effects panel and the
-   timeline.
+   OpenFX plug-ins come through `plugin/OfxHost` (OpenFX 1.4 on the CPU):
+   bundles in `OFX_PLUGIN_PATH` and `Common Files\OFX\Plugins` are described
+   once in a child process (`--ofx-describe`), kept in `ofxPluginCache.json`,
+   and listed as effects and transitions under the reference's FXIDs.
 
 5. **License subsystem.** Reference checks license state and edition early.
    Our `license::LicenseManager` is an interface; `OpenLicenseManager` is a
@@ -84,13 +85,14 @@ plan; concrete decisions live in code.
 
 ## Next steps
 
-- [ ] OFX plug-in host: load `.ofx` shared libraries from `Plugins/`, read
-      `OfxGetNumberOfPlugins`/`OfxGetPlugin` and register effects.
+- [x] OFX plug-in host: `src/plugin/OfxHost` loads `.ofx` bundles from the
+      OpenFX folders, reads `OfxGetNumberOfPlugins`/`OfxGetPlugin`, registers
+      effects and transitions and renders them.
 - [~] Effect instance pipeline: the five built-in colour effects now run in the
       render path - `RenderWorker::applyClipEffects` resolves each parameter
       through `Effect::parameterAt` (so keyframed parameters use their curve)
-      and calls `plugin::applyEffectToImage`. Still open: `EffectInstance::render`
-      for plugin-provided effects via an OFX host.
+      and calls `plugin::applyEffectToImage`, which hands native `.hfpl`
+      modules and OpenFX plug-ins to their hosts.
 - [x] Serialization of project document (native `.vegfx` XML schema via
       `src/project/VegfxSerializer`, wired into File → New/Open/Save/Save As).
 - [x] Timeline editing: add clips/layers via a whole-media Import; playhead

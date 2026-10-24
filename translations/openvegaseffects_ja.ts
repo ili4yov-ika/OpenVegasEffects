@@ -875,32 +875,32 @@
 <context>
     <name>AutoSaveSettingsWidget</name>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1323"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1337"/>
         <source>Enable Project Auto Saving</source>
         <translation>プロジェクトの自動保存をオン</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1333"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1347"/>
         <source> minute(s)</source>
         <translation> 分</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1334"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1348"/>
         <source>Auto Save Frequency:</source>
         <translation>自動保存の間隔：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1341"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1355"/>
         <source>Select Folder...</source>
         <translation>フォルダを選択...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1345"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1359"/>
         <source>Auto Save Project Path:</source>
         <translation>プロジェクトの自動保存パス：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1348"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1362"/>
         <source>Choose auto save projects path</source>
         <translation>プロジェクトの自動保存パスを選択</translation>
     </message>
@@ -3501,7 +3501,7 @@ Do you want to add a camera?</source>
         <translation>マスクを反転</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="991"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1005"/>
         <source> px</source>
         <translation> px</translation>
     </message>
@@ -4923,7 +4923,7 @@ You can queue exports from multiple projects by opening each one in turn and add
 <context>
     <name>openvegas::render::RenderManager</name>
     <message>
-        <location filename="../src/render/RenderManager.cpp" line="3245"/>
+        <location filename="../src/render/RenderManager.cpp" line="3254"/>
         <source>Video decoding did not deliver the requested cache frame.</source>
         <translation>動画デコーダーが要求されたキャッシュフレームを返しませんでした。</translation>
     </message>
@@ -7888,683 +7888,698 @@ Continue?</source>
         <translation>オプション</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="537"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="538"/>
         <source> levels</source>
         <translation> レベル</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="538"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="539"/>
         <source>Maximum Undo*:</source>
         <translation>最大取り消し回数*:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="546"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="547"/>
         <source>Default Template:</source>
         <translation>デフォルトのテンプレート：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="552"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="553"/>
         <source>Composite Shot Default Duration:</source>
         <translation>コンポジットショットのデフォルトの長さ：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="558"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="559"/>
         <source>Editor Default Duration:</source>
         <translation>エディターの既定の長さ:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="564"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="565"/>
         <source>Plane Default Duration:</source>
         <translation>平面の既定の長さ:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="570"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="571"/>
         <source>RMS Amplitude</source>
         <translation>RMS振幅</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="571"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="572"/>
         <location filename="../src/ui/TimelineWidget.cpp" line="638"/>
         <source>Peak Amplitude</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>ピーク振幅</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="572"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="573"/>
         <source>Audio Waveforms:</source>
         <translation>オーディオ波形：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="577"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="578"/>
         <source>Include screen layout when saving projects</source>
         <translation>プロジェクト保存時にスクリーンレイアウトを含む</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="580"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="581"/>
         <source>Use relative paths in saved projects</source>
         <translation>保存されたプロジェクト内で関連するパスを使用する</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="583"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="584"/>
         <source>Close all media files when application is not active</source>
         <translation>アプリケーションがアクティブでない場合は、全てのメディアファイルを閉じてください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="586"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="587"/>
         <source>Play audio when scrubbing timeline</source>
         <translation>タイムラインのスクラブ時にオーディオを再生</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="589"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="590"/>
         <source>Use logarithmic waveform scaling</source>
         <translation>波形スケールに対数グラフを使用</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="591"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="592"/>
         <source>Share anonymous usage analytics</source>
         <translation>匿名の使用状況データを共有</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="629"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="630"/>
         <source>VEGAS Dark</source>
         <translation>VEGAS ダーク</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="630"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="631"/>
         <source>System</source>
         <translation>システム</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="631"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="632"/>
         <source>Theme:</source>
         <translation>テーマ:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="635"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="636"/>
         <source>Use native menu bar</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>ネイティブメニューバーを使用</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="638"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="639"/>
         <source>Use native color picker</source>
         <translation>OS標準のカラーピッカーを使用</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="640"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="641"/>
         <source>Enable high-DPI scaling*</source>
         <translation>高DPIスケーリングを有効にする*</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="643"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="644"/>
         <source>Show menu bar quick actions</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>メニューバーにクイック操作を表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="646"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="647"/>
         <source>Enable mouse wheel scrolling in dropdown menus</source>
         <translation>ドロップダウンメニューでマウスホイールのスクロールを有効にする</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="649"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="650"/>
         <source>Hide panels while full-screen preview is active</source>
         <translation>全画面プレビュー中はパネルを非表示にする</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="680"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="681"/>
         <source>Select Folder...</source>
         <translation>フォルダを選択...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="688"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="689"/>
         <source>Default Export Directory:</source>
         <translation>デフォルトのエクスポートディレクトリ：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="691"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="692"/>
         <source>Default Snapshot Directory:</source>
         <translation>デフォルトスナップショットディレクトリ：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="698"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="699"/>
         <source>Timecode</source>
         <translation>タイムコード</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="699"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="700"/>
         <source>Natural</source>
         <translation>ナチュラル</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="700"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="701"/>
         <source>Seconds</source>
         <translation>秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="701"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="702"/>
         <source>The format in which to display time durations (Elapsed and Remaining only).</source>
         <translation>時間表示の形式（経過時間と残り時間のみ）</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="702"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="703"/>
         <source>Time Format:</source>
         <translation>時間形式：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="707"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="708"/>
         <source>Remove known file extensions from export names</source>
         <translation>エクスポート名から既知のファイル拡張子を削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="710"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="711"/>
         <source>Beep speaker on completion</source>
         <translation>完了時にスピーカーを鳴らす</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="731"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="732"/>
         <source>Select Folder</source>
         <translation>フォルダーの選択</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="744"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="745"/>
         <source>Select File</source>
         <translation>ファイルを選択</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="762"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="767"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="771"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="792"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="763"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="768"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="772"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="793"/>
         <source>Clear Cache</source>
         <translation>キャッシュを消去</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="763"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="764"/>
         <source>The selected path is not a safe cache location.</source>
         <translation>選択したパスは安全なキャッシュ保存先ではありません。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="768"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="769"/>
         <source>%1 is already empty.</source>
         <translation>%1 は既に空です。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="772"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="773"/>
         <source>Delete %1 at
 %2?</source>
         <translation>次の場所の %1 を削除しますか？
 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="793"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="794"/>
         <source>Some files in %1 could not be removed.</source>
         <translation>%1 内の一部のファイルを削除できませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="807"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="808"/>
         <source>Media Cache</source>
         <translation>メディアキャッシュ</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="816"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="828"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="860"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1164"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="817"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="829"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="861"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1178"/>
         <source>...</source>
         <translation>...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="820"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="821"/>
         <source>Cache database (*.db);;All files (*)</source>
         <translation>キャッシュデータベース (*.db);;すべてのファイル (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="822"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="823"/>
         <source>Media Cache Database*:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>メディアキャッシュデータベース*:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="834"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="835"/>
         <source>Media Cache Files*:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>メディアキャッシュファイル*:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="840"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="872"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="841"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="873"/>
         <source> day(s)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation> 日</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="841"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="871"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="842"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="872"/>
         <source>Keep forever</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>無期限に保持</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="842"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="843"/>
         <source>Days To Keep Media Cache Files:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>メディアキャッシュの保持日数:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="844"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="845"/>
         <source>Delete Media Cache</source>
         <translation>メディアキャッシュを削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="847"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="848"/>
         <source>media cache files</source>
         <translation>メディアキャッシュファイル</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="848"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="849"/>
         <source>media cache database</source>
         <translation>メディアキャッシュデータベース</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="853"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="854"/>
         <source>Timeline Cache</source>
         <translation>タイムラインキャッシュ</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="866"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="867"/>
         <source>Timeline Cache:</source>
         <translation>タイムラインキャッシュ:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="873"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="874"/>
         <source>Days To Keep Timeline Cache:</source>
         <translation>タイムラインキャッシュの保持日数:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="875"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="876"/>
         <source>Use automatic render cache</source>
         <translation>自動レンダリングキャッシュを使用</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="881"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1140"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="882"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1154"/>
         <source> sec</source>
         <translation> 秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="882"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="883"/>
         <source>Automatic cache delay:</source>
         <translation>自動キャッシュの待機時間:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="886"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="887"/>
         <source>Delete Timeline Cache</source>
         <translation>タイムラインキャッシュを削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="889"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="890"/>
         <source>timeline cache</source>
         <translation>タイムラインキャッシュ</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="910"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="897"/>
+        <source>Plugins Cache</source>
+        <translation>プラグインキャッシュ</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="900"/>
+        <source>Delete OpenFX Plugins Cache</source>
+        <translation>OpenFX プラグインキャッシュを削除</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="903"/>
+        <source>OpenFX plug-in cache</source>
+        <translation>OpenFX プラグインキャッシュ</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="924"/>
         <source> MB</source>
         <translation> MB</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="911"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="925"/>
         <source>Thumbnail cache size:</source>
         <translation>サムネイルキャッシュのサイズ:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="919"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="933"/>
         <source>Show checkerboard background for 2D Views</source>
         <translation>2D表示にチェッカーボード背景を表示する</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="921"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="935"/>
         <source>Show mouse coordinates</source>
         <translation>マウスの座標を表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="923"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="937"/>
         <source>Update the viewer during playback</source>
         <translation>再生中にビューアーを更新</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="925"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="939"/>
         <source>Show motion path</source>
         <translation>モーションパスを表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="927"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="941"/>
         <source>Show checkerboard background for 3D Views</source>
         <translation>3D表示にチェッカーボード背景を表示する</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="929"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="943"/>
         <source>Show floor plane in 3D Views</source>
         <translation>3Dビューに床面を表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="946"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="960"/>
         <source>Motion path key frames:</source>
         <translation>モーションパスのキーフレーム数:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="961"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="975"/>
         <source>Use turbo rendering where available</source>
         <translation>利用可能な場合はターボレンダリングを使用</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="970"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="984"/>
         <source>Automatic (default)</source>
         <translation>自動（既定）</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="972"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="986"/>
         <source>%1 thread(s)</source>
         <translation>%1 スレッド</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="974"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="988"/>
         <source>Render threads:</source>
         <translation>レンダリングスレッド数:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="976"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="990"/>
         <source>Use hardware video decoding</source>
         <translation>ハードウェア動画デコードを使用</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="979"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="993"/>
         <source>Use hardware video encoding</source>
         <translation>ハードウェア動画エンコードを使用</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="982"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="996"/>
         <source>Limit video decoding to 8 bit</source>
         <translation>動画デコードを8ビットに制限</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="997"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1011"/>
         <source>Maximum model texture size:</source>
         <translation>モデルテクスチャの最大サイズ:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="998"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1012"/>
         <source>Shadow map size:</source>
         <translation>シャドウマップのサイズ:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="999"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1013"/>
         <source>Reflection map size:</source>
         <translation>反射マップのサイズ:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1006"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1020"/>
         <source>3D antialiasing:</source>
         <translation>3Dアンチエイリアス:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1023"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1037"/>
         <source>Final</source>
         <translation>最終版</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1023"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1037"/>
         <source>Draft</source>
         <translation>ドラフト</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1024"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1038"/>
         <source>Quick</source>
         <translation>クイック</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1024"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1038"/>
         <source>Fastest</source>
         <translation>最速</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1032"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1046"/>
         <source>Antialiased</source>
         <translation>アンチエイリアス</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1032"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1046"/>
         <source>Full</source>
         <translation>フル</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1041"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1055"/>
         <source>Playback quality:</source>
         <translation>再生時の品質:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1042"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1056"/>
         <source>Playback resolution:</source>
         <translation>再生時の解像度:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1043"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1057"/>
         <source>Paused quality:</source>
         <translation>一時停止時の品質:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1044"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1058"/>
         <source>Paused resolution:</source>
         <translation>一時停止時の解像度:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1074"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1088"/>
         <source>Labels are available to timeline layers and media items. Edit a name or click its color.</source>
         <translation>ラベルはタイムラインのレイヤーとメディア項目に使用できます。名前を編集するか、色をクリックしてください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1078"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1092"/>
         <source>Label</source>
         <translation>ラベル</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1078"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1092"/>
         <source>Color</source>
         <translation>カラー</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1094"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1108"/>
         <source>Choose Label Color</source>
         <translation>ラベルの色を選択</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1119"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1133"/>
         <source>System Default</source>
         <translation>システムの既定</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1122"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1136"/>
         <source>Input device:</source>
         <translation>入力デバイス:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1126"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1140"/>
         <source>Mono</source>
         <translation>モノラル</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1127"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1141"/>
         <source>Stereo</source>
         <translation>ステレオ</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1128"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1142"/>
         <source>Channels:</source>
         <translation>チャンネル:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1133"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1147"/>
         <source>%1 Hz</source>
         <translation>%1 Hz</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1135"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1149"/>
         <source>Sample rate:</source>
         <translation>サンプルレート:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1141"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1155"/>
         <source>Recording countdown:</source>
         <translation>録音開始までのカウントダウン:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1143"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1157"/>
         <source>Mute project audio while recording</source>
         <translation>録音中はプロジェクトの音声をミュート</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1173"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1226"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1187"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1240"/>
         <source>Proxy</source>
         <translation>プロキシ</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1176"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1190"/>
         <source>Proxy directory:</source>
         <translation>プロキシの保存先:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1181"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1195"/>
         <source>Low</source>
         <translation>低</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1182"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1196"/>
         <source>Medium</source>
         <translation>中</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1183"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1197"/>
         <source>High</source>
         <translation>高</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1184"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1198"/>
         <source>Proxy quality:</source>
         <translation>プロキシの品質:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1187"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1200"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1207"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1201"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1214"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1221"/>
         <source>Delete Project Proxies</source>
         <translation>プロジェクトのプロキシを削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1189"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1203"/>
         <source>Delete All Proxies</source>
         <translation>すべてのプロキシを削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1195"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1209"/>
         <source>all proxy files</source>
         <translation>すべてのプロキシファイル</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1201"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1215"/>
         <source>Choose a proxy directory first.</source>
         <translation>先にプロキシの保存先を選択してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1208"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1252"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1222"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1266"/>
         <source>No saved project is currently selected.</source>
         <translation>保存済みのプロジェクトが選択されていません。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1212"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1226"/>
         <source>proxies for project &apos;%1&apos;</source>
         <translation>プロジェクト「%1」のプロキシ</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1216"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1230"/>
         <source>Pre-Render</source>
         <translation>プリレンダリング</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1219"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1233"/>
         <source>Pre-render directory:</source>
         <translation>プリレンダリングの保存先:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1225"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1239"/>
         <source>Auto</source>
         <translation>自動</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1227"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1241"/>
         <source>Full Resolution</source>
         <translation>フル解像度</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1228"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1242"/>
         <source>Preview mode:</source>
         <translation>プレビューモード:</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1230"/>
         <location filename="../src/ui/OptionsDialog.cpp" line="1244"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1251"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1258"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1265"/>
         <source>Delete Project Pre-Renders</source>
         <translation>プロジェクトのプリレンダリングを削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1232"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1246"/>
         <source>Delete All Pre-Renders</source>
         <translation>すべてのプリレンダリングを削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1239"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1253"/>
         <source>all pre-render files</source>
         <translation>すべてのプリレンダリングファイル</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1245"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1259"/>
         <source>Choose a pre-render directory first.</source>
         <translation>先にプリレンダリングの保存先を選択してください。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1257"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1271"/>
         <source>pre-renders for project &apos;%1&apos;</source>
         <translation>プロジェクト「%1」のプリレンダリング</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1261"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1275"/>
         <source>Prefer integrated GPU for proxy generation</source>
         <translation>プロキシ生成には内蔵GPUを優先</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1277"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1291"/>
         <source>Search commands</source>
         <translation>コマンドを検索</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1283"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1297"/>
         <source>Command</source>
         <translation>コマンド</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1283"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1297"/>
         <source>Shortcut</source>
         <translation>ショートカット</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1484"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1498"/>
         <source>Shortcut Conflict</source>
         <translation>ショートカットの競合</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1485"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1499"/>
         <source>The &quot;%1&quot; shortcut is already assigned to the &quot;%2&quot; command.</source>
         <translation>ショートカット「%1」は既に「%2」コマンドに割り当てられています。</translation>
     </message>
@@ -8584,249 +8599,249 @@ Continue?</source>
         <translation>OK</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1752"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1766"/>
         <source>Restore &apos;%1&apos; Defaults</source>
         <translation>&apos;%1&apos;デフォルトの復元</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="621"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="622"/>
         <source>Follow system</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>システムに従う</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="132"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="133"/>
         <source>Prompt me on launch if my GPU is unsupported</source>
         <translation>GPUがサポートされていない場合は起動時にダイアログを表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="134"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="135"/>
         <source>Prompt me on launch if my GPU driver is unsupported or out of date</source>
         <translation>GPUドライバがサポートされていない、または旧バージョンの場合は起動時にダイアログを表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="137"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="138"/>
         <source>Prompt me before using oversized particle textures</source>
         <translation>サイズが大きすぎるパーティクルテクスチャを使用する前にダイアログを表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="139"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="140"/>
         <source>Prompt me when importing an image from an image sequence</source>
         <translation>イメージシーケンスからイメージをインポートするときにプロンプトを表示する</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="142"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="143"/>
         <source>Prompt me when the media doesn&apos;t match editor timeline</source>
         <translation>メディアがエディターのタイムラインと一致しない場合はダイアログを表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="145"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="146"/>
         <source>Prompt me on launch if QuickTime is installed but could not be loaded</source>
         <translation>QuickTimeがインストールされ、ロードされない場合は、起動時にダイアログを表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="148"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="149"/>
         <source>Prompt me before converting 2D composite shots to 3D</source>
         <translation>2Dコンポジットショットを3Dに変換する前にダイアログを表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="150"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="151"/>
         <source>Prompt me before converting 3D composite shots to 2D</source>
         <translation>3Dコンポジットショットを2Dに変換する前にダイアログを表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="152"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="153"/>
         <source>Prompt me before removing export tasks from the export queue</source>
         <translation>エクスポートタスクをエクスポートキューから取り除く前にダイアログを表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="155"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="156"/>
         <source>Prompt me for the project settings to use before creating a new project</source>
         <translation>新規プロジェクトを作成する前に使用するプロジェクト設定をダイアログで表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="159"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="160"/>
         <source>Tell me what a Photoshop document&apos;s import could not carry over</source>
         <translation>Photoshop ドキュメントの読み込みで引き継げなかった内容を知らせる</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="240"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="241"/>
         <source>Red</source>
         <translation>赤</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="241"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="242"/>
         <source>Orange</source>
         <translation>オレンジ</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="242"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="243"/>
         <source>Yellow</source>
         <translation>黄</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="243"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="244"/>
         <source>Green</source>
         <translation>緑</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="244"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="245"/>
         <source>Cyan</source>
         <translation>シアン</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="245"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="246"/>
         <source>Blue</source>
         <translation>青</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="246"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="247"/>
         <source>Purple</source>
         <translation>紫</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="247"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="248"/>
         <source>Pink</source>
         <translation>ピンク</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="384"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="385"/>
         <source>General</source>
         <translation>全般</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="385"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="386"/>
         <source>Interface</source>
         <translation>インターフェイス</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="386"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="387"/>
         <source>Display</source>
         <translation>表示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="387"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="388"/>
         <source>Render</source>
         <translation>レンダー</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="388"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="389"/>
         <source>Quality Profiles</source>
         <translation>品質プロファイル</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="389"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="390"/>
         <source>Prompts &amp; Warnings</source>
         <translation>プロンプト＆警告</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="390"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="391"/>
         <source>Labels</source>
         <translation>ラベル</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="391"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="392"/>
         <source>Cache</source>
         <translation>キャッシュ</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="392"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="393"/>
         <source>Voiceover</source>
         <translation>ボイスオーバー</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="393"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="394"/>
         <source>Proxies &amp; Pre-Renders</source>
         <translation>プロキシとプリレンダリング</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="394"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="395"/>
         <source>Auto Save</source>
         <translation>自動保存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="395"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="396"/>
         <source>Shortcuts</source>
         <translation>ショートカット</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="396"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="397"/>
         <source>Export</source>
         <translation>エクスポート</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="399"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="400"/>
         <source>Plugins</source>
         <translation>プラグイン</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="420"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="421"/>
         <source>VEGAS Effects installation</source>
         <translation>VEGAS Effects のインストール</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="428"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="429"/>
         <source>Use the plugins of this installation</source>
         <translation>このインストールのプラグインを使用</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="433"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="434"/>
         <source>Plugin folders</source>
         <translation>プラグイン フォルダー</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="436"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="437"/>
         <source>Folders with .hfpl plugins - the Plugins folder of VEGAS Effects installed elsewhere, or of another FXhome program such as HitFilm or Imerge. Their category sub-folders are searched too.</source>
         <translation>.hfpl プラグインのフォルダー: 別の場所にインストールした VEGAS Effects、または HitFilm や Imerge など他の FXhome プログラムの Plugins フォルダー。カテゴリのサブフォルダーも検索されます。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="446"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="447"/>
         <source>Add Folder...</source>
         <translation>フォルダーを追加...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="448"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="449"/>
         <source>Remove</source>
         <translation>削除</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="450"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="481"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="451"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="482"/>
         <source>Find FXhome Plugins</source>
         <translation>FXhome プラグインを検索</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="457"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="458"/>
         <source>Plugins are looked for again when Options is closed with OK.</source>
         <translation>OK でオプションを閉じると、プラグインが再検索されます。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="464"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="465"/>
         <source>Plugin Folder</source>
         <translation>プラグイン フォルダー</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="482"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="483"/>
         <source>No other FXhome program with plugins was found.</source>
         <translation>プラグインを持つ他の FXhome プログラムは見つかりませんでした。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="497"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="498"/>
         <source>%1  (plugins: %2)</source>
         <translation>%1  (プラグイン: %2)</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="512"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="513"/>
         <source>Plugins found in %1: %2.</source>
         <translation>%1 のプラグイン: %2。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="516"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="517"/>
         <source>No plugins were found in %1. Add the folder with the plugins below - VEGAS Effects installed elsewhere, or another FXhome program.</source>
         <translation>%1 にプラグインが見つかりませんでした。下にプラグインのフォルダーを追加してください (別の場所にインストールした VEGAS Effects、または他の FXhome プログラム)。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="625"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="626"/>
         <source>Language*:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>言語*:</translation>

@@ -476,6 +476,21 @@ PropertyManager を持つ `<Effects>` / `<BehaviorEffects>`）に書き込み、
 QDataStream、件数と ID）で確認し、最新を最後にした 5 件の最近使った項目と、カテゴリーの上に
 あるパネルの Favorites/Recents の行を確認します。
 
+## OpenFX プラグイン
+
+テストは素の C API で独自の OpenFX プラグインをビルドし（`tests/ofx/TestOfxPlugins.cpp`）、
+`build/.../ofx-plugins` にバンドルとして置きます：フィルター（Gain、Mode の選択肢、Tint の色、
+Keep Alpha、正規化された既定値を持つ Offset）とトランジション（Wipe）を含む OpenVegasTest と、
+describe で異常終了する OpenVegasCrash です。`ofx_describe_sandbox` は別プロセスでの記述を行います。
+`ofxPluginsAreListedAsEffectsAndTransitions` は `OFX_PLUGIN_PATH` からそれらを見つけ、仕様（grouping
+からのカテゴリ、パラメーターとグループ、FXID、Crash が含まれないこと）と 2 回目のスキャンでの
+プラグインキャッシュを確認します。`ofxEffectRendersThroughTheHost` はフィルターを直接およびショット内で
+描画し（インデックスまたはラベルによる選択肢、色、ブール値、乗算済みアルファ、左下原点からの
+ピクセルに換算された正規化既定値）、プラグインの FXID でショットを保存して開き直します。
+`ofxTransitionMixesBothClips` は Wipe を直接および 2 つのクリップ間で実行します。
+`ofxSandboxDescribesPlugins` はサンドボックスの記録をプロセス内のものと比較し、異常終了する
+プラグインが報告されるだけであることを確認します。
+
 ## Behavior、トラッキング、スタビライズ
 
 `simulatedBehaviorsMoveInTheWorld`（OpenGL、リファレンスの Gravity.hfpl）は落下する

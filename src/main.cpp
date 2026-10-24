@@ -17,6 +17,7 @@
 #include "app/AppMain.h"
 #include "app/Settings.h"
 #include "app/Translations.h"
+#include "plugin/OfxHost.h"
 
 static QStringList commandLineArgumentsWide()
 {
@@ -158,6 +159,15 @@ int main(int argc, char** argv)
 
 
     QStringList rawArgs = commandLineArgumentsWide();
+
+    // The OpenFX sandbox, as the reference's VegasEffectsOFXSandbox.exe: this
+    // executable run again to describe one plug-in binary, so that a plug-in
+    // crashing while it is described takes only this process down.
+    const qsizetype ofxDescribe = rawArgs.indexOf(QStringLiteral("--ofx-describe"));
+    if (ofxDescribe >= 0 && ofxDescribe + 2 < rawArgs.size()) {
+        return openvegas::plugin::runOfxDescribeSandbox(rawArgs.at(ofxDescribe + 1), rawArgs.at(ofxDescribe + 2));
+    }
+
     enableConsoleIfRequested(rawArgs);
 
     std::vector<char*> rawCStrings;
@@ -183,6 +193,7 @@ int main(int argc, char** argv)
     app.setOrganizationName(openvegas::app::Settings::organizationName());
     app.setApplicationVersion(QStringLiteral("0.1.0"));
     app.setWindowIcon(QIcon(QStringLiteral(":/icons/logo.ico")));
+    openvegas::plugin::setOfxSandboxExecutable(QCoreApplication::applicationFilePath());
 
     // A second instance is turned away unless it explicitly asked to be
     // allowed via the environment (the reference honours a similar bypass).

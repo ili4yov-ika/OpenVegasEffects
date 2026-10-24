@@ -478,6 +478,21 @@ Motion Blur читать поворот по ключам в своих подв
 в форме настроек эталона (группа Plugins, QDataStream с int 0, счётчик и ID), пять недавних с
 самым новым в конце и строки Favorites/Recents панели над категориями.
 
+## Плагины OpenFX
+
+Тесты собирают свои плагины OpenFX на голом C API (`tests/ofx/TestOfxPlugins.cpp`) как
+бандлы в `build/.../ofx-plugins`: OpenVegasTest с фильтром (Gain, выбор Mode, цвет Tint,
+Keep Alpha, Offset с нормализованным значением по умолчанию) и переходом (Wipe) и
+OpenVegasCrash, который падает в describe; `ofx_describe_sandbox` описывает плагины в
+отдельном процессе. `ofxPluginsAreListedAsEffectsAndTransitions` находит их через
+`OFX_PLUGIN_PATH` и проверяет описания (категория из grouping, параметры и группы, FXID,
+отсутствие Crash) и кэш плагинов при втором сканировании. `ofxEffectRendersThroughTheHost`
+рисует фильтр напрямую и в композиции (выбор по индексу и по названию, цвет, флажок,
+premultiplied-альфа, нормализованное значение в пикселях от нижнего левого угла), сохраняет
+и открывает композицию с FXID плагина. `ofxTransitionMixesBothClips` проверяет Wipe напрямую
+и между двумя клипами. `ofxSandboxDescribesPlugins` сравнивает записи из песочницы с
+полученными в процессе и проверяет, что о падающем плагине только сообщается.
+
 ## Behavior, трекинг и стабилизация
 
 `simulatedBehaviorsMoveInTheWorld` (OpenGL, Gravity.hfpl эталона) делает падающую плоскость

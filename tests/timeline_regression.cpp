@@ -78,6 +78,7 @@
 #include "render/LayerGeometry.h"
 #include "render/VideoEncoder.h"
 #include "plugin/NativePlugin.h"
+#include "plugin/OfxHost.h"
 #include "media/ProxyMedia.h"
 #include "media/PsdDocument.h"
 #include "project/PsdImport.h"
@@ -1587,11 +1588,6 @@ private slots:
         QVERIFY(std::abs(fov - qRadiansToDegrees(2 * std::atan(canvas.height() / 2.0 / 2000.0))) < 1e-6);
         QCOMPARE(render::sceneCameraOf(&loaded, canvas, 10).nearPlane, 5.0);
     }
-    // Layers are reordered by dragging their rows in the timeline's tree, as
-    // the reference's TreeDropDelegate does with one MoveLayerCmd per layer
-    // ("Move Layer(s)"): the dragged layers keep their order and go before the
-    // layer under the drop, as one undoable edit, and come back selected.
-    // Track's Move Layer Up/Down take the same way.
     // A Photoshop document's layers as the specification lays them out:
     // pixels in every compression (raw, RLE, ZIP, ZIP with prediction),
     // blend keys, opacity, groups, clipping, a raster and a vector mask, a
@@ -1918,6 +1914,234 @@ private slots:
         QVERIFY2(right, qPrintable(seen.join("; ")));
     }
 
+    // OpenFX plug-ins in the OpenFX folders (OFX_PLUGIN_PATH here: the test
+    // bundles, OpenVegasTest with a filter and a transition, OpenVegasCrash
+    // with one that faults in describe) are listed as effects and
+    // transitions with their controls, groups, FXIDs and the plug-in cache;
+    // the faulting one is left out and the scan survives it.
+    void ofxPluginsAreListedAsEffectsAndTransitions() {
+        QStandardPaths::setTestModeEnabled(true);
+        const QByteArray oldPath = qgetenv("OFX_PLUGIN_PATH");
+        qputenv("OFX_PLUGIN_PATH", QByteArray(OFX_TEST_ROOT));
+        auto restore = qScopeGuard([&] {
+            plugin::deleteOfxPluginCache();
+            qputenv("OFX_PLUGIN_PATH", oldPath);
+            QStandardPaths::setTestModeEnabled(false);
+        });
+        QVERIFY(plugin::deleteOfxPluginCache());
+        QCOMPARE(plugin::findOfxBinaries(plugin::ofxPluginSearchPaths()).size(), 2);
+        for (int pass = 0; pass < 2; ++pass) {
+            auto manager = plugin::createPluginManager();
+            QVERIFY(manager->scan().isSuccess());
+            const plugin::EffectSpec gain = manager->spec(plugin::ofxEffectId("org.openvegas.test.Gain", false));
+            QCOMPARE(gain.kind, plugin::PluginKind::Effect2D);
+            QCOMPARE(gain.displayName, QString("Test Gain"));
+            QCOMPARE(gain.category, QString("OpenVegas Tests"));
+            QCOMPARE(gain.subCategory, QString("Colour"));
+            QCOMPARE(gain.version.major(), 2);
+            QVERIFY(gain.renderable);
+            QCOMPARE(gain.guid, QString("5e591edf-a450-aa56-d6cf-f8203ed1c9fa"));
+            QCOMPARE(gain.guid, plugin::ofxPluginGuid("org.openvegas.test.Gain", 2, false));
+            QStringList names, types, defaults;
+            for (const auto& p : gain.parameters) { names << p.name; types << p.type; defaults << p.defaultValue; }
+            QCOMPARE(names, QStringList({"gain", "mode", "tint", "keepAlpha", "offset"}));
+            QCOMPARE(types, QStringList({"double", "int", "color", "bool", "point2d"}));
+            QCOMPARE(defaults, QStringList({"1", "0", "#ffffff", "true", "0.5,0.5"}));
+            QCOMPARE(gain.parameters[0].group, QString("Adjust"));
+            QCOMPARE(gain.parameters[0].maximum, 2.0);
+            QCOMPARE(gain.parameters[1].choices, QStringList({"Multiply", "Invert"}));
+            QCOMPARE(gain.parameters[1].choiceValues, QStringList({"0", "1"}));
+            // A filter only: no transition of it.
+            QVERIFY(!manager->spec(plugin::ofxEffectId("org.openvegas.test.Gain", true)).id.isValid());
+            const plugin::EffectSpec wipe = manager->spec(plugin::ofxEffectId("org.openvegas.test.Wipe", true));
+            QCOMPARE(wipe.kind, plugin::PluginKind::VideoTransition);
+            QCOMPARE(wipe.guid, QString("b8fa77dc-78f1-ca57-d7c8-25f76f6b5131"));
+            // The host drives Transition; Reverse is the plug-in's own.
+            QCOMPARE(wipe.parameters.size(), 1);
+            QCOMPARE(wipe.parameters[0].name, QString("reverse"));
+            QVERIFY(!manager->spec(plugin::ofxEffectId("org.openvegas.test.Wipe", false)).id.isValid());
+            QVERIFY(!manager->spec(plugin::ofxEffectId("org.openvegas.test.Crash", false)).id.isValid());
+            QVERIFY(QFile::exists(plugin::ofxPluginCachePath()));
+            if (pass == 0) {
+                QFile cache(plugin::ofxPluginCachePath());
+                QVERIFY(cache.open(QIODevice::ReadOnly));
+                const QByteArray json = cache.readAll();
+                QVERIFY(json.contains("org.openvegas.test.Gain"));
+                QVERIFY(json.contains("faulted"));
+            }
+        }
+    }
+
+    // A filter renders through the host: values in the spec's order reach
+    // the plug-in's parameters (a choice by index, a colour, a boolean, a
+    // normalised default in pixels, bottom-left origin), pictures go in and
+    // out premultiplied, and each clip's effect has an instance of its own.
+    void ofxEffectRendersThroughTheHost() {
+        QStandardPaths::setTestModeEnabled(true);
+        const QByteArray oldPath = qgetenv("OFX_PLUGIN_PATH");
+        qputenv("OFX_PLUGIN_PATH", QByteArray(OFX_TEST_ROOT));
+        auto restore = qScopeGuard([&] {
+            plugin::deleteOfxPluginCache();
+            qputenv("OFX_PLUGIN_PATH", oldPath);
+            QStandardPaths::setTestModeEnabled(false);
+        });
+        auto manager = plugin::createPluginManager();
+        QVERIFY(manager->scan().isSuccess());
+        const core::Identifier id = plugin::ofxEffectId("org.openvegas.test.Gain", false);
+        QVERIFY(plugin::isOfxPlugin(id));
+        const auto run = [&](const QStringList& values, const QColor& colour) {
+            QImage image(8, 8, QImage::Format_RGBA8888);
+            image.fill(colour);
+            plugin::NativeFrameTime time; time.layerFrame = 3; time.layerFrames = 10;
+            const bool ok = plugin::applyEffectToImage(image, id, values, time);
+            return ok ? image : QImage();
+        };
+        const auto near = [](const QColor& a, const QColor& b) {
+            return std::abs(a.red() - b.red()) <= 2 && std::abs(a.green() - b.green()) <= 2
+                && std::abs(a.blue() - b.blue()) <= 2 && std::abs(a.alpha() - b.alpha()) <= 2;
+        };
+        QImage out = run({"0.5", "0", "#ffffff", "true", "0.5,0.5"}, QColor(200, 100, 50));
+        QVERIFY(!out.isNull());
+        QVERIFY2(near(out.pixelColor(0, 0), QColor(100, 50, 25)), qPrintable(out.pixelColor(0, 0).name()));
+        // The normalised default (0.5, 0.5) is pixel (4, 4) from the bottom.
+        QCOMPARE(out.pixelColor(4, 8 - 1 - 4), QColor(Qt::white));
+        QVERIFY(out.pixelColor(4, 4) != QColor(Qt::white));
+        out = run({"1", "1", "#ffffff", "true", "-1,-1"}, QColor(200, 100, 50));
+        QVERIFY(near(out.pixelColor(0, 0), QColor(55, 155, 205)));
+        out = run({"1", "Invert", "#ffffff", "true", "-1,-1"}, QColor(200, 100, 50));
+        QVERIFY(near(out.pixelColor(0, 0), QColor(55, 155, 205)));
+        out = run({"1", "0", "#ff0000", "true", "-1,-1"}, QColor(200, 100, 50));
+        QVERIFY(near(out.pixelColor(0, 0), QColor(200, 0, 0)));
+        // Half transparent: unchanged with Keep Alpha, its premultiplied
+        // colour over opaque without.
+        out = run({"1", "0", "#ffffff", "true", "-1,-1"}, QColor(200, 100, 50, 128));
+        QVERIFY(near(out.pixelColor(0, 0), QColor(200, 100, 50, 128)));
+        out = run({"1", "0", "#ffffff", "false", "-1,-1"}, QColor(200, 100, 50, 128));
+        QVERIFY(near(out.pixelColor(0, 0), QColor(100, 50, 25)));
+
+        // In a shot: the renderer's clip effects go through the host too.
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(16, 16); shot->setDurationSeconds(1);
+        auto media = std::make_shared<media::MediaManager>();
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        QImage still(16, 16, QImage::Format_RGBA8888); still.fill(QColor(200, 100, 50));
+        QVERIFY(still.save(dir.filePath("still.png")));
+        QVERIFY(media->importFile(dir.filePath("still.png")).isSuccess());
+        {
+            auto& layer = shot->addLayer("Still");
+            composition::Clip clip; clip.durationSeconds = 1;
+            clip.mediaId = media->assetByFilePath(QFileInfo(dir.filePath("still.png")).absoluteFilePath()).id();
+            composition::Effect fx; fx.pluginId = id; fx.name = "Test Gain";
+            fx.parameterValues = {"0.5", "0", "#ffffff", "true", "-1,-1"};
+            clip.effects.append(fx);
+            layer.clips.append(clip);
+        }
+        const QImage frame = render::renderCompositionFrame(shot, media, 0.5);
+        QVERIFY2(near(frame.pixelColor(8, 8), QColor(100, 50, 25)), qPrintable(frame.pixelColor(8, 8).name()));
+
+        // Saved and opened again: the effect is an <Instance> of the
+        // plug-in's FXID with its values by name.
+        const QString projectPath = dir.filePath("ofx.vegfx");
+        QVERIFY(project::VegfxSerializer::saveToFile(projectPath, *shot, *media, {}).isSuccess());
+        QFile saved(projectPath);
+        QVERIFY(saved.open(QIODevice::ReadOnly));
+        QVERIFY(saved.readAll().contains("5e591edf-a450-aa56-d6cf-f8203ed1c9fa"));
+        auto loaded = std::make_shared<composition::Composition>();
+        auto loadedMedia = std::make_shared<media::MediaManager>();
+        QVERIFY(project::VegfxSerializer::loadFromFile(projectPath, loaded.get(), loadedMedia.get()).isSuccess());
+        const composition::Effect& back = loaded->layers().first().clips.first().effects.first();
+        QCOMPARE(back.pluginId, id);
+        QCOMPARE(back.parameterValues.size(), 5);
+        QCOMPARE(back.parameterValues.first().toDouble(), 0.5);
+        const QImage again = render::renderCompositionFrame(loaded, loadedMedia, 0.5);
+        QVERIFY(near(again.pixelColor(8, 8), QColor(100, 50, 25)));
+    }
+
+    // A transition plug-in mixes SourceFrom and SourceTo by the Transition
+    // position the host gives it, on the timeline as well as directly.
+    void ofxTransitionMixesBothClips() {
+        QStandardPaths::setTestModeEnabled(true);
+        const QByteArray oldPath = qgetenv("OFX_PLUGIN_PATH");
+        qputenv("OFX_PLUGIN_PATH", QByteArray(OFX_TEST_ROOT));
+        auto restore = qScopeGuard([&] {
+            plugin::deleteOfxPluginCache();
+            qputenv("OFX_PLUGIN_PATH", oldPath);
+            QStandardPaths::setTestModeEnabled(false);
+        });
+        auto manager = plugin::createPluginManager();
+        QVERIFY(manager->scan().isSuccess());
+        const core::Identifier id = plugin::ofxEffectId("org.openvegas.test.Wipe", true);
+        QImage from(8, 4, QImage::Format_RGBA8888); from.fill(Qt::red);
+        QImage to(8, 4, QImage::Format_RGBA8888); to.fill(Qt::blue);
+        QImage out;
+        QVERIFY(plugin::applyOfxTransition(out, from, to, 0.25, id, {"false"}));
+        QCOMPARE(out.pixelColor(1, 0), QColor(Qt::blue));
+        QCOMPARE(out.pixelColor(2, 3), QColor(Qt::red));
+        QVERIFY(plugin::applyOfxTransition(out, from, to, 0.25, id, {"true"}));
+        QCOMPARE(out.pixelColor(6, 0), QColor(Qt::blue));
+        QCOMPARE(out.pixelColor(5, 0), QColor(Qt::red));
+
+        // Between two clips on a layer, halfway through the window.
+        auto shot = std::make_shared<composition::Composition>();
+        shot->setSize(16, 8); shot->setFrameRate(30, 1); shot->setDurationSeconds(4);
+        auto media = std::make_shared<media::MediaManager>();
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        QVERIFY(from.scaled(16, 8).save(dir.filePath("red.png")));
+        QVERIFY(to.scaled(16, 8).save(dir.filePath("blue.png")));
+        QVERIFY(media->importFile(dir.filePath("red.png")).isSuccess());
+        QVERIFY(media->importFile(dir.filePath("blue.png")).isSuccess());
+        const auto assetId = [&](const char* name) {
+            return media->assetByFilePath(QFileInfo(dir.filePath(name)).absoluteFilePath()).id();
+        };
+        {
+            auto& layer = shot->addLayer("Clips");
+            composition::Clip first; first.mediaId = assetId("red.png"); first.durationSeconds = 2;
+            composition::Clip second; second.mediaId = assetId("blue.png");
+            second.startSeconds = 2; second.durationSeconds = 2;
+            layer.clips.append(first);
+            layer.clips.append(second);
+            ui::addEffectToClip(layer.clips[1], manager->spec(id), 2.0);
+        }
+        const composition::Effect& wipe = shot->layers().first().clips[1].effects.first();
+        QCOMPARE(wipe.transitionEdge, composition::TransitionEdge::In);
+        const auto windows = composition::transitionWindows(shot->layers().first(), 0.5 / 30.0, {});
+        QCOMPARE(windows.size(), 1);
+        const double middle = (windows.first().start + windows.first().end) / 2;
+        const QImage frame = render::renderCompositionFrame(shot, media, middle);
+        QCOMPARE(frame.pixelColor(2, 4), QColor(Qt::blue));
+        QCOMPARE(frame.pixelColor(13, 4), QColor(Qt::red));
+    }
+
+    // Describing out of process: the sandbox gives the same records, and a
+    // plug-in that faults in describe is reported as unusable - the host's
+    // exception guard fails just that call, in the sandbox and in this
+    // process alike.
+    void ofxSandboxDescribesPlugins() {
+        const QString root = QStringLiteral(OFX_TEST_ROOT);
+        const QStringList binaries = plugin::findOfxBinaries({root});
+        QCOMPARE(binaries.size(), 2);
+        const QString test = binaries.filter("OpenVegasTest").value(0);
+        const QString crash = binaries.filter("OpenVegasCrash").value(0);
+        QVERIFY(!test.isEmpty() && !crash.isEmpty());
+        const QVector<plugin::OfxPluginRecord> here = plugin::describeOfxBinary(test);
+        plugin::setOfxSandboxExecutable(QStringLiteral(OFX_SANDBOX_EXECUTABLE));
+        auto restore = qScopeGuard([] { plugin::setOfxSandboxExecutable(QString()); });
+        QString error;
+        const QVector<plugin::OfxPluginRecord> there = plugin::describeOfxBinarySafely(test, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(there.size(), 2);
+        QCOMPARE(plugin::ofxRecordsToJson(there), plugin::ofxRecordsToJson(here));
+        QVERIFY(there.first().isValid());
+        QCOMPARE(there.first().context, QString("OfxImageEffectContextFilter"));
+        QVERIFY(there.last().transition);
+        const QVector<plugin::OfxPluginRecord> crashed = plugin::describeOfxBinarySafely(crash, &error);
+        QVERIFY(crashed.isEmpty() || !crashed.first().isValid());
+        plugin::setOfxSandboxExecutable(QString());
+        const QVector<plugin::OfxPluginRecord> guarded = plugin::describeOfxBinary(crash);
+        QCOMPARE(guarded.size(), 1);
+        QVERIFY(guarded.first().error.contains("faulted"));
+    }
+
     // Sound files are audio by their extension - FLAC, Ogg, Opus, M4A and
     // AIFF were taken for video, so a video decoder was opened on project_3's
     // MakeMe.flac, and its muting silenced the whole application on Windows -
@@ -1947,6 +2171,11 @@ private slots:
             QCOMPARE(int(manager.assetByFilePath(unknown).kind()), int(media::MediaKind::Audio));
     }
 
+    // Layers are reordered by dragging their rows in the timeline's tree, as
+    // the reference's TreeDropDelegate does with one MoveLayerCmd per layer
+    // ("Move Layer(s)"): the dragged layers keep their order and go before the
+    // layer under the drop, as one undoable edit, and come back selected.
+    // Track's Move Layer Up/Down take the same way.
     void layersAreReorderedByDraggingTheirRows() {
         const auto names = [](const composition::Composition& comp) {
             QStringList list;

@@ -44,6 +44,7 @@ add_executable(timeline_regression timeline_regression.cpp ${TIMELINE_TEST_SOURC
     ../src/plugin/NativeEffectRender.cpp ../src/plugin/NativeEffectRender.h
     ../src/plugin/NativePlugin.cpp ../src/plugin/NativePlugin.h
     ../src/plugin/PluginManager.cpp ../src/plugin/PluginManager.h
+    ../src/plugin/OfxHost.cpp ../src/plugin/OfxHost.h
     ../src/ui/LayerPanel.cpp ../src/ui/TrackPanel.cpp
     ../src/ui/Preview360VideoPanel.cpp
     ../src/ui/TrimmerPanel.cpp ../src/ui/TrimmerPanel.h
@@ -120,7 +121,8 @@ add_executable(options_regression options_regression.cpp
     ../src/ui/PromptMessage.cpp ../src/ui/PromptMessage.h
     ../src/ui/AutoSave.cpp ../src/ui/AutoSave.h
     ../src/app/AVTemplates.cpp ../src/app/AVTemplates.h
-    ../src/app/GpuDriver.cpp ../src/app/GpuDriver.h)
+    ../src/app/GpuDriver.cpp ../src/app/GpuDriver.h
+    ../src/plugin/OfxHost.cpp ../src/plugin/OfxHost.h)
 target_include_directories(options_regression PRIVATE ../src)
 target_link_libraries(options_regression PRIVATE Qt6::Widgets Qt6::Test Qt6::Xml)
 set_target_properties(options_regression PROPERTIES AUTOUIC ON
@@ -201,3 +203,34 @@ foreach(audio_target options_regression ui_stubs_regression)
 endforeach()
 
 include_directories(../thirdparty/vlc/include)
+include_directories(../thirdparty/openfx/include)
+
+# OpenFX plug-ins for the OpenFX host's tests, laid out as an installed bundle
+# would be (<name>.ofx.bundle/Contents/<arch>/<name>.ofx), and the sandbox
+# that describes a binary out of process.
+if(WIN32)
+    set(OFX_TEST_ARCH Win64)
+elseif(APPLE)
+    set(OFX_TEST_ARCH MacOS)
+else()
+    set(OFX_TEST_ARCH Linux-x86-64)
+endif()
+set(OFX_TEST_ROOT "${CMAKE_CURRENT_BINARY_DIR}/ofx-plugins")
+foreach(ofx_name OpenVegasTest OpenVegasCrash)
+    add_library(${ofx_name} MODULE ofx/TestOfxPlugins.cpp)
+    set_target_properties(${ofx_name} PROPERTIES PREFIX "" SUFFIX ".ofx")
+    add_custom_command(TARGET ${ofx_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${OFX_TEST_ROOT}/${ofx_name}.ofx.bundle/Contents/${OFX_TEST_ARCH}"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${ofx_name}>"
+            "${OFX_TEST_ROOT}/${ofx_name}.ofx.bundle/Contents/${OFX_TEST_ARCH}/${ofx_name}.ofx"
+        VERBATIM)
+    add_dependencies(timeline_regression ${ofx_name})
+endforeach()
+target_compile_definitions(OpenVegasCrash PRIVATE OPENVEGAS_OFX_CRASH)
+add_executable(ofx_describe_sandbox ofx/OfxDescribeSandbox.cpp ../src/plugin/OfxHost.cpp ../src/core/Log.cpp)
+target_include_directories(ofx_describe_sandbox PRIVATE ../src)
+target_link_libraries(ofx_describe_sandbox PRIVATE Qt6::Gui)
+add_dependencies(timeline_regression ofx_describe_sandbox)
+target_compile_definitions(timeline_regression PRIVATE
+    OFX_TEST_ROOT="${OFX_TEST_ROOT}"
+    OFX_SANDBOX_EXECUTABLE="$<TARGET_FILE:ofx_describe_sandbox>")

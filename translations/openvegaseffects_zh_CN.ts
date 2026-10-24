@@ -875,32 +875,32 @@
 <context>
     <name>AutoSaveSettingsWidget</name>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1323"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1337"/>
         <source>Enable Project Auto Saving</source>
         <translation>启用项目自动保存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1333"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1347"/>
         <source> minute(s)</source>
         <translation> 分钟</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1334"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1348"/>
         <source>Auto Save Frequency:</source>
         <translation>自动保存频率：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1341"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1355"/>
         <source>Select Folder...</source>
         <translation>选择文件夹...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1345"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1359"/>
         <source>Auto Save Project Path:</source>
         <translation>自动保存项目路径：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1348"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1362"/>
         <source>Choose auto save projects path</source>
         <translation>选择自动保存项目路径</translation>
     </message>
@@ -3501,7 +3501,7 @@ Do you want to add a camera?</source>
         <translation>反转蒙版</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="991"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1005"/>
         <source> px</source>
         <translation> 像素</translation>
     </message>
@@ -4923,7 +4923,7 @@ You can queue exports from multiple projects by opening each one in turn and add
 <context>
     <name>openvegas::render::RenderManager</name>
     <message>
-        <location filename="../src/render/RenderManager.cpp" line="3245"/>
+        <location filename="../src/render/RenderManager.cpp" line="3254"/>
         <source>Video decoding did not deliver the requested cache frame.</source>
         <translation>视频解码器未提供所请求的缓存帧。</translation>
     </message>
@@ -7887,683 +7887,698 @@ Continue?</source>
         <translation>选项</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="537"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="538"/>
         <source> levels</source>
         <translation> 水平</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="538"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="539"/>
         <source>Maximum Undo*:</source>
         <translation>最大撤消*：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="546"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="547"/>
         <source>Default Template:</source>
         <translation>默认模板：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="552"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="553"/>
         <source>Composite Shot Default Duration:</source>
         <translation>组合镜头默认时长：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="558"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="559"/>
         <source>Editor Default Duration:</source>
         <translation>编辑器默认时长：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="564"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="565"/>
         <source>Plane Default Duration:</source>
         <translation>平面默认时长：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="570"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="571"/>
         <source>RMS Amplitude</source>
         <translation>RMS振幅</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="571"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="572"/>
         <location filename="../src/ui/TimelineWidget.cpp" line="638"/>
         <source>Peak Amplitude</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>峰值幅度</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="572"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="573"/>
         <source>Audio Waveforms:</source>
         <translation>音频波形：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="577"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="578"/>
         <source>Include screen layout when saving projects</source>
         <translation>保存项目时包括屏幕布局</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="580"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="581"/>
         <source>Use relative paths in saved projects</source>
         <translation>在保存的项目中使用相对路径</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="583"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="584"/>
         <source>Close all media files when application is not active</source>
         <translation>当应用程序不活动时，关闭所有媒体文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="586"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="587"/>
         <source>Play audio when scrubbing timeline</source>
         <translation>清理时间线时播放音频</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="589"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="590"/>
         <source>Use logarithmic waveform scaling</source>
         <translation>使用对数波形缩放</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="591"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="592"/>
         <source>Share anonymous usage analytics</source>
         <translation>分享匿名使用统计数据</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="629"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="630"/>
         <source>VEGAS Dark</source>
         <translation>VEGAS 深色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="630"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="631"/>
         <source>System</source>
         <translation>系统</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="631"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="632"/>
         <source>Theme:</source>
         <translation>主题：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="635"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="636"/>
         <source>Use native menu bar</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>使用系统菜单栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="638"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="639"/>
         <source>Use native color picker</source>
         <translation>使用系统颜色选择器</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="640"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="641"/>
         <source>Enable high-DPI scaling*</source>
         <translation>启用高DPI缩放*</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="643"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="644"/>
         <source>Show menu bar quick actions</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>在菜单栏显示快捷操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="646"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="647"/>
         <source>Enable mouse wheel scrolling in dropdown menus</source>
         <translation>在下拉菜单中启用鼠标滚轮滚动</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="649"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="650"/>
         <source>Hide panels while full-screen preview is active</source>
         <translation>全屏预览时隐藏面板</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="680"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="681"/>
         <source>Select Folder...</source>
         <translation>选择文件夹...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="688"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="689"/>
         <source>Default Export Directory:</source>
         <translation>默认导出目录：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="691"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="692"/>
         <source>Default Snapshot Directory:</source>
         <translation>默认快照目录：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="698"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="699"/>
         <source>Timecode</source>
         <translation>时间码</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="699"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="700"/>
         <source>Natural</source>
         <translation>自然</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="700"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="701"/>
         <source>Seconds</source>
         <translation>秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="701"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="702"/>
         <source>The format in which to display time durations (Elapsed and Remaining only).</source>
         <translation>显示持续时间的格式（仅已过去和剩余）。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="702"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="703"/>
         <source>Time Format:</source>
         <translation>时间格式：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="707"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="708"/>
         <source>Remove known file extensions from export names</source>
         <translation>从导出名称中删除已知的文件扩展名</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="710"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="711"/>
         <source>Beep speaker on completion</source>
         <translation>蜂鸣器完成</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="731"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="732"/>
         <source>Select Folder</source>
         <translation>选择文件夹</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="744"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="745"/>
         <source>Select File</source>
         <translation>选择文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="762"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="767"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="771"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="792"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="763"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="768"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="772"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="793"/>
         <source>Clear Cache</source>
         <translation>清除缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="763"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="764"/>
         <source>The selected path is not a safe cache location.</source>
         <translation>所选路径不能安全地用作缓存位置。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="768"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="769"/>
         <source>%1 is already empty.</source>
         <translation>%1 已为空。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="772"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="773"/>
         <source>Delete %1 at
 %2?</source>
         <translation>删除以下位置的 %1？
 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="793"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="794"/>
         <source>Some files in %1 could not be removed.</source>
         <translation>无法删除 %1 中的部分文件。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="807"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="808"/>
         <source>Media Cache</source>
         <translation>媒体缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="816"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="828"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="860"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1164"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="817"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="829"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="861"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1178"/>
         <source>...</source>
         <translation>...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="820"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="821"/>
         <source>Cache database (*.db);;All files (*)</source>
         <translation>缓存数据库 (*.db);;所有文件 (*)</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="822"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="823"/>
         <source>Media Cache Database*:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>媒体缓存数据库*：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="834"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="835"/>
         <source>Media Cache Files*:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>媒体缓存文件*：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="840"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="872"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="841"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="873"/>
         <source> day(s)</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation> 天</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="841"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="871"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="842"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="872"/>
         <source>Keep forever</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>永久保留</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="842"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="843"/>
         <source>Days To Keep Media Cache Files:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>媒体缓存文件保留天数：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="844"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="845"/>
         <source>Delete Media Cache</source>
         <translation>删除媒体缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="847"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="848"/>
         <source>media cache files</source>
         <translation>媒体缓存文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="848"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="849"/>
         <source>media cache database</source>
         <translation>媒体缓存数据库</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="853"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="854"/>
         <source>Timeline Cache</source>
         <translation>时间线缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="866"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="867"/>
         <source>Timeline Cache:</source>
         <translation>时间线缓存：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="873"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="874"/>
         <source>Days To Keep Timeline Cache:</source>
         <translation>时间线缓存保留天数：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="875"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="876"/>
         <source>Use automatic render cache</source>
         <translation>使用自动渲染缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="881"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1140"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="882"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1154"/>
         <source> sec</source>
         <translation> 秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="882"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="883"/>
         <source>Automatic cache delay:</source>
         <translation>自动缓存延迟：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="886"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="887"/>
         <source>Delete Timeline Cache</source>
         <translation>删除时间轴缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="889"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="890"/>
         <source>timeline cache</source>
         <translation>时间线缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="910"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="897"/>
+        <source>Plugins Cache</source>
+        <translation>插件缓存</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="900"/>
+        <source>Delete OpenFX Plugins Cache</source>
+        <translation>删除 OpenFX 插件缓存</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="903"/>
+        <source>OpenFX plug-in cache</source>
+        <translation>OpenFX 插件缓存</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/OptionsDialog.cpp" line="924"/>
         <source> MB</source>
         <translation> MB</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="911"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="925"/>
         <source>Thumbnail cache size:</source>
         <translation>缩略图缓存大小：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="919"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="933"/>
         <source>Show checkerboard background for 2D Views</source>
         <translation>显示2D视图的背景</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="921"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="935"/>
         <source>Show mouse coordinates</source>
         <translation>显示鼠标坐标</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="923"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="937"/>
         <source>Update the viewer during playback</source>
         <translation>播放时更新查看器</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="925"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="939"/>
         <source>Show motion path</source>
         <translation>显示运动路径</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="927"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="941"/>
         <source>Show checkerboard background for 3D Views</source>
         <translation>显示3D视图的背景</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="929"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="943"/>
         <source>Show floor plane in 3D Views</source>
         <translation>在3D视图中显示地面</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="946"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="960"/>
         <source>Motion path key frames:</source>
         <translation>运动路径关键帧数：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="961"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="975"/>
         <source>Use turbo rendering where available</source>
         <translation>可用时使用加速渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="970"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="984"/>
         <source>Automatic (default)</source>
         <translation>自动（默认）</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="972"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="986"/>
         <source>%1 thread(s)</source>
         <translation>%1 个线程</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="974"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="988"/>
         <source>Render threads:</source>
         <translation>渲染线程数：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="976"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="990"/>
         <source>Use hardware video decoding</source>
         <translation>使用硬件视频解码</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="979"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="993"/>
         <source>Use hardware video encoding</source>
         <translation>使用硬件视频编码</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="982"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="996"/>
         <source>Limit video decoding to 8 bit</source>
         <translation>将视频解码限制为8位</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="997"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1011"/>
         <source>Maximum model texture size:</source>
         <translation>模型纹理最大尺寸：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="998"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1012"/>
         <source>Shadow map size:</source>
         <translation>阴影贴图大小：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="999"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1013"/>
         <source>Reflection map size:</source>
         <translation>反射贴图大小：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1006"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1020"/>
         <source>3D antialiasing:</source>
         <translation>3D抗锯齿：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1023"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1037"/>
         <source>Final</source>
         <translation>最后</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1023"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1037"/>
         <source>Draft</source>
         <translation>草稿</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1024"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1038"/>
         <source>Quick</source>
         <translation>快</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1024"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1038"/>
         <source>Fastest</source>
         <translation>最快</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1032"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1046"/>
         <source>Antialiased</source>
         <translation>抗锯齿</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1032"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1046"/>
         <source>Full</source>
         <translation>完整</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1041"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1055"/>
         <source>Playback quality:</source>
         <translation>播放质量：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1042"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1056"/>
         <source>Playback resolution:</source>
         <translation>播放分辨率：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1043"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1057"/>
         <source>Paused quality:</source>
         <translation>暂停时质量：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1044"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1058"/>
         <source>Paused resolution:</source>
         <translation>暂停时分辨率：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1074"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1088"/>
         <source>Labels are available to timeline layers and media items. Edit a name or click its color.</source>
         <translation>标签可用于时间线图层和媒体项目。请编辑名称或单击颜色。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1078"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1092"/>
         <source>Label</source>
         <translation>标签</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1078"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1092"/>
         <source>Color</source>
         <translation>颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1094"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1108"/>
         <source>Choose Label Color</source>
         <translation>选择标签颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1119"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1133"/>
         <source>System Default</source>
         <translation>系统默认</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1122"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1136"/>
         <source>Input device:</source>
         <translation>输入设备：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1126"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1140"/>
         <source>Mono</source>
         <translation>单声道</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1127"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1141"/>
         <source>Stereo</source>
         <translation>立体声</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1128"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1142"/>
         <source>Channels:</source>
         <translation>通道：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1133"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1147"/>
         <source>%1 Hz</source>
         <translation>%1 Hz</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1135"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1149"/>
         <source>Sample rate:</source>
         <translation>采样率：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1141"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1155"/>
         <source>Recording countdown:</source>
         <translation>录音倒计时：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1143"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1157"/>
         <source>Mute project audio while recording</source>
         <translation>录音时将项目音频静音</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1173"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1226"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1187"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1240"/>
         <source>Proxy</source>
         <translation>代理</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1176"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1190"/>
         <source>Proxy directory:</source>
         <translation>代理文件夹：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1181"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1195"/>
         <source>Low</source>
         <translation>低</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1182"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1196"/>
         <source>Medium</source>
         <translation>中等</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1183"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1197"/>
         <source>High</source>
         <translation>高</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1184"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1198"/>
         <source>Proxy quality:</source>
         <translation>代理质量：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1187"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1200"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1207"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1201"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1214"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1221"/>
         <source>Delete Project Proxies</source>
         <translation>删除项目代理文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1189"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1203"/>
         <source>Delete All Proxies</source>
         <translation>删除所有代理</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1195"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1209"/>
         <source>all proxy files</source>
         <translation>所有代理文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1201"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1215"/>
         <source>Choose a proxy directory first.</source>
         <translation>请先选择代理文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1208"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1252"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1222"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1266"/>
         <source>No saved project is currently selected.</source>
         <translation>当前未选择已保存的项目。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1212"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1226"/>
         <source>proxies for project &apos;%1&apos;</source>
         <translation>项目“%1”的代理文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1216"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1230"/>
         <source>Pre-Render</source>
         <translation>预渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1219"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1233"/>
         <source>Pre-render directory:</source>
         <translation>预渲染文件夹：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1225"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1239"/>
         <source>Auto</source>
         <translation>自动</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1227"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1241"/>
         <source>Full Resolution</source>
         <translation>完整分辨率</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1228"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1242"/>
         <source>Preview mode:</source>
         <translation>预览模式：</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1230"/>
         <location filename="../src/ui/OptionsDialog.cpp" line="1244"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1251"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1258"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1265"/>
         <source>Delete Project Pre-Renders</source>
         <translation>删除项目预渲染文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1232"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1246"/>
         <source>Delete All Pre-Renders</source>
         <translation>删除所有预渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1239"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1253"/>
         <source>all pre-render files</source>
         <translation>所有预渲染文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1245"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1259"/>
         <source>Choose a pre-render directory first.</source>
         <translation>请先选择预渲染文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1257"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1271"/>
         <source>pre-renders for project &apos;%1&apos;</source>
         <translation>项目“%1”的预渲染文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1261"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1275"/>
         <source>Prefer integrated GPU for proxy generation</source>
         <translation>生成代理时优先使用集成GPU</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1277"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1291"/>
         <source>Search commands</source>
         <translation>搜索命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1283"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1297"/>
         <source>Command</source>
         <translation>命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1283"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1297"/>
         <source>Shortcut</source>
         <translation>快捷方式</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1484"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1498"/>
         <source>Shortcut Conflict</source>
         <translation>快捷键冲突</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1485"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1499"/>
         <source>The &quot;%1&quot; shortcut is already assigned to the &quot;%2&quot; command.</source>
         <translation>快捷键“%1”已分配给“%2”命令。</translation>
     </message>
@@ -8583,249 +8598,249 @@ Continue?</source>
         <translation>确定</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="1752"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="1766"/>
         <source>Restore &apos;%1&apos; Defaults</source>
         <translation>恢复&apos;%1&apos;默认值</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="621"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="622"/>
         <source>Follow system</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>跟随系统</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="132"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="133"/>
         <source>Prompt me on launch if my GPU is unsupported</source>
         <translation>如果不支持我的GPU，则在启动时提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="134"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="135"/>
         <source>Prompt me on launch if my GPU driver is unsupported or out of date</source>
         <translation>如果我的GPU驱动程序不受支持或过时，则在启动时提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="137"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="138"/>
         <source>Prompt me before using oversized particle textures</source>
         <translation>在使用超大粒子纹理之前提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="139"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="140"/>
         <source>Prompt me when importing an image from an image sequence</source>
         <translation>从图像序列中导入图像时提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="142"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="143"/>
         <source>Prompt me when the media doesn&apos;t match editor timeline</source>
         <translation>当媒体与编辑器时间轴不匹配时提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="145"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="146"/>
         <source>Prompt me on launch if QuickTime is installed but could not be loaded</source>
         <translation>如果安装了QuickTime但无法加载，则在启动时提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="148"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="149"/>
         <source>Prompt me before converting 2D composite shots to 3D</source>
         <translation>在将2D组合镜头转换为3D之前提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="150"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="151"/>
         <source>Prompt me before converting 3D composite shots to 2D</source>
         <translation>在将3D组合镜头转换为2D之前提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="152"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="153"/>
         <source>Prompt me before removing export tasks from the export queue</source>
         <translation>在从导出队列中删除导出任务之前提示我</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="155"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="156"/>
         <source>Prompt me for the project settings to use before creating a new project</source>
         <translation>在创建新项目之前提示我输入要使用的项目设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="159"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="160"/>
         <source>Tell me what a Photoshop document&apos;s import could not carry over</source>
         <translation>告诉我导入 Photoshop 文档时无法转换的内容</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="240"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="241"/>
         <source>Red</source>
         <translation>红色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="241"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="242"/>
         <source>Orange</source>
         <translation>橙色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="242"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="243"/>
         <source>Yellow</source>
         <translation>黄色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="243"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="244"/>
         <source>Green</source>
         <translation>绿色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="244"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="245"/>
         <source>Cyan</source>
         <translation>青色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="245"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="246"/>
         <source>Blue</source>
         <translation>蓝色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="246"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="247"/>
         <source>Purple</source>
         <translation>紫色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="247"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="248"/>
         <source>Pink</source>
         <translation>粉色</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="384"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="385"/>
         <source>General</source>
         <translation>常规</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="385"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="386"/>
         <source>Interface</source>
         <translation>接口</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="386"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="387"/>
         <source>Display</source>
         <translation>显示</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="387"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="388"/>
         <source>Render</source>
         <translation>渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="388"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="389"/>
         <source>Quality Profiles</source>
         <translation>质量概况</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="389"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="390"/>
         <source>Prompts &amp; Warnings</source>
         <translation>提示与警告</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="390"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="391"/>
         <source>Labels</source>
         <translation>标签</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="391"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="392"/>
         <source>Cache</source>
         <translation>缓存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="392"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="393"/>
         <source>Voiceover</source>
         <translation>画外音</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="393"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="394"/>
         <source>Proxies &amp; Pre-Renders</source>
         <translation>代理 &amp; 预渲染</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="394"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="395"/>
         <source>Auto Save</source>
         <translation>自动保存</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="395"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="396"/>
         <source>Shortcuts</source>
         <translation>快捷键</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="396"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="397"/>
         <source>Export</source>
         <translation>导出</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="399"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="400"/>
         <source>Plugins</source>
         <translation>插件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="420"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="421"/>
         <source>VEGAS Effects installation</source>
         <translation>VEGAS Effects 安装</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="428"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="429"/>
         <source>Use the plugins of this installation</source>
         <translation>使用此安装的插件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="433"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="434"/>
         <source>Plugin folders</source>
         <translation>插件文件夹</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="436"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="437"/>
         <source>Folders with .hfpl plugins - the Plugins folder of VEGAS Effects installed elsewhere, or of another FXhome program such as HitFilm or Imerge. Their category sub-folders are searched too.</source>
         <translation>包含 .hfpl 插件的文件夹 - 安装在其他位置的 VEGAS Effects，或 HitFilm、Imerge 等其他 FXhome 程序的 Plugins 文件夹。也会搜索其类别子文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="446"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="447"/>
         <source>Add Folder...</source>
         <translation>添加文件夹...</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="448"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="449"/>
         <source>Remove</source>
         <translation>删除</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="450"/>
-        <location filename="../src/ui/OptionsDialog.cpp" line="481"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="451"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="482"/>
         <source>Find FXhome Plugins</source>
         <translation>查找 FXhome 插件</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="457"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="458"/>
         <source>Plugins are looked for again when Options is closed with OK.</source>
         <translation>使用&quot;确定&quot;关闭选项后将重新查找插件。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="464"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="465"/>
         <source>Plugin Folder</source>
         <translation>插件文件夹</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="482"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="483"/>
         <source>No other FXhome program with plugins was found.</source>
         <translation>未找到其他带有插件的 FXhome 程序。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="497"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="498"/>
         <source>%1  (plugins: %2)</source>
         <translation>%1  (插件: %2)</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="512"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="513"/>
         <source>Plugins found in %1: %2.</source>
         <translation>%1 中的插件: %2。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="516"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="517"/>
         <source>No plugins were found in %1. Add the folder with the plugins below - VEGAS Effects installed elsewhere, or another FXhome program.</source>
         <translation>在 %1 中未找到插件。请在下方添加插件文件夹 - 安装在其他位置的 VEGAS Effects，或其他 FXhome 程序。</translation>
     </message>
     <message>
-        <location filename="../src/ui/OptionsDialog.cpp" line="625"/>
+        <location filename="../src/ui/OptionsDialog.cpp" line="626"/>
         <source>Language*:</source>
         <translatorcomment>Translated for this port; not taken from the reference build - please have a native speaker review.</translatorcomment>
         <translation>语言*：</translation>

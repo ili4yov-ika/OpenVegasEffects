@@ -12,6 +12,7 @@
 
 #include <QAction>
 #include "media/AudioCapture.h"
+#include "plugin/OfxHost.h"
 #include <QApplication>
 #include <QCheckBox>
 #include <QColorDialog>
@@ -890,6 +891,19 @@ QWidget* OptionsDialog::buildCachePage()
     });
     timelineForm->addRow(clearTimeline);
     root->addWidget(timelineGroup);
+
+    // The reference's CacheSettingsWidget also deletes the OpenFX plug-in
+    // cache; the plug-ins are described again at the next start.
+    auto* pluginsGroup = new QGroupBox(tr("Plugins Cache"), page);
+    pluginsGroup->setObjectName(QStringLiteral("groupBoxCachePlugins"));
+    auto* pluginsLayout = new QVBoxLayout(pluginsGroup);
+    auto* clearOfx = new QPushButton(tr("Delete OpenFX Plugins Cache"), pluginsGroup);
+    clearOfx->setObjectName(QStringLiteral("toolButtonDeleteOfxPluginsCache"));
+    connect(clearOfx, &QPushButton::clicked, this, [this] {
+        clearManagedPath(plugin::ofxPluginCachePath(), tr("OpenFX plug-in cache"));
+    });
+    pluginsLayout->addWidget(clearOfx, 0, Qt::AlignLeft);
+    root->addWidget(pluginsGroup);
     root->addStretch();
 
     return page;

@@ -29,6 +29,7 @@
 #include "composition/Transition.h"
 #include "plugin/EffectRender.h"
 #include "plugin/NativeEffectRender.h"
+#include "plugin/OfxHost.h"
 #include "render/LayerGeometry.h"
 #include "render/TextGeometry.h"
 #include "render/TextRender.h"
@@ -1093,6 +1094,10 @@ void RenderWorker::applyClipEffects(QImage& image, const composition::Clip& clip
         // A module blurring motion reads its keyframed values between frames.
         plugin::NativeFrameTime at = time;
         at.valueAt = [&fx](int index, double when) { return fx.parameterAtTime(index, when).toString(); };
+        // An OpenFX plug-in gets an instance of its own on every clip.
+        if (owner && plugin::isOfxPlugin(fx.pluginId)) {
+            at.instanceKey = nativeInstanceKey(owner->id, clipIndex, int(effectIndex));
+        }
         if (owner && plugin::nativeEffectAnalysesOwnLayer(fx.pluginId)) {
             // Drawn from the instance's data (NativeInstanceHost keeps it in
             // the effect); without any yet, the module draws the frame as it is.
@@ -2350,11 +2355,15 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
             transitionTime.transitionCut = window.end > window.start
                 ? float((window.cut - window.start) / (window.end - window.start)) : 0.0f;
             QImage mixed;
-            if (!withEffects
-                || !plugin::nativeVideoTransitionRenderingVerified(effect.pluginId)
-                || !plugin::applyNativeVideoTransition(mixed, from, to, progress,
-                                                       effect.pluginId, values,
-                                                       transitionTime)) {
+            const bool rendered = withEffects
+                && (plugin::isOfxPlugin(effect.pluginId)
+                        ? plugin::applyOfxTransition(mixed, from, to, progress, effect.pluginId,
+                                                     values, transitionTime)
+                        : plugin::nativeVideoTransitionRenderingVerified(effect.pluginId)
+                              && plugin::applyNativeVideoTransition(mixed, from, to, progress,
+                                                                    effect.pluginId, values,
+                                                                    transitionTime));
+            if (!rendered) {
                 // Effects disabled by the quality profile, or a module this
                 // build cannot run: keep the cut soft with a plain dissolve.
                 mixed = dissolveImages(from, to, progress);

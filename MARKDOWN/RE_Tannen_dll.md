@@ -223,6 +223,28 @@ PluginManager in-process. Пространство `biff::tannen::OFX`.
 ⊃ vector<shared_ptr<OFX::Plugin>>`, у каждого `OFX::Plugin` своё состояние 0x6b0
 с флагом загрузки `+0x189`. Это и есть внутренний OpenFX-хост VEGAS Effects.
 
+### FXID OFX-плагина, имя хоста, пути и кэш (перенесено в `src/plugin/OfxHost.cpp`)
+
+- **FXID** (`FUN_1802ff1a0`, вызывается из `FUN_180301550` с `OfxPlugin*` на
+  `state+0x10`): SHA-1 строки `"<pluginIdentifier> <pluginVersionMajor> <флаг>"`,
+  флаг `"1"` для FXID эффекта (`+0x38`) и `"0"` для FXID перехода (`+0x48`).
+  Раскладка: Data1 = sha[0..3] big-endian, Data2 = sha[4..5] big-endian,
+  Data3 = `((sha6<<8)|sha7) & 0xff0f | 0x0050`,
+  Data4 = `[(sha7&0x0f)|0xd0, sha9..sha15]`. Для одного особого идентификатора
+  `TryLoadOFXPluginByUpgradingMajorVersion` добавляет старшие версии как псевдонимы.
+  С реальным проектом эталона с OFX-эффектом не сверено (такого проекта нет).
+- `kOfxPropName` хоста = `"com.FXHOME.HITFILM"` (строка `0x1806a8dc8`).
+- Пути поиска: `OFX_PLUGIN_PATH`, `C:\Program Files\Common Files\OFX\Plugins`;
+  бандлы `*.ofx.bundle/Contents/Win64/*.ofx`; отдельные regex-исключения для
+  BCC 3D Objects, Ignite, MotionArray и mocha HitFilm.
+- Кэш описаний: `/FXhome/VEGAS Effects/ofxPluginCache`; в настройках
+  (`CacheSettingsWidget`) кнопка «Delete OpenFX Plugins Cache».
+- `OfxHitFilm3DSuite` — необязательное расширение HitFilm (порт его не даёт).
+
+В порте: хост OpenFX 1.4 на CPU (`OfxHost.cpp`), песочница - тот же
+`OpenVegasEffects.exe --ofx-describe <binary> <out.json>`, кэш
+`ofxPluginCache.json` в AppLocalData, FXID по формуле выше.
+
 ### МОСТ OFX-плагин → модель: `OFXPlugin2DEffectWrapper`
 
 `OFXPlugin2DEffectWrapper : biff::project::AbstractPlugin` (наследует от

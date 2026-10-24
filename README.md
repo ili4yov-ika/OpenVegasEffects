@@ -33,6 +33,7 @@ plugins of VEGAS Effects, audio and export. Open items are listed in
 | Projects: the reference's `.vegfx` format (read and write), relative paths, auto save and recovery | Done |
 | Timeline: composite shots, nested shots in tabs, 2D/3D layers, clips, slices and rate stretch, keyframes and the value graph, transitions | Done |
 | Native `.hfpl` plugins of VEGAS Effects: all 321 modules run (241 2D effects, 43 Behaviors, 16 audio effects, 15 video transitions, 4 Geometry, 2 audio transitions); their controls, custom viewer UI and `.hfpr` presets | Done |
+| OpenFX plug-ins: an OpenFX 1.4 host (`OFX_PLUGIN_PATH`, `Common Files\OFX\Plugins`), filters and transitions in the Effects panel, the plug-in cache and an out-of-process describe, saved in `.vegfx` under the reference's FXIDs | Done; not yet tried with commercial plug-ins |
 | Text layers: styles, 3D extrusion, per-glyph Behaviors, the Text panel | Done |
 | 3D: models (OBJ, FBX with skins and blend shapes, glTF, 3DS, LWO, Alembic optional), cameras, lights, shadows, depth per pixel | Done |
 | Masks, motion tracking (MotionTrack), stabilisation | Done |

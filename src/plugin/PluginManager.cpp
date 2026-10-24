@@ -17,6 +17,7 @@
 #include "plugin/EffectRender.h"
 #include "plugin/NativeEffectRender.h"
 #include "plugin/NativePlugin.h"
+#include "plugin/OfxHost.h"
 #include "project/NativeEffectCatalog.h"
 
 namespace openvegas {
@@ -302,6 +303,7 @@ public:
             scanDirectory(dir, 0, dependencyDir);
         }
         saveMetadataCache();
+        scanOfxPlugins();
         return core::Result::ok();
     }
 
@@ -1321,6 +1323,30 @@ private:
         entry.plugin = std::make_shared<LocalPlugin>(filePath, spec);
         entry.spec = std::move(spec);
         m_entries.push_back(entry);
+    }
+
+    // The OpenFX plug-ins of the OpenFX folders, as effects (filter, general
+    // and generator contexts) and as transitions (transition context), the
+    // way the reference's OFXPlugin2DEffectWrapper and
+    // OFXPluginTransitionWrapper list them.
+    void scanOfxPlugins()
+    {
+        clearOfxPlugins();
+        const QStringList binaries = findOfxBinaries(ofxPluginSearchPaths());
+        for (const OfxPluginRecord& record : describeOfxBinariesCached(binaries)) {
+            const auto add = [&](bool transition) {
+                EffectSpec spec = ofxEffectSpec(record, transition);
+                // The same plug-in in two folders: the first one found wins.
+                if (indexOfId(spec.id.value()) >= 0) return;
+                registerOfxPlugin(spec.id, record, transition);
+                PluginEntry entry;
+                entry.plugin = std::make_shared<LocalPlugin>(record.binaryPath, spec);
+                entry.spec = std::move(spec);
+                m_entries.push_back(entry);
+            };
+            if (!record.context.isEmpty()) add(false);
+            if (record.transition) add(true);
+        }
     }
 
     // 12: slider units read as UTF-16 ("px", not "p"); 13: hidden controls.

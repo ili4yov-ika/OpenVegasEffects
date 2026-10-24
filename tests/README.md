@@ -470,6 +470,21 @@ Effects panel's favourites and recents in the reference's settings shape (group 
 QDataStream of int 0, the count and the IDs), five recents with the newest last, and the
 panel's Favorites/Recents rows above the categories.
 
+## OpenFX plug-ins
+
+The tests build their own OpenFX plug-ins against the bare C API (`tests/ofx/TestOfxPlugins.cpp`)
+as bundles in `build/.../ofx-plugins`: OpenVegasTest with a filter (Gain, a Mode choice, a
+Tint colour, Keep Alpha, an Offset with a normalised default) and a transition (Wipe), and
+OpenVegasCrash, which faults in describe; `ofx_describe_sandbox` is the out-of-process
+describer. `ofxPluginsAreListedAsEffectsAndTransitions` finds them through `OFX_PLUGIN_PATH`
+and checks the specs (category from the grouping, controls and groups, FXIDs, no Crash) and
+the plug-in cache on a second scan. `ofxEffectRendersThroughTheHost` renders the filter
+directly and in a shot (a choice by index or label, colour, boolean, premultiplied alpha, the
+normalised default in pixels from the bottom-left origin) and saves and reopens the shot with
+the plug-in's FXID. `ofxTransitionMixesBothClips` runs Wipe directly and between two clips.
+`ofxSandboxDescribesPlugins` compares the sandbox's records with the in-process ones and
+checks that the faulting plug-in is only reported.
+
 ## Behaviors, tracking and stabilisation
 
 `simulatedBehaviorsMoveInTheWorld` (OpenGL, the reference Gravity.hfpl) parents a falling

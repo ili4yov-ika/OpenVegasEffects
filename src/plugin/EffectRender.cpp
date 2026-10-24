@@ -1,13 +1,15 @@
 #include "plugin/EffectRender.h"
 #include "plugin/NativeEffectRender.h"
+#include "plugin/OfxHost.h"
 
 #include <QColor>
 #include <QImage>
 #include <cmath>
 
 // The built-in effects the port draws itself (Blur, Color Correction Wheels
-// and the simple color effects) over an RGBA8888 frame. Every other effect id
-// is handed to the native .hfpl host (applyNativeEffectToImage).
+// and the simple color effects) over an RGBA8888 frame. OpenFX plug-ins go to
+// the OpenFX host, every other effect id to the native .hfpl host
+// (applyNativeEffectToImage).
 namespace openvegas {
 namespace plugin {
 
@@ -237,6 +239,9 @@ bool applyEffectToImage(QImage& image, const core::Identifier& pluginId, const Q
     if (pluginId.value() == QLatin1String(kBuiltinBrightness)) {
         applyBrightness(image, parseBrightness(parameters));
         return true;
+    }
+    if (isOfxPlugin(pluginId)) {
+        return applyOfxEffectToImage(image, pluginId, parameters, time);
     }
     return applyNativeEffectToImage(image, pluginId, parameters, time);
 }

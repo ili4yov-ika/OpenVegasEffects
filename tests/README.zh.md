@@ -377,6 +377,18 @@ Layout 框：在字母落下的过程中，它就是没有逐字 Behavior 的同
 和 ID）检查 Effects 面板的收藏和最近使用，五个最近使用项中最新的在最后，以及面板中位于各分类之上
 的 Favorites/Recents 行。
 
+## OpenFX 插件
+
+测试用纯 C API 构建自己的 OpenFX 插件（`tests/ofx/TestOfxPlugins.cpp`），以包的形式放在
+`build/.../ofx-plugins`：OpenVegasTest 含一个滤镜（Gain、Mode 选项、Tint 颜色、Keep Alpha、
+带归一化默认值的 Offset）和一个转场（Wipe）；OpenVegasCrash 在 describe 时崩溃；
+`ofx_describe_sandbox` 在独立进程中描述插件。`ofxPluginsAreListedAsEffectsAndTransitions` 通过
+`OFX_PLUGIN_PATH` 找到它们，检查规格（来自 grouping 的类别、参数与分组、FXID、不含 Crash）以及
+第二次扫描时的插件缓存。`ofxEffectRendersThroughTheHost` 直接以及在镜头中渲染滤镜（按索引或标签的
+选项、颜色、布尔值、预乘 alpha、按左下原点换算为像素的归一化默认值），并以插件的 FXID 保存并重新打开
+镜头。`ofxTransitionMixesBothClips` 直接以及在两个剪辑之间运行 Wipe。`ofxSandboxDescribesPlugins`
+将沙盒的记录与进程内的记录比较，并确认崩溃的插件只会被报告。
+
 ## Behavior、跟踪与稳定
 
 `simulatedBehaviorsMoveInTheWorld`（OpenGL，参考程序的 Gravity.hfpl）把一个下落的平面设为一个

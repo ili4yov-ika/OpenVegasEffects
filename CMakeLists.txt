@@ -236,6 +236,8 @@ add_executable(OpenVegasEffects WIN32
     src/plugin/Plugin.h
     src/plugin/PluginManager.h
     src/plugin/PluginManager.cpp
+    src/plugin/OfxHost.h
+    src/plugin/OfxHost.cpp
     src/plugin/NativePlugin.h
     src/plugin/NativePlugin.cpp
     src/plugin/NativeEffectRender.h
@@ -505,6 +507,8 @@ set_property(SOURCE src/ui/LayoutPanel.cpp APPEND PROPERTY OBJECT_DEPENDS
 target_include_directories(OpenVegasEffects PRIVATE src)
 
 target_include_directories(OpenVegasEffects PRIVATE thirdparty/vlc/include)
+# The OpenFX headers (the API only): the OpenFX host includes them.
+target_include_directories(OpenVegasEffects PRIVATE thirdparty/openfx/include)
 target_compile_definitions(OpenVegasEffects PRIVATE OPENVEGAS_VLC_RUNTIME_DIR="${OPENVEGAS_VLC_RUNTIME_DIR}")
 target_link_libraries(OpenVegasEffects PRIVATE
     Qt6::Core
