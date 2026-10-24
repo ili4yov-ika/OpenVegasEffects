@@ -11,6 +11,12 @@
 #include "composition/Composition.h"
 #include "model3d/ModelLoader.h"
 
+// A media item of the project: a file (or an image sequence, or a model's
+// animation) with what is known about it - its kind, streams, size, rate,
+// duration, pixel aspect and alpha - and the user's overrides of those
+// (Media Properties). Overrides never change what the file says; the
+// accessors return the value in effect.
+
 namespace openvegas {
 namespace media {
 
@@ -45,6 +51,8 @@ const QStringList& audioFileExtensions()
     return extensions;
 }
 
+// Overrides the pixel aspect with one of the named ones (Custom is not
+// offered for media).
 void MediaAsset::setPixelAspectOverride(bool enabled, int pixelAspect)
 {
     using composition::Composition;
@@ -60,6 +68,7 @@ double MediaAsset::pixelAspectValue() const
                : m_filePixelAspect;
 }
 
+// The named aspect the file's own value is (square when it is none).
 int MediaAsset::filePixelAspectKind() const
 {
     using composition::Composition;
@@ -70,6 +79,9 @@ int MediaAsset::filePixelAspectKind() const
     return Composition::SquarePixels;
 }
 
+// Sets the file and takes its kind from the extension; a still's size,
+// format and alpha are read at once, everything else waits for the probe.
+// The media ID is derived from the path.
 void MediaAsset::setFilePath(const QString& path)
 {
     m_filePath = path;
@@ -105,6 +117,9 @@ void MediaAsset::setFilePath(const QString& path)
     m_id = core::Identifier(QStringLiteral("media:") + m_filePath);
 }
 
+// The numbered stills around a file that make an image sequence with it:
+// same prefix, tail and extension, consecutive numbers. Empty for a single
+// file.
 QStringList findImageSequence(const QString& file)
 {
     const QFileInfo info(file);
@@ -142,6 +157,8 @@ QStringList findImageSequence(const QString& file)
     return files;
 }
 
+// An image sequence as one video item, named "<first> - <last>", its path
+// the first file with a marker appended.
 MediaAsset MediaAsset::fromImageSequence(const QStringList& files, double frameRate)
 {
     MediaAsset asset;
@@ -165,6 +182,7 @@ MediaAsset MediaAsset::fromImageSequence(const QStringList& files, double frameR
     return asset;
 }
 
+// The still of an image sequence shown at a time.
 QString MediaAsset::sequenceFileAt(double seconds) const
 {
     if (m_sequenceFiles.isEmpty()) return {};
@@ -198,6 +216,7 @@ void MediaAsset::setFrameRateOverride(bool enabled, double rate)
     m_frameRateOverride = rate > 0.0 ? normalizedRate(rate) : 0.0;
 }
 
+// The rate in effect: a sequence's own, an override, or the file's.
 double MediaAsset::frameRate() const
 {
     if (isImageSequence()) return m_sequenceFrameRate;
@@ -205,6 +224,8 @@ double MediaAsset::frameRate() const
     return m_fileFrameRate;
 }
 
+// An overridden rate plays the same frames faster or slower, so the
+// duration scales with it.
 double MediaAsset::durationSeconds() const
 {
     if (!isImageSequence() && m_overrideFrameRate && m_fileFrameRate > 0.0)
@@ -212,6 +233,7 @@ double MediaAsset::durationSeconds() const
     return m_durationSeconds;
 }
 
+// Where in the file a time of the (rate-overridden) item is.
 double MediaAsset::sourceSecondsAt(double seconds) const
 {
     if (isImageSequence() || !m_overrideFrameRate || m_fileFrameRate <= 0.0) return seconds;
@@ -242,6 +264,9 @@ void MediaAsset::setColorSpace(int space)
     m_colorSpace = space >= AutomaticSpace && space <= Rec709 ? space : AutomaticSpace;
 }
 
+// Whether decoded frames need interpretFrame: premultiplied alpha, full
+// range video, or a color matrix other than the decoder's (BT.709 above
+// 576 lines, BT.601 below).
 bool MediaAsset::reinterpretsPixels() const
 {
     if (alphaMode() == PremultipliedAlpha) return true;
@@ -253,6 +278,9 @@ bool MediaAsset::reinterpretsPixels() const
     return (m_colorSpace == Rec709) != decoderRec709;
 }
 
+// Applies the overrides to a decoded frame: divides premultiplied alpha
+// out, undoes the decoder's range expansion for full-range video, and
+// re-matrixes the colors when the forced color space differs.
 QImage MediaAsset::interpretFrame(const QImage& frame) const
 {
     if (frame.isNull() || !reinterpretsPixels()) return frame;
@@ -298,6 +326,7 @@ QImage MediaAsset::interpretFrame(const QImage& frame) const
     return image;
 }
 
+// The file to read: the path without its marker, a sequence's first still.
 QString MediaAsset::sourcePath() const
 {
     if (m_kind == MediaKind::Model3DAnimation && m_filePath.endsWith(QLatin1String(kModelAnimationMarker)))
@@ -305,6 +334,8 @@ QString MediaAsset::sourcePath() const
     return isImageSequence() ? m_sequenceFiles.first() : m_filePath;
 }
 
+// A 3D model file's animations as a media item of their own (Import > 3D
+// Model Animation), kept apart from the model by a marker on the path.
 MediaAsset MediaAsset::fromModelAnimation(const QString& file, double durationSeconds, double frameRate)
 {
     MediaAsset asset;

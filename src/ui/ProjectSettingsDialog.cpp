@@ -18,6 +18,12 @@
 #include <QTabWidget>
 #include <QVBoxLayout>
 
+// Project Settings (and New Project Settings): the editor timeline's format -
+// size, frame rate, duration and audio rate (Editor) - and the project's
+// render settings - color bit depth, antialiasing and the map sizes
+// (Rendering), each tab with its Restore Defaults. Composite shots have
+// formats of their own (CompositionSettingsDialog).
+
 namespace openvegas {
 namespace ui {
 namespace {
@@ -41,6 +47,7 @@ const char* const kFrameRates[] = {
     QT_TRANSLATE_NOOP("ProjectSettingsDialog", "59.94"), QT_TRANSLATE_NOOP("ProjectSettingsDialog", "60"),
 };
 
+// An editor of a texture map's size, in steps of 64 pixels.
 QSpinBox* mapSizeSpin(QWidget* parent, const char* name)
 {
     auto* spin = new QSpinBox(parent);
@@ -51,6 +58,8 @@ QSpinBox* mapSizeSpin(QWidget* parent, const char* name)
     return spin;
 }
 
+// The number a frame rate's text starts with ("29.97 (NTSC)" -> 29.97, a
+// comma as decimal point too); fallback when there is none.
 double leadingNumber(const QString& value, double fallback)
 {
     const QRegularExpressionMatch match =
@@ -190,6 +199,7 @@ ProjectSettingsDialog::ProjectSettingsDialog(const Values& values, bool newProje
     setRendering(values.render);
 }
 
+// Shows render settings on the Rendering tab.
 void ProjectSettingsDialog::setRendering(const composition::ProjectRenderSettings& render)
 {
     int bitDepth = 0;
@@ -206,6 +216,7 @@ void ProjectSettingsDialog::setRendering(const composition::ProjectRenderSetting
     m_modelMaps->setValue(render.modelTextureMaxSize);
 }
 
+// The settings as edited.
 ProjectSettingsDialog::Values ProjectSettingsDialog::values() const
 {
     Values v;
@@ -225,6 +236,7 @@ ProjectSettingsDialog::Values ProjectSettingsDialog::values() const
     return v;
 }
 
+// The format a new project gets (Options' new project defaults).
 void ProjectSettingsDialog::restoreEditorDefaults()
 {
     composition::Composition fresh;
@@ -239,11 +251,14 @@ void ProjectSettingsDialog::restoreEditorDefaults()
     if (sample >= 0) m_sampleRate->setCurrentIndex(sample);
 }
 
+// The render settings Options sets for new projects.
 void ProjectSettingsDialog::restoreRenderingDefaults()
 {
     setRendering(app::defaultProjectRenderSettings());
 }
 
+// A project's settings: its editor sequence, or where that is unset (older
+// projects) the composition's own format.
 ProjectSettingsDialog::Values ProjectSettingsDialog::fromComposition(const composition::Composition& composition)
 {
     const composition::EditorSequence& sequence = composition.editorSequence();
@@ -259,6 +274,8 @@ ProjectSettingsDialog::Values ProjectSettingsDialog::fromComposition(const compo
     return v;
 }
 
+// Writes the settings into the project; the editor's out point is kept
+// inside the new duration.
 void ProjectSettingsDialog::apply(const Values& values, composition::Composition& composition)
 {
     composition::EditorSequence& sequence = composition.editorSequence();

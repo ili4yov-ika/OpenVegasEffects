@@ -43,11 +43,20 @@
 #include <QTimeEdit>
 #include <QVBoxLayout>
 
+// The Options dialog (ui/OptionsDialog.ui): a category list and one page per
+// category, built in code. Every value is stored under the reference's own
+// "Options/..." key in the application's INI settings, so the two programs
+// read the same names. loadSettings fills the pages, saveSettings writes
+// them back (OK) and Cancel reloads, since MainWindow reuses one dialog.
+// Restore Defaults resets only the page shown. Settings marked * take
+// effect after a restart.
+
 namespace openvegas {
 namespace ui {
 
 namespace {
 
+// The settings keys, as the reference names them.
 const char* const kMaxUndo             = "Options/MaxUndo";
 const char* const kDefaultTemplate     = "Options/DefaultTemplate";
 const char* const kShotDuration        = "Options/CompositeShotDefaultDuration";
@@ -147,6 +156,8 @@ const PromptDefinition kPromptDefinitions[] = {
                        "Prompt me for the project settings to use before creating a new project"), true},
 };
 
+// A command that can be given a shortcut: the action's object name (found
+// anywhere under the main window), its label and its default keys.
 struct ShortcutDefinition
 {
     const char* actionName;
@@ -196,12 +207,14 @@ const ShortcutDefinition kShortcutDefinitions[] = {
     {"actionCloseActivePanel", "Close Active Panel", "Ctrl+W"},
 };
 
+// The settings file every option is kept in.
 QSettings optionSettings()
 {
     return QSettings(QSettings::IniFormat, QSettings::UserScope,
                      app::Settings::organizationName(), app::Settings::applicationName());
 }
 
+// A folder under the user's local application data.
 QString defaultDataDirectory(const QString& child)
 {
     return QDir::toNativeSeparators(
@@ -235,6 +248,8 @@ const char* const kDefaultLabelColors[] = {
     "#4aa6a6", "#4f78b8", "#8662b0", "#b95f8a"
 };
 
+// A label's color button: filled with the color, its name as text in a
+// color that stays readable on it.
 void setLabelColorButton(QPushButton* button, const QColor& color)
 {
     const QColor valid = color.isValid() ? color : QColor(QStringLiteral("#808080"));
@@ -247,6 +262,7 @@ void setLabelColorButton(QPushButton* button, const QColor& color)
                                                    : QStringLiteral("black")));
 }
 
+// An explanatory note on a page, in the theme's dim text color.
 QWidget* makePageLabel(const QString& text)
 {
     auto* label = new QLabel(text);
@@ -337,6 +353,8 @@ void OptionsDialog::reject()
     QDialog::reject();
 }
 
+// Gives the actions under root the shortcuts stored in Options (or their
+// defaults); MainWindow calls it at start-up and after OK.
 void OptionsDialog::applyShortcuts(QWidget* root)
 {
     if (!root) {
@@ -379,12 +397,15 @@ const QStringList& OptionsDialog::categoryNames()
     return names;
 }
 
+// Opens the page of a category, by its untranslated name.
 void OptionsDialog::showCategory(const QString& name)
 {
     const int row = categoryNames().indexOf(name);
     if (row >= 0) m_ui->categoryList->setCurrentRow(row);
 }
 
+// Plugins: whether to use the plugins of a VEGAS Effects installation found
+// on the machine, and further folders to load .hfpl plugins from.
 QWidget* OptionsDialog::buildPluginsPage()
 {
     auto* page = new QWidget(this);
@@ -460,6 +481,7 @@ QWidget* OptionsDialog::buildPluginsPage()
     return page;
 }
 
+// Lists a plugin folder (once) with the number of plugins it holds.
 void OptionsDialog::addPluginFolder(const QString& folder)
 {
     if (!m_pluginFolders) return;
@@ -474,6 +496,8 @@ void OptionsDialog::addPluginFolder(const QString& folder)
     item->setToolTip(QDir::toNativeSeparators(path));
 }
 
+// Says how many plugins the installation's folder holds; with none, its
+// switch is disabled and the note says to add a folder instead.
 void OptionsDialog::updatePluginStatus()
 {
     if (!m_installationPluginStatus) return;
@@ -492,6 +516,9 @@ void OptionsDialog::updatePluginStatus()
     m_useInstallationPlugins->setEnabled(count > 0);
 }
 
+// General: undo depth, the default AV template, default durations of
+// shots, the editor and planes, audio waveforms, project file options and
+// analytics.
 QWidget* OptionsDialog::buildGeneralPage()
 {
     auto* page = new QWidget;
@@ -573,6 +600,8 @@ QWidget* OptionsDialog::buildGeneralPage()
     return page;
 }
 
+// Interface: language, theme, high-DPI scaling, menu bar and color picker
+// behaviour.
 QWidget* OptionsDialog::buildInterfacePage()
 {
     auto* page = new QWidget;
@@ -627,6 +656,8 @@ QWidget* OptionsDialog::buildInterfacePage()
     return page;
 }
 
+// Export: default export and snapshot folders, the time format, file name
+// handling and the completion beep.
 QWidget* OptionsDialog::buildExportPage()
 {
     auto* page = new QWidget;
@@ -687,6 +718,8 @@ QWidget* OptionsDialog::buildExportPage()
     return page;
 }
 
+// Lets the user pick a folder (or a file to save, browseFile) for a path
+// field.
 void OptionsDialog::browseDirectory(QLineEdit* target)
 {
     const QString start = target->text().trimmed();
@@ -710,6 +743,9 @@ void OptionsDialog::browseFile(QLineEdit* target, const QString& filter)
     }
 }
 
+// Deletes a cache file or a cache folder's contents (the folder too with
+// removeRoot), after asking. The home folder and drive roots are refused,
+// so a mistyped path cannot wipe them.
 void OptionsDialog::clearManagedPath(const QString& path, const QString& description,
                                      bool removeRoot)
 {
@@ -855,6 +891,8 @@ QWidget* OptionsDialog::buildCachePage()
     return page;
 }
 
+// Display: the thumbnail cache, checkerboards, floor plane, mouse
+// coordinates, viewer updates during playback and the motion path.
 QWidget* OptionsDialog::buildDisplayPage()
 {
     auto* page = new QWidget(this);
@@ -907,6 +945,8 @@ QWidget* OptionsDialog::buildDisplayPage()
     return page;
 }
 
+// Render: turbo rendering, render threads, hardware decoding and encoding,
+// 8-bit decoding, and the defaults of new projects' 3D render settings.
 QWidget* OptionsDialog::buildRenderPage()
 {
     auto* page = new QWidget(this);
@@ -963,6 +1003,8 @@ QWidget* OptionsDialog::buildRenderPage()
     return page;
 }
 
+// Quality Profiles: the viewer's quality and resolution while playing and
+// while paused.
 QWidget* OptionsDialog::buildQualityProfilesPage()
 {
     auto* page = new QWidget(this);
@@ -999,6 +1041,8 @@ QWidget* OptionsDialog::buildQualityProfilesPage()
     return page;
 }
 
+// Prompts & Warnings: one switch per question or warning the program can
+// show (kPromptDefinitions).
 QWidget* OptionsDialog::buildPromptsPage()
 {
     auto* page = new QWidget(this);
@@ -1016,6 +1060,7 @@ QWidget* OptionsDialog::buildPromptsPage()
     return page;
 }
 
+// Labels: the names and colors of the eight media labels.
 QWidget* OptionsDialog::buildLabelsPage()
 {
     auto* page = new QWidget(this);
@@ -1056,6 +1101,8 @@ QWidget* OptionsDialog::buildLabelsPage()
     return page;
 }
 
+// Voiceover: the input device, channels, sample rate, countdown and
+// whether the project is muted while recording.
 QWidget* OptionsDialog::buildVoiceoverPage()
 {
     auto* page = new QWidget(this);
@@ -1095,6 +1142,8 @@ QWidget* OptionsDialog::buildVoiceoverPage()
     return page;
 }
 
+// Proxies & Pre-Renders: where proxies and pre-renders go, proxy quality
+// and encoder, the pre-render preview mode, and the GPU used for proxies.
 QWidget* OptionsDialog::buildProxiesPage()
 {
     auto* page = new QWidget(this);
@@ -1212,6 +1261,7 @@ QWidget* OptionsDialog::buildProxiesPage()
     return page;
 }
 
+// Shortcuts: a key sequence editor per command of kShortcutDefinitions.
 QWidget* OptionsDialog::buildShortcutsPage()
 {
     auto* page = new QWidget(this);
@@ -1256,6 +1306,7 @@ QWidget* OptionsDialog::buildShortcutsPage()
     return page;
 }
 
+// Auto Save: the switch, the interval and the folder autosaves go to.
 QWidget* OptionsDialog::buildAutoSavePage()
 {
     auto* page = new QWidget(this);
@@ -1305,6 +1356,8 @@ void OptionsDialog::onCategoryChanged(int row)
     }
 }
 
+// Resets the controls of the page shown to the defaults; nothing is stored
+// until OK.
 void OptionsDialog::onRestoreDefaults()
 {
     const int idx = currentIndex();
@@ -1411,6 +1464,9 @@ void OptionsDialog::onRestoreDefaults()
     }
 }
 
+// Writes every page to the settings. Refused, with the reason, when two
+// commands share a shortcut. Tells MainWindow when the plugin folders
+// changed, so the plugins are scanned again.
 bool OptionsDialog::saveSettings()
 {
     QHash<QString, int> assigned;
@@ -1538,6 +1594,8 @@ bool OptionsDialog::saveSettings()
     return true;
 }
 
+// Fills every page from the settings, with the reference's defaults where
+// nothing is stored.
 void OptionsDialog::loadSettings()
 {
     const QSettings s = optionSettings();
@@ -1681,6 +1739,7 @@ void OptionsDialog::loadSettings()
     updatePluginStatus();
 }
 
+// "Restore '<page>' Defaults", for the page shown.
 void OptionsDialog::updateRestoreLabel()
 {
     const int idx = currentIndex();

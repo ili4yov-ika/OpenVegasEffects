@@ -13,6 +13,13 @@
 
 #include <cmath>
 
+// The reference's scrubber number field: read-only text that changes its
+// value while dragged left or right (one step per pixel; with Shift, in
+// snapping increments every 5 pixels; with Ctrl, where enabled, a click
+// flips the sign), and turns into an ordinary editor when clicked or
+// tabbed into. Escape restores the value the edit started with. While
+// dragging, the pointer is hidden and held in place.
+
 namespace openvegas::ui {
 
 DoubleScrubberSpinBox::DoubleScrubberSpinBox(QWidget* parent)
@@ -41,6 +48,7 @@ DoubleScrubberSpinBox::~DoubleScrubberSpinBox()
     showPointer();
 }
 
+// The next multiple of increment above (upwards) or below the value.
 double DoubleScrubberSpinBox::snapped(double value, double increment, bool upwards)
 {
     if (increment == 0.0) return value;
@@ -54,6 +62,8 @@ double DoubleScrubberSpinBox::snapped(double value, double increment, bool upwar
     return steps * increment;
 }
 
+// The value with at most `decimals` decimals and no trailing zeros beyond
+// the first `keep`.
 QString DoubleScrubberSpinBox::formatted(double value, int decimals, int keep)
 {
     const QString text = QString::number(value, 'f', qMax(0, decimals));
@@ -68,6 +78,7 @@ QString DoubleScrubberSpinBox::formatted(double value, int decimals, int keep)
     return text.left(qMax(lastNonZero + 1, keep > 0 ? dot + 1 + keep : 0));
 }
 
+// Read-only, scrubbed by dragging, with the prefix and suffix shown.
 void DoubleScrubberSpinBox::setScrubberMode()
 {
     const bool blocked = blockSignals(true);
@@ -80,6 +91,7 @@ void DoubleScrubberSpinBox::setScrubberMode()
     blockSignals(blocked);
 }
 
+// Edited as text: the bare number, all selected.
 void DoubleScrubberSpinBox::setEditMode()
 {
     m_prefix = prefix();
@@ -91,6 +103,7 @@ void DoubleScrubberSpinBox::setEditMode()
     lineEdit()->selectAll();
 }
 
+// Back to the value before the drag or edit, without reporting a change.
 void DoubleScrubberSpinBox::revert()
 {
     const bool blocked = blockSignals(true);
@@ -102,6 +115,7 @@ void DoubleScrubberSpinBox::revert()
     blockSignals(blocked);
 }
 
+// A field that takes no focus hands it back to its parent after an edit.
 void DoubleScrubberSpinBox::focusParentIfNoFocus()
 {
     if (hasFocus() && focusPolicy() == Qt::NoFocus && parentWidget() && !parentWidget()->hasFocus())
@@ -115,6 +129,8 @@ void DoubleScrubberSpinBox::showPointer()
     m_pointerHidden = false;
 }
 
+// The mouse on the text: press starts a scrub, moving changes the value,
+// release ends it - or, without a drag, starts editing the text.
 bool DoubleScrubberSpinBox::eventFilter(QObject* object, QEvent* event)
 {
     if (object != lineEdit() || !isEnabled()) return QDoubleSpinBox::eventFilter(object, event);
@@ -203,6 +219,7 @@ bool DoubleScrubberSpinBox::eventFilter(QObject* object, QEvent* event)
     return QDoubleSpinBox::eventFilter(object, event);
 }
 
+// Tabbing in edits the text; a mouse focus does not (the click decides).
 void DoubleScrubberSpinBox::focusInEvent(QFocusEvent* event)
 {
     const Qt::FocusReason reason = event->reason();
@@ -218,6 +235,8 @@ void DoubleScrubberSpinBox::focusInEvent(QFocusEvent* event)
     }
 }
 
+// Leaving keeps a typed value; leaving it unchanged just goes back to
+// scrubbing, and losing focus otherwise reverts.
 void DoubleScrubberSpinBox::focusOutEvent(QFocusEvent* event)
 {
     switch (event->reason()) {
@@ -257,6 +276,7 @@ void DoubleScrubberSpinBox::keyPressEvent(QKeyEvent* event)
     if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) event->accept();
 }
 
+// A field that takes no focus lets the wheel scroll its parent.
 void DoubleScrubberSpinBox::wheelEvent(QWheelEvent* event)
 {
     if (focusPolicy() == Qt::NoFocus && isReadOnly()) {
@@ -279,12 +299,14 @@ void DoubleScrubberSpinBox::stepBy(int steps)
     selectAll();
 }
 
+// Scrubbing shows the display decimals; editing up to three.
 QString DoubleScrubberSpinBox::textFromValue(double value) const
 {
     return isReadOnly() ? formatted(value, int(m_displayDecimals), int(m_displayDecimals))
                         : formatted(value, 3, 0);
 }
 
+// As wide as its text, so the field grows and shrinks with the value.
 QSize DoubleScrubberSpinBox::sizeHint() const
 {
     QSize hint = QDoubleSpinBox::sizeHint();

@@ -25,12 +25,30 @@
 #include "plugin/NativeEffectRender.h"
 #include "composition/Composition.h"
 
+// A console probe of the reference's native .hfpl plugins, used to find out
+// how they talk to their host before the application's host
+// (plugin/NativeEffectRender) was written to match. It loads one plugin or
+// every plugin in a folder, hands it a stand-in of the host's service table
+// (parameters, layers, timeline, scratch textures, buffers, renderbuffers -
+// the callbacks below), and runs it in the context the last argument names:
+// metadata, parameters, render, transition, audio, behavior, geometry,
+// custom UI, tracking and others (see the usage line in main). What a plugin
+// asks for and draws is printed; HFPL_PROBE_* environment variables add
+// traces of values, GL state and synchronised passes.
+//
+// It is not part of the application: CMake target hfpl_runtime_probe,
+// EXCLUDE_FROM_ALL, built with "tools/msvc_build.cmd probe". The findings
+// are in MARKDOWN/RE_HFPL_Plugins.md.
+
 namespace {
 
+// Traces collected by the stand-in services, printed after each run.
 QString g_bufferGlState;
 QStringList g_scratchTrace;
 bool g_forceDiagnosticMatrices = false;
 
+// A vertex buffer a plugin created through the host (reserved while it
+// holds it).
 struct ProbeVbo
 {
     GLuint id = 0;
@@ -45,6 +63,7 @@ QVector<GLuint> g_probeRenderbuffers;
 QStringList g_renderbufferTrace;
 qint32 g_probeFrameDimension = 1;
 
+// The bound GL program, framebuffer and uniform values, for traces.
 QString currentProgramValues(QOpenGLExtraFunctions* gl)
 {
     GLint program = 0;
@@ -99,6 +118,8 @@ QString currentProgramValues(QOpenGLExtraFunctions* gl)
         .arg(program).arg(framebuffer).arg(values.join(QLatin1Char('|')));
 }
 
+// A std::string (MSVC layout: buffer or pointer, size at +0x10, capacity at
+// +0x18) stored at an offset of a loaded module, for reading plugin tables.
 QString msvcStringAtRva(const void* moduleBase, quintptr rva)
 {
     const auto* object = static_cast<const char*>(moduleBase) + rva;
@@ -295,11 +316,14 @@ int clearRenderbuffer(quint64, quint64, qint32 renderbuffer)
     return g_probeRenderbuffers.contains(GLuint(renderbuffer)) ? 0 : -16;
 }
 
+// Places a callback in the host service table at its byte offset.
 void putService(QByteArray& api, int offset, void* callback)
 {
     std::memcpy(api.data() + offset, &callback, sizeof(callback));
 }
 
+// The host's parameter services answer with each parameter's default, so a
+// plugin runs as if newly applied.
 float defaultScalarParameter(quint64, const char* key, quint32)
 {
     const QByteArray name = key ? QByteArray(key) : QByteArray();
@@ -437,6 +461,8 @@ int defaultNotifyProgress(quint64, qint32, qint32)
     return 0;
 }
 
+// The host's scratch texture service: a real texture in the probe's GL
+// context, traced with the formats the plugin asked for.
 quint32 probeScratchTexture(quint64, quint64, qint32 width, qint32 height,
                             quint32 internalFormat, quint32 pixelFormat,
                             quint32 allocationQualifier, qint32, quint64,
@@ -506,6 +532,8 @@ int probeClearScratchTexture(quint64, quint64, qint32 texture)
     return texture > 0 ? 0 : -8;
 }
 
+// Where a plugin's DLL dependencies are when none is given: the folder that
+// holds Plugins/ (the reference's application folder).
 QString inferredDependencyDirectory(const QString& pluginPath)
 {
     QDir dir = QFileInfo(pluginPath).absoluteDir(); // category

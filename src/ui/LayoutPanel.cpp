@@ -21,6 +21,12 @@
 #include <cmath>
 #include <numeric>
 
+// The Layout panel (ui/panels/Layout.ui): the selected layers' box in frame
+// pixels - X and Y of the corner or edge picked in the direction grid, width
+// and height (optionally linked) - mirror and rotate buttons, and aligning
+// to the frame or to the selection and distributing three or more layers.
+// The panel only computes boxes; MainWindow applies them to the layers.
+
 namespace openvegas {
 namespace ui {
 
@@ -93,6 +99,8 @@ LayoutPanel::LayoutPanel(QWidget* parent)
     };
     auto* directionGroup = new QButtonGroup(form.widgetDirection);
     directionGroup->setExclusive(true);
+    // The icon buttons' flat look, in the theme's colors when the dark theme
+    // is on and the palette's otherwise.
     const bool dark = !qApp->styleSheet().isEmpty();
     const auto& colors = themeColors();
     const QString border = dark ? colors.lineColor.name() : palette().mid().color().name();
@@ -155,6 +163,8 @@ LayoutPanel::LayoutPanel(QWidget* parent)
     connect(m_scaleLinked, &QToolButton::toggled, this, [this](bool on) {
         if (on && m_height->value() > 0.0) m_linkedAspect = m_width->value() / m_height->value();
     });
+    // A typed or scrubbed number reports the new box; with the link on, the
+    // other size follows the ratio it had when linked.
     const auto onEdited = [this](QDoubleSpinBox* source) {
         if (m_updating || !m_hasSelection) return;
         if (m_scaleLinked->isChecked() && (source == m_width || source == m_height)
@@ -179,6 +189,7 @@ LayoutPanel::LayoutPanel(QWidget* parent)
     clearSelection();
 }
 
+// Picks which point of the box X and Y refer to.
 void LayoutPanel::setDirection(Direction direction)
 {
     if (m_direction == direction) {
@@ -205,6 +216,7 @@ void LayoutPanel::setSelectionBounds(const QRectF& bounds)
     setSelectionBounds(QVector<QRectF>{bounds});
 }
 
+// The boxes of the selected layers; the fields show the box around them all.
 void LayoutPanel::setSelectionBounds(const QVector<QRectF>& bounds)
 {
     if (bounds.isEmpty()) {
@@ -219,6 +231,7 @@ void LayoutPanel::setSelectionBounds(const QVector<QRectF>& bounds)
     updateEnabled();
 }
 
+// The frame "Align To: Timeline" aligns to.
 void LayoutPanel::setFrameRect(const QRectF& frame)
 {
     if (!frame.isEmpty()) {
@@ -265,6 +278,7 @@ void LayoutPanel::refreshFields(bool force)
     m_updating = false;
 }
 
+// The box the fields describe, from the picked point back to the corner.
 QRectF LayoutPanel::boundsFromFields() const
 {
     const int index = static_cast<int>(m_direction);
@@ -275,6 +289,8 @@ QRectF LayoutPanel::boundsFromFields() const
     return QRectF(m_x->value() - w * fx, m_y->value() - h * fy, w, h);
 }
 
+// Reports a new box: with several layers selected, each is moved and scaled
+// with the box around them all.
 void LayoutPanel::emitBounds(const QRectF& bounds)
 {
     if (m_selectionBounds.size() > 1 && !m_bounds.isEmpty()) {
@@ -299,6 +315,8 @@ void LayoutPanel::emitBounds(const QRectF& bounds)
     emit boundsEdited(bounds);
 }
 
+// Aligns each selected box's edge or centre to the frame or to the box
+// around the selection.
 void LayoutPanel::applyAlignment(Qt::Alignment alignment)
 {
     if (!m_hasSelection) {
@@ -327,6 +345,9 @@ void LayoutPanel::applyAlignment(Qt::Alignment alignment)
     }
 }
 
+// Spaces three or more boxes evenly between the first and the last, by
+// their left, right, top or bottom edges or their centres (the mode is the
+// button's icon name).
 void LayoutPanel::applyDistribution(const QString& mode)
 {
     if (m_selectionBounds.size() < 3) return;
@@ -362,6 +383,7 @@ void LayoutPanel::applyDistribution(const QString& mode)
     emit selectionBoundsEdited(changed);
 }
 
+// Enables what the selection allows.
 void LayoutPanel::updateEnabled()
 {
     if (!m_x) {

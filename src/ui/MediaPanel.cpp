@@ -39,6 +39,17 @@
 #include <algorithm>
 #include <functional>
 
+// The Media panel (ui/panels/Media.ui): the project's composite shots and
+// media, searchable, arranged by name or type and grouped by folder or kind,
+// as a list or as thumbnails. It imports (buttons and file drops), starts
+// drags into the timeline, and edits what belongs to a media item - its
+// label color, Media Properties (aspect, rate, alpha, color, decoding,
+// audio stream), a model's import settings and materials, its proxy and
+// relinking - each change as one undo step.
+//
+// Item data: UserRole the asset's index in the media manager, +1 its path
+// (the drag payload), +2 its label color.
+
 namespace openvegas {
 namespace ui {
 
@@ -46,6 +57,7 @@ namespace {
 // Item data: a composite shot's id, on rows that list a shot.
 constexpr int kShotIdRole = Qt::UserRole + 3;
 
+// Undo of a label color change.
 class MediaLabelCommand : public QUndoCommand
 {
 public:
@@ -62,7 +74,6 @@ private:
     std::function<void(const QColor&)> m_apply;
     QColor m_before, m_after;
 };
-// One pixel aspect override change: (overridden, PAR) before and after.
 // What Media Properties edits on an asset (MediaOverrideOptions, a
 // sequence's rate, a still's alpha and aspect).
 struct MediaOverrides
@@ -115,6 +126,7 @@ struct MediaOverrides
     bool sameAlpha(const MediaOverrides& o) const { return alpha == o.alpha && alphaMode == o.alphaMode; }
 };
 
+// Undo of a Media Properties change.
 class MediaOverridesCommand : public QUndoCommand
 {
 public:
@@ -128,6 +140,7 @@ private:
     MediaOverrides m_before, m_after;
 };
 
+// The kind's name, also the key "Arrange By: Type" sorts by.
 QString kindText(media::MediaKind kind)
 {
     switch (kind) {
@@ -213,6 +226,7 @@ MediaPanel::MediaPanel(QWidget* parent)
             this, &MediaPanel::newCompositeShotRequested);
     connect(m_removeButton, &QToolButton::clicked, this, &MediaPanel::removeSelected);
 
+    // List or thumbnail view, and the Arrange By and Group By menus.
     auto* viewModes = new QButtonGroup(this);
     m_list->setIconSize(QSize(12, 16));
     viewModes->setExclusive(true);
@@ -299,6 +313,8 @@ MediaPanel::MediaPanel(QWidget* parent)
     });
 }
 
+// A new manager (another project) starts a new epoch: undo records of the
+// previous one then do nothing.
 void MediaPanel::setMediaManager(media::MediaManager* manager)
 {
     if (m_manager != manager) ++m_managerEpoch;
@@ -308,6 +324,7 @@ void MediaPanel::setMediaManager(media::MediaManager* manager)
 
 void MediaPanel::setUndoStack(QUndoStack* stack) { m_undoStack = stack; }
 
+// Sets a media item's label color (an invalid color removes it), undoably.
 void MediaPanel::setMediaLabel(const core::Identifier& id, const QColor& color)
 {
     if (!m_manager) return;
@@ -334,6 +351,7 @@ void MediaPanel::setMediaPixelAspect(const core::Identifier& id, bool overridden
     setMediaOverrides(id, edited);
 }
 
+// Applies what Media Properties changed on an item as one undo step.
 void MediaPanel::setMediaOverrides(const core::Identifier& id, const media::MediaAsset& edited)
 {
     if (!m_manager) return;
@@ -379,6 +397,8 @@ void MediaPanel::setMediaOverrides(const core::Identifier& id, const media::Medi
     else { command->redo(); delete command; }
 }
 
+// Media Properties of a video, image or sound; a relink chosen there is
+// passed on.
 void MediaPanel::showMediaProperties(const core::Identifier& id)
 {
     if (!m_manager) return;
@@ -390,6 +410,8 @@ void MediaPanel::showMediaProperties(const core::Identifier& id)
     if (!dialog.relinkPath().isEmpty()) emit relinkRequested(asset.filePath(), dialog.relinkPath());
 }
 
+// A 3D model's import settings and material edits, undoably; new import
+// settings read the model again.
 void MediaPanel::showModelProperties(const core::Identifier& id)
 {
     if (!m_manager) return;
@@ -451,6 +473,7 @@ QString MediaPanel::selectedCompositeShotId() const
     return item ? item->data(kShotIdRole).toString() : QString();
 }
 
+// The path of the selected media item, or "".
 QString MediaPanel::selectedFilePath() const
 {
     if (!m_manager || !m_list) {
@@ -468,6 +491,7 @@ QString MediaPanel::selectedFilePath() const
     return QString();
 }
 
+// The row of the asset at an index of the media manager, or null.
 QListWidgetItem* MediaPanel::itemForAsset(int index) const
 {
     if (!m_manager || index < 0 || index >= m_manager->assets().size()) {
@@ -481,6 +505,7 @@ QListWidgetItem* MediaPanel::itemForAsset(int index) const
     return nullptr;
 }
 
+// What follows the name in a row: kind, size, duration, pixel aspect, proxy.
 QString MediaPanel::metadataText(const media::MediaAsset& asset) const
 {
     QString meta = kindText(asset.kind());
@@ -496,6 +521,8 @@ QString MediaPanel::metadataText(const media::MediaAsset& asset) const
     return meta;
 }
 
+// Lists the shots and the media matching the search, keeping the selection.
+// Missing files are shown in red; thumbnails of stills are cached by file.
 void MediaPanel::rebuildList()
 {
     if (!m_list || !m_manager) {
@@ -620,6 +647,7 @@ void MediaPanel::rebuildList()
     updateCount();
 }
 
+// A folder heading of the panel's own (not a folder on disk).
 void MediaPanel::createFolder()
 {
     bool ok = false;
@@ -631,6 +659,8 @@ void MediaPanel::createFolder()
     }
 }
 
+// A shot's menu (open, properties, primary, save, delete) or a media item's
+// (relink, properties, proxy, label).
 void MediaPanel::showContextMenu(const QPoint& position)
 {
     QListWidgetItem* item = m_list->itemAt(position);
@@ -693,6 +723,7 @@ void MediaPanel::showContextMenu(const QPoint& position)
             });
         }
     }
+    // The eight labels of Options > Labels, by their names and colors there.
     QMenu* labels = menu.addMenu(tr("Media Label"));
     const char* names[] = {"Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "Pink"};
     const char* colors[] = {"#c94b4b", "#d9823b", "#d1b849", "#55a868", "#4aa6a6", "#4f78b8", "#8662b0", "#b95f8a"};
@@ -727,6 +758,8 @@ void MediaPanel::showContextMenu(const QPoint& position)
     if (!newPath.isEmpty()) emit relinkRequested(oldPath, newPath);
 }
 
+// Removes the selected media item from the project; a selected shot is
+// handed to MainWindow to delete.
 void MediaPanel::removeSelected()
 {
     if (!m_manager || !m_list) {
@@ -761,6 +794,8 @@ void MediaPanel::updateCount()
         tr("%1 item(s)").arg(m_manager->assets().size() + m_shots.size()));
 }
 
+// A row's drag data: a shot's ID, or a media item's path (and its file URL,
+// so other applications can take it too).
 QMimeData* MediaPanel::dragData(const QListWidgetItem* item) const
 {
     if (!item) return nullptr;
@@ -777,6 +812,8 @@ QMimeData* MediaPanel::dragData(const QListWidgetItem* item) const
     return mime;
 }
 
+// Starts the drag of a row once the mouse moved far enough with the button
+// down.
 bool MediaPanel::eventFilter(QObject* watched, QEvent* event)
 {
     if (m_list && watched == m_list->viewport()) {
@@ -815,6 +852,7 @@ void MediaPanel::dragEnterEvent(QDragEnterEvent* event)
     }
 }
 
+// Files dropped on the panel are imported.
 void MediaPanel::dropEvent(QDropEvent* event)
 {
     const QMimeData* mime = event->mimeData();

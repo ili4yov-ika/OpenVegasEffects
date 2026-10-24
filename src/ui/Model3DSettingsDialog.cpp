@@ -22,6 +22,13 @@
 #include "model3d/ModelLoader.h"
 #include "ui/TimelineParameterEditor.h"
 
+// 3D Model Properties: how a model file is imported (Advanced: axes,
+// anchor, unit and scale, normals, UV), its groups (Groups) and its
+// materials (Materials), edited per material with the rows its illumination
+// model uses. Update Preview reads the file again with the settings chosen;
+// material edits are kept as differences from what the file says, so they
+// survive a re-import.
+
 namespace openvegas {
 namespace ui {
 
@@ -78,6 +85,7 @@ Model3DSettingsDialog::Model3DSettingsDialog(const QString& filePath,
     resize(520, 520);
 }
 
+// Advanced: the import settings, grouped as the reference groups them.
 QWidget* Model3DSettingsDialog::buildAdvancedTab()
 {
     auto* page = new QWidget(this);
@@ -147,6 +155,7 @@ QWidget* Model3DSettingsDialog::buildMaterialsTab()
     return m_materials;
 }
 
+// The materials that differ from the file's own, by name.
 QVector<model3d::Material> Model3DSettingsDialog::editedMaterials() const
 {
     QVector<model3d::Material> edited;
@@ -159,6 +168,9 @@ QVector<model3d::Material> Model3DSettingsDialog::editedMaterials() const
     return edited;
 }
 
+// One group per material, its diffuse color as icon, with an editor row for
+// each property its illumination model has. Changing the model rebuilds the
+// rows, after the editor's signal returns.
 void Model3DSettingsDialog::rebuildMaterialRows()
 {
     m_materials->clear();
@@ -193,6 +205,8 @@ void Model3DSettingsDialog::rebuildMaterialRows()
             m_materials->setItemWidget(item, 1, timelineParameterEditor(
                 m_materials, spec, QStringLiteral("materialRow_%1_%2").arg(m).arg(key), read, write, m_materialReaders));
         };
+        // Editor specs and row builders for colors, percentages (stored as
+        // 0..1) and plain numbers.
         const auto percent = [](double maximum = 100.0) {
             plugin::EffectParameterSpec spec;
             spec.type = QStringLiteral("double"); spec.minimum = 0.0; spec.maximum = maximum;
@@ -318,6 +332,7 @@ void Model3DSettingsDialog::rebuildMaterialRows()
     }
 }
 
+// Groups: the model's node names.
 QWidget* Model3DSettingsDialog::buildGroupsTab()
 {
     m_groups = new QTreeWidget(this);
@@ -328,6 +343,7 @@ QWidget* Model3DSettingsDialog::buildGroupsTab()
     return m_groups;
 }
 
+// Shows import settings in the Advanced tab.
 void Model3DSettingsDialog::applyToControls(const model3d::ImportSettings& settings)
 {
     m_flipYZAxis->setChecked(settings.flipYZAxis);
@@ -342,6 +358,7 @@ void Model3DSettingsDialog::applyToControls(const model3d::ImportSettings& setti
     m_flipUVCoordinates->setChecked(settings.flipUVCoordinates);
 }
 
+// The import settings as chosen.
 model3d::ImportSettings Model3DSettingsDialog::settings() const
 {
     model3d::ImportSettings settings;
@@ -359,6 +376,8 @@ model3d::ImportSettings Model3DSettingsDialog::settings() const
     return settings;
 }
 
+// Reads the model with the current settings, re-applies the material
+// edits and summarizes what was read (or why it failed).
 void Model3DSettingsDialog::updatePreview()
 {
     // Edits made so far survive reading the file again.

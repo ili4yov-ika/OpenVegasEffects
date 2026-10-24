@@ -16,15 +16,24 @@
 #include <algorithm>
 #include <optional>
 
+// Effect presets (.hfpr): a saved chain of effect instances, written in the
+// same <Instance> form a project stores effects in, under a <Preset> root
+// that says whether it is 2D or 3D, its format version and which kinds of
+// effects it holds. The Library panel lists them; applying one adds its
+// effects to a clip.
+
 namespace openvegas {
 namespace project {
 namespace {
 
+// An attribute that holds 0 or 1.
 bool flag(const QDomElement& element, const char* name)
 {
     return element.attribute(QString::fromLatin1(name)).trimmed().toInt() != 0;
 }
 
+// Opens and parses a preset; result says why it failed (unreadable, not a
+// preset, or of a newer format than this version understands).
 bool readDocument(const QString& path, QDomDocument* document, int* result)
 {
     QFile file(path);
@@ -47,6 +56,7 @@ bool readDocument(const QString& path, QDomDocument* document, int* result)
 
 } // namespace
 
+// The message the user sees for a PresetResult.
 QString effectPresetError(int code)
 {
     // The reference's strings, translated in the context its QObject::tr uses.
@@ -70,6 +80,8 @@ QString effectPresetError(int code)
     return QCoreApplication::translate("QObject", "Error during preset creation.");
 }
 
+// A preset's description (name, ID, kind, what it holds) without its
+// effects - what the Library lists.
 bool readEffectPreset(const QString& path, EffectPreset* preset, int* result)
 {
     QDomDocument document;
@@ -93,6 +105,7 @@ bool readEffectPreset(const QString& path, EffectPreset* preset, int* result)
     return true;
 }
 
+// The effects of a 2D preset, their keys in frames at the given rate.
 QVector<composition::Effect> effectPresetEffects(const QString& path, double fps, int* result)
 {
     QDomDocument document;
@@ -110,6 +123,9 @@ QVector<composition::Effect> effectPresetEffects(const QString& path, double fps
     return effects;
 }
 
+// Saves effects as a 2D preset with a new ID; returns a PresetResult. The
+// Has*Effects flags come from the reference's catalog of its plug-ins, and
+// nothing is written when no instance could be.
 int writeEffectPreset(const QString& path, const QVector<composition::Effect>& effects, double fps)
 {
     if (path.trimmed().isEmpty()) return PresetNoPath;
@@ -153,6 +169,7 @@ int writeEffectPreset(const QString& path, const QVector<composition::Effect>& e
     return PresetOk;
 }
 
+// Every readable preset in a folder and its subfolders, by name.
 QVector<EffectPreset> scanEffectPresets(const QString& directory)
 {
     QVector<EffectPreset> presets;
@@ -168,6 +185,8 @@ QVector<EffectPreset> scanEffectPresets(const QString& directory)
     return presets;
 }
 
+// The path itself if nothing is there, else "<name> (n).<suffix>" with the
+// first free n.
 QString uniqueFilePath(const QString& path)
 {
     QFileInfo info(path);

@@ -12,6 +12,12 @@
 
 #include "render/VideoEncoder.h"
 
+// Export presets: what a preset holds, its .hfxp file (the reference's XML -
+// <Preset><MP4|AVI|MOV|WAV|ImageSequence> with an <ExportPreset> header and
+// a PropertyManager of named values), the built-in presets, the checks the
+// encoders' limits impose, and the FFmpeg arguments and filters a preset
+// turns into.
+
 namespace openvegas {
 namespace render {
 
@@ -32,6 +38,7 @@ QString formatTag(ExportFormat format)
     return QString();
 }
 
+// The format a file's element names; false for an unknown one.
 bool formatFromTag(const QString& tag, ExportFormat* format)
 {
     for (ExportFormat f : {ExportFormat::MP4, ExportFormat::AVI, ExportFormat::MOV,
@@ -101,6 +108,7 @@ QHash<QString, QString> readProperties(const QDomElement& properties)
     return values;
 }
 
+// The translation context of each format's messages, in ExportFormat order.
 const char* const kFormatContexts[] = {"MP4ExportPreset", "AVIExportPreset", "MOVExportPreset",
                                        "WAVExportPreset", "ImageSequenceExportPreset"};
 
@@ -111,6 +119,7 @@ const char* formatContext(ExportFormat format)
 
 } // namespace
 
+// The output file's extension (an image sequence's, by its image format).
 QString ExportPreset::extension() const
 {
     switch (format) {
@@ -129,6 +138,7 @@ QString ExportPreset::extension() const
     return QStringLiteral("mp4");
 }
 
+// The size exported for a source of the given size ("Use Source" per axis).
 QSize ExportPreset::resolution(const QSize& source) const
 {
     return QSize(widthUseSource ? source.width() : qMax(1, width),
@@ -140,6 +150,7 @@ double ExportPreset::frameRateFor(double source) const
     return frameRateUseSource || frameRate <= 0.0 ? source : frameRate;
 }
 
+// The names the interface shows the formats by.
 QString exportFormatName(ExportFormat format)
 {
     switch (format) {
@@ -158,12 +169,14 @@ QString exportFormatName(ExportFormat format)
     return QString();
 }
 
+// A built-in preset's name is translated; a user's is shown as written.
 QString exportPresetDisplayName(const ExportPreset& preset)
 {
     return preset.userCreated ? preset.name
                               : QCoreApplication::translate("ExportPreset", preset.name.toUtf8().constData());
 }
 
+// The Resolution and Framerate columns of the preset list.
 QString exportPresetResolutionText(const ExportPreset& preset)
 {
     if (!preset.hasVideo()) return QStringLiteral("-");
@@ -193,6 +206,8 @@ QString exportPresetFileSuffix()
     return QStringLiteral("hfxp");
 }
 
+// Writes a preset as the reference does, with only the properties its
+// format has; the file is replaced atomically.
 bool writeExportPreset(const QString& path, const ExportPreset& p, QString* error)
 {
     QDomDocument doc;
@@ -285,6 +300,8 @@ bool writeExportPreset(const QString& path, const ExportPreset& p, QString* erro
     return true;
 }
 
+// Reads a preset file; its name is the file's. Missing or unreadable values
+// keep the defaults, enumerations are clamped to their range.
 bool readExportPreset(const QString& path, ExportPreset* preset, QString* error)
 {
     QFile file(path);
@@ -524,6 +541,10 @@ QVector<ExportPreset> builtInExportPresets()
     return presets;
 }
 
+// The reasons a preset cannot export a source of the given size and rate -
+// the reference's messages: a stream must be on, H.264 needs even sizes,
+// CineForm multiples of 16 x 8 and its RGB format for alpha, DV its exact
+// PAL or NTSC format. Empty when it can.
 QStringList validateExportPreset(const ExportPreset& p, const QSize& source, double sourceFps)
 {
     QStringList problems;
@@ -579,6 +600,9 @@ QStringList validateExportPreset(const ExportPreset& p, const QSize& source, dou
     return problems;
 }
 
+// FFmpeg's video codec arguments for a preset: H.264 through the chosen
+// encoder (software or hardware) with the preset's profile and rate control,
+// ProRes by profile, CineForm, Photo-JPEG, uncompressed or DV.
 QStringList exportVideoArguments(const ExportPreset& p, const QString& h264Encoder)
 {
     QStringList args;
@@ -647,6 +671,8 @@ QStringList exportVideoArguments(const ExportPreset& p, const QString& h264Encod
     return args;
 }
 
+// The scaling filter from the shot's frames to the preset's size, by its
+// scale mode: stretched, fitted with bars, or filled and cropped.
 QString exportVideoFilter(const ExportPreset& p, const QSize& source, double pixelAspect)
 {
     const bool square = std::abs(pixelAspect - 1.0) <= 1e-9;
@@ -682,6 +708,9 @@ QString exportVideoFilter(const ExportPreset& p, const QSize& source, double pix
     return chain.join(QLatin1Char(','));
 }
 
+// For YUV output: converts with the BT.709 matrix in limited range and tags
+// the stream so, so players do not guess (and shift the colors). RGB output
+// is left as it is.
 QStringList withVideoColorTags(QStringList arguments)
 {
     const int pixelFormat = arguments.lastIndexOf(QStringLiteral("-pix_fmt"));
@@ -703,6 +732,8 @@ QStringList withVideoColorTags(QStringList arguments)
     return arguments;
 }
 
+// FFmpeg's audio arguments: AAC at the preset's bit rate or 16-bit PCM,
+// always stereo.
 QStringList exportAudioArguments(const ExportPreset& p)
 {
     if (!p.hasAudio()) return {QStringLiteral("-an")};
