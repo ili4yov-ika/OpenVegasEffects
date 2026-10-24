@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Normalize floating-point properties inside QDoubleSpinBox UI blocks."""
+"""Normalize floating-point properties inside QDoubleSpinBox UI blocks.
+
+Usage: python tools/normalize_ui_double_properties.py <form.ui>...
+
+Qt Designer writes <double> for a QDoubleSpinBox's minimum, maximum,
+singleStep and value, but hand-edited or generated forms sometimes carry
+<number>, which uic turns into an integer and so truncates fractional
+limits and steps. Only those four properties of QDoubleSpinBox widgets are
+touched; the rest of the file is kept byte for byte.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +28,7 @@ FLOAT_PROPERTY = re.compile(
 
 
 def normalize(path: Path) -> int:
+    """Rewrite the form in place; returns the number of properties changed."""
     source = path.read_text(encoding="utf-8")
     changes = 0
 
@@ -35,6 +45,7 @@ def normalize(path: Path) -> int:
 
     result = WIDGET.sub(widget, source)
     if result != source:
+        # newline="" keeps the form's own line endings.
         path.write_text(result, encoding="utf-8", newline="")
     return changes
 

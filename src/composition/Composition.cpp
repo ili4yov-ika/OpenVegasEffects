@@ -3,9 +3,16 @@
 #include <algorithm>
 #include <cmath>
 
+// The composition: a project's (or a composite shot's) layers and settings.
+// Layers are kept in drawing order - index 0 is the bottom one - and every
+// change to that order renumbers zIndex so that it always equals the index.
+// A project's composition also owns its composite shots, each a composition
+// of its own.
+
 namespace openvegas {
 namespace composition {
 
+// Appends a layer on top.
 Layer& Composition::addLayer(const QString& name)
 {
     Layer layer;
@@ -15,6 +22,7 @@ Layer& Composition::addLayer(const QString& name)
     return m_layers.last();
 }
 
+// Inserts a layer at an index (0..count); false when it is out of range.
 bool Composition::insertLayer(int index, const Layer& layer)
 {
     if (index < 0 || index > m_layers.size()) {
@@ -27,6 +35,7 @@ bool Composition::insertLayer(int index, const Layer& layer)
     return true;
 }
 
+// A copy of a layer, or a default one for an index out of range.
 Layer Composition::layerCopy(int index) const
 {
     if (index < 0 || index >= m_layers.size()) {
@@ -43,6 +52,7 @@ void Composition::setLayers(const QVector<Layer>& layers)
     }
 }
 
+// Removes a layer; false when the index is out of range.
 bool Composition::removeLayer(int index)
 {
     if (index < 0 || index >= m_layers.size()) {
@@ -64,6 +74,8 @@ bool Composition::removeLayer(int index)
     return true;
 }
 
+// Exchanges two layers' places (the Track panel's Move Up and Move Down
+// when nothing handles moveLayersRequested).
 bool Composition::swapLayers(int a, int b)
 {
     if (a < 0 || a >= m_layers.size() || b < 0 || b >= m_layers.size() || a == b) {
@@ -76,6 +88,10 @@ bool Composition::swapLayers(int a, int b)
     return true;
 }
 
+// Moves layers to a drop position, as dragging their rows in the timeline
+// does: rows are indices, dropRow the index the insertion line is drawn
+// above (count for the very end). newRows receives every layer's new index
+// by its old one. False when nothing would move.
 bool Composition::moveLayers(QVector<int> rows, int dropRow, QVector<int>* newRows)
 {
     const int count = m_layers.size();
@@ -107,6 +123,7 @@ bool Composition::moveLayers(QVector<int> rows, int dropRow, QVector<int>* newRo
     return true;
 }
 
+// The first layer with a name, or null.
 Layer* Composition::layer(const QString& name)
 {
     for (Layer& layer : m_layers) {
@@ -122,6 +139,8 @@ Layer& Composition::layerRef(int index)
     return m_layers[index];
 }
 
+// Adds a clip of a media item to the named layer - a new layer when there is
+// none of that name - and lengthens the composition to hold it.
 Clip* Composition::addClip(const QString& layerName, const core::Identifier& mediaId,
                            double startSeconds, double durationSeconds)
 {
@@ -146,6 +165,7 @@ Clip* Composition::addClip(const QString& layerName, const core::Identifier& med
     return &target->clips.last();
 }
 
+// A clip by its layer's and its own index, or null.
 Clip* Composition::clipAt(int layerIndex, int clipIndex)
 {
     if (layerIndex < 0 || layerIndex >= m_layers.size()) {
@@ -158,6 +178,9 @@ Clip* Composition::clipAt(int layerIndex, int clipIndex)
     return &layer.clips[clipIndex];
 }
 
+// A frame rate as the exact fraction encoders and the project file want:
+// whole rates as n/1, the NTSC rates (23.976, 29.97, 59.94, ...) as
+// n*1000/1001, anything else in thousandths. 30/1 for an invalid rate.
 void Composition::frameRateFraction(double fps, int* numerator, int* denominator)
 {
     int num = 30, den = 1;
@@ -178,6 +201,8 @@ void Composition::frameRateFraction(double fps, int* numerator, int* denominator
     if (denominator) *denominator = den;
 }
 
+// Adds a composite shot at an index (the end for an invalid one). The
+// composition itself and a shot already present are not added.
 void Composition::addCompositeShot(const std::shared_ptr<Composition>& shot, int index)
 {
     if (!shot || shot.get() == this || compositeShot(shot->id())) return;
@@ -185,6 +210,7 @@ void Composition::addCompositeShot(const std::shared_ptr<Composition>& shot, int
     m_compositeShots.insert(index, shot);
 }
 
+// Removes a composite shot; returns the index it had, or -1.
 int Composition::removeCompositeShot(const core::Identifier& id)
 {
     for (int i = 0; i < m_compositeShots.size(); ++i) {
@@ -203,6 +229,7 @@ std::shared_ptr<Composition> Composition::compositeShot(const core::Identifier& 
     return nullptr;
 }
 
+// Resets to a new, empty project with new IDs (File > New).
 void Composition::clear()
 {
     m_id = core::Identifier(QUuid::createUuid().toString(QUuid::WithoutBraces));
@@ -225,6 +252,10 @@ void Composition::clear()
     m_activeShotId.clear();
 }
 
+// Calls visit on every keyframe curve a layer holds: its transform, light,
+// camera and surface curves, motion tracks, the model's node transforms and
+// animations, and its effects' animated parameters. Code that must touch
+// all of a layer's keys (shifting, retiming) goes through this one list.
 void forEachLayerCurve(Layer& layer, const std::function<void(KeyFrameList&)>& visit)
 {
     const auto transformCurves = [&visit](LayerTransform& t) {
@@ -266,6 +297,8 @@ void forEachLayerCurve(Layer& layer, const std::function<void(KeyFrameList&)>& v
     }
 }
 
+// Moves all of a layer's keyframes by a number of frames (moving a layer
+// in time keeps its animation with it).
 void shiftLayerKeys(Layer& layer, int frames)
 {
     if (frames == 0) return;

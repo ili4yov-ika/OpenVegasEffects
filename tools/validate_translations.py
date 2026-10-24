@@ -13,6 +13,9 @@ import xml.etree.ElementTree as ET
 
 
 class Markup(HTMLParser):
+    """The sequence of tags and the link targets of a rich-text message,
+    compared between the source and its translation."""
+
     def __init__(self, text):
         super().__init__()
         self.tags = []
@@ -30,13 +33,16 @@ class Markup(HTMLParser):
 
 
 def validate(path):
+    """Print and count the problems of one catalog; True when there are none."""
     root = ET.parse(path).getroot()
+    # Russian has three plural forms (1, 2-4, 5+); Japanese and Chinese one.
     plural_count = 3 if root.get('language', '').startswith('ru') else 1
     errors = []
     active = 0
     for context in root.findall('context'):
         for message in context.findall('message'):
             translation = message.find('translation')
+            # Messages lupdate no longer finds in the code do not count.
             if translation is not None and translation.get('type') in ('obsolete', 'vanished'):
                 continue
             active += 1
@@ -54,6 +60,8 @@ def validate(path):
                     errors.append(f'{key}: empty translation')
                 if '\ufffd' in text:
                     errors.append(f'{key}: Unicode replacement character')
+                # QString::arg() placeholders (%1, %L1) and tr()'s %n must
+                # all survive, each as many times as in the source.
                 tokens = lambda s: Counter(re.findall(r'%L?\d+|%n', s))
                 if tokens(source) != tokens(text):
                     errors.append(f'{key}: placeholder mismatch')
@@ -75,6 +83,7 @@ def validate(path):
 
 
 if __name__ == '__main__':
+    # Every catalog in translations/, wherever the script is run from.
     paths = sorted((Path(__file__).resolve().parent.parent / 'translations').glob('*.ts'))
     results = [validate(path) for path in paths]
     sys.exit(0 if paths and all(results) else 1)

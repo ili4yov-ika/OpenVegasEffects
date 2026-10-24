@@ -12,10 +12,16 @@
 
 #include <cmath>
 
+// Audio/video templates: the frame size, frame rate, pixel aspect and audio
+// rate a new project or composite shot starts with. The system templates are
+// built in; user templates are .hft files - the reference's XML format, one
+// <Template> in a <Templates> root - in the user's Templates/AV folder.
+
 namespace openvegas {
 namespace app {
 namespace {
 
+// Tests point the user folder elsewhere (setUserTemplateFolderOverride).
 QString s_folderOverride;
 
 QString childText(const QDomElement& parent, const char* name)
@@ -131,6 +137,7 @@ QVector<AVTemplate> builtInTemplates()
     return templates;
 }
 
+// Where user templates are read from and saved to.
 QString userTemplateFolder()
 {
     if (!s_folderOverride.isEmpty()) return s_folderOverride;
@@ -140,6 +147,9 @@ QString userTemplateFolder()
 
 void setUserTemplateFolderOverride(const QString& folder) { s_folderOverride = folder; }
 
+// Every template of every .hft file in the folder, by file name. Files that
+// do not parse and templates without a size or rate are skipped; one without
+// an ID gets a new one, so it can still be chosen.
 QVector<AVTemplate> loadTemplates(const QString& folder)
 {
     QVector<AVTemplate> templates;
@@ -174,6 +184,7 @@ QVector<AVTemplate> loadTemplates(const QString& folder)
     return templates;
 }
 
+// The built-in templates followed by the user's.
 QVector<AVTemplate> allTemplates()
 {
     QVector<AVTemplate> templates = builtInTemplates();
@@ -181,6 +192,7 @@ QVector<AVTemplate> allTemplates()
     return templates;
 }
 
+// The template with an ID, or an empty one (no ID) when none has it.
 AVTemplate templateById(const QString& id)
 {
     for (const AVTemplate& t : allTemplates())
@@ -188,6 +200,10 @@ AVTemplate templateById(const QString& id)
     return AVTemplate{QString(), QString()};
 }
 
+// Saves a template as <ID>.hft in the user folder - a copy of a system
+// template gets an ID of its own - and returns it with its file; an empty
+// template when it could not be written. The frame rate is kept to three
+// decimals, as the reference writes it.
 AVTemplate saveUserTemplate(AVTemplate t)
 {
     if (t.id.isEmpty() || t.system) t.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -224,6 +240,7 @@ AVTemplate saveUserTemplate(AVTemplate t)
     return t;
 }
 
+// Deletes a user template's file; system templates cannot be deleted.
 bool deleteUserTemplate(const AVTemplate& t)
 {
     if (t.system || t.filePath.isEmpty()) return false;

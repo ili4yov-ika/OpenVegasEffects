@@ -30,6 +30,14 @@
 #include "app/Settings.h"
 #include "core/Log.h"
 
+// Export presets in the interface: ExportPresetManager keeps the built-in
+// presets and the user's (one file each in the user preset folder) and the
+// default one; ExportPresetDialog edits a preset's properties as a tree that
+// shows only what applies to its format and codec; ExportPresetsPage is the
+// Export panel's Presets tab - the list, search, the default preset and the
+// create, edit, rename, duplicate and delete commands. Built-in presets are
+// never changed: editing one saves a copy.
+
 namespace openvegas {
 namespace ui {
 
@@ -40,6 +48,8 @@ using render::ExportPreset;
 
 const QString kDefaultKey = QStringLiteral("Options/DefaultExportPreset");
 
+// The settings file the default preset is kept in (the application's own,
+// not the default QSettings scope).
 QSettings exportSettings()
 {
     return QSettings(QSettings::IniFormat, QSettings::UserScope, app::Settings::organizationName(),
@@ -53,6 +63,7 @@ QString translated(const char* context, const char* text)
     return QCoreApplication::translate(context, text);
 }
 
+// The translation context of a format's property names.
 const char* formatContext(ExportFormat format)
 {
     switch (format) {
@@ -162,11 +173,14 @@ ExportPresetManager::ExportPresetManager(const QString& userDirectory, QObject* 
     reload();
 }
 
+// The file of a user preset: <folder>/<name>.<suffix>.
 QString ExportPresetManager::pathFor(const QString& name) const
 {
     return QDir(m_directory).filePath(name + QLatin1Char('.') + render::exportPresetFileSuffix());
 }
 
+// Re-reads the presets: the built-in ones, then the user's sorted by name.
+// Unreadable files are logged and skipped.
 void ExportPresetManager::reload()
 {
     m_presets = render::builtInExportPresets();
@@ -193,6 +207,7 @@ void ExportPresetManager::reload()
     emit presetsChanged();
 }
 
+// A preset by name, or an invalid one.
 ExportPreset ExportPresetManager::preset(const QString& name) const
 {
     for (const ExportPreset& preset : m_presets)
@@ -200,6 +215,8 @@ ExportPreset ExportPresetManager::preset(const QString& name) const
     return ExportPreset{};
 }
 
+// The preset new export tasks use; the built-in default when the chosen one
+// no longer exists.
 QString ExportPresetManager::defaultPreset() const
 {
     const QString name = exportSettings().value(kDefaultKey).toString();
@@ -218,6 +235,9 @@ bool ExportPresetManager::setDefaultPreset(const QString& name, QString* error)
     return true;
 }
 
+// Saves a user preset. previousName is the name it was edited under (empty
+// for a new one): renaming writes the new file, removes the old one and
+// carries the default over. A new name that is already taken is refused.
 bool ExportPresetManager::savePreset(ExportPreset preset, const QString& previousName, QString* error)
 {
     preset.userCreated = true;
@@ -256,6 +276,8 @@ bool ExportPresetManager::savePreset(ExportPreset preset, const QString& previou
     return true;
 }
 
+// Deletes user presets (built-in ones are skipped); if the default was one
+// of them, the built-in default takes its place.
 bool ExportPresetManager::removePresets(const QStringList& names, QString* error)
 {
     bool ok = true;
@@ -272,6 +294,8 @@ bool ExportPresetManager::removePresets(const QStringList& names, QString* error
     return ok;
 }
 
+// Saves a copy of each preset under a free name ("<name> 1", ...); returns
+// the names made.
 QStringList ExportPresetManager::duplicatePresets(const QStringList& names, QString* error)
 {
     QStringList made;
@@ -294,6 +318,8 @@ QStringList ExportPresetManager::duplicatePresets(const QStringList& names, QStr
     return made;
 }
 
+// The name itself if it is free (no preset and no file of that name),
+// otherwise the name with the first free number appended.
 QString ExportPresetManager::uniqueName(const QString& base) const
 {
     const QString trimmed = base.trimmed().isEmpty() ? QCoreApplication::translate("ExportPreset", "New Preset") : base.trimmed();
@@ -374,6 +400,7 @@ ExportPresetDialog::ExportPresetDialog(const ExportPreset& preset, bool creating
         updateProblems();
     });
     connect(m_comment, &QLineEdit::textChanged, this, [this](const QString& text) { m_preset.comment = text; });
+    // A new format starts with the streams and audio codec it can have.
     connect(m_format, &QComboBox::currentIndexChanged, this, [this] {
         const ExportFormat format = ExportFormat(m_format->currentData().toInt());
         if (format == m_preset.format) return;
@@ -384,6 +411,7 @@ ExportPresetDialog::ExportPresetDialog(const ExportPreset& preset, bool creating
                                                           : ExportPreset::AudioCodec::Pcm;
         rebuildProperties();
     });
+    // The search shows matching properties, and whole groups by their name.
     connect(m_search, &QLineEdit::textChanged, this, [this](const QString& text) {
         for (int g = 0; g < m_properties->topLevelItemCount(); ++g) {
             QTreeWidgetItem* group = m_properties->topLevelItem(g);
@@ -400,6 +428,11 @@ ExportPresetDialog::ExportPresetDialog(const ExportPreset& preset, bool creating
     rebuildProperties();
 }
 
+// Builds the property tree for the preset as it is now: a Video group (with
+// its switch where video is optional) - size, scale mode, frame rate, codec
+// or image format, and the H.264, JPEG quality, CineForm and alpha settings
+// when they apply - and an Audio group. Choices that change which rows exist
+// (codec, encoding, image format) rebuild the tree once their signal is done.
 void ExportPresetDialog::rebuildProperties()
 {
     m_properties->clear();
@@ -409,6 +442,9 @@ void ExportPresetDialog::rebuildProperties()
         // A change that alters which rows exist rebuilds after the signal.
         QMetaObject::invokeMethod(this, [this, change] { change(); rebuildProperties(); }, Qt::QueuedConnection);
     };
+    // Small builders for the rows: a group with an optional switch that
+    // enables its rows, a labelled row, a combo box, a list of translated
+    // choices, and number editors.
     const auto group = [&](const char* name, bool* enabled) {
         auto* item = new QTreeWidgetItem(m_properties, {translated(ctx, name)});
         item->setFirstColumnSpanned(false);
@@ -619,6 +655,8 @@ void ExportPresetDialog::rebuildProperties()
     updateProblems();
 }
 
+// Shows what the encoder would reject about the preset, and allows OK only
+// with a name that is not taken.
 void ExportPresetDialog::updateProblems()
 {
     // A shot of 1920 x 1080 at 30 fps stands in for the one exported, for
@@ -706,12 +744,12 @@ ExportPresetsPage::ExportPresetsPage(ExportPresetManager* manager, QWidget* pare
     refresh();
 }
 
+// Lists the presets under Built-In and User, the default in bold, keeping
+// the selection, and fills the default preset box.
 void ExportPresetsPage::refresh()
 {
     m_refreshing = true;
     const QStringList selected = selectedPresets();
-    const QString current = m_default->currentData().toString();
-    Q_UNUSED(current);
     m_tree->clear();
     auto* builtIn = new QTreeWidgetItem(m_tree, {QCoreApplication::translate("biff::ui::exporter::ExportPresetItemModel", "Built-In Presets")});
     builtIn->setToolTip(0, QCoreApplication::translate("biff::ui::exporter::ExportPresetItemModel", "These presets are supplied with %1 and cannot be altered.")
@@ -746,6 +784,7 @@ void ExportPresetsPage::refresh()
     m_refreshing = false;
 }
 
+// The names of the selected presets (the group rows have none).
 QStringList ExportPresetsPage::selectedPresets() const
 {
     QStringList names;
@@ -756,6 +795,7 @@ QStringList ExportPresetsPage::selectedPresets() const
     return names;
 }
 
+// Hides the presets whose name does not contain the search text.
 void ExportPresetsPage::applySearch()
 {
     const QString text = m_search->text().trimmed();
@@ -768,6 +808,7 @@ void ExportPresetsPage::applySearch()
     }
 }
 
+// Logs a failure and tells the user; nothing for an empty message.
 void ExportPresetsPage::report(const QString& message)
 {
     if (message.isEmpty()) return;
@@ -777,6 +818,7 @@ void ExportPresetsPage::report(const QString& message)
     box.exec();
 }
 
+// A new preset starts as a copy of the default one.
 void ExportPresetsPage::createPreset()
 {
     ExportPreset preset = m_manager->preset(m_manager->defaultPreset());
@@ -790,6 +832,7 @@ void ExportPresetsPage::createPreset()
     if (!m_manager->savePreset(dialog.preset(), QString(), &error)) report(error);
 }
 
+// Edits a user preset in place; a built-in one opens as a copy to save.
 void ExportPresetsPage::editPreset(const QString& name)
 {
     const ExportPreset preset = m_manager->preset(name);
@@ -814,6 +857,7 @@ void ExportPresetsPage::editPreset(const QString& name)
     if (!m_manager->savePreset(dialog.preset(), name, &error)) report(error);
 }
 
+// Asks for a new name for a user preset.
 void ExportPresetsPage::renamePreset(const QString& name)
 {
     const ExportPreset preset = m_manager->preset(name);
@@ -836,6 +880,7 @@ void ExportPresetsPage::duplicatePresets(const QStringList& names)
     report(error);
 }
 
+// Deletes the user presets among the names, after asking.
 void ExportPresetsPage::deletePresets(const QStringList& names)
 {
     QStringList removable;
@@ -859,6 +904,7 @@ void ExportPresetsPage::makeDefault(const QString& name)
     if (!name.isEmpty() && !m_manager->setDefaultPreset(name, &error)) report(error);
 }
 
+// The list's context menu; renaming and deleting apply to user presets only.
 void ExportPresetsPage::showContextMenu(const QPoint& position)
 {
     QTreeWidgetItem* item = m_tree->itemAt(position);

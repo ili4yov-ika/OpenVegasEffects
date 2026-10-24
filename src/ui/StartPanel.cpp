@@ -10,6 +10,12 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+// The Start page (ui/panels/Start.ui): new and open project, new composite
+// shot (empty or one per media file), import, the recent projects and the
+// tutorials link. The panel only reports what was clicked; MainWindow acts
+// on it. Its content is shown as a page of the Timeline dock rather than as
+// a dock of its own (takeContentWidget).
+
 namespace openvegas {
 namespace ui {
 
@@ -36,11 +42,13 @@ StartPanel::StartPanel(QWidget* parent)
     connect(newProject, &QToolButton::clicked, this, &StartPanel::newProjectRequested);
     QToolButton* openProject = form.toolButtonOpen;
     connect(openProject, &QToolButton::clicked, this, &StartPanel::openProjectRequested);
+    // Clearing empties the list here at once; MainWindow clears the setting.
     QToolButton* clearRecents = form.toolButtonClearRecents;
     connect(clearRecents, &QToolButton::clicked, this, [this] {
         setRecentProjects(QStringList());
         emit clearRecentsRequested();
     });
+    // Each item carries its full path; double-click or Enter opens it.
     m_recentList = form.listViewRecentProjects;
     connect(m_recentList, &QListWidget::itemActivated,
             this, [this](QListWidgetItem* item) {
@@ -54,6 +62,8 @@ StartPanel::StartPanel(QWidget* parent)
             this, [this](const QString&) { emit tutorialsRequested(); });
 }
 
+// Detaches the form's content so the Timeline dock can show it as its start
+// page; the panel keeps its connections to the widgets inside.
 QWidget* StartPanel::takeContentWidget()
 {
     QWidget* content = widget();
@@ -63,6 +73,8 @@ QWidget* StartPanel::takeContentWidget()
     return content;
 }
 
+// Replaces the list (the settings' recent projects at start-up), keeping the
+// first maxRecentProjects.
 void StartPanel::setRecentProjects(const QStringList& paths)
 {
     m_recentProjects = paths.mid(0, maxRecentProjects);
@@ -82,6 +94,7 @@ void StartPanel::addRecentProject(const QString& path)
     rebuildRecentList();
 }
 
+// One item per project: its file name, with the full path as tooltip.
 void StartPanel::rebuildRecentList()
 {
     m_recentList->clear();

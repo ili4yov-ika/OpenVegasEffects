@@ -34,6 +34,12 @@
 
 #include <cmath>
 
+// The Text panel (ui/panels/Text.ui): the character, paragraph and
+// background formatting of the selected text layer. It edits a copy of the
+// layer's TextStyle - refresh() shows it, commit() reads every control back
+// into it and emits styleEdited, which MainWindow turns into an undoable
+// edit. m_updating keeps refresh() from committing what it is showing.
+
 namespace openvegas {
 namespace ui {
 
@@ -94,6 +100,7 @@ private:
 
 namespace {
 
+// The panel's icons, from resources/icons/text.
 QIcon textIcon(const QString& name)
 {
     return QIcon(QStringLiteral(":/text-icons/%1.svg").arg(name));
@@ -101,6 +108,7 @@ QIcon textIcon(const QString& name)
 
 QIcon pipetteIcon() { return textIcon(QStringLiteral("pipette")); }
 
+// The icon of a caps, decoration, script or expansion toggle, by its name.
 void setToggleIcon(QToolButton* button)
 {
     if (!button) return;
@@ -183,6 +191,8 @@ private:
     bool m_dragging = false;
 };
 
+// Gives a spin box of the form the drag gesture; values are then committed
+// when editing finishes, not on every typed digit.
 void installDesignerScrubber(QDoubleSpinBox* spin)
 {
     if (!spin) return;
@@ -192,6 +202,7 @@ void installDesignerScrubber(QDoubleSpinBox* spin)
     spin->setKeyboardTracking(false);
 }
 
+// A dragging spin box for controls made in code (the additional outlines).
 QDoubleSpinBox* makeSpin(QWidget* parent, const QString& objectName, double minimum,
                          double maximum, const QString& suffix = QString())
 {
@@ -205,6 +216,7 @@ QDoubleSpinBox* makeSpin(QWidget* parent, const QString& objectName, double mini
     return spin;
 }
 
+// The icons of the alignment buttons, in TextStyle::AlignH / AlignV order.
 QIcon alignmentIcon(int index, bool vertical = false)
 {
     static const QStringList horizontal = {"text-left-align", "text-center-align", "text-right-align",
@@ -213,6 +225,8 @@ QIcon alignmentIcon(int index, bool vertical = false)
     return textIcon((vertical ? verticals : horizontal).value(index));
 }
 
+// The reference labels its controls with icons: a label showing the icon of
+// its object name, with the text as tooltip and accessible name.
 QLabel* makeLabel(QWidget* parent, const QString& objectName, const QString& text)
 {
     static const QHash<QString, QString> icons = {
@@ -240,24 +254,6 @@ QLabel* makeLabel(QWidget* parent, const QString& objectName, const QString& tex
     label->setFixedSize(20, 22);
     return label;
 }
-
-QWidget* sectionBody(QGroupBox* group, const QString& name, const QString& title)
-{
-    group->setTitle(QString());
-    auto* layout = new QVBoxLayout(group);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(6);
-    auto* heading = new QLabel(title, group);
-    heading->setObjectName(QStringLiteral("label") + name);
-    heading->setProperty("textSectionHeading", true);
-    heading->setFixedHeight(28);
-    layout->addWidget(heading);
-    auto* content = new QWidget(group);
-    content->setObjectName(QStringLiteral("widget") + name);
-    layout->addWidget(content);
-    return content;
-}
-
 
 } // namespace
 
@@ -349,6 +345,8 @@ TextPanel::TextPanel(QWidget* parent)
         installDesignerScrubber(spin);
     }
 
+    // The form's plain color buttons are replaced by swatches in the same
+    // place of their layouts.
     const auto replaceBoxSwatch = [](QBoxLayout* layout, QToolButton* oldButton) {
         const int index = layout->indexOf(oldButton);
         QWidget* parent = oldButton->parentWidget();
@@ -387,6 +385,8 @@ TextPanel::TextPanel(QWidget* parent)
         rebuildOutlines();
         commit();
     });
+    // Alignment buttons are exclusive; caps and script buttons are exclusive
+    // too but can all be off (None).
     for (int i = 0; i < m_alignH.size(); ++i) {
         m_alignH[i]->setIcon(alignmentIcon(i));
         connect(m_alignH[i], &QToolButton::clicked, this, [this, button = m_alignH[i]] {
@@ -419,6 +419,8 @@ TextPanel::TextPanel(QWidget* parent)
     m_strikethrough->setFont(strikeFont);
     connect(m_underline, &QToolButton::clicked, this, [this] { commit(); });
     connect(m_strikethrough, &QToolButton::clicked, this, [this] { commit(); });
+    // A family is taken once it is one the system has: chosen from the list,
+    // or typed and confirmed; an unknown typed name is reverted.
     connect(m_fontFamily, &QComboBox::currentTextChanged, this, [this](const QString&) {
         if (m_updating || m_fontFamily->findText(m_fontFamily->currentText()) < 0) return;
         refreshFontStyles(m_fontStyle->currentText());
@@ -440,6 +442,8 @@ TextPanel::TextPanel(QWidget* parent)
     m_fontColor->colorPicked = [this] { commit(); };
     m_outlineColor->colorPicked = [this] { commit(); };
     m_backgroundColor->colorPicked = [this] { commit(); };
+    // Switching the background on with zero opacity would show nothing, so
+    // it starts opaque.
     connect(m_backgroundEnabled, &QCheckBox::toggled, this, [this, content = form.widgetBackground](bool enabled) {
         content->setEnabled(enabled);
         if (!m_updating && enabled && m_backgroundOpacity->value() == 0) {
@@ -450,6 +454,7 @@ TextPanel::TextPanel(QWidget* parent)
     for (QDoubleSpinBox* spin : {m_backgroundOpacity, m_backgroundRoundness,
                                  m_backgroundExpansionX, m_backgroundExpansionY}) {
         connect(spin, &QDoubleSpinBox::valueChanged, this, [this, spin](double value) {
+            // Linked expansion: either axis sets both.
             if (!m_updating && !m_expansionLinked->isChecked()) {
                 QDoubleSpinBox* other = spin == m_backgroundExpansionX ? m_backgroundExpansionY
                                       : spin == m_backgroundExpansionY ? m_backgroundExpansionX : nullptr;
@@ -471,6 +476,8 @@ TextPanel::TextPanel(QWidget* parent)
     clearSelection();
 }
 
+// One row per additional outline (outline 2, 3, ...): size, color, screen
+// picker and remove. The list shows up to four rows before it scrolls.
 void TextPanel::rebuildOutlines()
 {
     if (!m_outlines) return;
@@ -531,6 +538,7 @@ void TextPanel::rebuildOutlines()
     }
 }
 
+// Lists the styles of the chosen family and selects the preferred one.
 void TextPanel::refreshFontStyles(const QString& preferredStyle)
 {
     const QSignalBlocker blocker(m_fontStyle);
@@ -546,6 +554,7 @@ void TextPanel::refreshFontStyles(const QString& preferredStyle)
     m_fontStyle->setCurrentIndex(index >= 0 ? index : 0);
 }
 
+// Picks a swatch's color from anywhere on the screen (the pipette buttons).
 void TextPanel::pickScreenColor(ColorSwatchButton* swatch)
 {
     if (!m_hasSelection) return;
@@ -559,6 +568,7 @@ void TextPanel::pickScreenColor(ColorSwatchButton* swatch)
     picker->setFocus();
 }
 
+// Shows the style of the selected text layer and enables the controls.
 void TextPanel::setStyle(const TextStyle& style)
 {
     m_style = style;
@@ -567,6 +577,7 @@ void TextPanel::setStyle(const TextStyle& style)
     updateEnabled();
 }
 
+// No text layer is selected: the controls show the last style, disabled.
 void TextPanel::clearSelection()
 {
     m_hasSelection = false;
@@ -574,6 +585,8 @@ void TextPanel::clearSelection()
     updateEnabled();
 }
 
+// Puts the style into the controls. A family the system does not have
+// (a project from another machine) is added to the list rather than lost.
 void TextPanel::refresh()
 {
     if (!m_fontFamily) {
@@ -641,6 +654,7 @@ void TextPanel::refresh()
     m_updating = false;
 }
 
+// Reads all controls into the style and reports it edited.
 void TextPanel::commit()
 {
     if (m_updating || !m_hasSelection) {
@@ -735,6 +749,7 @@ QString TextPanel::text() const
     return m_style.text;
 }
 
+// Sets the size shown, and the style's, without reporting an edit.
 void TextPanel::setFontSize(int size)
 {
     m_style.fontSize = size;

@@ -14,10 +14,18 @@
 
 #include <functional>
 
+// The export queue behind the Export panel's Tasks tab. A task is a shot,
+// a frame range, a preset and an output file; adding one saves a snapshot
+// of the whole project as it is at that moment, so later edits do not
+// change what the task exports. Tasks run one at a time, each from its
+// snapshot, while the queue is started; the list is kept in an XML file so
+// it survives a restart. A finished task's snapshot is deleted.
+
 namespace openvegas {
 namespace ui {
 namespace {
 
+// The states as the tasks file spells them.
 const char* stateToken(ExportTask::State state)
 {
     switch (state) {
@@ -88,6 +96,8 @@ ExportQueue::~ExportQueue()
     }
 }
 
+// Saves the project to a new .vegfx in the snapshot folder (the system's
+// temporary folder by default); returns its path, or "" on failure.
 QString ExportQueue::writeSnapshot(const composition::Composition& project,
                                    const media::MediaManager& media,
                                    const project::ProjectSaveOptions& options) const
@@ -105,6 +115,8 @@ QString ExportQueue::writeSnapshot(const composition::Composition& project,
     return project::VegfxSerializer::saveToFile(path, project, media, snapshot).isSuccess() ? path : QString();
 }
 
+// Queues the export of a shot's frame range; returns the task's ID, or ""
+// when its snapshot could not be written. A running queue picks it up.
 QString ExportQueue::addTask(const composition::Composition& project, const composition::Composition& shot,
                              const media::MediaManager& media, const QString& preset,
                              const QString& outputPath, int firstFrame, int lastFrame,
@@ -135,6 +147,8 @@ int ExportQueue::indexOf(const QString& id) const
     return -1;
 }
 
+// Removes tasks and their snapshots, cancelling the running one if it is
+// among them.
 void ExportQueue::removeTasks(const QStringList& ids)
 {
     if (ids.contains(m_jobTaskId) && m_job) {
@@ -162,6 +176,7 @@ void ExportQueue::removeFinishedTasks()
     if (!finished.isEmpty()) removeTasks(finished);
 }
 
+// Queues a fresh copy of each task, ready to run again.
 void ExportQueue::duplicateTasks(const QStringList& ids)
 {
     const QVector<ExportTask> current = m_tasks;
@@ -185,6 +200,7 @@ void ExportQueue::duplicateTasks(const QStringList& ids)
     if (m_running && !m_job) runNext();
 }
 
+// Runs the ready tasks one after another until none is left.
 void ExportQueue::start()
 {
     if (m_running) return;
@@ -193,6 +209,8 @@ void ExportQueue::start()
     runNext();
 }
 
+// Stops the queue; the running task is cancelled and becomes ready again,
+// to start over from its first frame.
 void ExportQueue::suspend()
 {
     if (!m_running) return;
@@ -215,6 +233,8 @@ void ExportQueue::suspend()
     emit runningChanged(false);
 }
 
+// Starts the first ready task, or stops the queue when there is none. A
+// task whose snapshot cannot be loaded fails and the next one is tried.
 void ExportQueue::runNext()
 {
     if (!m_running || m_job) return;
@@ -281,6 +301,7 @@ void ExportQueue::runNext()
     job->start();
 }
 
+// Records a task's result and moves on, after the job's signal returns.
 void ExportQueue::jobFinished(const QString& id, bool ok, const QString& message)
 {
     const int row = indexOf(id);
@@ -304,6 +325,7 @@ void ExportQueue::jobFinished(const QString& id, bool ok, const QString& message
     QMetaObject::invokeMethod(this, &ExportQueue::runNext, Qt::QueuedConnection);
 }
 
+// Writes the task list to the tasks file (nothing when there is none set).
 bool ExportQueue::save() const
 {
     if (m_tasksFile.isEmpty()) return true;
@@ -334,6 +356,7 @@ bool ExportQueue::save() const
     return file.commit();
 }
 
+// Reads the task list back; a missing file is an empty queue.
 bool ExportQueue::load()
 {
     if (m_tasksFile.isEmpty()) return false;

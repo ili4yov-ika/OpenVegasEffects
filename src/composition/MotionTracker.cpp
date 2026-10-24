@@ -4,6 +4,12 @@
 #include <cmath>
 #include <limits>
 
+// Point tracking by block matching: the square patch around the point in one
+// frame is looked for in a window around the same place in the next frame,
+// and the best match - the smallest sum of absolute differences after both
+// patches' mean brightness is removed, so a fade does not lose the point -
+// is where the point went. Works on 8-bit grayscale copies of the frames.
+
 namespace openvegas::composition {
 namespace {
 
@@ -13,12 +19,16 @@ QImage gray8(const QImage& image)
         ? image : image.convertToFormat(QImage::Format_Grayscale8);
 }
 
+// Whether the patch of the given radius around (x, y) lies inside the image.
 bool patchFits(const QImage& image, int x, int y, int radius)
 {
     return x - radius >= 0 && y - radius >= 0
         && x + radius < image.width() && y + radius < image.height();
 }
 
+// The zero-mean sum of absolute differences between the patch around
+// (ax, ay) in a and the one around (bx, by) in b: 0 for identical patches,
+// up to 255 per pixel.
 double patchScore(const QImage& a, int ax, int ay, const QImage& b, int bx, int by, int radius)
 {
     const int side = radius * 2 + 1;
@@ -57,6 +67,8 @@ QPointF MotionTracker::trackStep(const QImage& previousFrame, const QImage& curr
 
     const QImage previous = gray8(previousFrame);
     const QImage current = gray8(currentFrame);
+    // The search is exhaustive, so both radii are kept in a range that stays
+    // interactive.
     sampleRadius = qBound(2, sampleRadius, 64);
     searchRadius = qBound(sampleRadius, searchRadius, 256);
     const int px = qRound(point.x());
@@ -77,6 +89,7 @@ QPointF MotionTracker::trackStep(const QImage& previousFrame, const QImage& curr
             }
         }
     }
+    // Confidence: 1 for a perfect match, falling with the mean difference.
     if (confidence) {
         const int pixels = (sampleRadius * 2 + 1) * (sampleRadius * 2 + 1);
         *confidence = qBound(0.0, 1.0 - best / (255.0 * pixels), 1.0);
@@ -84,6 +97,8 @@ QPointF MotionTracker::trackStep(const QImage& previousFrame, const QImage& curr
     return bestPoint;
 }
 
+// Follows a point through a run of frames, frame to frame, starting at
+// firstPoint in the first one; one point per frame.
 QVector<QPointF> MotionTracker::track(const QVector<QImage>& frames, const QPointF& firstPoint,
                                       int sampleRadius, int searchRadius)
 {

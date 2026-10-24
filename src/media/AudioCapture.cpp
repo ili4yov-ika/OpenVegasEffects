@@ -11,10 +11,22 @@
 #elif defined(Q_OS_MACOS)
 #include <CoreAudio/CoreAudio.h>
 #endif
+// Microphone capture for voiceovers through libVLC: the platform's capture
+// access module (DirectShow on Windows, qtsound on macOS, PulseAudio on
+// Linux) opens the chosen input, and VLC hands decoded 16-bit PCM to a
+// callback that applies the recording volume and writes it to a QIODevice.
+// Device IDs are "<module>:<name>" so that start() knows which access
+// module and which device to open; "default" is the system's default input.
+
 namespace openvegas::media {
+
+// The capture devices of the system, by the same names VLC's access modules
+// use to open them.
 QVector<AudioInputDevice> audioInputDevices() {
     QVector<AudioInputDevice> devices;
 #ifdef Q_OS_WIN
+    // DirectShow's audio input category, by friendly name - what dshow-adev
+    // expects. COM is released only if this call initialised it.
     const HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     ICreateDevEnum* enumerator = nullptr;
     if (SUCCEEDED(CoCreateInstance(CLSID_SystemDeviceEnum, nullptr, CLSCTX_INPROC_SERVER,
@@ -40,6 +52,8 @@ QVector<AudioInputDevice> audioInputDevices() {
     }
     if (SUCCEEDED(initialized)) CoUninitialize();
 #elif defined(Q_OS_MACOS)
+    // Every CoreAudio device with an input stream, by UID (what qtsound://
+    // opens) and display name.
     AudioObjectPropertyAddress property{kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
     UInt32 size = 0;
     if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &property, 0, nullptr, &size) == noErr) {
@@ -71,11 +85,15 @@ QVector<AudioInputDevice> audioInputDevices() {
 #endif
     return devices;
 }
+// Starts capturing the device into destination in the given format (16-bit
+// only); false when the device is gone, VLC is missing or it cannot play.
 bool AudioCapture::start(const QString& id, const PcmFormat& format, QIODevice* destination) {
     stop(); m_failed = false;
     if (!format.isValid() || format.sampleFormat() != PcmFormat::Int16 || !destination || !vlcInstance()) return false;
     const auto devices = audioInputDevices();
     if (id != QLatin1String("default") && std::none_of(devices.begin(), devices.end(), [&](const auto& device) { return device.id == id; })) return false;
+    // The ID's "dshow:", "qtsound:" or "pulse:" prefix is cut off to get the
+    // device name; a short live cache keeps the latency low.
     QString location;
     QStringList options{QStringLiteral(":no-video"), QStringLiteral(":live-caching=50")};
 #ifdef Q_OS_WIN
@@ -99,6 +117,7 @@ bool AudioCapture::start(const QString& id, const PcmFormat& format, QIODevice* 
     if (api.libvlc_media_player_play(m_player) != 0) { stop(); return false; }
     return true;
 }
+// Stops and releases the player; after the lock no callback writes anymore.
 void AudioCapture::stop() {
     if (m_player) {
         vlc().libvlc_media_player_stop(m_player);
@@ -106,9 +125,12 @@ void AudioCapture::stop() {
     }
     QMutexLocker lock(&m_mutex); m_destination = nullptr;
 }
+// Whether a write failed or VLC reported an error (the device was unplugged).
 bool AudioCapture::failed() const {
     return m_failed || (m_player && vlc().libvlc_media_player_get_state(m_player) == VlcError);
 }
+// VLC's audio callback, on its own thread: scales the native-endian samples
+// by the recording volume and writes them little-endian, as WAV stores them.
 void AudioCapture::samples(void* opaque, const void* input, unsigned frames, int64_t) {
     auto& self = *static_cast<AudioCapture*>(opaque);
     const size_t count = size_t(frames) * self.m_format.channelCount();

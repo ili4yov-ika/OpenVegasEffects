@@ -14,14 +14,15 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
-namespace openvegas {
-namespace ui {
-namespace {
-
+// Recovered Projects: the autosaves left by sessions that did not close
+// normally (AutoSave), listed with when each was saved. A recovered project
+// can be opened, saved under a name of its own, or deleted.
+//
 // Strings use the reference's own contexts (AutoSaveRecoveryDialog,
 // biff::ui::MainAppWindow), so its catalogues translate them as well.
 
-} // namespace
+namespace openvegas {
+namespace ui {
 
 RecoveredProjectsDialog::RecoveredProjectsDialog(QWidget* parent) : QDialog(parent)
 {
@@ -74,6 +75,7 @@ int RecoveredProjectsDialog::count() const
     return m_entries.size();
 }
 
+// Lists the autosaves again (after a delete), selecting the first.
 void RecoveredProjectsDialog::reload()
 {
     m_entries = autosave::entries();
@@ -90,12 +92,15 @@ void RecoveredProjectsDialog::reload()
     updateButtons();
 }
 
+// The selected autosave, or an empty entry.
 autosave::Entry RecoveredProjectsDialog::current() const
 {
     const int row = m_list->currentItem() ? m_list->indexOfTopLevelItem(m_list->currentItem()) : -1;
     return row >= 0 && row < m_entries.size() ? m_entries.at(row) : autosave::Entry();
 }
 
+// Copies the selected autosave to a .vegfx the user chooses, next to the
+// original project by default; the autosave itself stays in the list.
 void RecoveredProjectsDialog::saveCopy()
 {
     const autosave::Entry entry = current();
@@ -115,6 +120,7 @@ void RecoveredProjectsDialog::saveCopy()
     }
 }
 
+// Deletes the selected autosave's file for good.
 void RecoveredProjectsDialog::deleteCurrent()
 {
     const autosave::Entry entry = current();

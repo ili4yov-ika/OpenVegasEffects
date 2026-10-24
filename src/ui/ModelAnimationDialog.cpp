@@ -17,10 +17,16 @@
 
 #include <cmath>
 
+// 3D Model Animation Properties: one animation of a model layer - its name,
+// the file it comes from (the model itself, or another file relinked to it),
+// which of the file's animation clips it plays, and the frame rate it plays
+// at (the file's, or one chosen). The duration shown follows the choices.
+
 namespace openvegas::ui {
 
 namespace {
 
+// The reference's context for the dialog's strings, so its catalogs apply.
 QString text(const char* source)
 {
     return QCoreApplication::translate("AnimationSettingsDialog", source);
@@ -58,6 +64,8 @@ ModelAnimationDialog::ModelAnimationDialog(const composition::ModelAnimationInst
     m_animation->setObjectName(QStringLiteral("comboBoxAnimation"));
     form->addRow(text(QT_TRANSLATE_NOOP("AnimationSettingsDialog", "Animation")), m_animation);
 
+    // "From File" (0) keeps the file's rate; an override that is none of the
+    // listed rates gets an item of its own so it is shown as it is.
     m_rate = new QComboBox(this);
     m_rate->setObjectName(QStringLiteral("comboBoxAnimationFrameRate"));
     m_rate->addItem(text(QT_TRANSLATE_NOOP("AnimationSettingsDialog", "From File")), 0.0);
@@ -112,6 +120,8 @@ ModelAnimationDialog::ModelAnimationDialog(const composition::ModelAnimationInst
     readFile();
 }
 
+// Relinks the animation to a file. Choosing the model's own file stores no
+// path, so the animation follows the model if that is relinked later.
 void ModelAnimationDialog::setFilePath(const QString& path)
 {
     m_instance.filePath = QFileInfo(path).absoluteFilePath() == QFileInfo(m_modelFile).absoluteFilePath()
@@ -120,6 +130,8 @@ void ModelAnimationDialog::setFilePath(const QString& path)
     readFile();
 }
 
+// Lists the animation clips of the current file with their durations and
+// rates, or says why there are none (missing file, unreadable animation).
 void ModelAnimationDialog::readFile()
 {
     const QString file = m_instance.filePath.isEmpty() ? m_modelFile : m_instance.filePath;
@@ -168,6 +180,7 @@ void ModelAnimationDialog::showDuration()
     m_duration->setText(timecode(frames / rate, rate));
 }
 
+// The animation as edited in the dialog.
 composition::ModelAnimationInstance ModelAnimationDialog::instance() const
 {
     composition::ModelAnimationInstance result = m_instance;
@@ -179,6 +192,7 @@ composition::ModelAnimationInstance ModelAnimationDialog::instance() const
     return result;
 }
 
+// HH:MM:SS:FF at the given rate (rounded to whole frames per second).
 QString ModelAnimationDialog::timecode(double seconds, double rate)
 {
     const int perSecond = qMax(1, int(std::lround(rate)));

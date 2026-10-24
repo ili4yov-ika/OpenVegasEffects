@@ -10,9 +10,16 @@
 #include <QProcess>
 #include <QStandardPaths>
 
+// Proxy media: smaller H.264 copies of video sources that the viewer can
+// decode instead of the originals (Media > Proxy, Options' proxy folder,
+// quality and encoder). FFmpeg makes them one at a time in the background;
+// each is written to "<proxy>.part" and moved into place only when complete,
+// so a cancelled or failed transcode never leaves a proxy that looks valid.
+
 namespace openvegas {
 namespace media {
 
+// The modes as the project file and the settings spell them.
 QString proxyModeToken(ProxyMode mode)
 {
     switch (mode) {
@@ -34,6 +41,9 @@ ProxyMode proxyModeFromToken(const QString& token)
     return ProxyMode::None;
 }
 
+// Where a source's proxy lives: <root>/<project>/<name>-<hash>-<mode>.mp4.
+// The hash covers the source's path, size and modification time, so editing
+// or replacing the source gives a new proxy instead of reusing a stale one.
 QString proxyFilePath(const QString& proxyRoot, const QString& projectName,
                       const QString& sourcePath, ProxyMode mode)
 {
@@ -55,11 +65,15 @@ QString proxyFilePath(const QString& proxyRoot, const QString& projectName,
 QStringList proxyEncodeArguments(const QString& source, const QString& output, ProxyMode mode,
                                  const QString& quality, const QString& encoder)
 {
+    // The CRF (or QSV global quality) of each proxy quality: lower is better.
     const QString token = app::proxyQualityToken(quality);
     const int level = token == QLatin1String("Low") ? 28
         : token == QLatin1String("High") ? 18 : 23;
-    // Frame sizes stay even, which H.264 4:2:0 needs (the reference rejects
-    // odd sources outright).
+    // Performance proxies are a quarter of the source's width and height,
+    // Quality ones half. Frame sizes stay even, which H.264 4:2:0 needs (the
+    // reference rejects odd sources outright). The first video stream only,
+    // no audio: the sound always comes from the original. Quality proxies
+    // are all keyframes (-g 1), so scrubbing never waits for a GOP.
     const QString scale = mode == ProxyMode::Performance
         ? QStringLiteral("scale=trunc(iw/4)*2:trunc(ih/4)*2")
         : QStringLiteral("scale=trunc(iw/2)*2:trunc(ih/2)*2");
@@ -82,6 +96,9 @@ QStringList proxyEncodeArguments(const QString& source, const QString& output, P
     return arguments;
 }
 
+// Moves a finished transcode into place: copied through QSaveFile, so an
+// existing proxy is replaced atomically or not at all, then the temporary
+// file is removed. False, with the reason, when anything fails.
 bool publishProxyFile(const QString& completedPath, const QString& outputPath, QString* error)
 {
     if (error) error->clear();
@@ -121,6 +138,7 @@ ProxyGenerator::~ProxyGenerator()
     cancelAll();
 }
 
+// Queues a proxy unless the same output is already queued or being made.
 void ProxyGenerator::enqueue(const QString& source, const QString& output, ProxyMode mode,
                              const QString& quality, const QString& encoder)
 {
@@ -145,6 +163,8 @@ int ProxyGenerator::pendingCount() const
     return int(m_queue.size()) + (m_process ? 1 : 0);
 }
 
+// Drops the queue and kills the running transcode, removing its partial file.
+// The killed job reports nothing: its signals are disconnected first.
 void ProxyGenerator::cancelAll()
 {
     m_queue.clear();
@@ -158,6 +178,8 @@ void ProxyGenerator::cancelAll()
     }
 }
 
+// Starts the next queued job when none is running. Jobs that cannot start
+// (no ffmpeg on PATH, no proxy folder) are reported as failed at once.
 void ProxyGenerator::startNext()
 {
     if (m_process || m_queue.isEmpty()) return;

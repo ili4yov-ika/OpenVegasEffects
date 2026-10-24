@@ -30,6 +30,12 @@
 #include <QFormLayout>
 #include <QGroupBox>
 
+// TimelineWidget's editing: how changes made in the timeline reach the
+// model and the undo stack, and the property editors of its tree's rows.
+// An edit is bracketed by beginModelEdit and finishModelEdit, which compares
+// the layers before and after and pushes one undo record when they differ;
+// editLayer wraps a single change to one layer that way.
+
 namespace openvegas::ui {
 namespace {
 using namespace composition;
@@ -48,6 +54,9 @@ private:
     CompositionSettings m_before, m_after;
     std::function<void()> m_notify;
 };
+// The undo record of a timeline edit: the layers before and after. The edit
+// is already applied when the record is pushed, so the first redo does
+// nothing.
 class TimelineEdit : public QUndoCommand {
 public:
     TimelineEdit(std::shared_ptr<Composition> comp, QVector<Layer> before, QVector<Layer> after,
@@ -70,10 +79,14 @@ private:
 
 }
 
+// Remembers the layers before an edit (also when a drag in the value graph
+// starts).
 void TimelineWidget::beginModelEdit()
 {
     if (m_comp) { m_editBefore = m_comp->layers(); m_editPending = true; }
 }
+// Ends an edit: records it for undo under the title if anything changed,
+// then rebuilds the tree (rebuild) or re-reads its values.
 void TimelineWidget::finishModelEdit(const QString& title, bool rebuild)
 {
     if (!m_comp || !m_editPending) return;
@@ -92,6 +105,7 @@ void TimelineWidget::finishModelEdit(const QString& title, bool rebuild)
     m_canvas->update(); m_valueGraphView->update();
     emit keyFramesChanged();
 }
+// Adds a plug-in's effect to a clip; returns its index, or -1.
 int TimelineWidget::addEffect(int layerIndex, int clipIndex, const plugin::EffectSpec& spec,
                               double seconds)
 {
@@ -108,6 +122,8 @@ int TimelineWidget::addEffect(int layerIndex, int clipIndex, const plugin::Effec
     return added;
 }
 
+// Adds the effects of a preset file (.hfpr) to a clip, their keys moved to
+// where the clip starts; returns how many were added (0 with the reason).
 int TimelineWidget::addPreset(int layerIndex, int clipIndex, const QString& presetPath, QString* error)
 {
     if (!m_comp || layerIndex < 0 || layerIndex >= m_comp->layers().size()
@@ -135,12 +151,16 @@ int TimelineWidget::addPreset(int layerIndex, int clipIndex, const QString& pres
     return int(effects.size());
 }
 
+// One undoable change to one layer. Ignored while the tree is being rebuilt,
+// when editors report the values they are given.
 void TimelineWidget::editLayer(int index, const QString& title,
     const std::function<void(composition::Layer&)>& edit, bool rebuild)
 {
     if (m_rebuilding || !m_comp || index < 0 || index >= m_comp->layers().size()) return;
     beginModelEdit(); edit(m_comp->layerRef(index)); finishModelEdit(title, rebuild);
 }
+// Switches a layer between 2D and 3D; the first 3D layer of a composition
+// without a camera asks to add one.
 void TimelineWidget::setLayerDimension(int index, composition::LayerDimension dimension)
 {
     if (m_rebuilding || !m_comp || index < 0 || index >= m_comp->layers().size()
@@ -159,12 +179,15 @@ void TimelineWidget::setLayerDimension(int index, composition::LayerDimension di
     m_comp->layerRef(index).dimension = dimension;
     finishModelEdit(QCoreApplication::translate("CompositionTools", "Set Layer Dimension(s)"), true);
 }
+// Rebuilds the tree once, after the current event - never under the signal
+// of a widget the rebuild would delete.
 void TimelineWidget::scheduleRefresh()
 {
     if (m_refreshPending) return;
     m_refreshPending = true;
     QTimer::singleShot(0, this, [this] { m_refreshPending = false; rebuildTree(); });
 }
+// Re-reads every row's value at the playhead and the key buttons.
 void TimelineWidget::refreshValues()
 {
     if (m_rebuilding) return;
@@ -191,6 +214,8 @@ bool TimelineWidget::eventFilter(QObject* object, QEvent* event)
     }
     return QDockWidget::eventFilter(object, event);
 }
+// Shows the rows matching the search, with their parents and everything
+// under a matching row; the lanes follow the visible rows.
 void TimelineWidget::applySearch()
 {
     if (!m_tree) return;
@@ -207,6 +232,10 @@ void TimelineWidget::applySearch()
     syncLanes();
 }
 
+// The editor of an effect parameter's row. A parameter the plug-in does not
+// describe (an unknown effect) is edited as a number or text by its value.
+// Writes from an editor of a tree that has since been rebuilt are dropped
+// (m_treeGeneration).
 void TimelineWidget::buildParameterEditor(QTreeWidgetItem* row, int layerIndex, int clipIndex, int effectIndex, int p)
 {
     const auto& effect = m_comp->layers()[layerIndex].clips[clipIndex].effects[effectIndex];
@@ -266,6 +295,7 @@ void TimelineWidget::buildParameterEditor(QTreeWidgetItem* row, int layerIndex, 
     m_tree->setItemWidget(row, 1, editor);
 }
 
+// The transform rows of a layer, for its dimension.
 void TimelineWidget::buildTransformRows(QTreeWidgetItem* parent, int index)
 {
     // A camera, a light and a point layer have a Target after Position
@@ -281,6 +311,9 @@ void TimelineWidget::buildTransformRows(QTreeWidgetItem* parent, int index)
     }
 }
 
+// One transform property's row with an editor per axis - of the layer, or
+// of a node of its 3D model. A value is set as a key when the property is
+// animated, otherwise as its static value.
 void TimelineWidget::buildTransformRow(QTreeWidgetItem* parent, int index,
                                        composition::TransformProperty prop,
                                        const QString& modelNode, const QVector3D& pivot)
@@ -368,6 +401,8 @@ void TimelineWidget::buildTransformRow(QTreeWidgetItem* parent, int index,
     m_tree->setItemWidget(row, 1, axes);
 }
 
+// The keyframe curves of the current row - all axes of a transform
+// property - that the key buttons act on; none for a locked layer.
 QVector<composition::KeyFrameList*> TimelineWidget::selectedCurves()
 {
     QVector<composition::KeyFrameList*> curves;
@@ -395,6 +430,8 @@ QVector<composition::KeyFrameList*> TimelineWidget::selectedCurves()
     } else if (auto* curve = selectedCurve()) curves.append(curve);
     return curves;
 }
+// Each animatable row's key icon (filled when it has keys), and the toolbar's
+// key toggle and interpolation buttons for the key at the playhead.
 void TimelineWidget::updateKeyButtons()
 {
     if (!m_toggleKeyButton || !m_tree) return;
@@ -442,6 +479,7 @@ void TimelineWidget::updateKeyButtons()
     }
 }
 
+// The add effect (or behavior) menu of a layer's row, for its selected clip.
 void TimelineWidget::showEffectMenu(int layer, bool behaviors, QWidget* anchor)
 {
     if (!m_comp || !m_pluginManager || layer < 0 || layer >= m_comp->layers().size()) return;
@@ -475,6 +513,7 @@ void TimelineWidget::showEffectMenu(int layer, bool behaviors, QWidget* anchor)
     menu.exec(anchor->mapToGlobal(QPoint(0, anchor->height())));
 }
 
+// Composite Shot Properties for the shown shot, as one undo step.
 void TimelineWidget::editCompositionProperties()
 {
     if (!m_comp) return;
@@ -499,6 +538,7 @@ void TimelineWidget::editCompositionProperties()
     else { CompositionSettingsDialog::apply(after, *m_comp); notify(); }
 }
 
+// The editor timeline's format, for the dialog's Match Timeline.
 void TimelineWidget::setMatchFormat(int width, int height, int fpsNumerator, int fpsDenominator)
 {
     m_matchFormat.width = width;
@@ -507,6 +547,7 @@ void TimelineWidget::setMatchFormat(int width, int height, int fpsNumerator, int
     m_matchFormat.fpsDenominator = qMax(1, fpsDenominator);
 }
 
+// Sets the shot's duration (at least one frame), undoably.
 void TimelineWidget::setCompositionDuration(double seconds)
 {
     if (!m_comp || !qIsFinite(seconds)) {
@@ -548,6 +589,7 @@ void TimelineWidget::selectAllRows()
     m_tree->selectAll();
 }
 
+// Masks drawn in the viewer: a shape in its bounds, or a freehand outline.
 void TimelineWidget::addMaskToLayer(int layerIndex, composition::MaskShape shape,
                                     const QRectF& bounds)
 {
@@ -574,6 +616,7 @@ void TimelineWidget::addFreehandMaskToLayer(int layerIndex, const QVector<QPoint
     }, true);
 }
 
+// Stores the path a motion track analysis found.
 void TimelineWidget::setMotionTrackData(int layerIndex, int trackIndex,
                                         const composition::KeyFrameList& xCurve,
                                         const composition::KeyFrameList& yCurve)

@@ -10,6 +10,14 @@
 
 #include <atomic>
 
+// The index of the media cache: one SQLite row per file the application
+// keeps in its media cache folder - waveform peaks, decoded frames and
+// conformed audio (AppMain prefixes their keys "peaks:", "frame:" and
+// "conformed:"). A row holds the file's path, its size and when it was last
+// used, which is what the two pruning policies need: Options' "days to keep"
+// (pruneOlderThan) and the size cap (pruneToBytes, least recently used first).
+// Removing an entry always deletes its file too.
+
 namespace openvegas {
 namespace cache {
 
@@ -18,6 +26,8 @@ CacheDB::~CacheDB()
     close();
 }
 
+// Opens (or creates) the database file and its table; opening an open
+// database does nothing.
 core::Result CacheDB::open(const QString& sqlitePath)
 {
     if (m_db.isOpen()) {
@@ -71,6 +81,8 @@ core::Result CacheDB::open(const QString& sqlitePath)
     return core::Result::ok();
 }
 
+// Closes the connection and unregisters it from Qt, so its name can be used
+// again and no driver handle outlives the object.
 void CacheDB::close()
 {
     if (m_db.isOpen()) {
@@ -88,6 +100,7 @@ bool CacheDB::isOpen() const
     return m_db.isOpen();
 }
 
+// Adds an entry, or replaces the one with the same key (a file written again).
 core::Result CacheDB::put(const CacheEntry& entry)
 {
     if (!isOpen()) {
@@ -113,6 +126,7 @@ core::Result CacheDB::put(const CacheEntry& entry)
     return core::Result::ok();
 }
 
+// The entry of a key; false when there is none.
 bool CacheDB::get(const QString& key, CacheEntry& out) const
 {
     if (!isOpen()) {
@@ -138,6 +152,8 @@ bool CacheDB::get(const QString& key, CacheEntry& out) const
     return true;
 }
 
+// Deletes the least recently used entries, and their files, until the
+// recorded sizes add up to maxBytes at most; returns how many went.
 qint64 CacheDB::pruneToBytes(qint64 maxBytes)
 {
     if (!isOpen()) {
@@ -156,6 +172,8 @@ qint64 CacheDB::pruneToBytes(qint64 maxBytes)
             "SELECT key, cache_file, bytes FROM cache_entries ORDER BY last_used_utc_ms ASC"))) {
         return 0;
     }
+    // Rows are collected first and deleted after: deleting while the SELECT
+    // is still being stepped through would disturb it.
     QStringList keys;
     while (bytes > maxBytes && oldest.next()) {
         keys << oldest.value(0).toString();
@@ -167,6 +185,8 @@ qint64 CacheDB::pruneToBytes(qint64 maxBytes)
     return keys.size();
 }
 
+// Marks an entry used now, so the pruning keeps it longer; false when the
+// key is unknown.
 bool CacheDB::touch(const QString& key, qint64 nowUtcMs)
 {
     if (!isOpen()) {
@@ -179,6 +199,8 @@ bool CacheDB::touch(const QString& key, qint64 nowUtcMs)
     return query.exec() && query.numRowsAffected() > 0;
 }
 
+// The files of the entries matching an SQL condition with a ":t" parameter
+// bound to value, or of all entries for an empty condition.
 QStringList CacheDB::filesWhere(const QString& condition, qint64 value) const
 {
     QStringList files;
@@ -196,6 +218,7 @@ QStringList CacheDB::filesWhere(const QString& condition, qint64 value) const
     return files;
 }
 
+// Deletes an entry's row; its file is the caller's.
 bool CacheDB::removeByKey(const QString& key)
 {
     if (!isOpen()) {
@@ -207,6 +230,8 @@ bool CacheDB::removeByKey(const QString& key)
     return query.exec();
 }
 
+// Deletes the entries, and their files, not used since the given time;
+// returns how many went.
 qint64 CacheDB::pruneOlderThan(qint64 lastUsedBeforeUtcMs)
 {
     if (!isOpen()) {
@@ -224,6 +249,7 @@ qint64 CacheDB::pruneOlderThan(qint64 lastUsedBeforeUtcMs)
     return query.numRowsAffected();
 }
 
+// Empties the cache: every file and every row.
 qint64 CacheDB::purgeAll()
 {
     if (!isOpen()) {
@@ -251,6 +277,8 @@ qint64 CacheDB::entryCount() const
     return query.value(0).toLongLong();
 }
 
+// The size of the cache on disk: the files that still exist, measured now
+// rather than the sizes recorded when they were written.
 qint64 CacheDB::totalBytes() const
 {
     qint64 bytes = 0;

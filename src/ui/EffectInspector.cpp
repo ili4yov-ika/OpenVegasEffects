@@ -39,6 +39,21 @@
 #include <algorithm>
 #include <cmath>
 
+// The Controls panel (ui/panels/Controls.ui): every editable property of the
+// selected layer and clip as one tree - Layer Properties, Tracks, Masks,
+// Effects, the (World) Transform and Behaviors - each row with its editor,
+// and a keyframe button where the property can be animated.
+//
+// The tree is rebuilt (refresh) when the selection or the structure changes,
+// and only its values are re-read (refreshValues, through m_valueReaders)
+// when the playhead moves or a value is edited. Every edit goes through
+// editModel: it changes the composition and pushes one undo record holding
+// the layers before and after; quick successive edits of the same control
+// merge into one.
+//
+// Rows carry their place in the model in item data: UserRole the layer,
+// +1 the clip, +2 the effect, +3 the parameter, +4 the transform property.
+
 namespace openvegas::ui {
 namespace {
 constexpr double kPi = 3.14159265358979323846;
@@ -51,6 +66,8 @@ constexpr int kControlKeyRole = Qt::UserRole + 9;
 constexpr int kStartsHiddenRole = Qt::UserRole + 10;
 // A group of a plug-in's controls: hidden with all of them.
 constexpr int kControlGroupRole = Qt::UserRole + 11;
+// A row's position in the tree ("2/0/5"), and with its text the key its
+// expanded state is remembered by across a rebuild.
 QString itemPath(QTreeWidgetItem* item)
 {
     QStringList result;
@@ -67,6 +84,9 @@ QString expandedKey(QTreeWidgetItem* item)
     return itemPath(item) + QLatin1Char('|') + item->text(0);
 }
 
+// A hue/saturation wheel for the Color Wheels effect: angle is the hue,
+// distance from the centre the saturation, at full value. Clicking or
+// dragging picks a color and reports it.
 class ColorWheelEditor final : public QWidget
 {
 public:
@@ -85,6 +105,7 @@ protected:
     {
         QPainter painter(this); painter.setRenderHint(QPainter::Antialiasing);
         const QRect wheel = rect().adjusted(5, 5, -5, -5);
+        // The wheel is drawn into an image once per size, pixel by pixel.
         if (m_wheel.size() != wheel.size()) {
             m_wheel = QImage(wheel.size(), QImage::Format_ARGB32_Premultiplied);
             const QPointF center(m_wheel.width() / 2., m_wheel.height() / 2.);
@@ -125,6 +146,10 @@ private:
     std::function<void(QColor)> m_changed;
 };
 
+// The undo record of an edit made in the panel: the composition's layers
+// before and after. The edit is already applied when it is pushed, so the
+// first redo does nothing. Edits of the same control (merge key) within
+// 750 ms merge, so dragging a slider is one step in the history.
 class ControlsEditCommand final : public QUndoCommand
 {
 public:
@@ -167,6 +192,7 @@ private:
     bool m_first = true;
 };
 
+// The panel's 20x20 icon buttons (add, remove, keyframe, link, ...).
 QToolButton* smallButton(QWidget* parent, const QString& name, const QString& icon,
                          const QString& tooltip)
 {
@@ -217,6 +243,7 @@ EffectInspector::EffectInspector(QWidget* parent) : QDockWidget(parent)
     connect(m_search, &QLineEdit::textChanged, this, &EffectInspector::applySearch);
     connect(collapse, &QToolButton::clicked, m_tree, &QTreeWidget::collapseAll);
     connect(expand, &QToolButton::clicked, m_tree, &QTreeWidget::expandAll);
+    // An effect row's check box switches the effect on and off.
     connect(m_tree, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem* item, int column) {
         if (m_building || column != 0 || !item->data(0, Qt::UserRole + 2).isValid()) return;
         const int effectIndex = item->data(0, Qt::UserRole + 2).toInt();
@@ -244,6 +271,8 @@ void EffectInspector::setComposition(std::shared_ptr<composition::Composition> c
     refresh();
 }
 
+// Shows a layer and clip - unless the panel is pinned to a layer. Without a
+// clip (-1), the clip under the playhead is shown and followed as it moves.
 void EffectInspector::setSelection(int layerIndex, int clipIndex)
 {
     auto* pin = findChild<QToolButton*>("controlsPin");
@@ -262,6 +291,7 @@ void EffectInspector::setSelection(int layerIndex, int clipIndex)
     refresh();
 }
 
+// The title ("<layer> > <clip number>") and the playhead's timecode.
 void EffectInspector::updateHeader()
 {
     if (!m_selectionTitle || !m_timeLabel) return;
@@ -282,6 +312,7 @@ void EffectInspector::updateHeader()
         .arg(seconds % 60, 2, 10, QLatin1Char('0')).arg(frames % nominal, 2, 10, QLatin1Char('0')));
 }
 
+// Rebuilds the whole tree for the selection, keeping which rows were open.
 void EffectInspector::refresh()
 {
     QHash<QString, bool> expanded;
@@ -312,6 +343,8 @@ void EffectInspector::refresh()
     refreshValues();
 }
 
+// Tracks: each motion track's switch, its point at the playhead and the
+// button that tracks it forward from there (MainWindow does the work).
 void EffectInspector::buildTracks(const composition::Layer& layer)
 {
     auto* root = new QTreeWidgetItem(m_tree, {tr("Tracks")});
@@ -340,6 +373,7 @@ void EffectInspector::buildTracks(const composition::Layer& layer)
             editModel(tr("Enable track"), QStringLiteral("track-enabled-%1").arg(index),
                 [=](composition::Layer& target) { if (index < target.motionTracks.size()) target.motionTracks[index].enabled = value; });
         });
+        // Moving the point by hand discards the tracked path.
         const auto setCoordinate = [this, index](int axis, double value) {
             editModel(tr("Set tracking point"), QStringLiteral("track-point-%1-%2").arg(index).arg(axis),
                 [=](composition::Layer& target) {
@@ -362,6 +396,8 @@ void EffectInspector::buildTracks(const composition::Layer& layer)
     root->setExpanded(!layer.motionTracks.isEmpty());
 }
 
+// Layer Properties: visibility, 2D/3D and the blend mode. Models, cameras
+// and lights are always 3D, so their dimension is fixed.
 void EffectInspector::buildLayerProperties(const composition::Layer& layer)
 {
     auto* root = new QTreeWidgetItem(m_tree, {tr("Layer Properties")});
@@ -402,6 +438,8 @@ void EffectInspector::buildLayerProperties(const composition::Layer& layer)
     });
 }
 
+// Switches the layer between 2D (0) and 3D (1). The first 3D layer of a
+// composition without a camera asks to add one, as the reference does.
 void EffectInspector::setLayerDimension(int index)
 {
     const auto* layer = layerRef();
@@ -434,6 +472,9 @@ void EffectInspector::setLayerDimension(int index)
     }, false, true);
 }
 
+// Masks: the add button, and per mask its switch, shape, opacity, feather,
+// expansion, inversion and a remove button. A new mask covers the middle
+// quarter of the frame.
 void EffectInspector::buildMasks(const composition::Layer& layer)
 {
     auto* root = new QTreeWidgetItem(m_tree, {tr("Masks")});
@@ -540,6 +581,12 @@ void EffectInspector::buildMasks(const composition::Layer& layer)
     }
 }
 
+// Effects, or Behaviors: the add menu of the installed plug-ins of that
+// kind, and per effect of the clip its switch, the preset menu (presets are
+// kept per plug-in in the settings), a transition's edge and duration, the
+// color wheels of Color Wheels, and one row per parameter - grouped as the
+// plug-in groups them, a slider beside bounded numbers, and a keyframe
+// button.
 void EffectInspector::buildEffects(const composition::Layer& layer, bool behaviors)
 {
     auto* root = new QTreeWidgetItem(m_tree, {behaviors ? tr("Behaviors") : tr("Effects")});
@@ -724,6 +771,8 @@ void EffectInspector::buildEffects(const composition::Layer& layer, bool behavio
         refreshModuleControls(e);
         for (int p = 0; p < spec.parameters.size(); ++p) {
             plugin::EffectParameterSpec param = spec.parameters[p];
+            // A layer parameter chooses among the composition's layers, by ID
+            // (the null ID is "None").
             if (param.type == "layer") {
                 param.choices = {tr("None")};
                 param.choiceValues = {QStringLiteral("00000000-0000-0000-0000-000000000000")};
@@ -758,6 +807,8 @@ void EffectInspector::buildEffects(const composition::Layer& layer, bool behavio
                 return value.isValid() ? value : QVariant(fallback);
             };
             const QString type = param.type.toLower();
+            // A slider over the range, in 1000 steps, for numbers with
+            // sensible bounds.
             if ((type == "int" || type == "double" || type == "float" || type == "angle")
                 && std::isfinite(param.minimum) && std::isfinite(param.maximum)
                 && param.maximum > param.minimum && param.maximum - param.minimum < 1000000.) {
@@ -809,6 +860,9 @@ void EffectInspector::buildEffects(const composition::Layer& layer, bool behavio
     }
 }
 
+// Transform (World Transform for 3D layers): the properties of the layer's
+// dimension, one editor per axis, a slider for opacity, the scale link and a
+// keyframe button for each property that can be animated.
 void EffectInspector::buildTransformSection(const composition::Layer& layer, int frame)
 {
     auto* root = new QTreeWidgetItem(m_tree, {layer.dimension == composition::LayerDimension::ThreeD
@@ -877,6 +931,8 @@ void EffectInspector::buildTransformSection(const composition::Layer& layer, int
     Q_UNUSED(frame);
 }
 
+// Shows the rows whose label matches the filter, with their parents, and
+// hides the controls a native module has switched off.
 void EffectInspector::applySearch()
 {
     if (!m_tree || !m_search) return;
@@ -906,6 +962,8 @@ void EffectInspector::applySearch()
     for (int i = 0; i < m_tree->topLevelItemCount(); ++i) visit(m_tree->topLevelItem(i));
 }
 
+// Lets a native module decide, from the effect's values at the playhead,
+// which of its controls are shown (its SetPropertyState calls).
 void EffectInspector::refreshModuleControls(int effectIndex)
 {
     const composition::Effect* effect = effectAt(effectIndex);
@@ -922,6 +980,7 @@ void EffectInspector::refreshModuleControls(int effectIndex)
         QStringLiteral("%1/%2/%3").arg(m_comp->layers()[m_layerIndex].id.value()).arg(m_clipIndex).arg(effectIndex));
 }
 
+// Re-reads every editor's value at the playhead without rebuilding.
 void EffectInspector::refreshValues()
 {
     for (const auto& reader : m_valueReaders) reader();
@@ -934,6 +993,7 @@ void EffectInspector::refreshValues()
     updateHeader();
 }
 
+// Applies the modules' shown and hidden controls to the rows.
 void EffectInspector::applyControlStates()
 {
     if (!m_tree) return;
@@ -952,6 +1012,8 @@ void EffectInspector::applyControlStates()
     if (changed) applySearch();
 }
 
+// The playhead moved: the values follow it, and when the panel follows the
+// clip under the playhead and that changes, the tree is rebuilt for it.
 void EffectInspector::setCurrentTime(double seconds)
 {
     if (qFuzzyCompare(m_time + 1., seconds + 1.)) return;
@@ -986,6 +1048,8 @@ composition::Effect* EffectInspector::effectAt(int effectIndex)
     return &layer->clips[m_clipIndex].effects[effectIndex];
 }
 
+// An editor's value as the parameter's type stores it (int, double, bool or
+// string), so keyframes interpolate numbers rather than text.
 QVariant EffectInspector::typedValue(int effectIndex, int paramIndex, const QVariant& raw) const
 {
     if (!m_comp || !m_pluginManager || m_layerIndex < 0 || m_layerIndex >= m_comp->layers().size()) return raw;
@@ -1009,6 +1073,11 @@ double EffectInspector::transformValue(const composition::Layer& layer, Transfor
     return layer.transform.valueAt(prop, axis, frame);
 }
 
+// Applies an edit to the selected layer and records it for undo. Nothing
+// happens on a locked layer, and nothing is recorded when the edit changed
+// nothing. keyFrames tells the timeline that keys changed; rebuild rebuilds
+// the tree afterwards (structure changed), otherwise only values are re-read.
+// Returns whether anything changed.
 bool EffectInspector::editModel(const QString& title, const QString& mergeKey,
                                 const std::function<void(composition::Layer&)>& edit,
                                 bool keyFrames, bool rebuild)
@@ -1033,6 +1102,8 @@ bool EffectInspector::editModel(const QString& title, const QString& mergeKey,
     return true;
 }
 
+// Sets a parameter: on an animated parameter it sets (or adds) the key at
+// the playhead, otherwise its static value.
 void EffectInspector::applyParamValue(int effectIndex, int paramIndex, const QVariant& raw)
 {
     const QVariant value = typedValue(effectIndex, paramIndex, raw);
@@ -1050,6 +1121,9 @@ void EffectInspector::applyParamValue(int effectIndex, int paramIndex, const QVa
     if (edited) emit effectParameterEdited(m_layerIndex, m_clipIndex, effectIndex, paramIndex);
 }
 
+// Adds a key with the current value at the playhead, or removes the one
+// there. Removing the last key makes the value static again, at the value
+// the parameter had at the playhead.
 void EffectInspector::toggleParamKeyFrame(int effectIndex, int paramIndex, bool on)
 {
     const QVariant held = effectAt(effectIndex) ? effectAt(effectIndex)->parameterAt(paramIndex, currentFrame()) : QVariant();
@@ -1070,6 +1144,8 @@ void EffectInspector::toggleParamKeyFrame(int effectIndex, int paramIndex, bool 
     }, true);
 }
 
+// Sets a transform property's axis, as a key when it is animated. With the
+// scale link on, the other axes scale by the same factor.
 void EffectInspector::applyTransformValue(TransformProp prop, int axis, double value)
 {
     editModel(tr("Edit transform"), QStringLiteral("transform-%1-%2").arg(int(prop)).arg(axis),
@@ -1087,6 +1163,8 @@ void EffectInspector::applyTransformValue(TransformProp prop, int axis, double v
     }, layerRef() && layerRef()->transform.isAnimated(prop, layerRef()->dimension));
 }
 
+// Adds or removes the keys of all of a property's axes at the playhead, as
+// toggleParamKeyFrame does for one parameter.
 void EffectInspector::toggleTransformKeyFrame(TransformProp prop, bool on)
 {
     editModel(tr("Toggle transform keyframe"), QStringLiteral("transform-key-%1").arg(int(prop)),
@@ -1103,6 +1181,7 @@ void EffectInspector::toggleTransformKeyFrame(TransformProp prop, bool on)
     }, true);
 }
 
+// Whether the shown clip's effects or the layer's transform have keyframes.
 bool EffectInspector::hasAnimatedParameters() const
 {
     if (!m_comp || m_layerIndex < 0 || m_layerIndex >= m_comp->layers().size()) return false;

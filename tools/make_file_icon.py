@@ -40,6 +40,8 @@ def polygons(svg):
 
 
 def render(svg, size, view):
+    """The icon at size x size: drawn SUPERSAMPLE times larger without
+    anti-aliasing, then scaled down with Lanczos for smooth edges."""
     scale = size * SUPERSAMPLE / view
     image = Image.new('RGBA', (size * SUPERSAMPLE, size * SUPERSAMPLE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)

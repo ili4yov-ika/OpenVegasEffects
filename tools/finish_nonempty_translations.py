@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Mark filled Qt TS translations as finished without reformatting the file."""
+"""Mark filled Qt TS translations as finished without reformatting the file.
+
+Usage: python tools/finish_nonempty_translations.py <catalog.ts>...
+
+A translation with text loses type="unfinished"; an empty one that is not
+obsolete or vanished gains it, so lrelease never ships an empty string. The
+file is edited with regular expressions rather than an XML writer so that
+lupdate's own layout - and the diff - stay as they are.
+"""
 
 from __future__ import annotations
 
@@ -8,15 +16,19 @@ from pathlib import Path
 import re
 
 
+# <translation ...>text</translation>, the text possibly holding
+# <numerusform> elements; and the self-closed <translation ... />.
 PAIRED_TRANSLATION = re.compile(
     r'(<translation\b[^>]*?(?<!/)>)((?:(?!<translation\b).)*?)(</translation>)',
     re.DOTALL,
 )
 EMPTY_TRANSLATION = re.compile(r'<translation\b([^>]*)/>')
+# Tags inside a translation (numerus forms) do not count as text.
 TAGS = re.compile(r"<[^>]+>")
 
 
 def finish_nonempty(path: Path) -> int:
+    """Fix the type attribute of every translation; returns how many changed."""
     source = path.read_text(encoding="utf-8")
     changed = 0
 

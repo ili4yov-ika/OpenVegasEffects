@@ -21,6 +21,8 @@ ConformedAudioStore& defaultStore()
 
 } // namespace
 
+// The store every cache made afterwards uses (AppMain sets it once the media
+// cache database is open).
 void ConformedAudioCache::setDefaultStore(const ConformedAudioStore& store)
 {
     defaultStore() = store;
@@ -33,6 +35,7 @@ ConformedAudioCache::ConformedAudioCache(QObject* parent)
 {
 }
 
+// Kills a running conversion and removes its partial file.
 ConformedAudioCache::~ConformedAudioCache()
 {
     if (m_process) {
@@ -63,6 +66,10 @@ QString ConformedAudioCache::fileFor(const QString& key) const
         ? QString() : QDir(m_store.directory).filePath(key + QStringLiteral(".wav"));
 }
 
+// The conformed WAV of a file's stream at the rate if it is ready; otherwise
+// queues its conversion (once) and returns nothing, so the caller decodes
+// the media itself for now and conformedReady() tells it to switch. A WAV of
+// no more than its 44-byte header holds no audio and does not count.
 QString ConformedAudioCache::conformed(const QString& filePath, int audioStreamIndex, int sampleRate)
 {
     if (m_store.directory.isEmpty() || sampleRate <= 0) return {};
@@ -81,6 +88,9 @@ QString ConformedAudioCache::conformed(const QString& filePath, int audioStreamI
     return {};
 }
 
+// Runs FFmpeg on the next queued file when none is running: the stream, as
+// 16-bit stereo PCM at the rate, into "<key>.wav.part.wav" first and renamed
+// when complete. Files that fail are not tried again this session.
 void ConformedAudioCache::startNext()
 {
     if (m_process || m_queue.isEmpty()) return;

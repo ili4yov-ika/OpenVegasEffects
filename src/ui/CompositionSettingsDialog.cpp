@@ -23,6 +23,12 @@
 
 #include <cmath>
 
+// Composite Shot Properties: a shot's name, duration, frame size, frame
+// rate and pixel aspect (Standard), and its fog and motion blur (Advanced).
+// The format can come from an AV template or the timeline (Match Timeline);
+// the template box names the template the current format matches, or
+// Custom. The dialog works on a Values copy; apply() writes one back.
+
 namespace openvegas {
 namespace ui {
 namespace {
@@ -54,11 +60,13 @@ const char* const kAspects[] = {
     QT_TRANSLATE_NOOP("CompositionSettingsDialog", "Custom"),
 };
 
+// A string in the dialog's translation context.
 QString text(const char* source)
 {
     return QCoreApplication::translate("CompositionSettingsDialog", source);
 }
 
+// Frame rates compare to a thousandth (29.97 matches 30000/1001).
 bool sameRate(double a, double b) { return std::abs(a - b) < 1e-3; }
 
 } // namespace
@@ -72,6 +80,7 @@ bool CompositionSettingsDialog::Values::operator==(const Values& o) const
            && render == o.render;
 }
 
+// The values the dialog edits, read from a composition.
 CompositionSettingsDialog::Values CompositionSettingsDialog::fromComposition(
     const composition::Composition& composition)
 {
@@ -89,6 +98,7 @@ CompositionSettingsDialog::Values CompositionSettingsDialog::fromComposition(
     return v;
 }
 
+// Writes edited values into a composition.
 void CompositionSettingsDialog::apply(const Values& v, composition::Composition& composition)
 {
     composition.setName(v.name);
@@ -224,6 +234,7 @@ CompositionSettingsDialog::CompositionSettingsDialog(const Values& values, const
                             QCoreApplication::translate("CompositionSettingsDialog", "Exponential²")});
     m_fogFalloff->setCurrentIndex(qBound(0, r.fogFalloff, 2));
     fogForm->addRow(QCoreApplication::translate("CompositionSettingsDialog", "Fall Off:"), m_fogFalloff);
+    // The fog color as a swatch button that opens the color picker.
     m_fogColor = new QToolButton(fog);
     m_fogColor->setObjectName(QStringLiteral("widgetColor"));
     m_fogColorValue = r.fogColor;
@@ -318,12 +329,14 @@ CompositionSettingsDialog::CompositionSettingsDialog(const Values& values, const
                   m_timeline.fpsDenominator, m_timeline.pixelAspect, m_timeline.customPixelAspect);
         matchTemplate();
     });
+    // Any change of the format re-selects the template it matches.
     for (QSpinBox* spin : {m_width, m_height})
         connect(spin, &QSpinBox::valueChanged, this, &CompositionSettingsDialog::matchTemplate);
     connect(m_frameRate, &QComboBox::currentTextChanged, this, &CompositionSettingsDialog::matchTemplate);
     connect(m_aspect, &QComboBox::currentIndexChanged, this, &CompositionSettingsDialog::matchTemplate);
 }
 
+// Shows a format; a rate that is not in the list is shown as typed text.
 void CompositionSettingsDialog::setFormat(int width, int height, int numerator, int denominator,
                                           int aspect, double custom)
 {
@@ -343,6 +356,7 @@ void CompositionSettingsDialog::setFormat(int width, int height, int numerator, 
     m_initial.customPixelAspect = custom > 0.0 ? custom : 1.0;
 }
 
+// The rate chosen or typed; the original one when the text is not a rate.
 double CompositionSettingsDialog::frameRate() const
 {
     const int index = m_frameRate->findText(m_frameRate->currentText());
@@ -355,6 +369,7 @@ double CompositionSettingsDialog::frameRate() const
     return value > 0.0 ? value : double(m_initial.fpsNumerator) / qMax(1, m_initial.fpsDenominator);
 }
 
+// The values as edited; an empty name keeps the original one.
 CompositionSettingsDialog::Values CompositionSettingsDialog::values() const
 {
     Values v = m_initial;
@@ -379,6 +394,8 @@ CompositionSettingsDialog::Values CompositionSettingsDialog::values() const
     return v;
 }
 
+// Fills the template box (Custom first, then every template) and selects
+// the given template, or the one the format matches.
 void CompositionSettingsDialog::refreshTemplates(const QString& selectId)
 {
     m_templates = app::allTemplates();
@@ -399,6 +416,8 @@ void CompositionSettingsDialog::refreshTemplates(const QString& selectId)
     matchTemplate();
 }
 
+// Selects the first template with the current size, rate and aspect, or
+// Custom. Only user templates can be deleted.
 void CompositionSettingsDialog::matchTemplate()
 {
     if (m_applyingTemplate) return;
@@ -418,6 +437,7 @@ void CompositionSettingsDialog::matchTemplate()
     m_deleteTemplate->setEnabled(found > 0 && !m_templates.at(found - 1).system);
 }
 
+// Takes the format of the chosen template.
 void CompositionSettingsDialog::applyTemplate(int index)
 {
     if (index <= 0 || index > m_templates.size()) {
@@ -433,6 +453,7 @@ void CompositionSettingsDialog::applyTemplate(int index)
     m_deleteTemplate->setEnabled(!t.system);
 }
 
+// Saves the current format as a user template under a name asked for.
 void CompositionSettingsDialog::saveTemplate()
 {
     bool ok = false;
@@ -459,6 +480,7 @@ void CompositionSettingsDialog::saveTemplate()
     refreshTemplates(saved.id);
 }
 
+// Deletes the selected user template, after asking.
 void CompositionSettingsDialog::deleteTemplate()
 {
     const int index = m_template->currentIndex();

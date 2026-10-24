@@ -4,6 +4,11 @@
 #include <QJsonObject>
 #include <cmath>
 
+// A text layer's style travels as the parameter list of its text effect: one
+// string per property, in the fixed order below. These functions convert
+// between that list and TextStyle. A missing or unreadable value keeps the
+// default, so lists written by older versions - shorter ones - still load.
+
 namespace openvegas {
 namespace composition {
 
@@ -55,6 +60,8 @@ enum Index
     IdxCount,
 };
 
+// The value at an index, or "" past the end of an older, shorter list. The
+// read* helpers below return the fallback for a missing or malformed value.
 QString at(const QStringList& values, int index)
 {
     return index < values.size() ? values.at(index) : QString();
@@ -122,6 +129,7 @@ QString writeEnum(Enum value, const char* const (&names)[N])
     return QLatin1String(index < N ? names[index] : names[0]);
 }
 
+// Numbers are stored with two decimals.
 QString number(double value)
 {
     return QString::number(value, 'f', 2);
@@ -134,6 +142,8 @@ int textStyleParameterCount()
     return int(IdxCount);
 }
 
+// The style a parameter list describes. A list from before the background
+// could be switched off has it on whenever its opacity is above zero.
 TextStyle textStyleFromParameters(const QStringList& values)
 {
     TextStyle style;
@@ -189,6 +199,8 @@ TextStyle textStyleFromParameters(const QStringList& values)
         style.backgroundExpansionX *= 100.0 / style.fontSize;
         style.backgroundExpansionY *= 100.0 / style.fontSize;
     }
+    // Additional outlines are a JSON array of {size, color}; entries with an
+    // invalid color or a size outside 0..400 are dropped.
     const QJsonArray outlines = QJsonDocument::fromJson(at(values, IdxAdditionalOutlines).toUtf8()).array();
     for (const QJsonValue& item : outlines) {
         const QJsonObject entry = item.toObject();
@@ -200,6 +212,7 @@ TextStyle textStyleFromParameters(const QStringList& values)
     return style;
 }
 
+// The parameter list of a style, always the full current length.
 QStringList textStyleToParameters(const TextStyle& style)
 {
     QStringList values;

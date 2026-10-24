@@ -58,6 +58,8 @@ OVERRIDES = {
 def qm_messages(path):
     """(context, source, translation) of a compiled Qt catalogue."""
     data = path.read_bytes()
+    # A .qm file is a 16-byte magic number followed by tagged blocks
+    # (tag byte, big-endian length, body); messages are in block 0x69.
     pos = 16
     while pos < len(data):
         tag = data[pos]
@@ -110,6 +112,8 @@ def existing(path):
 
 
 def write(path, language, contexts):
+    """Write a TS catalog of {context: {source: translation or None}},
+    sorted so that regenerating it gives a stable diff."""
     lines = ['<?xml version="1.0" encoding="utf-8"?>', '<!DOCTYPE TS>',
              f'<TS version="2.1" language="{language}">']
     for name in sorted(contexts):

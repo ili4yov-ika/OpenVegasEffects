@@ -23,11 +23,19 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+// The Trimmer (ui/panels/Trimmer.ui): a media item's in and out points,
+// set by dragging the markers or at the scrub position, and kept on the
+// asset; Insert (B) and Overlay (N) put the trimmed range into the timeline.
+// TrimmerWidget draws the strip with its selection, markers and playhead;
+// TrimmerPanel adds the media list, the scrub slider and the readouts, and
+// takes media dropped from the Media panel or the file manager.
+
 namespace openvegas {
 namespace ui {
 
 namespace {
 const int kFrameGuideSpacing = 80; // px between trimmer frame guides
+// How close to a marker, in pixels, a press grabs it instead of the playhead.
 const int kMarkerHitWidth = 8;
 } // namespace
 
@@ -41,6 +49,8 @@ TrimmerWidget::TrimmerWidget(QWidget* parent)
     setMouseTracking(true);
 }
 
+// Shows a media item with the trim range stored on it (the whole item when
+// it has none), the playhead at the in point.
 void TrimmerWidget::setAsset(const media::MediaAsset& asset)
 {
     m_asset = asset;
@@ -53,6 +63,7 @@ void TrimmerWidget::setAsset(const media::MediaAsset& asset)
     update();
 }
 
+// The rate frames are counted in (the project's); the range is re-read in it.
 void TrimmerWidget::setFrameRate(double framesPerSecond)
 {
     const double next = qMax(1.0, framesPerSecond);
@@ -75,6 +86,8 @@ void TrimmerWidget::clearAsset()
     update();
 }
 
+// The in point stays before the out point, the out point after the in point;
+// both are in frames.
 void TrimmerWidget::setTrimInPoint(int frames)
 {
     const int next = qBound(0, frames, qMax(0, m_trimOut - 1));
@@ -108,6 +121,7 @@ void TrimmerWidget::setPositionSeconds(double seconds)
     update();
 }
 
+// Conversions between the widget's x and the item's time and frames.
 double TrimmerWidget::secondsFromX(int x) const
 {
     const double w = qMax(1.0, double(qMax(1, width() - 1)));
@@ -125,6 +139,7 @@ int TrimmerWidget::frameFromX(int x) const
     return qBound(0, qRound(secondsFromX(x) * m_frameRate), m_frameCount);
 }
 
+// Moves what is being dragged; a marker takes the playhead with it.
 void TrimmerWidget::updateDragPosition(int x)
 {
     switch (m_dragMode) {
@@ -144,6 +159,7 @@ void TrimmerWidget::updateDragPosition(int x)
     }
 }
 
+// A press near a marker drags it, anywhere else moves the playhead.
 void TrimmerWidget::mousePressEvent(QMouseEvent* event)
 {
     if (!m_asset.isValid() || event->button() != Qt::LeftButton) {
@@ -268,6 +284,7 @@ TrimmerPanel::TrimmerPanel(QWidget* parent)
         }
     });
 
+    // The form's placeholder frame is replaced by the drawing widget.
     m_positionLabel = form.trimmerPosition;
     const int frameIndex = form.inOutLayout->indexOf(form.trimmer_frame);
     form.inOutLayout->removeWidget(form.trimmer_frame);
@@ -275,6 +292,8 @@ TrimmerPanel::TrimmerPanel(QWidget* parent)
     m_widget = new TrimmerWidget(form.trimmer_in_out);
     m_widget->setObjectName(QStringLiteral("trimmer-frame"));
     form.inOutLayout->insertWidget(frameIndex, m_widget, 1);
+    // The slider and the strip's playhead follow each other (0..1000 is the
+    // item's whole length).
     m_scrub = form.TrimmerSlider;
     connect(m_scrub, &QSlider::valueChanged, this, [this](int value) {
         if (m_widget->hasAsset()) {
@@ -308,6 +327,7 @@ TrimmerPanel::TrimmerPanel(QWidget* parent)
         updateReadouts();
     });
 
+    // B inserts and N overlays while the panel has focus, as in the reference.
     auto* insertAction = new QAction(this);
     insertAction->setObjectName(QStringLiteral("InsertTrimmerAsset"));
     insertAction->setShortcut(QKeySequence(Qt::Key_B));
@@ -324,6 +344,7 @@ TrimmerPanel::TrimmerPanel(QWidget* parent)
     updateReadouts();
 }
 
+// Lists the project's media; the item shown stays if it is still there.
 void TrimmerPanel::setMediaManager(media::MediaManager* manager)
 {
     m_manager = manager;
@@ -349,6 +370,7 @@ void TrimmerPanel::setMediaManager(media::MediaManager* manager)
     }
 }
 
+// Shows a media item and selects it in the list; an invalid one clears.
 void TrimmerPanel::openAsset(const media::MediaAsset& asset)
 {
     if (!asset.isValid()) {
@@ -373,6 +395,7 @@ void TrimmerPanel::openAsset(const media::MediaAsset& asset)
     }
 }
 
+// Mark In / Mark Out: the point at the playhead.
 void TrimmerPanel::setTrimInPoint()
 {
     if (!m_widget->hasAsset()) {
@@ -397,6 +420,7 @@ void TrimmerPanel::setFrameRate(double framesPerSecond)
     updateReadouts();
 }
 
+// Stores the range on the media item, so it is kept with the project.
 void TrimmerPanel::persistTrimRange()
 {
     if (!m_manager || !m_widget->hasAsset()) {
@@ -411,6 +435,7 @@ void TrimmerPanel::persistTrimRange()
     emit trimRangeChanged(asset->filePath(), asset->trimInPoint(), asset->trimOutPoint());
 }
 
+// HH:MM:SS:FF at the trimmer's rate.
 QString TrimmerPanel::timecode(double seconds) const
 {
     const int fps = qMax(1, qRound(m_widget->frameRate()));
@@ -425,6 +450,7 @@ QString TrimmerPanel::timecode(double seconds) const
         .arg(ss, 2, 10, QLatin1Char('0')).arg(ff, 2, 10, QLatin1Char('0'));
 }
 
+// The playhead's timecode and the range's in, out and duration.
 void TrimmerPanel::updateReadouts()
 {
     if (!m_widget->hasAsset()) {
@@ -440,6 +466,7 @@ void TrimmerPanel::updateReadouts()
         .arg(timecode((m_widget->trimOutPoint() - m_widget->trimInPoint()) / fps)));
 }
 
+// Accepts files and the Media panel's trimmer drags, whose data is the path.
 void TrimmerPanel::dragEnterEvent(QDragEnterEvent* event)
 {
     bool supported = event->mimeData()->hasUrls();
@@ -451,6 +478,7 @@ void TrimmerPanel::dragEnterEvent(QDragEnterEvent* event)
     }
 }
 
+// Opens the first dropped item that is in the project's media.
 void TrimmerPanel::dropEvent(QDropEvent* event)
 {
     if (!m_manager) {
