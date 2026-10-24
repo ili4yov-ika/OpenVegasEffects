@@ -17,7 +17,7 @@
    <string>Start</string>
   </property>
   <widget class="QWidget" name="StartPanelWidget">
-   <layout class="QHBoxLayout" name="rootLayout">
+   <layout class="QHBoxLayout" name="rootLayout" stretch="0,1,0">
     <property name="spacing"><number>12</number></property>
     <property name="leftMargin"><number>8</number></property>
     <property name="topMargin"><number>8</number></property>
@@ -29,6 +29,12 @@
       <property name="spacing"><number>6</number></property>
       <item>
        <widget class="QToolButton" name="toolButtonNewComp">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="text"><string>New Composite Shot</string></property>
         <property name="toolTip"><string>Create New Composite Shot</string></property>
         <property name="autoRaise"><bool>true</bool></property>
@@ -40,6 +46,12 @@
       </item>
       <item>
        <widget class="QToolButton" name="toolButtonNewCompsFromMedia">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="text"><string>New Composite Shots
 From Footage</string></property>
         <property name="toolTip"><string>Make Composite Shots</string></property>
@@ -52,6 +64,12 @@ From Footage</string></property>
       </item>
       <item>
        <widget class="QToolButton" name="AddMedia">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="text"><string>Import File</string></property>
         <property name="toolTip"><string>Import File</string></property>
         <property name="autoRaise"><bool>true</bool></property>
@@ -63,6 +81,12 @@ From Footage</string></property>
       </item>
       <item>
        <widget class="QToolButton" name="toolButtonEditScreen">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="text"><string>Edit Screen</string></property>
         <property name="toolTip"><string>Go to the Edit Screen</string></property>
         <property name="autoRaise"><bool>true</bool></property>

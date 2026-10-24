@@ -1730,7 +1730,8 @@ void MainWindow::buildTransportToolbar()
 
     auto* logo = new QToolButton(main);
     logo->setObjectName(QStringLiteral("toolButtonLogo"));
-    logo->setIcon(QIcon(QStringLiteral(":/icons/logo.png")));
+    // The project file's icon (resources/icons/iconfile.svg).
+    logo->setIcon(QIcon(QStringLiteral(":/icons/project-file.svg")));
     logo->setToolTip(tr("Start"));
     logo->setAutoRaise(true);
     connect(logo, &QToolButton::clicked, this, [this] {

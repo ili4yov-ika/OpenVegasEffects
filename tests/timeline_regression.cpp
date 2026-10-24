@@ -6673,12 +6673,18 @@ private slots:
         QSignalSpy openSpy(&start, &ui::StartPanel::openProjectRequested);
         importFile->click(); newProject->click(); openProject->click();
         QCOMPARE(importSpy.count(), 1); QCOMPARE(newSpy.count(), 1); QCOMPARE(openSpy.count(), 1);
-        // Create New shows the project file's icon beside its label.
-        QVERIFY(!newProject->icon().pixmap(QSize(16, 16)).isNull());
-        QCOMPARE(newProject->toolButtonStyle(), Qt::ToolButtonTextBesideIcon);
-        const QImage icon = newProject->icon().pixmap(QSize(32, 32)).toImage();
-        QCOMPARE(icon.pixelColor(icon.width() / 4, icon.height() * 3 / 4).rgb(), QColor(0x01, 0xC5, 0x5B).rgb());
+        // Create New is text only, like Open and Clear Recents.
+        QVERIFY(newProject->icon().isNull());
         start.resize(900, 520); start.show(); QTest::qWait(20);
+        // The four entry points share one width (the widest one's).
+        QSet<int> widths;
+        for (const char* name : {"toolButtonNewComp", "toolButtonNewCompsFromMedia", "AddMedia", "toolButtonEditScreen"}) {
+            auto* button = start.findChild<QToolButton*>(QString::fromLatin1(name));
+            QVERIFY(button);
+            widths.insert(button->width());
+            QVERIFY(button->width() >= button->sizeHint().width());
+        }
+        QCOMPARE(widths.size(), 1);
         QVERIFY(start.grab().save(testArtifactPath(QStringLiteral("start-panel.png"))));
     }
     // .vegfx files get the project icon - the executable's icon 1 - through
