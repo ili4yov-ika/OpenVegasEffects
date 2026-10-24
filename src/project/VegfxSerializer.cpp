@@ -1979,7 +1979,8 @@ bool readClipsExtension(const QDomElement& wrapper, composition::Layer* layer)
 }
 
 void appendMasksExtension(QDomDocument& doc, QDomElement& wrapper,
-                          const QVector<composition::LayerMask>& masks)
+                          const QVector<composition::LayerMask>& masks,
+                          const std::function<QString(const QString&)>& storedPath)
 {
     if (masks.isEmpty()) return;
     QDomElement root = doc.createElement(QStringLiteral("OpenVegasMasks"));
@@ -1998,6 +1999,13 @@ void appendMasksExtension(QDomDocument& doc, QDomElement& wrapper,
         node.setAttribute(QStringLiteral("Opacity"), mask.opacity);
         node.setAttribute(QStringLiteral("Feather"), mask.feather);
         node.setAttribute(QStringLiteral("Expansion"), mask.expansion);
+        if (!mask.imagePath.isEmpty()) {
+            // The file as media files are stored (relative when asked), the
+            // part of it (a Photoshop layer's mask) apart.
+            const QString file = media::psdFileOfPath(mask.imagePath);
+            node.setAttribute(QStringLiteral("ImageFile"), storedPath ? storedPath(file) : file);
+            node.setAttribute(QStringLiteral("ImagePart"), mask.imagePath.mid(file.size()));
+        }
         for (const QPointF& point : mask.points) {
             QDomElement pointNode = doc.createElement(QStringLiteral("Point"));
             pointNode.setAttribute(QStringLiteral("X"), point.x());
@@ -2023,7 +2031,10 @@ void readMasksExtension(const QDomElement& wrapper, composition::Layer* layer)
         mask.name = node.attribute(QStringLiteral("Name"), QStringLiteral("Mask"));
         mask.shape = static_cast<composition::MaskShape>(qBound(0,
             node.attribute(QStringLiteral("Shape")).toInt(),
-            int(composition::MaskShape::Freehand)));
+            int(composition::MaskShape::Image)));
+        // Resolved against the project's folder once the project is read.
+        const QString imageFile = node.attribute(QStringLiteral("ImageFile"));
+        if (!imageFile.isEmpty()) mask.imagePath = imageFile + node.attribute(QStringLiteral("ImagePart"));
         mask.bounds = QRectF(node.attribute(QStringLiteral("X")).toDouble(),
                              node.attribute(QStringLiteral("Y")).toDouble(),
                              node.attribute(QStringLiteral("Width")).toDouble(),
@@ -3286,6 +3297,14 @@ static core::Result loadProjectImpl(const QString& filePath,
                 resolveId(clip.mediaId);
                 if (clip.nestedComposition) resolveClipPaths(clip.nestedComposition.get());
             }
+            // Picture masks: relative files against the project's folder,
+            // missing ones looked for beside it like media.
+            for (auto& mask : layer.masks) {
+                if (mask.imagePath.isEmpty()) continue;
+                const QString file = media::psdFileOfPath(mask.imagePath);
+                const QString part = mask.imagePath.mid(file.size());
+                mask.imagePath = resolveAssetPath(QDir::cleanPath(file), projectDir, nullptr) + part;
+            }
         }
     };
     resolveClipPaths(composition);
@@ -3796,7 +3815,7 @@ static QDomDocument projectDocument(const QString& filePath,
                     return bool(c.nestedComposition) || c.nestedCompositionId.isValid();
                 });
             if (written.sliceOf.isEmpty()) appendClipsExtension(doc, wrapper, layer.clips, hasNestedClip);
-            appendMasksExtension(doc, wrapper, layer.masks);
+            appendMasksExtension(doc, wrapper, layer.masks, storedPath);
             appendMotionTracksExtension(doc, wrapper, layer.motionTracks);
 
             QDomElement named = doc.createElement(QStringLiteral("LayerBase"));

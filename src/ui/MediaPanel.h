@@ -109,6 +109,10 @@ private:
     // 48000Hz").
     QStringList detailLines(const media::MediaAsset& asset) const;
     QStringList detailLines(const CompositeShotEntry& shot) const;
+    // Whether a media item is a part of a Photoshop document listed as a
+    // composite shot (a layer, a smart object's source): the shot stands
+    // for it, so it is neither listed nor counted.
+    bool partOfListedDocument(const media::MediaAsset& asset) const;
     // A still's preview, scaled to the thumbnail; cached by file and time.
     QPixmap stillPreview(const QString& path, const QString& readPath) const;
     // A video's frame, read on a worker thread; the row shows the video

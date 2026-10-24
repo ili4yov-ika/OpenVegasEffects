@@ -33,9 +33,14 @@ namespace media {
 // source, before its smart filters, is "<document>#psdsource:<unique id>".
 // An embedded source that is a Photoshop document is a document itself:
 // "<document>#psdsource:<id>#psdlayer:<layer id>" is one of its layers, and
-// sources nest the same way to any depth.
+// sources nest the same way to any depth. "<document>#psdmask:<layer id>"
+// (optionally ":clip:<base layer id>") is what shows of a layer as a mask:
+// white, its alpha its raster and vector masks and its groups' (and the
+// base's alpha when clipped), over the layer's rectangle - the document's
+// for a layer without pixels.
 inline constexpr char kPsdLayerMarker[] = "#psdlayer:";
 inline constexpr char kPsdSourceMarker[] = "#psdsource:";
+inline constexpr char kPsdMaskMarker[] = "#psdmask:";
 inline constexpr char kPsdClipMarker[] = ":clip:";
 
 // Whether a path names a layer or a smart object source of a document.
@@ -95,6 +100,9 @@ struct PsdLayer
     bool vectorMaskDisabled = false;
     QPainterPath vectorMask;     // in document pixels
     QVariantMap effects;         // 'lfx2', the layer style
+    // A Solid Color fill layer's colour ('SoCo'); such a layer may come
+    // without pixels of its own, its colour filling the document.
+    QColor fillColor;
     QVariantMap smartObject;     // 'SoLd' / 'SoLE'
     QString adjustmentKey;       // 'expA', 'levl', 'hue2', 'CgEd', ...
     QByteArray adjustmentData;
@@ -134,8 +142,24 @@ public:
     QImage layerImage(int index) const;
     // The folder records of the groups a layer is in, innermost first.
     QVector<int> enclosingGroups(int index) const;
+    // Whether a layer's raster mask hides nothing: none, switched off, or
+    // white everywhere - the mask Photoshop gives every new adjustment layer.
+    bool rasterMaskHidesNothing(int index) const;
+    // A layer's vector mask as a path in document pixels; empty when it has
+    // none (or it is switched off).
+    QPainterPath vectorMaskPath(int index) const;
+    // Where a layer's mask lies: its rectangle, or the whole document for a
+    // layer without pixels (an adjustment).
+    QRect maskArea(int index) const;
+    // What of a layer its masks and its groups' let show, over maskArea:
+    // white, the alpha the masks.
+    QImage maskImage(int index) const;
     // The flattened document as Photoshop saved it ("maximize compatibility").
     QImage compositeImage() const;
+    // Whether that is the document's picture: without "maximize
+    // compatibility" Photoshop saves a blank one (one colour all over) - the
+    // smart objects' embedded documents among them.
+    bool hasCompositeImage() const;
     QByteArray linkedFileData(const QString& uniqueId) const;
     // The same bytes without a copy, valid while this document lives.
     QByteArray linkedFileView(const QString& uniqueId) const;
@@ -167,7 +191,8 @@ private:
     QHash<QString, PsdLinkedFile> m_linked;
 };
 
-// Whether each layer shows, its groups' visibility included.
+// Whether each layer shows, its groups' visibility included - and, for a
+// clipped layer, its base's.
 QVector<bool> psdLayersShown(const PsdDocument& document);
 
 // A document by its path - a file, or a document embedded in one as a

@@ -271,7 +271,12 @@ private:
     // A Photoshop document by its layers: a composite shot of them, placed
     // in the open shot as one layer at `cursor` (moved past it). False when
     // the document has no layers to import, which then comes in flattened.
-    bool importPhotoshopLayers(const QString& file, double& cursor, QStringList* notes);
+    // How a Photoshop document comes in: its layers as one composite shot
+    // nested as a layer (the default), its layers straight onto the shot in
+    // front, or one flattened image (as the reference imports it).
+    enum class PhotoshopImport { CompositeShot, Layers, FlattenedImage };
+    bool importPhotoshopLayers(const QString& file, double& cursor, QStringList* notes,
+                               PhotoshopImport kind = PhotoshopImport::CompositeShot);
     // Imports a model and puts a 3D layer on the timeline for it. Reached from
     // importFiles(), which is where every route into the project ends up - the
     // Import command, a drop on the Media panel, a drop on the window.

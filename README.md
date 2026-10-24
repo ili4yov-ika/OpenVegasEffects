@@ -37,7 +37,7 @@ plugins of VEGAS Effects, audio and export. Open items are listed in
 | Text layers: styles, 3D extrusion, per-glyph Behaviors, the Text panel | Done |
 | 3D: models (OBJ, FBX with skins and blend shapes, glTF, 3DS, LWO, Alembic optional), cameras, lights, shadows, depth per pixel | Done |
 | Masks, motion tracking (MotionTrack), stabilisation | Done |
-| Photoshop documents (`.psd`, `.psb`) by layers: blend modes, groups, masks, clipping, layer styles, adjustment layers, smart objects with Camera Raw and Gaussian Blur smart filters as editable effects; a smart object whose source is a Photoshop document becomes that document's own shot with its layers locked; Curves and Camera Raw looks as LUTs | Done |
+| Photoshop documents (`.psd`, `.psb`) by layers: blend modes, groups, masks, clipping, layer styles, adjustment layers, smart objects with Camera Raw and Gaussian Blur smart filters as editable effects; a smart object whose source is a Photoshop document becomes that document's own shot with its layers locked (kept as pixels when, split, it would draw differently); vector masks as masks, raster masks and clipping as picture masks; Solid Color fill layers; Curves, Black & White and Camera Raw looks as LUTs. On import: one composite shot, separate layers or one flattened image | Done |
 | Viewer with overlays and reduced previews, 360 viewer, Layer, Trimmer and Layout panels | Done |
 | Audio: libVLC playback, the master mix, Audio Meters, native audio effects in real time, voiceover recording | Done on Windows |
 | Export: video, image sequences and audio through FFmpeg, the export queue and presets, OpenEXR (optional) | Done |

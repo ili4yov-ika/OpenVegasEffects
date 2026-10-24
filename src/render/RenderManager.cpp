@@ -1180,6 +1180,25 @@ double RenderWorker::applyClipBehaviors(QImage& image,
     return opacity;
 }
 
+namespace {
+// The pictures of picture masks (a Photoshop layer's masks), read once:
+// working one out decodes the layer's mask channels.
+QImage maskPicture(const QString& path)
+{
+    static QMutex mutex;
+    static QCache<QString, QImage> pictures(8);
+    {
+        QMutexLocker lock(&mutex);
+        if (const QImage* cached = pictures.object(path)) return *cached;
+    }
+    QImage picture = media::readStillImage(path);
+    if (!picture.isNull()) picture = picture.convertToFormat(QImage::Format_RGBA8888);
+    QMutexLocker lock(&mutex);
+    pictures.insert(path, new QImage(picture));
+    return picture;
+}
+} // namespace
+
 void RenderWorker::applyLayerMasks(QImage& image, const composition::Layer& layer) const
 {
     QVector<composition::LayerMask> masks;
@@ -1198,6 +1217,31 @@ void RenderWorker::applyLayerMasks(QImage& image, const composition::Layer& laye
     for (const auto& mask : masks) {
         QRectF bounds(mask.bounds.x() * sx, mask.bounds.y() * sy,
                       mask.bounds.width() * sx, mask.bounds.height() * sy);
+        if (mask.shape == composition::MaskShape::Image) {
+            // The picture's alpha over its bounds; nothing shows outside.
+            const QImage picture = maskPicture(mask.imagePath);
+            if (picture.isNull()) continue;
+            QImage piece(alpha.size(), QImage::Format_RGBA8888);
+            piece.fill(Qt::transparent);
+            {
+                QPainter painter(&piece);
+                painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+                painter.drawImage(bounds, picture);
+            }
+            if (mask.inverted) {
+                for (int y = 0; y < piece.height(); ++y) {
+                    uchar* row = piece.scanLine(y);
+                    for (int x = 0; x < piece.width(); ++x) {
+                        row[x * 4] = row[x * 4 + 1] = row[x * 4 + 2] = 255;
+                        row[x * 4 + 3] = uchar(255 - row[x * 4 + 3]);
+                    }
+                }
+            }
+            maskPainter.setOpacity(qBound(0.0, mask.opacity, 1.0));
+            maskPainter.drawImage(QPoint(0, 0), piece);
+            maskPainter.setOpacity(1.0);
+            continue;
+        }
         bounds.adjust(-mask.expansion * sx, -mask.expansion * sy,
                       mask.expansion * sx, mask.expansion * sy);
         QPainterPath path;
@@ -2724,13 +2768,17 @@ QImage RenderWorker::renderFrameImage(double timeSeconds, const QSize& size, boo
                     continue;
                 }
                 if (withEffects) {
-                    if (layer.masks.isEmpty()) {
+                    // Its opacity mixes the graded picture with the one below,
+                    // as its masks limit where it grades.
+                    const double gradeOpacity = layer.transform.opacityAt(frameNo, layer.opacity);
+                    if (layer.masks.isEmpty() && gradeOpacity >= 1.0) {
                         applyClipEffects(out, clip, frameNo);
-                    } else {
+                    } else if (gradeOpacity > 0.0) {
                         QImage graded = out;
                         applyClipEffects(graded, clip, frameNo);
                         applyLayerMasks(graded, layer);
                         QPainter painter(&out);
+                        painter.setOpacity(qMin(1.0, gradeOpacity));
                         painter.drawImage(QPoint(0, 0), graded);
                     }
                 }

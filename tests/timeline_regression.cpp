@@ -1805,6 +1805,145 @@ private slots:
                  qPrintable(text));
     }
 
+    // Masks, fills and clipping as the import carries them: an adjustment's
+    // vector mask becomes a freehand mask of its Grade layer and the white
+    // mask every new adjustment gets none; a Solid Color fill layer saved
+    // without pixels is a Plane of its colour, cut by its vector mask (a
+    // freehand mask) or its raster mask (one picture mask, "#psdmask:"); a
+    // layer clipped to a hidden base is hidden; Black & White is a look-up
+    // table by Photoshop's formula. The picture mask survives a save.
+    void photoshopMasksFillsAndClippingImport() {
+        using namespace psdtest;
+        const QSize size(200, 100);
+        const auto exposureBlock = [] {
+            Bytes b; b.u16(1); b.f32(1.0f); b.f32(0.0f); b.f32(1.0f); return b.data;
+        };
+        const auto fillBlock = [](const QColor& colour) {
+            Bytes b; b.u32(16); writeDescriptor(b, QVariantMap{{"_class", "null"}, {"Clr ", rgb(colour)}}); return b.data;
+        };
+        QVector<Layer> layers;
+        Layer background; background.name = "Background"; background.id = 1; background.rect = QRect(QPoint(0, 0), size);
+        background.pixels = filled(size, Qt::white);
+        layers.append(background);
+        Layer graded; graded.name = "Graded"; graded.id = 2;
+        graded.blocks.append({"expA", exposureBlock()});
+        graded.vectorMask = rectangleVectorMask(QRectF(60, 20, 80, 60), size);
+        layers.append(graded);
+        Layer whiteMasked; whiteMasked.name = "White Mask"; whiteMasked.id = 3;
+        whiteMasked.blocks.append({"expA", exposureBlock()});
+        whiteMasked.maskRect = QRect(QPoint(0, 0), size);
+        whiteMasked.mask = QImage(size, QImage::Format_Grayscale8); whiteMasked.mask.fill(255); whiteMasked.maskDefault = 255;
+        layers.append(whiteMasked);
+        Layer square; square.name = "Square"; square.id = 4;
+        square.blocks.append({"SoCo", fillBlock(Qt::blue)});
+        square.vectorMask = rectangleVectorMask(QRectF(10, 10, 30, 30), size);
+        layers.append(square);
+        Layer right; right.name = "Right"; right.id = 5;
+        right.blocks.append({"SoCo", fillBlock(Qt::green)});
+        right.maskRect = QRect(150, 0, 50, 100);
+        right.mask = QImage(right.maskRect.size(), QImage::Format_Grayscale8); right.mask.fill(255); right.maskDefault = 0;
+        layers.append(right);
+        Layer base; base.name = "Hidden Base"; base.id = 6; base.rect = QRect(0, 60, 40, 40);
+        base.pixels = filled(base.rect.size(), Qt::red); base.hidden = true;
+        layers.append(base);
+        Layer clipped; clipped.name = "Clipped"; clipped.id = 7; clipped.rect = QRect(0, 60, 40, 40);
+        clipped.pixels = filled(clipped.rect.size(), Qt::yellow); clipped.clipping = true;
+        layers.append(clipped);
+        Layer bw; bw.name = "Black & White"; bw.id = 8; bw.hidden = true;
+        {
+            Bytes b; b.u32(16);
+            writeDescriptor(b, QVariantMap{{"_class", "null"}, {"Rd  ", 40}, {"Yllw", 60}, {"Grn ", 40},
+                                           {"Cyn ", 60}, {"Bl  ", 20}, {"Mgnt", 80}, {"useTint", false}});
+            bw.blocks.append({"blwh", b.data});
+        }
+        layers.append(bw);
+
+        QTemporaryDir dir; QVERIFY(dir.isValid());
+        const QString path = dir.filePath("masks.psd");
+        { QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write(document(size, layers, filled(size, Qt::white))); }
+        auto media = std::make_shared<media::MediaManager>();
+        project::PsdImportOptions options;
+        options.lookDirectory = dir.filePath("looks");
+        const project::PsdImportResult result = project::importPsdComposition(path, *media, psdTestSpec, options);
+        QVERIFY(result.shot);
+        QVERIFY2(!result.notes.join('\n').contains("mask"), qPrintable(result.notes.join('\n')));
+        const auto layerNamed = [&result](const QString& name) -> const composition::Layer* {
+            for (const composition::Layer& layer : result.shot->layers()) if (layer.name == name) return &layer;
+            return nullptr;
+        };
+        const auto near = [](const QRectF& a, const QRectF& b) {
+            return std::abs(a.left() - b.left()) <= 1 && std::abs(a.top() - b.top()) <= 1
+                && std::abs(a.right() - b.right()) <= 1 && std::abs(a.bottom() - b.bottom()) <= 1;
+        };
+        const composition::Layer* gradedLayer = layerNamed("Graded");
+        QVERIFY(gradedLayer);
+        QCOMPARE(gradedLayer->kind, composition::LayerKind::Grade);
+        QCOMPARE(gradedLayer->masks.size(), 1);
+        QCOMPARE(gradedLayer->masks.first().shape, composition::MaskShape::Freehand);
+        QVERIFY(near(gradedLayer->masks.first().bounds, QRectF(60, 20, 80, 60)));
+        QVERIFY(layerNamed("White Mask") && layerNamed("White Mask")->masks.isEmpty());
+        const composition::Layer* squareLayer = layerNamed("Square");
+        QVERIFY(squareLayer);
+        QCOMPARE(squareLayer->kind, composition::LayerKind::Plane);
+        QCOMPARE(squareLayer->planeColor, QColor(Qt::blue));
+        QCOMPARE(squareLayer->masks.size(), 1);
+        QVERIFY(near(squareLayer->masks.first().bounds, QRectF(10, 10, 30, 30)));
+        const composition::Layer* rightLayer = layerNamed("Right");
+        QVERIFY(rightLayer);
+        QCOMPARE(rightLayer->masks.size(), 1);
+        QCOMPARE(rightLayer->masks.first().shape, composition::MaskShape::Image);
+        QVERIFY(rightLayer->masks.first().imagePath.contains("#psdmask:5"));
+        QVERIFY(layerNamed("Clipped") && !layerNamed("Clipped")->visible);
+        // Black & White: red is 40 % grey, yellow (red and green) 60 %.
+        const composition::Layer* bwLayer = layerNamed("Black & White");
+        QVERIFY(bwLayer && !bwLayer->clips.first().effects.isEmpty());
+        QFile cube(bwLayer->clips.first().effects.first().parameterValues.value(0));
+        QVERIFY(cube.open(QIODevice::ReadOnly));
+        QStringList entries;
+        for (const QByteArray& line : cube.readAll().split('\n'))
+            if (!line.isEmpty() && (std::isdigit(uchar(line.at(0))) || line.at(0) == '-')) entries << QString::fromLatin1(line);
+        QCOMPARE(entries.size(), 33 * 33 * 33);
+        QCOMPARE(entries.at(32).split(' ').first().toDouble(), 0.4);
+        QCOMPARE(entries.at(32 + 32 * 33).split(' ').first().toDouble(), 0.6);
+
+        // Drawn: the blue square, the green right side, nothing clipped to
+        // the hidden base.
+        const auto check = [](const QImage& frame) {
+            return frame.pixelColor(20, 20) == QColor(Qt::blue) && frame.pixelColor(175, 50) == QColor(Qt::green)
+                && frame.pixelColor(125, 50) == QColor(Qt::white) && frame.pixelColor(10, 80) == QColor(Qt::white);
+        };
+        const QImage frame = render::renderCompositionFrame(result.shot, media, 0.5);
+        QVERIFY2(check(frame), qPrintable(frame.pixelColor(20, 20).name() + " " + frame.pixelColor(175, 50).name() + " "
+                                          + frame.pixelColor(125, 50).name() + " " + frame.pixelColor(10, 80).name()));
+        for (const bool relative : {false, true}) {
+            const QString projectPath = dir.filePath(relative ? "relative.vegfx" : "absolute.vegfx");
+            project::ProjectSaveOptions save;
+            save.useRelativePaths = relative;
+            QVERIFY(project::VegfxSerializer::saveToFile(projectPath, *result.shot, *media, save).isSuccess());
+            auto loaded = std::make_shared<composition::Composition>();
+            auto loadedMedia = std::make_shared<media::MediaManager>();
+            QVERIFY(project::VegfxSerializer::loadFromFile(projectPath, loaded.get(), loadedMedia.get()).isSuccess());
+            QVERIFY(check(render::renderCompositionFrame(loaded, loadedMedia, 0.5)));
+        }
+    }
+
+    // A document saved without "maximize compatibility" has a blank
+    // flattened image (one colour all over): it is not taken for the
+    // document's picture.
+    void photoshopBlankFlattenedImage() {
+        using namespace psdtest;
+        const QSize size(40, 20);
+        Layer layer; layer.name = "Layer"; layer.id = 1; layer.rect = QRect(0, 0, 20, 20); layer.pixels = filled(layer.rect.size(), Qt::red);
+        media::PsdDocument blank;
+        QVERIFY(blank.loadData(document(size, {layer}, filled(size, Qt::white))));
+        QVERIFY(!blank.hasCompositeImage());
+        QImage picture = filled(size, Qt::white);
+        for (int y = 0; y < 20; ++y) for (int x = 0; x < 20; ++x) picture.setPixelColor(x, y, Qt::red);
+        media::PsdDocument saved;
+        QVERIFY(saved.loadData(document(size, {layer}, picture)));
+        QVERIFY(saved.hasCompositeImage());
+    }
+
     // The sample documents Photoshop made (SAMPLES/vegfx_projects/project_*,
     // kept out of git): every layer decodes, and the imported shot looks
     // like Photoshop's own flattened image. project_4's is one smart object
@@ -1816,7 +1955,12 @@ private slots:
         const QString root = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects";
         QStringList files;
         QDirIterator it(root, {"*.psd", "*.psb"}, QDir::Files, QDirIterator::Subdirectories);
-        while (it.hasNext()) files << it.next();
+        // OPENVEGAS_PSD_SAMPLES limits the run to the files whose path has it.
+        const QString only = qEnvironmentVariable("OPENVEGAS_PSD_SAMPLES");
+        while (it.hasNext()) {
+            const QString next = it.next();
+            if (only.isEmpty() || next.contains(only)) files << next;
+        }
         if (files.isEmpty()) QSKIP("No sample PSD or PSB in SAMPLES/vegfx_projects");
         // The reference plug-ins' own specs when they are there.
         const QString pluginDir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects/Plugins";
@@ -1862,6 +2006,7 @@ private slots:
             QVERIFY2(!flat.isNull(), qPrintable(path));
             const project::PsdImportResult result = project::importPsdComposition(path, *media, specOf, options);
             QVERIFY2(result.shot && result.layerCount > 0, qPrintable(path + ": " + result.error));
+            qInfo().noquote() << QFileInfo(path).fileName() << "notes" << result.notes;
             // Embedded documents: shots of their own, every layer locked;
             // the document's own layers are not.
             for (const composition::Layer& layer : result.shot->layers()) QVERIFY(!layer.locked);
@@ -1877,8 +2022,27 @@ private slots:
             };
             scan(*result.shot);
             for (const auto& nested : result.nestedShots) scan(*nested);
-            if (QFileInfo(path).fileName().startsWith(QLatin1String("Slowed"))) {
-                QCOMPARE(result.nestedShots.size(), 1);
+            // Whether an embedded document stays split depends on how it
+            // draws, so with the reference plug-ins only.
+            if (nativeRuns && QFileInfo(path).fileName().startsWith(QLatin1String("Slowed"))) {
+                // Its smart object's document is split; inside that, the
+                // mockup's "YOUR DESING HERE" - clipped to the cassette and
+                // masked - is cut out by one picture mask of both, its own
+                // document split only when that draws as Photoshop's picture.
+                const auto inner = std::find_if(result.nestedShots.cbegin(), result.nestedShots.cend(),
+                                                [](const auto& shot) { return shot->name() == QString::fromUtf8("Кривые 1"); });
+                QVERIFY(inner != result.nestedShots.cend());
+                bool designMasked = false;
+                for (const composition::Layer& layer : (*inner)->layers())
+                    if (layer.name == "YOUR DESING HERE") {
+                        QCOMPARE(layer.masks.size(), 1);
+                        QCOMPARE(layer.masks.first().shape, composition::MaskShape::Image);
+                        QVERIFY(layer.masks.first().imagePath.contains(":clip:"));
+                        QVERIFY(layer.clips.first().nestedComposition
+                                || result.notes.join('\n').contains("YOUR DESING HERE: its source document is not split"));
+                        designMasked = true;
+                    }
+                QVERIFY(designMasked);
                 // Camera Raw's vignette on top, the smart object below it.
                 QCOMPARE(result.shot->layers().size(), 2);
                 const composition::Layer& vignette = result.shot->layers().first();
@@ -1886,9 +2050,8 @@ private slots:
                 QCOMPARE(vignette.clips.first().effects.first().pluginId.value(),
                          QString("com.FXHOME.HitFilm.VignetteExposure"));
                 const composition::Layer& smart = result.shot->layers().last();
-                QVERIFY(smart.clips.first().nestedComposition == result.nestedShots.first());
-                QCOMPARE(result.nestedShots.first()->name(), QString::fromUtf8("Кривые 1"));
-                QCOMPARE(result.nestedShots.first()->displaySize(), QSize(6942, 6054));
+                QVERIFY(smart.clips.first().nestedComposition == *inner);
+                QCOMPARE((*inner)->displaySize(), QSize(6942, 6054));
                 QCOMPARE(smart.clips.first().effects.size(), 1);
                 QCOMPARE(smart.clips.first().effects.first().pluginId.value(), QString("com.FXHOME.HitFilm.LUT"));
                 QVERIFY(QFileInfo::exists(smart.clips.first().effects.first().parameterValues.value(0)));
@@ -2400,6 +2563,12 @@ private slots:
             QVERIFY2(!list->item(i)->text().contains("#psd"), qPrintable(list->item(i)->text()));
         QCOMPARE(panel.findChild<QLabel*>("media-panel-count")->text(),
                  QStringLiteral("%1 item(s)").arg(withVideo ? 4 : 3));
+        // Imported as separate layers (no shot of the document), they are.
+        panel.setCompositeShots({});
+        bool layersListed = false;
+        for (int i = 0; i < list->count(); ++i) layersListed = layersListed || list->item(i)->toolTip().contains("#psdlayer:");
+        QVERIFY(layersListed);
+        panel.setCompositeShots({shot});
         QListWidgetItem* shotRow = row(imported.shot->name());
         QVERIFY(shotRow);
         QVERIFY(!shotRow->data(previewRole).value<QPixmap>().isNull());

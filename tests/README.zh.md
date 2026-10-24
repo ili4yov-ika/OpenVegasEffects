@@ -436,7 +436,12 @@ Exposure Pro 的 Camera Raw）并进行绘制。`photoshopSamplesImportByLayers`
 Photoshop 自身的合并图像比较，使胶片颗粒按平均值计入（`psd-<名称>.png`、`psd-<名称>-photoshop.png`）。
 project_4 的文档是一个智能对象，其源是一个带完整 Camera Raw 调色的 29 层文档：该文档成为独立的镜头，
 所有图层均被锁定，Camera Raw 成为按 Photoshop 结果拟合的 LUT（具备参考插件和 OpenGL 时比较该镜头；
-否则只比较不含效果的文档）。`photoshopFlattenedImageTransparency` 检查合并图像的额外通道仅在图层数
+否则只比较不含效果的文档）。`photoshopMasksFillsAndClippingImport` 检查调整图层的矢量蒙版成为其 Grade
+图层的 Freehand 蒙版，新调整图层的白色蒙版不成为蒙版，无像素的纯色填充图层成为由矢量蒙版或栅格蒙版
+（一个图像蒙版 `#psdmask:`，以绝对和相对路径保存后仍保留）裁剪的 Plane，剪贴到隐藏基底的图层被隐藏，
+黑白按 Photoshop 的公式成为 LUT；`photoshopBlankFlattenedImage` 检查空白合并图像（未启用“最大兼容”
+保存）不被当作文档的图像。具备参考插件时，嵌入文档仅当绘制结果与 Photoshop 图像相差在 6 级以内时才保持
+拆分。`photoshopFlattenedImageTransparency` 检查合并图像的额外通道仅在图层数
 为负时才是其透明度（否则是存储的选区），`photoshopCameraRawBeyondToneKeepsPixels` 检查超出色调控件的
 Camera Raw 会保留 Photoshop 滤镜处理后的像素并列出这些设置，而中性值不计入。
 `photoshopLayersSurviveSave` 以绝对路径和相对路径保存并重新打开。具备 OpenGL 和参考插件时，

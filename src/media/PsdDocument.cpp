@@ -746,6 +746,10 @@ bool PsdDocument::parseLayerInfo(qint64 begin, qint64 end, bool wide)
                     layer.smartObject = smart;
                     if (layer.kind == PsdLayer::Kind::Pixel) layer.kind = PsdLayer::Kind::SmartObject;
                 }
+            } else if (key == QLatin1String("SoCo")) {
+                b.u32();                            // descriptor version
+                const QVariantMap fill = readDescriptorBody(b, 0);
+                if (b.ok()) layer.fillColor = psdColor(fill.value(QStringLiteral("Clr ")), QColor());
             } else if (key == QLatin1String("TySh")) {
                 if (layer.kind == PsdLayer::Kind::Pixel) layer.kind = PsdLayer::Kind::Text;
             } else if (key == QLatin1String("vmsk") || key == QLatin1String("vsms")) {
@@ -911,6 +915,50 @@ void PsdDocument::applyMasks(QImage& image, const QRect& area, const PsdLayer& o
     }
 }
 
+bool PsdDocument::rasterMaskHidesNothing(int index) const
+{
+    if (index < 0 || index >= m_layers.size()) return true;
+    const PsdLayer& layer = m_layers.at(index);
+    if (!layer.hasRasterMask || layer.rasterMask.disabled) return true;
+    // Black around its rectangle hides the rest of the document.
+    if (layer.rasterMask.defaultColor != 255) return false;
+    const QRect& m = layer.rasterMask.rect;
+    if (m.isEmpty()) return true;
+    for (const PsdChannel& channel : layer.channels) {
+        if (channel.id != layer.rasterMask.channel) continue;
+        const QByteArray plane = channelPlane(channel, m.width(), m.height());
+        if (plane.size() < qint64(m.width()) * m.height()) return false;
+        for (const char value : plane)
+            if (uchar(value) < 255) return false;
+    }
+    return true;
+}
+
+QPainterPath PsdDocument::vectorMaskPath(int index) const
+{
+    if (index < 0 || index >= m_layers.size()) return {};
+    const PsdLayer& layer = m_layers.at(index);
+    return layer.hasVectorMask && !layer.vectorMaskDisabled ? layer.vectorMask : QPainterPath();
+}
+
+QRect PsdDocument::maskArea(int index) const
+{
+    if (index < 0 || index >= m_layers.size()) return {};
+    const QRect& rect = m_layers.at(index).rect;
+    return rect.isEmpty() ? QRect(QPoint(0, 0), m_size) : rect;
+}
+
+QImage PsdDocument::maskImage(int index) const
+{
+    const QRect area = maskArea(index);
+    if (area.isEmpty()) return {};
+    QImage image(area.size(), QImage::Format_RGBA8888);
+    image.fill(Qt::white);
+    applyMasks(image, area, m_layers.at(index));
+    for (int group : enclosingGroups(index)) applyMasks(image, area, m_layers.at(group));
+    return image;
+}
+
 QVector<int> PsdDocument::enclosingGroups(int index) const
 {
     // A group's folder record is above its layers, past the dividers and
@@ -999,6 +1047,23 @@ QByteArray PsdDocument::linkedFileData(const QString& uniqueId) const
     return it == m_linked.cend() ? QByteArray() : m_data.mid(it->offset, it->length);
 }
 
+bool PsdDocument::hasCompositeImage() const
+{
+    const QImage composite = compositeImage();
+    if (composite.isNull()) return false;
+    // One colour all over, while the document has layers: the blank picture
+    // Photoshop leaves without "maximize compatibility".
+    if (m_layers.isEmpty()) return true;
+    const QImage pixels = composite.convertToFormat(QImage::Format_RGBA8888);
+    const quint32 first = *reinterpret_cast<const quint32*>(pixels.constScanLine(0));
+    for (int y = 0; y < pixels.height(); y += 2) {
+        const quint32* row = reinterpret_cast<const quint32*>(pixels.constScanLine(y));
+        for (int x = 0; x < pixels.width(); x += 2)
+            if (row[x] != first) return true;
+    }
+    return false;
+}
+
 QByteArray PsdDocument::linkedFileView(const QString& uniqueId) const
 {
     const auto it = m_linked.constFind(uniqueId);
@@ -1026,6 +1091,22 @@ QVector<bool> psdLayersShown(const PsdDocument& document)
             shown[i] = parent && layer.visible;
         }
     }
+    // A clipped layer shows only where its base does: with the base hidden
+    // the whole clipping set is. Walked from the bottom, a level per group.
+    QVector<bool> bases{true};
+    for (int i = 0; i < layers.size(); ++i) {
+        const PsdLayer& layer = layers.at(i);
+        if (layer.kind == PsdLayer::Kind::GroupEnd) {
+            bases.append(true);
+        } else if (layer.kind == PsdLayer::Kind::GroupStart) {
+            if (bases.size() > 1) bases.removeLast();
+            bases.last() = shown[i];
+        } else if (layer.clipping) {
+            shown[i] = shown[i] && bases.last();
+        } else {
+            bases.last() = shown[i];
+        }
+    }
     return shown;
 }
 
@@ -1033,14 +1114,15 @@ QVector<bool> psdLayersShown(const PsdDocument& document)
 
 bool isPsdMarkerPath(const QString& path)
 {
-    return path.contains(QLatin1String(kPsdLayerMarker)) || path.contains(QLatin1String(kPsdSourceMarker));
+    return path.contains(QLatin1String(kPsdLayerMarker)) || path.contains(QLatin1String(kPsdSourceMarker))
+           || path.contains(QLatin1String(kPsdMaskMarker));
 }
 
 QString psdFileOfPath(const QString& path)
 {
     // The first marker ends the file's part (a nested path has several).
     qsizetype first = -1;
-    for (const char* marker : {kPsdLayerMarker, kPsdSourceMarker}) {
+    for (const char* marker : {kPsdLayerMarker, kPsdSourceMarker, kPsdMaskMarker}) {
         const qsizetype at = path.indexOf(QLatin1String(marker));
         if (at >= 0 && (first < 0 || at < first)) first = at;
     }
@@ -1049,8 +1131,9 @@ QString psdFileOfPath(const QString& path)
 
 QString psdDocumentOfPath(const QString& path)
 {
-    const qsizetype layerAt = path.indexOf(QLatin1String(kPsdLayerMarker));
-    return layerAt >= 0 ? path.left(layerAt) : path;
+    qsizetype at = path.indexOf(QLatin1String(kPsdLayerMarker));
+    if (at < 0) at = path.indexOf(QLatin1String(kPsdMaskMarker));
+    return at >= 0 ? path.left(at) : path;
 }
 
 bool isPsdFile(const QString& path)
@@ -1102,6 +1185,7 @@ struct MarkerTarget
     std::shared_ptr<const PsdDocument> document;
     int layer = -1;
     int clipBase = -1;
+    bool mask = false;          // a "#psdmask:" path: the layer's mask
     QString sourceId;
 };
 
@@ -1110,11 +1194,17 @@ struct MarkerTarget
 MarkerTarget resolveMarker(const QString& path)
 {
     MarkerTarget target;
-    const qsizetype layerAt = path.indexOf(QLatin1String(kPsdLayerMarker));
+    qsizetype layerAt = path.indexOf(QLatin1String(kPsdLayerMarker));
+    qsizetype markerLength = qsizetype(qstrlen(kPsdLayerMarker));
+    if (layerAt < 0) {
+        layerAt = path.indexOf(QLatin1String(kPsdMaskMarker));
+        markerLength = qsizetype(qstrlen(kPsdMaskMarker));
+        target.mask = layerAt >= 0;
+    }
     if (layerAt >= 0) {
         target.document = openPsdDocument(path.left(layerAt));
         if (!target.document) return target;
-        const QStringList parts = path.mid(layerAt + qsizetype(qstrlen(kPsdLayerMarker))).split(QLatin1Char(':'));
+        const QStringList parts = path.mid(layerAt + markerLength).split(QLatin1Char(':'));
         target.layer = target.document->indexOfLayerId(parts.value(0).toUInt());
         if (parts.size() >= 3 && parts.at(1) == QLatin1String("clip"))
             target.clipBase = target.document->indexOfLayerId(parts.at(2).toUInt());
@@ -1140,7 +1230,7 @@ QImage sourceImage(const QString& path, const PsdDocument& document, const QStri
         const auto inner = openPsdDocument(path);
         if (!inner) return {};
         const QImage composite = inner->compositeImage();
-        return composite.isNull() ? flattenLayers(*inner) : composite;
+        return composite.isNull() || !inner->hasCompositeImage() ? flattenLayers(*inner) : composite;
     }
     QImage image = QImage::fromData(data);
     return image.isNull() ? QImage() : image.convertToFormat(QImage::Format_RGBA8888);
@@ -1174,16 +1264,19 @@ QImage readStillImage(const QString& path)
         const MarkerTarget target = resolveMarker(path);
         if (!target.document) return {};
         if (!target.sourceId.isEmpty()) return sourceImage(path, *target.document, target.sourceId);
-        QImage image = target.document->layerImage(target.layer);
+        if (target.layer < 0) return {};
+        QImage image = target.mask ? target.document->maskImage(target.layer)
+                                   : target.document->layerImage(target.layer);
         if (image.isNull() || target.clipBase < 0) return image;
         // Clipped: only where the base layer is.
-        const PsdLayer& own = target.document->layers().at(target.layer);
+        const QRect area = target.mask ? target.document->maskArea(target.layer)
+                                       : target.document->layers().at(target.layer).rect;
         const PsdLayer& base = target.document->layers().at(target.clipBase);
         const QImage baseImage = target.document->layerImage(target.clipBase);
         for (int y = 0; y < image.height(); ++y) {
             uchar* row = image.scanLine(y);
             for (int x = 0; x < image.width(); ++x) {
-                const QPoint at = own.rect.topLeft() + QPoint(x, y) - base.rect.topLeft();
+                const QPoint at = area.topLeft() + QPoint(x, y) - base.rect.topLeft();
                 const int cover = baseImage.valid(at) ? uchar(baseImage.constScanLine(at.y())[at.x() * 4 + 3]) : 0;
                 row[x * 4 + 3] = uchar(row[x * 4 + 3] * cover / 255);
             }
@@ -1194,7 +1287,7 @@ QImage readStillImage(const QString& path)
         const auto document = cachedDocument(path);
         if (!document) return {};
         QImage composite = document->compositeImage();
-        return composite.isNull() ? flattenLayers(*document) : composite;
+        return composite.isNull() || !document->hasCompositeImage() ? flattenLayers(*document) : composite;
     }
     return QImage(path);
 }
@@ -1213,7 +1306,9 @@ QSize stillImageSize(const QString& path)
             QBuffer buffer(&data);
             return QImageReader(&buffer).size();
         }
-        return target.layer >= 0 ? target.document->layers().at(target.layer).rect.size() : QSize();
+        if (target.layer < 0) return {};
+        return target.mask ? target.document->maskArea(target.layer).size()
+                           : target.document->layers().at(target.layer).rect.size();
     }
     if (isPsdFile(path)) {
         QFile file(path);

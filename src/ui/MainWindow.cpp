@@ -36,6 +36,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QScreen>
+#include <QCheckBox>
 #include <QPushButton>
 #include <QLabel>
 #include <QSet>
@@ -49,6 +50,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <optional>
 #include <cstring>
 #include <limits>
 
@@ -256,8 +258,17 @@ void giveBottomDockTheCorners(QMainWindow* window)
 constexpr int kLayoutStateVersion = 4;
 const char kUntitledDocument[] = QT_TRANSLATE_NOOP("openvegas::ui::MainWindow", "Untitled Project");
 
-const char kMediaPatterns[] =
-    "*.mp4 *.mov *.avi *.mkv *.webm *.png *.jpg *.jpeg *.bmp *.tga *.exr *.dpx";
+// Every video, still (Photoshop documents among them) and sound format the
+// media manager takes, from its own lists so the two cannot drift apart.
+QString mediaPatterns()
+{
+    QStringList patterns;
+    for (const QStringList* list : {&media::videoFileExtensions(), &media::imageFileExtensions(),
+                                    &media::audioFileExtensions()})
+        for (const QString& extension : *list) patterns.append(QStringLiteral("*.%1").arg(extension));
+    patterns.removeDuplicates();
+    return patterns.join(QLatin1Char(' '));
+}
 
 // Filter for the single Import command. The reference keeps a second command
 // of its own for 3D models; here there is one Import, so its filter has to
@@ -276,7 +287,7 @@ QString importFileFilter()
         modelPatterns.append(QStringLiteral("*.%1").arg(extension));
     }
     const QString models = modelPatterns.join(QLatin1Char(' '));
-    const QString media = QLatin1String(kMediaPatterns);
+    const QString media = mediaPatterns();
 
     QStringList filters;
     filters.append(QCoreApplication::translate("openvegas::ui::MainWindow",
@@ -284,6 +295,8 @@ QString importFileFilter()
                        .arg(media, models));
     filters.append(QCoreApplication::translate("openvegas::ui::MainWindow", "Media Files (%1)")
                        .arg(media));
+    filters.append(QCoreApplication::translate("openvegas::ui::MainWindow", "Photoshop Documents (%1)")
+                       .arg(QStringLiteral("*.psd *.psb")));
     // The per-format model entries come from the reference's own filter string
     // (1412d0000) rather than being restated here, so the list a user scrolls
     // reads exactly as the original's does.
@@ -3102,6 +3115,34 @@ void MainWindow::importFiles(const QStringList& files)
     }
     QSet<QString> importedSequences;
     QStringList photoshopNotes;
+    // Photoshop documents: asked for each how it comes in, or once for all
+    // of them when the answer is to hold for the rest.
+    const int photoshopCount = int(std::count_if(files.cbegin(), files.cend(),
+                                                 [](const QString& f) { return media::isPsdFile(f); }));
+    std::optional<PhotoshopImport> photoshopForAll;
+    const auto askPhotoshopImport = [&](const QString& file) -> std::optional<PhotoshopImport> {
+        if (photoshopForAll) return photoshopForAll;
+        QMessageBox box(QMessageBox::Question, tr("Import Photoshop Document"),
+                        tr("How should \"%1\" be imported?").arg(QFileInfo(file).fileName()),
+                        QMessageBox::NoButton, this);
+        box.setInformativeText(tr("As one composite shot, its layers come in as a shot of their own, "
+                                  "placed as one layer. As separate layers, they go straight onto the "
+                                  "shot in front. As one image, the document is flattened."));
+        QPushButton* shot = box.addButton(tr("As One Composite Shot"), QMessageBox::AcceptRole);
+        QPushButton* layers = box.addButton(tr("As Separate Layers"), QMessageBox::AcceptRole);
+        QPushButton* flat = box.addButton(tr("As One Image"), QMessageBox::AcceptRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(shot);
+        if (photoshopCount > 1)
+            box.setCheckBox(new QCheckBox(tr("Import the other Photoshop documents the same way"), &box));
+        box.exec();
+        std::optional<PhotoshopImport> kind;
+        if (box.clickedButton() == shot) kind = PhotoshopImport::CompositeShot;
+        else if (box.clickedButton() == layers) kind = PhotoshopImport::Layers;
+        else if (box.clickedButton() == flat) kind = PhotoshopImport::FlattenedImage;
+        if (kind && box.checkBox() && box.checkBox()->isChecked()) photoshopForAll = kind;
+        return kind;
+    };
     const double sequenceRate = m_composition->fpsDenominator() > 0
         ? double(m_composition->fpsNumerator()) / m_composition->fpsDenominator() : 30.0;
     for (const QString& file : files) {
@@ -3146,9 +3187,15 @@ void MainWindow::importFiles(const QStringList& files)
             }
             continue;
         }
-        if (media::isPsdFile(file) && importPhotoshopLayers(file, cursor, &photoshopNotes)) {
-            ++imported;
-            continue;
+        if (media::isPsdFile(file)) {
+            const auto kind = askPhotoshopImport(file);
+            if (!kind) continue;                                  // cancelled
+            if (*kind != PhotoshopImport::FlattenedImage
+                && importPhotoshopLayers(file, cursor, &photoshopNotes, *kind)) {
+                ++imported;
+                continue;
+            }
+            // Flattened: an image like any other, below.
         }
         const core::Result r = m_mediaManager->importFile(file);
         if (r.isFailure()) {
@@ -3190,7 +3237,8 @@ void MainWindow::importFiles(const QStringList& files)
     }
 }
 
-bool MainWindow::importPhotoshopLayers(const QString& file, double& cursor, QStringList* notes)
+bool MainWindow::importPhotoshopLayers(const QString& file, double& cursor, QStringList* notes,
+                                       PhotoshopImport kind)
 {
     if (!m_rootComposition || !m_composition || !m_mediaManager) return false;
     project::PsdImportOptions options;
@@ -3215,16 +3263,49 @@ bool MainWindow::importPhotoshopLayers(const QString& file, double& cursor, QStr
     if (!result.shot || result.layerCount == 0) return false;
     const std::shared_ptr<composition::Composition> shot = result.shot;
     // Names of their own among the project's shots: the documents embedded
-    // in it (split into their layers) first, then the document's.
+    // in it (split into their layers) first, then the document's - unless
+    // its layers go straight onto the shot in front.
     QStringList names;
     for (const auto& existing : allProjectShots()) names.append(existing->name());
     QVector<std::shared_ptr<composition::Composition>> added = result.nestedShots;
-    added.append(shot);
+    if (kind != PhotoshopImport::Layers) added.append(shot);
     for (const auto& each : added) {
         const QString base = each->name();
         for (int n = 2; names.contains(each->name()); ++n) each->setName(QStringLiteral("%1 %2").arg(base).arg(n));
         names.append(each->name());
         m_rootComposition->addCompositeShot(each);
+    }
+    for (const QString& note : result.notes)
+        notes->append(QStringLiteral("%1 - %2").arg(QFileInfo(file).fileName(), note));
+
+    if (kind == PhotoshopImport::Layers) {
+        // The document centred in the shot in front: transforms are already
+        // from the centre; masks, in pixels, move by the difference of the
+        // two sizes, and a Plane without masks keeps to the document's frame.
+        const QPointF offset((m_composition->displaySize().width() - shot->displaySize().width()) / 2.0,
+                             (m_composition->displaySize().height() - shot->displaySize().height()) / 2.0);
+        const QVector<composition::Layer> layers = shot->layers();
+        for (int k = int(layers.size()) - 1; k >= 0; --k) {   // bottom first, each on top
+            composition::Layer layer = layers.at(k);
+            for (composition::Clip& clip : layer.clips) clip.startSeconds += cursor;
+            for (composition::LayerMask& mask : layer.masks) {
+                mask.bounds.translate(offset);
+                for (QPointF& point : mask.points) point += offset;
+            }
+            if (layer.kind == composition::LayerKind::Plane && layer.masks.isEmpty()
+                && shot->displaySize() != m_composition->displaySize()) {
+                composition::LayerMask frame;
+                frame.name = tr("Document Frame");
+                frame.bounds = QRectF(offset, QSizeF(shot->displaySize()));
+                layer.masks.append(frame);
+            }
+            m_composition->insertLayer(0, layer);
+        }
+        const double length = shot->durationSeconds();
+        if (m_composition->durationSeconds() < cursor + length) m_composition->setDurationSeconds(cursor + length);
+        cursor += length;
+        projectShotsChanged();
+        return true;
     }
 
     composition::Clip clip;
@@ -3241,8 +3322,6 @@ bool MainWindow::importPhotoshopLayers(const QString& file, double& cursor, QStr
     if (m_composition->durationSeconds() < cursor + clip.durationSeconds)
         m_composition->setDurationSeconds(cursor + clip.durationSeconds);
     cursor += clip.durationSeconds;
-    for (const QString& note : result.notes)
-        notes->append(QStringLiteral("%1 - %2").arg(QFileInfo(file).fileName(), note));
     projectShotsChanged();
     return true;
 }

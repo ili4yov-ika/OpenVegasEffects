@@ -545,6 +545,14 @@ source is a 29-layer document under a full Camera Raw look: that document become
 its own with every layer locked, Camera Raw a LUT fitted to Photoshop's result (with the
 reference plug-ins and OpenGL the shot is compared; without them only documents without
 effects are).
+`photoshopMasksFillsAndClippingImport` checks an adjustment's vector mask as a freehand mask
+of its Grade layer, the white mask of a new adjustment as none, a Solid Color fill layer
+without pixels as a Plane cut by its vector mask or by its raster mask (one picture mask,
+`#psdmask:`, which survives a save with absolute and relative paths), a layer clipped to a
+hidden base as hidden and Black & White as a LUT by Photoshop's formula;
+`photoshopBlankFlattenedImage` that a blank flattened image (saved without "maximize
+compatibility") is not taken for the document's picture. With the reference plug-ins an
+embedded document stays split only when it draws within 6 levels of Photoshop's picture of it.
 `photoshopFlattenedImageTransparency` checks that the flattened image's extra channel is its
 transparency only when the layer count is negative (otherwise a saved selection), and
 `photoshopCameraRawBeyondToneKeepsPixels` that Camera Raw beyond the tone controls keeps

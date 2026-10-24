@@ -678,6 +678,18 @@ QStringList MediaPanel::detailLines(const media::MediaAsset& asset) const
     return lines;
 }
 
+bool MediaPanel::partOfListedDocument(const media::MediaAsset& asset) const
+{
+    const QString path = asset.filePath();
+    if (!media::isPsdMarkerPath(path)) return false;
+    // A layer's document; a source's, the one it is embedded in.
+    QString document = media::psdDocumentOfPath(path);
+    if (document == path) document = path.left(path.lastIndexOf(QLatin1String(media::kPsdSourceMarker)));
+    for (const CompositeShotEntry& shot : m_shots)
+        if (!shot.previewPath.isEmpty() && shot.previewPath == document) return true;
+    return false;
+}
+
 QStringList MediaPanel::detailLines(const CompositeShotEntry& shot) const
 {
     QStringList lines;
@@ -814,7 +826,7 @@ void MediaPanel::rebuildList()
         }
         // The layers and smart object sources of an imported Photoshop
         // document belong to its composite shot, which lists them.
-        if (media::isPsdMarkerPath(asset.filePath())) continue;
+        if (partOfListedDocument(asset)) continue;
         indices.append(i);
     }
     std::sort(indices.begin(), indices.end(), [&](int a, int b) {
@@ -1046,7 +1058,7 @@ void MediaPanel::updateCount()
     // is not counted either.
     qsizetype assets = 0;
     for (const media::MediaAsset& asset : m_manager->assets())
-        if (!media::isPsdMarkerPath(asset.filePath())) ++assets;
+        if (!partOfListedDocument(asset)) ++assets;
     m_countLabel->setText(tr("%1 item(s)").arg(assets + m_shots.size()));
 }
 

@@ -62,6 +62,9 @@ enum class MaskShape
     Polygon,
     Star,
     Freehand,
+    // A picture's alpha over `bounds` (imagePath; outside it nothing shows):
+    // a Photoshop layer's raster masks as an import makes them.
+    Image,
 };
 
 // A mask is stored in composition pixel coordinates. This matches the Viewer
@@ -79,6 +82,8 @@ struct LayerMask
     double opacity = 1.0;
     double feather = 0.0;
     double expansion = 0.0;
+    // For MaskShape::Image: the picture, a path media::readStillImage reads.
+    QString imagePath;
 };
 
 // Blend modes offered for a layer. The list lives beside the model because a

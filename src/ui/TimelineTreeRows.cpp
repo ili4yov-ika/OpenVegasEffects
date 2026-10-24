@@ -394,6 +394,8 @@ void TimelineWidget::rebuildTree()
             enabled->setChecked(mask.enabled); enabled->setToolTip(tr("Enable mask")); ml->addWidget(enabled);
             auto* shape = new QComboBox(controls); shape->setObjectName(QStringLiteral("timelineMaskShape_%1_%2").arg(i).arg(m));
             shape->addItems({tr("Rectangle"), tr("Rounded Rectangle"), tr("Ellipse"), tr("Polygon"), tr("Star"), tr("Freehand")});
+            // A picture mask (an imported Photoshop mask) stays one.
+            if (mask.shape == composition::MaskShape::Image) { shape->addItem(tr("Image")); shape->setEnabled(false); }
             shape->setCurrentIndex(int(mask.shape)); shape->setToolTip(tr("Mask shape")); ml->addWidget(shape);
             auto number = [controls, ml](const QString& name, double value, double min, double max, const QString& tip) {
                 auto* spin = new QDoubleSpinBox(controls); spin->setObjectName(name); spin->setRange(min, max);

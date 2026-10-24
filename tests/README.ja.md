@@ -553,6 +553,14 @@ RLE、ZIP、予測付き ZIP のチャンネル、描画モードのキー、不
 すべてのレイヤーがロックされた独立したショットになり、Camera Raw は Photoshop の結果に合わせた LUT に
 なります（リファレンスのプラグインと OpenGL があればショットを比較し、なければエフェクトのないドキュメント
 だけを比較します）。
+`photoshopMasksFillsAndClippingImport` は、調整レイヤーのベクトルマスクが Grade レイヤーの Freehand
+マスクになること、新しい調整レイヤーの白いマスクはマスクにならないこと、ピクセルのないべた塗り
+レイヤーがベクトルマスクまたはラスターマスク（絶対パス・相対パスでの保存後も残る画像マスク
+`#psdmask:`）で切り抜かれた Plane になること、非表示のベースにクリッピングされたレイヤーが非表示に
+なること、白黒が Photoshop の式による LUT になることを確認します。`photoshopBlankFlattenedImage` は
+（「互換性を優先」なしで保存された）空の統合画像をドキュメントの画像とみなさないことを確認します。
+リファレンスのプラグインがあれば、埋め込みドキュメントは Photoshop の画像との差が 6 レベル以内に
+描画される場合にだけ分割されたままになります。
 `photoshopFlattenedImageTransparency` は統合画像の追加チャンネルがレイヤー数が負のときだけ透明度で
 あること（それ以外は保存された選択範囲）を、`photoshopCameraRawBeyondToneKeepsPixels` はトーン以外の
 Camera Raw 設定があると Photoshop がフィルターを適用したピクセルを保ち、その設定名を示すこと、

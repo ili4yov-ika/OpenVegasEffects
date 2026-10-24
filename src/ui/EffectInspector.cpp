@@ -513,8 +513,11 @@ void EffectInspector::buildMasks(const composition::Layer& layer)
         auto* shape = new QComboBox(controls);
         shape->setObjectName(QStringLiteral("controlsMaskShape_%1").arg(index));
         shape->addItems(shapes);
+        // A picture mask (an imported Photoshop mask) stays one.
+        const bool picture = mask.shape == composition::MaskShape::Image;
+        if (picture) shape->addItem(tr("Image"));
         shape->setCurrentIndex(int(mask.shape));
-        shape->setEnabled(!layer.locked);
+        shape->setEnabled(!layer.locked && !picture);
         layout->addWidget(shape, 1);
         const auto number = [controls, layout](const QString& name, double value,
                                                double minimum, double maximum,

@@ -11,6 +11,8 @@
 #include <QHash>
 #include <QLineF>
 #include <QRegularExpression>
+#include <QPainter>
+#include <QPainterPath>
 #include <QSet>
 #include <QStandardPaths>
 #include <QTransform>
@@ -919,6 +921,49 @@ std::optional<CubeLut> modernBrightnessContrastLut(const QByteArray& data)
     return lut;
 }
 
+// Photoshop's Black & White: the grey of a colour is its lowest channel,
+// plus the step to the middle one weighted by the secondary hue it makes
+// with the highest (yellow, cyan or magenta), plus the step to the highest
+// weighted by that primary (red, green or blue) - the six sliders, in
+// percent. Its tint is not carried over (noted).
+std::optional<CubeLut> blackWhiteLut(const QByteArray& data, bool* tinted)
+{
+    QVariantMap values;
+    for (const qint64 offset : {qint64(4), qint64(0), qint64(8)}) {
+        bool ok = false;
+        values = media::readPsdDescriptor(data, offset, &ok);
+        if (ok && values.contains(QStringLiteral("Rd  "))) break;
+        values.clear();
+    }
+    if (values.isEmpty()) return std::nullopt;
+    if (tinted) *tinted = flag(values, "useTint", false);
+    const double red = valueOf(values, "Rd  ", 40) / 100.0, yellow = valueOf(values, "Yllw", 60) / 100.0;
+    const double green = valueOf(values, "Grn ", 40) / 100.0, cyan = valueOf(values, "Cyn ", 60) / 100.0;
+    const double blue = valueOf(values, "Bl  ", 20) / 100.0, magenta = valueOf(values, "Mgnt", 80) / 100.0;
+    CubeLut lut;
+    const int n = lut.size;
+    lut.rgb.reserve(n * n * n * 3);
+    for (int b = 0; b < n; ++b)
+        for (int g = 0; g < n; ++g)
+            for (int r = 0; r < n; ++r) {
+                const double c[3] = {r / double(n - 1), g / double(n - 1), b / double(n - 1)};
+                int hi = 0, lo = 0;
+                for (int k = 1; k < 3; ++k) {
+                    if (c[k] > c[hi]) hi = k;
+                    if (c[k] < c[lo]) lo = k;
+                }
+                if (hi == lo) lo = (hi + 1) % 3;
+                const int mid = 3 - hi - lo;
+                const double primary = hi == 0 ? red : hi == 1 ? green : blue;
+                // The secondary between the highest and the middle channel.
+                const int pair = (1 << hi) | (1 << mid);
+                const double secondary = pair == 3 ? yellow : pair == 6 ? cyan : magenta;
+                const double grey = qBound(0.0, c[lo] + (c[mid] - c[lo]) * secondary + (c[hi] - c[mid]) * primary, 1.0);
+                for (int k = 0; k < 3; ++k) lut.rgb.append(float(grey));
+            }
+    return lut;
+}
+
 // Where a smart object's source lies in the document: its corners (Trnf)
 // as a transform from the source's pixels.
 std::optional<QTransform> smartObjectTransform(const QVariantMap& smart, const QSize& sourceSize)
@@ -957,6 +1002,152 @@ struct ImportContext
     QString lookDirectory;
     PsdImportResult* result;
 };
+
+// What hides parts of a layer, as a shape: the intersection of its own
+// vector mask, its groups' and - for a layer clipped to a base that is solid
+// inside its outline - that base's outline, in document pixels.
+struct MaskShape
+{
+    bool masked = false;      // false: nothing hides any of it
+    QPainterPath path;        // what shows; empty and masked: nothing does
+};
+
+// Whether a layer's pixels are solid inside `outline` and empty outside it,
+// so that clipping to the layer is clipping to the outline. Sampled every
+// few pixels; a few antialiased edge pixels may differ.
+bool solidInside(const media::PsdDocument& document, int index, const QPainterPath& outline)
+{
+    const QRect rect = document.layers().at(index).rect;
+    const QImage image = document.layerImage(index);
+    if (image.isNull() || rect.isEmpty()) return false;
+    QImage coverage(rect.size(), QImage::Format_Alpha8);
+    coverage.fill(0);
+    {
+        QPainter painter(&coverage);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.translate(-rect.topLeft());
+        painter.fillPath(outline, Qt::white);
+    }
+    const QImage pixels = image.convertToFormat(QImage::Format_RGBA8888);
+    qint64 samples = 0, wrong = 0;
+    for (int y = 0; y < rect.height(); y += 3) {
+        const uchar* row = pixels.constScanLine(y);
+        const uchar* cover = coverage.constScanLine(y);
+        for (int x = 0; x < rect.width(); x += 3) {
+            ++samples;
+            if (std::abs(int(row[x * 4 + 3]) - int(cover[x])) > 32) ++wrong;
+        }
+    }
+    return samples > 0 && wrong * 100 <= samples;
+}
+
+// The shape of what hides a layer (see MaskShape); null when a mask cannot be
+// one - a raster mask that hides something, or a base that is not solid
+// inside its outline.
+std::optional<MaskShape> maskShapeOf(const media::PsdDocument& document, int index, int base)
+{
+    MaskShape shape;
+    const auto take = [&](int record) {
+        if (!document.rasterMaskHidesNothing(record)) return false;
+        const QPainterPath path = document.vectorMaskPath(record);
+        if (path.isEmpty()) return true;
+        shape.path = shape.masked ? shape.path.intersected(path) : path;
+        shape.masked = true;
+        return true;
+    };
+    if (!take(index)) return std::nullopt;
+    for (int group : document.enclosingGroups(index))
+        if (!take(group)) return std::nullopt;
+    if (base >= 0) {
+        if (!document.rasterMaskHidesNothing(base)) return std::nullopt;
+        QPainterPath outline = document.vectorMaskPath(base);
+        if (outline.isEmpty()) outline.addRect(QRectF(document.layers().at(base).rect));
+        if (!solidInside(document, base, outline)) return std::nullopt;
+        shape.path = shape.masked ? shape.path.intersected(outline) : outline;
+        shape.masked = true;
+    }
+    return shape;
+}
+
+// A shape as this port's masks: one freehand mask per polygon it fills.
+QVector<composition::LayerMask> layerMasksOf(const QPainterPath& path, const QString& name)
+{
+    QVector<composition::LayerMask> masks;
+    for (const QPolygonF& polygon : path.toFillPolygons()) {
+        if (polygon.size() < 3) continue;
+        composition::LayerMask mask;
+        mask.name = name;
+        mask.shape = composition::MaskShape::Freehand;
+        mask.points = QVector<QPointF>(polygon.cbegin(), polygon.cend());
+        mask.bounds = polygon.boundingRect();
+        masks.append(mask);
+    }
+    return masks;
+}
+
+// Puts a shape on a layer: its masks, or the layer hidden when the shape
+// shows nothing.
+void applyMaskShape(composition::Layer& layer, const MaskShape& shape)
+{
+    if (!shape.masked) return;
+    layer.masks = layerMasksOf(shape.path, PsdImportText::tr("Photoshop Mask"));
+    if (layer.masks.isEmpty()) layer.visible = false;
+}
+
+// A layer's masks as one picture mask (media::kPsdMaskMarker): its raster
+// and vector masks, its groups' and, clipped, its base's alpha - exact
+// where shapes cannot be.
+void applyPictureMask(composition::Layer& layer, const media::PsdDocument& document,
+                      const QString& documentPath, int index, int base)
+{
+    QString path = documentPath + QLatin1String(media::kPsdMaskMarker)
+                   + QString::number(document.layers().at(index).id);
+    if (base >= 0)
+        path += QLatin1String(media::kPsdClipMarker) + QString::number(document.layers().at(base).id);
+    composition::LayerMask mask;
+    mask.name = PsdImportText::tr("Photoshop Mask");
+    mask.shape = composition::MaskShape::Image;
+    mask.imagePath = path;
+    mask.bounds = QRectF(document.maskArea(index));
+    layer.masks = {mask};
+}
+
+// The mean difference of two pictures over the colour channels of 8 x 8
+// blocks' averages, both over white (film grain counts by its average);
+// negative when they cannot be compared.
+double blockDifference(const QImage& first, const QImage& second)
+{
+    if (first.isNull() || second.isNull() || first.size() != second.size()) return -1.0;
+    const auto overWhite = [](const QImage& image) {
+        QImage white(image.size(), QImage::Format_RGBA8888);
+        white.fill(Qt::white);
+        QPainter painter(&white);
+        painter.drawImage(0, 0, image);
+        painter.end();
+        return white;
+    };
+    const QImage a = overWhite(first), b = overWhite(second);
+    double total = 0.0;
+    qint64 samples = 0;
+    for (int by = 0; by + 8 <= a.height(); by += 8) {
+        for (int bx = 0; bx + 8 <= a.width(); bx += 8) {
+            double sa[3] = {0, 0, 0}, sb[3] = {0, 0, 0};
+            for (int y = by; y < by + 8; ++y) {
+                const uchar* pa = a.constScanLine(y) + bx * 4;
+                const uchar* pb = b.constScanLine(y) + bx * 4;
+                for (int x = 0; x < 8; ++x)
+                    for (int c = 0; c < 3; ++c) { sa[c] += pa[x * 4 + c]; sb[c] += pb[x * 4 + c]; }
+            }
+            for (int c = 0; c < 3; ++c) total += std::abs(sa[c] - sb[c]) / 64.0;
+            samples += 3;
+        }
+    }
+    return samples > 0 ? total / samples : -1.0;
+}
+
+// An embedded document split into layers draws within this of Photoshop's
+// own picture of it (levels, per 8 x 8 block), or it is not split.
+constexpr double kMaxSplitDifference = 6.0;
 
 QString defaultLookDirectory()
 {
@@ -1049,7 +1240,8 @@ std::shared_ptr<composition::Composition> importDocument(const media::PsdDocumen
         layer.opacity = record.opacity / 255.0 * groupOpacity.at(i);
         bool exact = true;
         layer.blendMode = psdBlendModeName(record.blendKey, &exact);
-        if (!exact)
+        // (a hidden layer's mode changes nothing that shows)
+        if (!exact && layer.visible)
             addNote(notes, PsdImportText::tr("%1: the blend mode \"%2\" is shown as \"%3\".")
                                .arg(record.name, photoshopModeName(record.blendKey),
                                     composition::blendModeDisplayName(layer.blendMode)));
@@ -1066,6 +1258,19 @@ std::shared_ptr<composition::Composition> importDocument(const media::PsdDocumen
                                         PsdImportText::tr("Brightness/Contrast"),
                                         {{QStringLiteral("lutFilePath"), path}, {QStringLiteral("strength"), QStringLiteral("100")}},
                                         notes);
+            }
+            if (!effect && record.adjustmentKey == QLatin1String("blwh")) {
+                bool tinted = false;
+                if (const auto lut = blackWhiteLut(record.adjustmentData, &tinted)) {
+                    const QString path = writeCubeLut(*lut, context.lookDirectory,
+                                                      QStringLiteral("%1 - %2").arg(name, record.name));
+                    if (!path.isEmpty())
+                        effect = makeEffect(specOf, QStringLiteral("com.FXHOME.HitFilm.LUT"), translated(QT_TRANSLATE_NOOP("openvegas::project::PsdImport", "Black & White")),
+                                            {{QStringLiteral("lutFilePath"), path}, {QStringLiteral("strength"), QStringLiteral("100")}},
+                                            notes);
+                    if (effect && tinted)
+                        addNote(notes, PsdImportText::tr("%1: the tint of Black & White is not converted.").arg(record.name));
+                }
             }
             if (!effect && record.adjustmentKey == QLatin1String("curv")) {
                 // Curves, exactly, as a look-up table.
@@ -1084,20 +1289,37 @@ std::shared_ptr<composition::Composition> importDocument(const media::PsdDocumen
                 effect = adjustmentEffect(record, specOf, notes);
             }
             if (!effect) continue;
-            if (record.hasRasterMask || record.hasVectorMask)
-                addNote(notes, PsdImportText::tr("%1: the adjustment's mask is not kept.").arg(record.name));
+            // Its mask, as masks of the Grade layer: shapes when it is vector
+            // ones, a picture otherwise (a white raster mask - every new
+            // adjustment's - hides nothing).
+            const auto shape = maskShapeOf(document, i, -1);
             if (record.clipping) {
-                // Clipped to a pixel layer with only adjustments between: an
-                // effect of that layer.
+                // Clipped to a pixel layer with only adjustments between, and
+                // no mask of its own: an effect of that layer.
                 const int base = baseOf(i);
                 bool onlyAdjustments = base >= 0 && layerOfRecord.contains(base);
                 for (int b = base + 1; onlyAdjustments && b < i; ++b)
                     onlyAdjustments = records.at(b).kind == media::PsdLayer::Kind::Adjustment;
-                if (onlyAdjustments) {
+                // (and at full opacity: an effect has none of its own)
+                if (onlyAdjustments && shape && !shape->masked && layer.opacity >= 0.999) {
                     layers[layerOfRecord.value(base)].clips.first().effects.append(*effect);
                     continue;
                 }
-                addNote(notes, PsdImportText::tr("%1: a clipped adjustment applies to everything below it.").arg(record.name));
+                // Otherwise a Grade layer masked by its own mask and the base's
+                // alpha: what is below the base does not show where the base
+                // is solid, so this grades the base alone - wherever it is
+                // solid, and a little of what is below where it is not.
+                if (base < 0) {
+                    addNote(notes, PsdImportText::tr("%1: a clipped adjustment applies to everything below it.").arg(record.name));
+                } else if (const auto clipped = maskShapeOf(document, i, base)) {
+                    applyMaskShape(layer, *clipped);
+                } else {
+                    applyPictureMask(layer, document, documentPath, i, base);
+                }
+            } else if (shape) {
+                applyMaskShape(layer, *shape);
+            } else {
+                applyPictureMask(layer, document, documentPath, i, -1);
             }
             layer.kind = composition::LayerKind::Grade;
             composition::Clip clip = clipOf(QString());
@@ -1105,6 +1327,24 @@ std::shared_ptr<composition::Composition> importDocument(const media::PsdDocumen
             layer.clips.append(clip);
             layers.append(layer);
             styles.append(QVector<composition::Effect>());
+            ++context.result->layerCount;
+            continue;
+        }
+        // A Solid Color fill layer saved without pixels: its colour over the
+        // whole document, as a Plane, shaped by its masks.
+        if (record.rect.isEmpty() && record.fillColor.isValid()) {
+            layer.kind = composition::LayerKind::Plane;
+            layer.planeColor = record.fillColor;
+            composition::Clip clip = clipOf(QString());
+            layer.clips.append(clip);
+            const int base = record.clipping ? baseOf(i) : -1;
+            if (const auto shape = maskShapeOf(document, i, base)) applyMaskShape(layer, *shape);
+            else applyPictureMask(layer, document, documentPath, i, base);
+            if (record.fillOpacity < 255) layer.opacity *= record.fillOpacity / 255.0;
+            layerOfRecord.insert(i, int(layers.size()));
+            layers.append(layer);
+            styles.append(psdLayerStyleEffects(record.effects, document.globalLightAngle(), QSizeF(document.size()),
+                                               specOf, record.name, notes));
             ++context.result->layerCount;
             continue;
         }
@@ -1139,26 +1379,50 @@ std::shared_ptr<composition::Composition> importDocument(const media::PsdDocumen
                 composition::LayerTransform placement;
                 const bool placed = sourceSize.isValid()
                     && smartObjectPlacement(smart, sourceSize, document.size(), &placement);
-                // Masks of its own or of its groups only apply to pixels.
-                bool groupMasked = false;
-                for (int group : document.enclosingGroups(i))
-                    if (records.at(group).hasRasterMask || records.at(group).hasVectorMask) groupMasked = true;
-                const bool plain = !record.hasRasterMask && !record.hasVectorMask && !groupMasked && base < 0;
+                // Its masks, its groups' and a base it is clipped to become
+                // masks of the layer: shapes when they are vector ones, one
+                // picture mask otherwise.
+                const auto maskShape = maskShapeOf(document, i, base);
                 // An embedded document is split into its own shot first: its
                 // picture is what the filters work on here.
                 std::shared_ptr<composition::Composition> nested;
-                if (inner && placed && plain && (complete || onlyCameraRaw(smart))) {
+                QImage drawnNested;
+                bool splitRejected = false;
+                if (inner && placed && (complete || onlyCameraRaw(smart))) {
                     const QString innerName =
                         QFileInfo(document.linkedFiles().value(uid).name.remove(QChar(0))).completeBaseName();
+                    const qsizetype shotsBefore = context.result->nestedShots.size();
+                    const qsizetype notesBefore = notes->size();
+                    const int layersBefore = context.result->layerCount;
                     nested = importDocument(*inner, sourcePath, innerName.isEmpty() ? record.name : innerName,
                                             depth + 1, context);
+                    // Kept split only when it draws as Photoshop drew the
+                    // document; otherwise the document's own picture stands
+                    // in for it (what it brought along goes too).
+                    if (options.renderShot) {
+                        drawnNested = options.renderShot(nested);
+                        // (a document saved without its own picture cannot tell)
+                        const double difference = inner->hasCompositeImage()
+                            ? blockDifference(inner->compositeImage(), drawnNested) : -1.0;
+                        if (difference > kMaxSplitDifference) {
+                            nested.reset();
+                            splitRejected = true;
+                            drawnNested = QImage();
+                            context.result->nestedShots.resize(shotsBefore);
+                            while (notes->size() > notesBefore) notes->removeLast();
+                            context.result->layerCount = layersBefore;
+                            addNote(notes, PsdImportText::tr("%1: its source document is not split into layers: split, "
+                                                             "it would differ from Photoshop's picture of it by %2 levels.")
+                                               .arg(record.name).arg(difference, 0, 'f', 1));
+                        }
+                    }
                 }
                 // Camera Raw beyond what converts: a table fitted to what
                 // Photoshop made of the source - of the source as this port
                 // draws it when it can, so that the table also takes up what
                 // the split document draws differently.
                 std::optional<composition::Effect> vignette;
-                if (!complete && placed && plain && onlyCameraRaw(smart)) {
+                if (!complete && placed && onlyCameraRaw(smart)) {
                     // Its post-crop vignette, on a layer of the document's
                     // frame: when nothing is below the smart object and it
                     // covers the frame, a Grade layer right above it darkens
@@ -1182,7 +1446,7 @@ std::shared_ptr<composition::Composition> importDocument(const media::PsdDocumen
                                                {QStringLiteral("midpoint"), number(midpoint)}}, notes);
                     }
                     QImage sourceImage;
-                    if (nested && options.renderShot) sourceImage = options.renderShot(nested);
+                    if (nested) sourceImage = drawnNested;
                     if (sourceImage.size() != sourceSize) sourceImage = media::readStillImage(sourcePath);
                     const auto toDocument = smartObjectTransform(smart, sourceSize);
                     // With the vignette apart, the table learns from the
@@ -1214,9 +1478,14 @@ std::shared_ptr<composition::Composition> importDocument(const media::PsdDocumen
                     }
                 }
                 for (const QString& note : filterNotes) addNote(notes, note);
-                if (complete && placed && plain) {
+                // The source drawn here when it is split, or when there are
+                // filters to put on it; a document that is not split shows
+                // Photoshop's own pixels of the layer.
+                if (complete && placed && (nested || hasFilters)) {
                     fromSource = true;
                     pendingVignette = vignette;
+                    if (maskShape) applyMaskShape(layer, *maskShape);
+                    else applyPictureMask(layer, document, documentPath, i, base);
                     layer.transform.position = placement.position;
                     layer.transform.scalePercent = placement.scalePercent;
                     layer.transform.rotationDegrees = placement.rotationDegrees;
@@ -1233,7 +1502,7 @@ std::shared_ptr<composition::Composition> importDocument(const media::PsdDocumen
                         layer.clips.append(clipOf(sourcePath));
                     }
                     effects = filters;
-                } else if (hasFilters || inner) {
+                } else if (hasFilters || (inner && !splitRejected)) {
                     QString reason;
                     if (!embedded)
                         reason = PsdImportText::tr("its source is not embedded in the document");
@@ -1242,8 +1511,6 @@ std::shared_ptr<composition::Composition> importDocument(const media::PsdDocumen
                                      .arg(document.linkedFiles().value(uid).name);
                     else if (!placed)
                         reason = PsdImportText::tr("it is warped or in perspective");
-                    else if (!plain)
-                        reason = PsdImportText::tr("it is masked or clipped");
                     else
                         reason = PsdImportText::tr("not every filter could be converted");
                     addNote(notes, hasFilters
