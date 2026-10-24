@@ -59,8 +59,8 @@ python tools/plugin_translations.py [--ru-dictionary ru.json]
 Проверка скомпилированных каталогов в настроенной сборке тестов:
 
 ```powershell
-cmake --build build/ci-local-test --target translation_regression
-ctest --test-dir build/ci-local-test -R translation_regression --output-on-failure
+cmake --build build/Windows_MSVC-x64-Release-Tests --target translation_regression
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -R translation_regression --output-on-failure
 ```
 
 Тест проверяет загрузку всех трёх языков, возврат к английскому, контексты

@@ -24,9 +24,9 @@ application's sources they need into six QtTest targets, all registered with CTe
 From the repository root, with Qt for MSVC (other kits work the same way):
 
 ```powershell
-cmake -S tests -B build/ci-local-test -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
-cmake --build build/ci-local-test --config Release --parallel
-ctest --test-dir build/ci-local-test -C Release --output-on-failure --timeout 120
+cmake -S tests -B build/Windows_MSVC-x64-Release-Tests -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
+cmake --build build/Windows_MSVC-x64-Release-Tests --config Release --parallel
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 120
 ```
 
 CTest runs the suites on the `offscreen` platform. Under CTest `timeline_regression` also
@@ -39,7 +39,7 @@ offscreen. Run them on the `windows` platform (they show no window):
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'windows'
-build/ci-local-test/Release/timeline_regression.exe nativeEffectsMoveWithTime everyShippedModuleRuns
+build/Windows_MSVC-x64-Release-Tests/Release/timeline_regression.exe nativeEffectsMoveWithTime everyShippedModuleRuns
 ```
 
 ### What some tests need

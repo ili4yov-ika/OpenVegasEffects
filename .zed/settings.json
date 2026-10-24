@@ -7,7 +7,7 @@
           "--background-index",
           "--completion-style=detailed",
           "--header-insertion=never",
-          "--compile-commands-dir=build/Windows_MSVC-x64",
+          "--compile-commands-dir=build/Windows_MSVC-x64-Debug",
           "--pch-storage=memory",
           "--clang-tidy=false"
         ]
@@ -50,7 +50,6 @@
     "**/.classpath",
     "**/.settings",
     "**/build/**",
-    "**/build-pro/**",
     "**/SAMPLES/VEGAS_Effects/**"
   ]
 }

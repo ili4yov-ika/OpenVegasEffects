@@ -24,9 +24,9 @@
 在仓库根目录下，使用 MSVC 版 Qt（其他套件同理）：
 
 ```powershell
-cmake -S tests -B build/ci-local-test -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
-cmake --build build/ci-local-test --config Release --parallel
-ctest --test-dir build/ci-local-test -C Release --output-on-failure --timeout 120
+cmake -S tests -B build/Windows_MSVC-x64-Release-Tests -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
+cmake --build build/Windows_MSVC-x64-Release-Tests --config Release --parallel
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 120
 ```
 
 CTest 在 `offscreen` 平台上运行测试套件。在 CTest 下，`timeline_regression` 还会把日志写入
@@ -38,7 +38,7 @@ CTest 在 `offscreen` 平台上运行测试套件。在 CTest 下，`timeline_re
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'windows'
-build/ci-local-test/Release/timeline_regression.exe nativeEffectsMoveWithTime everyShippedModuleRuns
+build/Windows_MSVC-x64-Release-Tests/Release/timeline_regression.exe nativeEffectsMoveWithTime everyShippedModuleRuns
 ```
 
 ### 部分测试的依赖

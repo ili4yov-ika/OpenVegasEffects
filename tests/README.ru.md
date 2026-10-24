@@ -24,9 +24,9 @@
 Из корня репозитория, с Qt для MSVC (другие киты — так же):
 
 ```powershell
-cmake -S tests -B build/ci-local-test -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
-cmake --build build/ci-local-test --config Release --parallel
-ctest --test-dir build/ci-local-test -C Release --output-on-failure --timeout 120
+cmake -S tests -B build/Windows_MSVC-x64-Release-Tests -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
+cmake --build build/Windows_MSVC-x64-Release-Tests --config Release --parallel
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 120
 ```
 
 CTest запускает наборы на платформе `offscreen`. Под CTest `timeline_regression` также пишет
@@ -39,7 +39,7 @@ CTest запускает наборы на платформе `offscreen`. По�
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'windows'
-build/ci-local-test/Release/timeline_regression.exe nativeEffectsMoveWithTime everyShippedModuleRuns
+build/Windows_MSVC-x64-Release-Tests/Release/timeline_regression.exe nativeEffectsMoveWithTime everyShippedModuleRuns
 ```
 
 ### Что нужно некоторым тестам

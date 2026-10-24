@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "Win32-MSVC-Qt",
-      "compileCommands": "${workspaceFolder}/build/Windows_MSVC-x64/compile_commands.json",
+      "compileCommands": "${workspaceFolder}/build/Windows_MSVC-x64-Debug/compile_commands.json",
       "configurationProvider": "ms-vscode.cmake-tools",
       "includePath": [
         "${workspaceFolder}/src",

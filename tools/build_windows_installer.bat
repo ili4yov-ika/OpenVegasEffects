@@ -24,10 +24,11 @@ chcp 65001 >nul
 
 set "SCRIPT_DIR=%~dp0"
 for %%a in ("%SCRIPT_DIR%..") do set "PROJECT_ROOT=%%~fa"
-REM Deliberately NOT a dev tree from CMakePresets (build\Windows_MSVC-x64 is
-REM Debug, build\Windows_MSVC-x64-Release RelWithDebInfo): reusing one would
-REM flip its cache and force a full rebuild every time you switch.
-set "BUILD_DIR=%PROJECT_ROOT%\build\windows-installer"
+REM Build trees are build\<OS>_<compiler>-<arch>-<configuration>. Deliberately
+REM NOT a dev tree from CMakePresets (build\Windows_MSVC-x64-Debug is Debug,
+REM build\Windows_MSVC-x64-Release RelWithDebInfo): reusing one would flip its
+REM cache and force a full rebuild every time you switch.
+set "BUILD_DIR=%PROJECT_ROOT%\build\Windows_MSVC-x64-Release-Installer"
 set "INSTALL_DIR=%BUILD_DIR%\install"
 set "NSIS_SCRIPT=%SCRIPT_DIR%nsis_installer.nsi"
 set "OUTPUT_FILE=%SCRIPT_DIR%OpenVegasEffects_Setup.exe"

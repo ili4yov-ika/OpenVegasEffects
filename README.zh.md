@@ -116,12 +116,19 @@ Makefile 已经就位。
 
 [`CMakePresets.json`](CMakePresets.json) 中的预设是各 IDE 共用的唯一配置来源：
 
+每个构建都位于 `build/<操作系统>_<编译器>-<架构>-<配置>/`：
+
 | 预设 | 工具链 | 目录 |
 |------|--------|------|
-| `windows-msvc-debug` | MSVC v143（VS 2022）+ Qt `msvc2022_64` | `build/Windows_MSVC-x64/` |
-| `windows-msvc-release` | 同上，RelWithDebInfo | `build/Windows_MSVC-x64-Release/` |
-| `windows-mingw-debug` / `-release` | MinGW GCC + Qt `mingw_64` | `build/Windows_MinGW-x64/` |
-| `linux-debug` / `-release`、`macos-debug` / `-release` | 系统编译器 + Ninja | `build/linux/`、`build/macos/` |
+| `windows-msvc-debug` / `-release` | MSVC v143（VS 2022）+ Qt `msvc2022_64`；Release 为 RelWithDebInfo | `build/Windows_MSVC-x64-Debug/`、`build/Windows_MSVC-x64-Release/` |
+| `windows-mingw-debug` / `-release` | MinGW GCC + Qt `mingw_64` | `build/Windows_MinGW-x64-Debug/`、`-Release/` |
+| `windows-llvm-debug` / `-release` | LLVM-MinGW Clang + Qt `llvm-mingw_64` | `build/Windows_LLVM-x64-Debug/`、`-Release/` |
+| `linux-debug` / `-release` | GCC + 系统 Qt | `build/Linux_GCC-x64-Debug/`、`-Release/` |
+| `linux-llvm-debug` / `-release` | Clang + 系统 Qt | `build/Linux_LLVM-x64-Debug/`、`-Release/` |
+| `macos-debug` / `-release`、`macos-x64-debug` / `-release` | Apple Clang，Apple 芯片 / Intel | `build/macOS_LLVM-arm64-Debug/`、`build/macOS_LLVM-x64-Debug/` 等 |
+
+此外：回归测试位于 `build/Windows_MSVC-x64-Release-Tests/`（[`tests/`](tests/)），安装程序暂存位于
+`build/Windows_MSVC-x64-Release-Installer/`，Qt Creator 的 qmake 构建位于 `build/Windows_MSVC-x64-Debug-qmake/` 等。
 
 在 **x64 Native Tools Command Prompt for VS 2022** 窗口中：
 
@@ -169,7 +176,7 @@ tools\build_windows_installer.bat
 ```
 
 脚本会自动找到 Visual Studio 2022（vswhere）和 Qt 的 `msvc2022_64` 套件，在
-`build\windows-installer` 中用 Ninja 构建 Release，安装到全新的前缀，用 windeployqt
+`build\Windows_MSVC-x64-Release-Installer` 中用 Ninja 构建 Release，安装到全新的前缀，用 windeployqt
 部署 Qt，把 MSVC 运行时 DLL 复制到 EXE 旁边，并生成 `tools\OpenVegasEffects_Setup.exe`。
 `CMAKE_PREFIX_PATH` 可选择其他 Qt 套件，`OPENVEGAS_VLC_RUNTIME_DIR` 可选择其他 libVLC
 运行时；用其他生成器、编译器或 Qt 套件配置的构建目录会重新创建。
@@ -249,7 +256,7 @@ CMake Tools 选择了更新版本 Visual Studio 的环境，也能避免把 VS 2
 启动脚本还会启用 UTF-8（`chcp 65001`）：否则本地化的 `/showIncludes` 行可能与 CMake 的
 前缀不匹配，Ninja 会丢失头文件依赖，并在类发生变化后混用不兼容的目标文件。如果目录已经
 用错误的代码页构建过，请在配置后运行
-`cmake --build build/Windows_MSVC-x64 --target clean` 并完全重新构建。
+`cmake --build build/Windows_MSVC-x64-Debug --target clean` 并完全重新构建。
 
 - **VS Code** —— [`.vscode/`](.vscode/)：`launch.json`（`cppvsdbg` 调试器，读取 MSVC
   的 PDB；Debug／RelWithDebInfo／附加配置）、`tasks.json`（配置／构建／清理／运行）、
@@ -257,7 +264,7 @@ CMake Tools 选择了更新版本 Visual Studio 的环境，也能避免把 VS 2
   `extensions.json` 中。按 F5 构建并运行。
 - **Zed** —— [`.zed/debug.json`](.zed/debug.json)（CodeLLDB 适配器，PDB 位于 exe 旁边）
   以及使用相同预设的 [`.zed/tasks.json`](.zed/tasks.json)。`clangd` 会索引
-  `build/Windows_MSVC-x64/compile_commands.json`。
+  `build/Windows_MSVC-x64-Debug/compile_commands.json`。
 
 在 IDE 之外运行时，请把 Qt 的 `bin` 加入 PATH：
 

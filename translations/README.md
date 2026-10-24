@@ -62,8 +62,8 @@ languages.
 Checking the compiled catalogs in a configured test build:
 
 ```powershell
-cmake --build build/ci-local-test --target translation_regression
-ctest --test-dir build/ci-local-test -R translation_regression --output-on-failure
+cmake --build build/Windows_MSVC-x64-Release-Tests --target translation_regression
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -R translation_regression --output-on-failure
 ```
 
 The test checks that all three languages load, the return to English, the contexts of

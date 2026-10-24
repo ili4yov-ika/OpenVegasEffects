@@ -52,8 +52,8 @@ python tools/plugin_translations.py [--ru-dictionary ru.json]
 在已配置的测试构建中检查编译后的目录：
 
 ```powershell
-cmake --build build/ci-local-test --target translation_regression
-ctest --test-dir build/ci-local-test -R translation_regression --output-on-failure
+cmake --build build/Windows_MSVC-x64-Release-Tests --target translation_regression
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -R translation_regression --output-on-failure
 ```
 
 该测试检查三种语言是否都能加载、能否切回英语、颜色选择对话框和启动画面状态的上下文，

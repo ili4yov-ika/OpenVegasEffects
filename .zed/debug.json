@@ -3,8 +3,8 @@
     "label": "OpenVegas Effects (MSVC Debug)",
     "adapter": "CodeLLDB",
     "request": "launch",
-    "program": "$ZED_WORKTREE_ROOT/build/Windows_MSVC-x64/OpenVegasEffects.exe",
-    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MSVC-x64",
+    "program": "$ZED_WORKTREE_ROOT/build/Windows_MSVC-x64-Debug/OpenVegasEffects.exe",
+    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MSVC-x64-Debug",
     "args": [],
     "env": {
       "PATH": "C:/Qt/6.9.3/msvc2022_64/bin",
@@ -33,8 +33,8 @@
     "label": "OpenVegasEffects (CMake MinGW Debug)",
     "adapter": "GDB",
     "request": "launch",
-    "program": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64/OpenVegasEffects.exe",
-    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64",
+    "program": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64-Debug/OpenVegasEffects.exe",
+    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64-Debug",
     "env": {
       "PATH": "C:/Qt/6.9.3/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin",
       "QT_PLUGIN_PATH": "C:/Qt/6.9.3/mingw_64/plugins"
@@ -46,8 +46,8 @@
     "label": "OpenVegas Effects (CMake MinGW Release)",
     "adapter": "GDB",
     "request": "launch",
-    "program": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64/OpenVegasEffects.exe",
-    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64",
+    "program": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64-Release/OpenVegasEffects.exe",
+    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64-Release",
     "env": {
       "PATH": "C:/Qt/6.9.3/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin",
       "QT_PLUGIN_PATH": "C:/Qt/6.9.3/mingw_64/plugins"
@@ -59,8 +59,8 @@
     "label": "OpenVegas Effects (qmake MinGW Debug)",
     "adapter": "GDB",
     "request": "launch",
-    "program": "$ZED_WORKTREE_ROOT/build-pro/debug/OpenVegasEffects.exe",
-    "cwd": "$ZED_WORKTREE_ROOT/build-pro/debug",
+    "program": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64-Debug-qmake/debug/OpenVegasEffects.exe",
+    "cwd": "$ZED_WORKTREE_ROOT/build/Windows_MinGW-x64-Debug-qmake/debug",
     "env": {
       "PATH": "C:/Qt/6.9.3/mingw_64/bin;C:/Qt/Tools/mingw1310_64/bin",
       "QT_PLUGIN_PATH": "C:/Qt/6.9.3/mingw_64/plugins"

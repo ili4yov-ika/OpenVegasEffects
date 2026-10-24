@@ -58,8 +58,8 @@ python tools/plugin_translations.py [--ru-dictionary ru.json]
 設定済みのテストビルドで、コンパイルされたカタログを確認するには：
 
 ```powershell
-cmake --build build/ci-local-test --target translation_regression
-ctest --test-dir build/ci-local-test -R translation_regression --output-on-failure
+cmake --build build/Windows_MSVC-x64-Release-Tests --target translation_regression
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -R translation_regression --output-on-failure
 ```
 
 このテストは、3 つの言語すべての読み込み、英語への切り戻し、カラーピッカーのダイアログと

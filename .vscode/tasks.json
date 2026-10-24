@@ -23,7 +23,7 @@
         "panel": "shared",
         "clear": true
       },
-      "detail": "Ninja + MSVC v143 + Qt msvc2022_64 -> build/Windows_MSVC-x64/"
+      "detail": "Ninja + MSVC v143 + Qt msvc2022_64 -> build/Windows_MSVC-x64-Debug/"
     },
     {
       "label": "CMake: Build (MSVC Debug)",
@@ -51,7 +51,7 @@
         "kind": "build",
         "isDefault": true
       },
-      "detail": "Incremental build of build/Windows_MSVC-x64/"
+      "detail": "Incremental build of build/Windows_MSVC-x64-Debug/"
     },
     {
       "label": "CMake: Configure + Build (MSVC Debug)",
@@ -150,7 +150,7 @@
     {
       "label": "CMake: Clean (MSVC)",
       "type": "shell",
-      "command": "if exist \"${workspaceFolder}\\build\\Windows_MSVC-x64\" rmdir /s /q \"${workspaceFolder}\\build\\Windows_MSVC-x64\" & if exist \"${workspaceFolder}\\build\\Windows_MSVC-x64-Release\" rmdir /s /q \"${workspaceFolder}\\build\\Windows_MSVC-x64-Release\" & echo Cleaned.",
+      "command": "if exist \"${workspaceFolder}\\build\\Windows_MSVC-x64-Debug\" rmdir /s /q \"${workspaceFolder}\\build\\Windows_MSVC-x64-Debug\" & if exist \"${workspaceFolder}\\build\\Windows_MSVC-x64-Release\" rmdir /s /q \"${workspaceFolder}\\build\\Windows_MSVC-x64-Release\" & echo Cleaned.",
       "options": {
         "shell": {
           "executable": "cmd.exe",
@@ -173,9 +173,9 @@
     {
       "label": "Run OpenVegas Effects (MSVC Debug)",
       "type": "shell",
-      "command": "${workspaceFolder}/build/Windows_MSVC-x64/OpenVegasEffects.exe",
+      "command": "${workspaceFolder}/build/Windows_MSVC-x64-Debug/OpenVegasEffects.exe",
       "options": {
-        "cwd": "${workspaceFolder}/build/Windows_MSVC-x64",
+        "cwd": "${workspaceFolder}/build/Windows_MSVC-x64-Debug",
         "env": {
           "PATH": "C:/Qt/6.9.3/msvc2022_64/bin;${env:PATH}",
           "QT_PLUGIN_PATH": "C:/Qt/6.9.3/msvc2022_64/plugins"

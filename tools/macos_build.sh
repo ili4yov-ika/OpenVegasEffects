@@ -36,8 +36,17 @@ for arg in "$@"; do
     esac
 done
 
-PRESET="macos-${BUILD_TYPE}"
-BUILD_DIR="${PROJECT_ROOT}/build/macos"
+# build/macOS_LLVM-<arch>-<configuration>, for the Mac's own architecture
+# (CMakePresets.json: macos-* for Apple silicon, macos-x64-* for Intel).
+if [[ "$(uname -m)" == "arm64" ]]; then
+    PRESET="macos-${BUILD_TYPE}"
+    ARCH_NAME="arm64"
+else
+    PRESET="macos-x64-${BUILD_TYPE}"
+    ARCH_NAME="x64"
+fi
+if [[ "$BUILD_TYPE" == "release" ]]; then CONFIG_NAME="Release"; else CONFIG_NAME="Debug"; fi
+BUILD_DIR="${PROJECT_ROOT}/build/macOS_LLVM-${ARCH_NAME}-${CONFIG_NAME}"
 
 cd "$PROJECT_ROOT"
 

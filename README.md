@@ -130,12 +130,20 @@ the new top-level Makefile is already in place.
 
 The presets in [`CMakePresets.json`](CMakePresets.json) are the single source of truth for the IDEs:
 
+Every build goes into `build/<OS>_<compiler>-<arch>-<configuration>/`:
+
 | Preset | Toolchain | Directory |
 |--------|-----------|-----------|
-| `windows-msvc-debug` | MSVC v143 (VS 2022) + Qt `msvc2022_64` | `build/Windows_MSVC-x64/` |
-| `windows-msvc-release` | same, RelWithDebInfo | `build/Windows_MSVC-x64-Release/` |
-| `windows-mingw-debug` / `-release` | MinGW GCC + Qt `mingw_64` | `build/Windows_MinGW-x64/` |
-| `linux-debug` / `-release`, `macos-debug` / `-release` | system compiler + Ninja | `build/linux/`, `build/macos/` |
+| `windows-msvc-debug` / `-release` | MSVC v143 (VS 2022) + Qt `msvc2022_64`; Release is RelWithDebInfo | `build/Windows_MSVC-x64-Debug/`, `build/Windows_MSVC-x64-Release/` |
+| `windows-mingw-debug` / `-release` | MinGW GCC + Qt `mingw_64` | `build/Windows_MinGW-x64-Debug/`, `-Release/` |
+| `windows-llvm-debug` / `-release` | LLVM-MinGW Clang + Qt `llvm-mingw_64` | `build/Windows_LLVM-x64-Debug/`, `-Release/` |
+| `linux-debug` / `-release` | GCC + system Qt | `build/Linux_GCC-x64-Debug/`, `-Release/` |
+| `linux-llvm-debug` / `-release` | Clang + system Qt | `build/Linux_LLVM-x64-Debug/`, `-Release/` |
+| `macos-debug` / `-release`, `macos-x64-debug` / `-release` | Apple Clang, Apple silicon / Intel | `build/macOS_LLVM-arm64-Debug/`, `build/macOS_LLVM-x64-Debug/`, ... |
+
+Beside them: the regression tests `build/Windows_MSVC-x64-Release-Tests/`
+([`tests/`](tests/)), the installer staging `build/Windows_MSVC-x64-Release-Installer/`,
+Qt Creator's qmake builds `build/Windows_MSVC-x64-Debug-qmake/` and the like.
 
 From an **x64 Native Tools Command Prompt for VS 2022** window:
 
@@ -184,7 +192,7 @@ tools\build_windows_installer.bat
 ```
 
 It finds Visual Studio 2022 (vswhere) and the Qt `msvc2022_64` kit itself, builds
-Release with Ninja in `build\windows-installer`, installs it into a fresh prefix,
+Release with Ninja in `build\Windows_MSVC-x64-Release-Installer`, installs it into a fresh prefix,
 deploys Qt with windeployqt, copies the MSVC runtime DLLs next to the EXE and writes
 `tools\OpenVegasEffects_Setup.exe`. `CMAKE_PREFIX_PATH` chooses another Qt kit and
 `OPENVEGAS_VLC_RUNTIME_DIR` another libVLC runtime; a build tree configured with
@@ -276,7 +284,7 @@ once to refresh the Ninja rules. The launcher also enables UTF-8 (`chcp 65001`):
 otherwise localized `/showIncludes` lines may not match CMake's prefix, Ninja will miss
 header dependencies and mix incompatible object files after class changes. If the
 directory was already built with the wrong code page, after configure run
-`cmake --build build/Windows_MSVC-x64 --target clean` and a full rebuild.
+`cmake --build build/Windows_MSVC-x64-Debug --target clean` and a full rebuild.
 
 - **VS Code** — [`.vscode/`](.vscode/): `launch.json` (`cppvsdbg` debugger, reads MSVC
   PDBs; Debug / RelWithDebInfo / attach configurations), `tasks.json` (configure /
@@ -284,7 +292,7 @@ directory was already built with the wrong code page, after configure run
   the debugger). Extensions are listed in `extensions.json`. F5 builds and runs.
 - **Zed** — [`.zed/debug.json`](.zed/debug.json) (CodeLLDB adapter, PDB next to the
   exe) and [`.zed/tasks.json`](.zed/tasks.json) with the same presets. `clangd` indexes
-  `build/Windows_MSVC-x64/compile_commands.json`.
+  `build/Windows_MSVC-x64-Debug/compile_commands.json`.
 
 Running outside an IDE — add Qt's `bin` to PATH:
 

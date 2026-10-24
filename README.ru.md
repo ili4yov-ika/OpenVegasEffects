@@ -127,12 +127,20 @@ Makefile другой конфигурации могут давать `C1083` �
 
 Пресеты в [`CMakePresets.json`](CMakePresets.json) — единый источник настроек для IDE:
 
+Каждая сборка лежит в `build/<ОС>_<компилятор>-<архитектура>-<конфигурация>/`:
+
 | Пресет | Инструменты | Каталог |
 |--------|-------------|---------|
-| `windows-msvc-debug` | MSVC v143 (VS 2022) + Qt `msvc2022_64` | `build/Windows_MSVC-x64/` |
-| `windows-msvc-release` | то же, RelWithDebInfo | `build/Windows_MSVC-x64-Release/` |
-| `windows-mingw-debug` / `-release` | MinGW GCC + Qt `mingw_64` | `build/Windows_MinGW-x64/` |
-| `linux-debug` / `-release`, `macos-debug` / `-release` | системный компилятор + Ninja | `build/linux/`, `build/macos/` |
+| `windows-msvc-debug` / `-release` | MSVC v143 (VS 2022) + Qt `msvc2022_64`; Release — это RelWithDebInfo | `build/Windows_MSVC-x64-Debug/`, `build/Windows_MSVC-x64-Release/` |
+| `windows-mingw-debug` / `-release` | MinGW GCC + Qt `mingw_64` | `build/Windows_MinGW-x64-Debug/`, `-Release/` |
+| `windows-llvm-debug` / `-release` | LLVM-MinGW Clang + Qt `llvm-mingw_64` | `build/Windows_LLVM-x64-Debug/`, `-Release/` |
+| `linux-debug` / `-release` | GCC + системный Qt | `build/Linux_GCC-x64-Debug/`, `-Release/` |
+| `linux-llvm-debug` / `-release` | Clang + системный Qt | `build/Linux_LLVM-x64-Debug/`, `-Release/` |
+| `macos-debug` / `-release`, `macos-x64-debug` / `-release` | Apple Clang, Apple silicon / Intel | `build/macOS_LLVM-arm64-Debug/`, `build/macOS_LLVM-x64-Debug/`, ... |
+
+Рядом с ними: регрессионные тесты `build/Windows_MSVC-x64-Release-Tests/`
+([`tests/`](tests/)), подготовка установщика `build/Windows_MSVC-x64-Release-Installer/`,
+qmake-сборки Qt Creator `build/Windows_MSVC-x64-Debug-qmake/` и подобные.
 
 Из окна **x64 Native Tools Command Prompt for VS 2022**:
 
@@ -181,7 +189,7 @@ tools\build_windows_installer.bat
 ```
 
 Он сам находит Visual Studio 2022 (vswhere) и кит Qt `msvc2022_64`, собирает Release
-через Ninja в `build\windows-installer`, устанавливает его в чистый префикс,
+через Ninja в `build\Windows_MSVC-x64-Release-Installer`, устанавливает его в чистый префикс,
 раскладывает Qt через windeployqt, кладёт рядом с EXE DLL рантайма MSVC и пишет
 `tools\OpenVegasEffects_Setup.exe`. `CMAKE_PREFIX_PATH` выбирает другой кит Qt,
 `OPENVEGAS_VLC_RUNTIME_DIR` — другой рантайм libVLC; дерево сборки, настроенное
@@ -273,7 +281,7 @@ Ninja. Запускающий скрипт также включает UTF-8 (`c
 строки `/showIncludes` могут не совпасть с префиксом CMake, Ninja потеряет зависимости
 от заголовков и после изменения классов смешает несовместимые объектные файлы. Если
 каталог уже собирался с неверной кодовой страницей, после настройки выполните
-`cmake --build build/Windows_MSVC-x64 --target clean` и полную пересборку.
+`cmake --build build/Windows_MSVC-x64-Debug --target clean` и полную пересборку.
 
 - **VS Code** — [`.vscode/`](.vscode/): `launch.json` (отладчик `cppvsdbg`, читает PDB
   MSVC; конфигурации Debug / RelWithDebInfo / подключения), `tasks.json` (настройка /
@@ -281,7 +289,7 @@ Ninja. Запускающий скрипт также включает UTF-8 (`c
   отладчике). Расширения перечислены в `extensions.json`. F5 собирает и запускает.
 - **Zed** — [`.zed/debug.json`](.zed/debug.json) (адаптер CodeLLDB, PDB рядом с exe) и
   [`.zed/tasks.json`](.zed/tasks.json) с теми же пресетами. `clangd` индексирует
-  `build/Windows_MSVC-x64/compile_commands.json`.
+  `build/Windows_MSVC-x64-Debug/compile_commands.json`.
 
 Запуск вне IDE — добавьте `bin` Qt в PATH:
 

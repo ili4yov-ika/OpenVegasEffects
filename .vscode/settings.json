@@ -20,7 +20,7 @@
   "cmake.configureOnOpen": false,
   "cmake.automaticReconfigure": false,
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/Windows_MSVC-x64/compile_commands.json",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/Windows_MSVC-x64-Debug/compile_commands.json",
   "C_Cpp.default.intelliSenseMode": "windows-msvc-x64",
   "C_Cpp.default.cppStandard": "c++17",
   "files.associations": {
@@ -33,16 +33,14 @@
   },
   "files.exclude": {
     "build/**": true,
-    "build/Windows_MSVC-x64/**": true,
+    "build/Windows_MSVC-x64-Debug/**": true,
     "build/Windows_MSVC-x64-Release/**": true,
-    "build-pro/**": true,
     "SAMPLES/VEGAS_Effects/**": true
   },
   "search.exclude": {
     "build/**": true,
-    "build/Windows_MSVC-x64/**": true,
+    "build/Windows_MSVC-x64-Debug/**": true,
     "build/Windows_MSVC-x64-Release/**": true,
-    "build-pro/**": true,
     "SAMPLES/**": true
   },
   "terminal.integrated.env.windows": {

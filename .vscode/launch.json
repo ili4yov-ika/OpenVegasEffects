@@ -5,10 +5,10 @@
       "name": "OpenVegas Effects (MSVC Debug)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/Windows_MSVC-x64/OpenVegasEffects.exe",
+      "program": "${workspaceFolder}/build/Windows_MSVC-x64-Debug/OpenVegasEffects.exe",
       "args": [],
       "stopAtEntry": false,
-      "cwd": "${workspaceFolder}/build/Windows_MSVC-x64",
+      "cwd": "${workspaceFolder}/build/Windows_MSVC-x64-Debug",
       "environment": [
         {
           "name": "PATH",
@@ -25,7 +25,7 @@
       ],
       "console": "integratedTerminal",
       "preLaunchTask": "CMake: Configure + Build (MSVC Debug)",
-      "symbolSearchPath": "${workspaceFolder}/build/Windows_MSVC-x64",
+      "symbolSearchPath": "${workspaceFolder}/build/Windows_MSVC-x64-Debug",
       "visualizerFile": "${workspaceFolder}/.vscode/qt6.natvis",
       "sourceFileMap": {}
     },

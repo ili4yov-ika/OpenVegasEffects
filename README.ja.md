@@ -130,12 +130,20 @@ Windows では qmake が Qt Creator のビルドステップ用に最新の `Mak
 
 [`CMakePresets.json`](CMakePresets.json) のプリセットが IDE 共通の唯一の設定元です：
 
+すべてのビルドは `build/<OS>_<コンパイラー>-<アーキテクチャ>-<構成>/` に置かれます：
+
 | プリセット | ツールチェーン | ディレクトリ |
 |------------|----------------|--------------|
-| `windows-msvc-debug` | MSVC v143（VS 2022）+ Qt `msvc2022_64` | `build/Windows_MSVC-x64/` |
-| `windows-msvc-release` | 同上、RelWithDebInfo | `build/Windows_MSVC-x64-Release/` |
-| `windows-mingw-debug` / `-release` | MinGW GCC + Qt `mingw_64` | `build/Windows_MinGW-x64/` |
-| `linux-debug` / `-release`、`macos-debug` / `-release` | システムのコンパイラー + Ninja | `build/linux/`、`build/macos/` |
+| `windows-msvc-debug` / `-release` | MSVC v143（VS 2022）+ Qt `msvc2022_64`。Release は RelWithDebInfo | `build/Windows_MSVC-x64-Debug/`、`build/Windows_MSVC-x64-Release/` |
+| `windows-mingw-debug` / `-release` | MinGW GCC + Qt `mingw_64` | `build/Windows_MinGW-x64-Debug/`、`-Release/` |
+| `windows-llvm-debug` / `-release` | LLVM-MinGW Clang + Qt `llvm-mingw_64` | `build/Windows_LLVM-x64-Debug/`、`-Release/` |
+| `linux-debug` / `-release` | GCC + システムの Qt | `build/Linux_GCC-x64-Debug/`、`-Release/` |
+| `linux-llvm-debug` / `-release` | Clang + システムの Qt | `build/Linux_LLVM-x64-Debug/`、`-Release/` |
+| `macos-debug` / `-release`、`macos-x64-debug` / `-release` | Apple Clang、Apple シリコン / Intel | `build/macOS_LLVM-arm64-Debug/`、`build/macOS_LLVM-x64-Debug/` など |
+
+そのほか：回帰テストは `build/Windows_MSVC-x64-Release-Tests/`（[`tests/`](tests/)）、インストーラーの
+ステージングは `build/Windows_MSVC-x64-Release-Installer/`、Qt Creator の qmake ビルドは
+`build/Windows_MSVC-x64-Debug-qmake/` などです。
 
 **x64 Native Tools Command Prompt for VS 2022** ウィンドウから：
 
@@ -184,7 +192,7 @@ tools\build_windows_installer.bat
 ```
 
 スクリプトは Visual Studio 2022（vswhere）と Qt の `msvc2022_64` キットを自動で見つけ、
-`build\windows-installer` で Ninja により Release をビルドし、新しいプレフィックスに
+`build\Windows_MSVC-x64-Release-Installer` で Ninja により Release をビルドし、新しいプレフィックスに
 インストールし、windeployqt で Qt を配置し、MSVC ランタイムの DLL を EXE の隣に
 コピーして `tools\OpenVegasEffects_Setup.exe` を作成します。`CMAKE_PREFIX_PATH` で
 別の Qt キットを、`OPENVEGAS_VLC_RUNTIME_DIR` で別の libVLC ランタイムを指定できます。
@@ -276,7 +284,7 @@ VS 2022 のコンパイラーと VS 2026 のヘッダーを混ぜたときの `S
 `/showIncludes` の行が CMake のプレフィックスと一致せず、Ninja がヘッダーの依存関係を
 見失い、クラスの変更後に互換性のないオブジェクトファイルを混在させます。誤ったコード
 ページで既にビルドしたディレクトリでは、構成後に
-`cmake --build build/Windows_MSVC-x64 --target clean` を実行して完全に再ビルドします。
+`cmake --build build/Windows_MSVC-x64-Debug --target clean` を実行して完全に再ビルドします。
 
 - **VS Code** — [`.vscode/`](.vscode/)：`launch.json`（`cppvsdbg` デバッガー、MSVC の
   PDB を読む。Debug／RelWithDebInfo／アタッチの構成）、`tasks.json`（構成／ビルド／
@@ -284,7 +292,7 @@ VS 2022 のコンパイラーと VS 2026 のヘッダーを混ぜたときの `S
   読みやすく表示）。拡張機能は `extensions.json` にあります。F5 でビルドして実行します。
 - **Zed** — [`.zed/debug.json`](.zed/debug.json)（CodeLLDB アダプター、PDB は exe の隣）
   と同じプリセットを使う [`.zed/tasks.json`](.zed/tasks.json)。`clangd` は
-  `build/Windows_MSVC-x64/compile_commands.json` をインデックスします。
+  `build/Windows_MSVC-x64-Debug/compile_commands.json` をインデックスします。
 
 IDE の外で実行する場合は、Qt の `bin` を PATH に追加します：
 
