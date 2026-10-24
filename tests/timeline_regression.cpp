@@ -3039,7 +3039,8 @@ private slots:
         QTranslator app, plugins, qt;
         QVERIFY(app.load(QStringLiteral(TRANSLATION_TEST_ROOT) + "/" + locale + "/openvegaseffects_" + locale + ".qm"));
         QVERIFY(plugins.load(QStringLiteral(TRANSLATION_TEST_ROOT) + "/" + locale + "/openvegaseffects_plugins_" + locale + ".qm"));
-        qt.load(QStringLiteral("qt_") + locale, QLibraryInfo::path(QLibraryInfo::TranslationsPath));
+        // Qt's own catalog is optional: not every Qt installation ships it.
+        (void)qt.load(QStringLiteral("qt_") + locale, QLibraryInfo::path(QLibraryInfo::TranslationsPath));
         qApp->installTranslator(&app); qApp->installTranslator(&plugins); qApp->installTranslator(&qt);
         auto cleanup = qScopeGuard([&] { qApp->removeTranslator(&app); qApp->removeTranslator(&plugins); qApp->removeTranslator(&qt); });
         // The project's own names, file names and template names.
@@ -11943,6 +11944,25 @@ private slots:
         request.layer->clips[0].durationSeconds = 1.5;
         QVERIFY(cache.pathFor(request) != made);
         QVERIFY(cache.readyFor(request).isEmpty());
+    }
+
+    // A module and its dependency folder given as relative paths load as
+    // absolute ones do: LoadLibraryExW's LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR and
+    // AddDllDirectory refuse relative paths, which made a relative
+    // OPENVEGAS_HFPL_BALANCE fail the native audio tests.
+    void nativeModulesLoadFromRelativePaths() {
+        const QString root = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString balance = root + "/Plugins/Audio/Balance.hfpl";
+        if (!QFileInfo::exists(balance)) QSKIP("the reference's Balance.hfpl is not in SAMPLES");
+        const QDir here = QDir::current();
+        if (QFileInfo(here.relativeFilePath(balance)).isAbsolute())
+            QSKIP("the sources are on another drive than the working folder");
+        const auto relative = plugin::loadNativePluginMetadata(here.relativeFilePath(balance),
+                                                               here.relativeFilePath(root));
+        const auto absolute = plugin::loadNativePluginMetadata(balance, root);
+        QVERIFY2(absolute.lifecycleCompatible, qPrintable(absolute.metadataError + absolute.lifecycleError));
+        QVERIFY2(relative.lifecycleCompatible, qPrintable(relative.metadataError + relative.lifecycleError));
+        QCOMPARE(relative.parameters.size(), absolute.parameters.size());
     }
 
     void nestedAudioNativeDspAndTransitions() {

@@ -932,11 +932,14 @@ NativePluginInfo loadNativePluginMetadata(const QString& filePath,
     // stay changed after the scan.
     DLL_DIRECTORY_COOKIE cookie = nullptr;
     if (!dependencySearchPath.isEmpty()) {
-        const QString nativePath = QDir::toNativeSeparators(dependencySearchPath);
+        // AddDllDirectory and LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR take absolute
+        // paths only; a relative one made LoadLibraryExW fail (error 87).
+        const QString nativePath =
+            QDir::toNativeSeparators(QFileInfo(dependencySearchPath).absoluteFilePath());
         cookie = AddDllDirectory(reinterpret_cast<const wchar_t*>(nativePath.utf16()));
     }
 
-    const QString nativeFile = QDir::toNativeSeparators(filePath);
+    const QString nativeFile = QDir::toNativeSeparators(QFileInfo(filePath).absoluteFilePath());
     HMODULE module = LoadLibraryExW(reinterpret_cast<const wchar_t*>(nativeFile.utf16()), nullptr,
                                     LOAD_LIBRARY_SEARCH_DEFAULT_DIRS
                                         | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR
@@ -1166,12 +1169,15 @@ bool NativePluginRuntime::load(const QString& filePath,
     }
 
     if (!dependencySearchPath.isEmpty()) {
-        const QString nativePath = QDir::toNativeSeparators(dependencySearchPath);
+        // AddDllDirectory and LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR take absolute
+        // paths only; a relative one made LoadLibraryExW fail (error 87).
+        const QString nativePath =
+            QDir::toNativeSeparators(QFileInfo(dependencySearchPath).absoluteFilePath());
         m_dllDirectoryCookie = AddDllDirectory(
             reinterpret_cast<const wchar_t*>(nativePath.utf16()));
     }
 
-    const QString nativeFile = QDir::toNativeSeparators(filePath);
+    const QString nativeFile = QDir::toNativeSeparators(QFileInfo(filePath).absoluteFilePath());
     const HMODULE module = LoadLibraryExW(
         reinterpret_cast<const wchar_t*>(nativeFile.utf16()), nullptr,
         LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR
