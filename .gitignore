@@ -10,8 +10,14 @@
 /RelWithDebInfo/
 /MinSizeRel/
 
-# Built by tools/build_windows_installer.bat
+# Where tools/build_windows_installer.bat used to write the installer (it
+# now goes to build/Windows_MSVC-x64-Release-Installer)
 tools/OpenVegasEffects_Setup.exe
+
+# Photoshop documents (samples, embedded sources taken out of them) stay out
+# of the repository for now
+*.psd
+*.psb
 
 # Python bytecode
 __pycache__/

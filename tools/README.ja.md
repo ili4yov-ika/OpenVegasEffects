@@ -13,7 +13,7 @@
 
 | ファイル | 役割 |
 |----------|------|
-| [`msvc_build.cmd`](msvc_build.cmd) | Visual Studio 2022 の環境を読み込んで CMake プリセットを構成・ビルドします: `msvc_build.cmd <コマンド> [プリセット]`、コマンドは `configure`、`build`、`buildall`、`probe`、`clean` |
+| [`msvc_build.cmd`](msvc_build.cmd) | Visual Studio 2022 の環境を読み込んで CMake プリセットを構成・ビルドします: `msvc_build.cmd <コマンド> [windows-msvc-debug|windows-msvc-release]`、コマンドは `configure`、`build`（未構成のツリーは先に構成）、`buildall`、`probe`、`clean`、`tests`（`build/Windows_MSVC-x64-Release-Tests` で回帰テストをビルドして実行） |
 | [`build_windows_installer.bat`](build_windows_installer.bat) | Windows インストーラーを作成します: MSVC と Ninja による Release ビルド、`cmake --install`、windeployqt、MSVC ランタイム、NSIS |
 | [`nsis_installer.nsi`](nsis_installer.nsi)、[`nsis_payload.ps1`](nsis_payload.ps1) | NSIS スクリプトと、それがまとめるファイルの一覧 |
 | [`build_deb.sh`](build_deb.sh)、[`debian/`](debian/) | `.deb` パッケージ |

@@ -3,8 +3,10 @@
 
 export DH_VERBOSE = 1
 
+# The build tree goes where every build does:
+# build/<OS>_<compiler>-<arch>-<configuration>.
 %:
-	dh $@ --buildsystem=cmake+ninja
+	dh $@ --buildsystem=cmake+ninja --builddirectory=build/Linux_GCC-x64-Release-Package
 
 override_dh_auto_configure:
 	dh_auto_configure -- \

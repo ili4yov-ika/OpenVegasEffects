@@ -4,7 +4,8 @@
 #
 # rpmbuild builds from the source archive (%build in openvegaseffects.spec), so
 # the project is not configured or built locally first - that would be the same
-# work twice.
+# work twice. Its tree (_topdir) is build/Linux_GCC-x64-Release-RPM, as build
+# trees are build/<OS>_<compiler>-<arch>-<configuration>.
 
 set -euo pipefail
 
@@ -31,7 +32,7 @@ command -v cmake >/dev/null 2>&1 || { echo "[ERROR] CMake not found!"; exit 1; }
 command -v rpmbuild >/dev/null 2>&1 || { echo "[ERROR] rpmbuild not found! Install it: sudo dnf install rpm-build rpmdevtools"; exit 1; }
 
 echo "[1/4] Setting up the RPM build tree..."
-RPMBUILD_DIR="$HOME/rpmbuild"
+RPMBUILD_DIR="$PROJECT_ROOT/build/Linux_GCC-x64-Release-RPM"
 mkdir -p "$RPMBUILD_DIR"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 
 echo "[2/4] Creating the source archive..."
@@ -57,7 +58,7 @@ cp "$SPEC_FILE" "$RPMBUILD_DIR/SPECS/"
 
 echo "[4/4] Building the RPM package..."
 cd "$RPMBUILD_DIR"
-rpmbuild -ba "SPECS/${PACKAGE_NAME}.spec"
+rpmbuild --define "_topdir $RPMBUILD_DIR" -ba "SPECS/${PACKAGE_NAME}.spec"
 
 echo
 echo "========================================"

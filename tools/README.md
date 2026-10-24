@@ -13,7 +13,7 @@ Build, packaging, translation and reverse-engineering helpers.
 
 | File | What it does |
 |------|--------------|
-| [`msvc_build.cmd`](msvc_build.cmd) | Configures and builds a CMake preset with the Visual Studio 2022 environment loaded: `msvc_build.cmd <command> [preset]`, the command being `configure`, `build`, `buildall`, `probe` or `clean` |
+| [`msvc_build.cmd`](msvc_build.cmd) | Configures and builds a CMake preset with the Visual Studio 2022 environment loaded: `msvc_build.cmd <command> [windows-msvc-debug|windows-msvc-release]`, the command being `configure`, `build` (configures a tree not configured yet), `buildall`, `probe`, `clean` or `tests` (builds and runs the regression tests in `build/Windows_MSVC-x64-Release-Tests`) |
 | [`build_windows_installer.bat`](build_windows_installer.bat) | Builds the Windows installer: Release with MSVC and Ninja, `cmake --install`, windeployqt, the MSVC runtime, NSIS |
 | [`nsis_installer.nsi`](nsis_installer.nsi), [`nsis_payload.ps1`](nsis_payload.ps1) | The NSIS script and the payload list it compiles |
 | [`build_deb.sh`](build_deb.sh), [`debian/`](debian/) | The `.deb` package |

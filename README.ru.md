@@ -178,7 +178,10 @@ cmake --build build -j 8
 через dpkg-buildpackage, `.rpm` через rpmbuild); пакет содержит приложение, его
 ярлык и значок. На macOS `tools/setup_macos.sh` ставит Qt 6, CMake и Ninja через
 Homebrew, а `tools/macos_build.sh [debug|release] [test] [deploy]` собирает по
-пресетам. Эти пути пока не проверены.
+пресетам (`test` собирает и запускает регрессионные тесты рядом, в `...-Tests`). Деревья
+пакетов - `build/Linux_GCC-x64-Release-Package/` (туда же попадает `.deb`) и
+`build/Linux_GCC-x64-Release-RPM/` (`_topdir` для rpmbuild, `.rpm` в `RPMS/`). Эти пути пока не
+проверены.
 
 ### Установщик для Windows
 
@@ -191,7 +194,7 @@ tools\build_windows_installer.bat
 Он сам находит Visual Studio 2022 (vswhere) и кит Qt `msvc2022_64`, собирает Release
 через Ninja в `build\Windows_MSVC-x64-Release-Installer`, устанавливает его в чистый префикс,
 раскладывает Qt через windeployqt, кладёт рядом с EXE DLL рантайма MSVC и пишет
-`tools\OpenVegasEffects_Setup.exe`. `CMAKE_PREFIX_PATH` выбирает другой кит Qt,
+`build\Windows_MSVC-x64-Release-Installer\OpenVegasEffects_Setup.exe`. `CMAKE_PREFIX_PATH` выбирает другой кит Qt,
 `OPENVEGAS_VLC_RUNTIME_DIR` — другой рантайм libVLC; дерево сборки, настроенное
 другим генератором, компилятором или китом Qt, создаётся заново.
 
@@ -200,10 +203,10 @@ tools\build_windows_installer.bat
 
 ```bat
 tools\msvc_build.cmd buildall windows-msvc-release
-cmake --install build\Windows_MSVC-x64-Release --prefix build\installer-stage
-"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release --no-compiler-runtime build\installer-stage\bin\OpenVegasEffects.exe
-copy "%VCToolsRedistDir%x64\Microsoft.VC143.CRT\*.dll" build\installer-stage\bin\
-"C:\Program Files (x86)\NSIS\makensis.exe" /DBUILD_DIR=build\installer-stage /DOUTPUT_FILE=build\OpenVegasEffects_Setup.exe tools\nsis_installer.nsi
+cmake --install build\Windows_MSVC-x64-Release --prefix build\Windows_MSVC-x64-Release-Installer\install
+"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release --no-compiler-runtime build\Windows_MSVC-x64-Release-Installer\install\bin\OpenVegasEffects.exe
+copy "%VCToolsRedistDir%x64\Microsoft.VC143.CRT\*.dll" build\Windows_MSVC-x64-Release-Installer\install\bin\
+"C:\Program Files (x86)\NSIS\makensis.exe" /DBUILD_DIR=build\Windows_MSVC-x64-Release-Installer\install /DOUTPUT_FILE=build\Windows_MSVC-x64-Release-Installer\OpenVegasEffects_Setup.exe tools\nsis_installer.nsi
 ```
 
 NSIS требует подготовленный `bin` с приложением и `platforms\qwindows.dll`.

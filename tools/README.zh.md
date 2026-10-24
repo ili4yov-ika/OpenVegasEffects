@@ -13,7 +13,7 @@
 
 | 文件 | 作用 |
 |------|------|
-| [`msvc_build.cmd`](msvc_build.cmd) | 加载 Visual Studio 2022 环境后配置并构建 CMake 预设：`msvc_build.cmd <命令> [预设]`，命令为 `configure`、`build`、`buildall`、`probe` 或 `clean` |
+| [`msvc_build.cmd`](msvc_build.cmd) | 加载 Visual Studio 2022 环境后配置并构建 CMake 预设：`msvc_build.cmd <命令> [windows-msvc-debug|windows-msvc-release]`，命令为 `configure`、`build`（尚未配置的构建树会先配置）、`buildall`、`probe`、`clean` 或 `tests`（在 `build/Windows_MSVC-x64-Release-Tests` 中构建并运行回归测试） |
 | [`build_windows_installer.bat`](build_windows_installer.bat) | 构建 Windows 安装程序：用 MSVC 和 Ninja 进行 Release 构建、`cmake --install`、windeployqt、MSVC 运行时、NSIS |
 | [`nsis_installer.nsi`](nsis_installer.nsi)、[`nsis_payload.ps1`](nsis_payload.ps1) | NSIS 脚本及其打包的文件清单 |
 | [`build_deb.sh`](build_deb.sh)、[`debian/`](debian/) | `.deb` 软件包 |

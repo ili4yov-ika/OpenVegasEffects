@@ -164,8 +164,10 @@ cmake --build build -j 8
 `tools/build_deb.sh` 和 `tools/build_rpm.sh` 构建 `openvegaseffects` 软件包（`.deb`
 通过 dpkg-buildpackage，`.rpm` 通过 rpmbuild）；软件包包含应用程序、桌面项和图标。在
 macOS 上，`tools/setup_macos.sh` 通过 Homebrew 安装 Qt 6、CMake 和 Ninja，
-`tools/macos_build.sh [debug|release] [test] [deploy]` 使用预设进行构建。这些流程尚未
-验证。
+`tools/macos_build.sh [debug|release] [test] [deploy]` 使用预设进行构建（`test` 会在旁边的
+`...-Tests` 中构建并运行回归测试）。软件包的构建树为 `build/Linux_GCC-x64-Release-Package/`（`.deb`
+也放在这里）和 `build/Linux_GCC-x64-Release-RPM/`（rpmbuild 的 `_topdir`，`.rpm` 在 `RPMS/` 下）。
+这些流程尚未验证。
 
 ### Windows 安装程序
 
@@ -177,7 +179,7 @@ tools\build_windows_installer.bat
 
 脚本会自动找到 Visual Studio 2022（vswhere）和 Qt 的 `msvc2022_64` 套件，在
 `build\Windows_MSVC-x64-Release-Installer` 中用 Ninja 构建 Release，安装到全新的前缀，用 windeployqt
-部署 Qt，把 MSVC 运行时 DLL 复制到 EXE 旁边，并生成 `tools\OpenVegasEffects_Setup.exe`。
+部署 Qt，把 MSVC 运行时 DLL 复制到 EXE 旁边，并生成 `build\Windows_MSVC-x64-Release-Installer\OpenVegasEffects_Setup.exe`。
 `CMAKE_PREFIX_PATH` 可选择其他 Qt 套件，`OPENVEGAS_VLC_RUNTIME_DIR` 可选择其他 libVLC
 运行时；用其他生成器、编译器或 Qt 套件配置的构建目录会重新创建。
 
@@ -186,10 +188,10 @@ Developer Command Prompt for VS 2022）。在项目根目录下：
 
 ```bat
 tools\msvc_build.cmd buildall windows-msvc-release
-cmake --install build\Windows_MSVC-x64-Release --prefix build\installer-stage
-"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release --no-compiler-runtime build\installer-stage\bin\OpenVegasEffects.exe
-copy "%VCToolsRedistDir%x64\Microsoft.VC143.CRT\*.dll" build\installer-stage\bin\
-"C:\Program Files (x86)\NSIS\makensis.exe" /DBUILD_DIR=build\installer-stage /DOUTPUT_FILE=build\OpenVegasEffects_Setup.exe tools\nsis_installer.nsi
+cmake --install build\Windows_MSVC-x64-Release --prefix build\Windows_MSVC-x64-Release-Installer\install
+"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release --no-compiler-runtime build\Windows_MSVC-x64-Release-Installer\install\bin\OpenVegasEffects.exe
+copy "%VCToolsRedistDir%x64\Microsoft.VC143.CRT\*.dll" build\Windows_MSVC-x64-Release-Installer\install\bin\
+"C:\Program Files (x86)\NSIS\makensis.exe" /DBUILD_DIR=build\Windows_MSVC-x64-Release-Installer\install /DOUTPUT_FILE=build\Windows_MSVC-x64-Release-Installer\OpenVegasEffects_Setup.exe tools\nsis_installer.nsi
 ```
 
 NSIS 需要准备好的 `bin`，其中包含应用和 `platforms\qwindows.dll`。编译期间，

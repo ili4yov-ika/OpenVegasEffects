@@ -13,7 +13,7 @@
 
 | Файл | Что делает |
 |------|------------|
-| [`msvc_build.cmd`](msvc_build.cmd) | Конфигурирует и собирает пресет CMake с загруженным окружением Visual Studio 2022: `msvc_build.cmd <команда> [пресет]`, где команда - `configure`, `build`, `buildall`, `probe` или `clean` |
+| [`msvc_build.cmd`](msvc_build.cmd) | Конфигурирует и собирает пресет CMake с загруженным окружением Visual Studio 2022: `msvc_build.cmd <команда> [windows-msvc-debug|windows-msvc-release]`, где команда - `configure`, `build` (сначала конфигурирует ещё не настроенное дерево), `buildall`, `probe`, `clean` или `tests` (собирает и запускает регрессионные тесты в `build/Windows_MSVC-x64-Release-Tests`) |
 | [`build_windows_installer.bat`](build_windows_installer.bat) | Собирает установщик Windows: Release с MSVC и Ninja, `cmake --install`, windeployqt, среда выполнения MSVC, NSIS |
 | [`nsis_installer.nsi`](nsis_installer.nsi), [`nsis_payload.ps1`](nsis_payload.ps1) | Скрипт NSIS и список файлов, который он упаковывает |
 | [`build_deb.sh`](build_deb.sh), [`debian/`](debian/) | Пакет `.deb` |

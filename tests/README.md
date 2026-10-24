@@ -26,8 +26,12 @@ From the repository root, with Qt for MSVC (other kits work the same way):
 ```powershell
 cmake -S tests -B build/Windows_MSVC-x64-Release-Tests -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
 cmake --build build/Windows_MSVC-x64-Release-Tests --config Release --parallel
-ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 120
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 900
 ```
+
+Or all three in one step, with the Visual Studio environment loaded and without sound:
+`tools\msvc_build.cmd tests`. The tree is `build/<OS>_<compiler>-<arch>-<configuration>-Tests`,
+like every build tree.
 
 CTest runs the suites on the `offscreen` platform. Under CTest `timeline_regression` also
 writes its log to `timeline_ctest.txt` beside the build: its standard output does not

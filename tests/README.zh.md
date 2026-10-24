@@ -26,8 +26,11 @@
 ```powershell
 cmake -S tests -B build/Windows_MSVC-x64-Release-Tests -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
 cmake --build build/Windows_MSVC-x64-Release-Tests --config Release --parallel
-ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 120
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 900
 ```
+
+也可以加载 Visual Studio 环境并在无声音的情况下一步完成这三步：`tools\msvc_build.cmd tests`。
+与所有构建一样，构建树为 `build/<操作系统>_<编译器>-<架构>-<配置>-Tests`。
 
 CTest 在 `offscreen` 平台上运行测试套件。在 CTest 下，`timeline_regression` 还会把日志写入
 构建目录旁的 `timeline_ctest.txt`：它的标准输出不会进入 CTest 的日志，而该文件会指出是哪个

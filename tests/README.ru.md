@@ -26,8 +26,12 @@
 ```powershell
 cmake -S tests -B build/Windows_MSVC-x64-Release-Tests -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
 cmake --build build/Windows_MSVC-x64-Release-Tests --config Release --parallel
-ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 120
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 900
 ```
+
+Или все три шага разом, с загруженным окружением Visual Studio и без звука:
+`tools\msvc_build.cmd tests`. Дерево сборки - `build/<ОС>_<компилятор>-<архитектура>-<конфигурация>-Tests`,
+как и у всех сборок.
 
 CTest запускает наборы на платформе `offscreen`. Под CTest `timeline_regression` также пишет
 свой журнал в `timeline_ctest.txt` рядом со сборкой: его стандартный вывод не попадает в

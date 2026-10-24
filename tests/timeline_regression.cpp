@@ -1815,9 +1815,9 @@ private slots:
     void photoshopSamplesImportByLayers() {
         const QString root = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects";
         QStringList files;
-        QDirIterator it(root, {"*.psd"}, QDir::Files, QDirIterator::Subdirectories);
+        QDirIterator it(root, {"*.psd", "*.psb"}, QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) files << it.next();
-        if (files.isEmpty()) QSKIP("No sample PSD in SAMPLES/vegfx_projects");
+        if (files.isEmpty()) QSKIP("No sample PSD or PSB in SAMPLES/vegfx_projects");
         // The reference plug-ins' own specs when they are there.
         const QString pluginDir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects/Plugins";
         std::shared_ptr<plugin::PluginManager> manager;

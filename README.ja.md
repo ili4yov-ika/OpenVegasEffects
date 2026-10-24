@@ -181,7 +181,10 @@ cmake --build build -j 8
 します（`.deb` は dpkg-buildpackage、`.rpm` は rpmbuild）。パッケージにはアプリケーション、
 デスクトップエントリ、アイコンが含まれます。macOS では `tools/setup_macos.sh` が Homebrew
 で Qt 6、CMake、Ninja をインストールし、`tools/macos_build.sh [debug|release] [test]
-[deploy]` がプリセットでビルドします。これらの手順はまだ検証されていません。
+[deploy]` がプリセットでビルドします（`test` は回帰テストを隣の `...-Tests` にビルドして実行します）。
+パッケージのツリーは `build/Linux_GCC-x64-Release-Package/`（`.deb` もここに置かれます）と
+`build/Linux_GCC-x64-Release-RPM/`（rpmbuild の `_topdir`、`.rpm` は `RPMS/` 内）です。
+これらの手順はまだ検証されていません。
 
 ### Windows インストーラー
 
@@ -194,7 +197,7 @@ tools\build_windows_installer.bat
 スクリプトは Visual Studio 2022（vswhere）と Qt の `msvc2022_64` キットを自動で見つけ、
 `build\Windows_MSVC-x64-Release-Installer` で Ninja により Release をビルドし、新しいプレフィックスに
 インストールし、windeployqt で Qt を配置し、MSVC ランタイムの DLL を EXE の隣に
-コピーして `tools\OpenVegasEffects_Setup.exe` を作成します。`CMAKE_PREFIX_PATH` で
+コピーして `build\Windows_MSVC-x64-Release-Installer\OpenVegasEffects_Setup.exe` を作成します。`CMAKE_PREFIX_PATH` で
 別の Qt キットを、`OPENVEGAS_VLC_RUNTIME_DIR` で別の libVLC ランタイムを指定できます。
 別のジェネレーター、コンパイラー、Qt キットで構成されたビルドツリーは作り直されます。
 
@@ -203,10 +206,10 @@ Developer Command Prompt for VS 2022 が必要です）。プロジェクトル�
 
 ```bat
 tools\msvc_build.cmd buildall windows-msvc-release
-cmake --install build\Windows_MSVC-x64-Release --prefix build\installer-stage
-"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release --no-compiler-runtime build\installer-stage\bin\OpenVegasEffects.exe
-copy "%VCToolsRedistDir%x64\Microsoft.VC143.CRT\*.dll" build\installer-stage\bin\
-"C:\Program Files (x86)\NSIS\makensis.exe" /DBUILD_DIR=build\installer-stage /DOUTPUT_FILE=build\OpenVegasEffects_Setup.exe tools\nsis_installer.nsi
+cmake --install build\Windows_MSVC-x64-Release --prefix build\Windows_MSVC-x64-Release-Installer\install
+"C:\Qt\6.9.3\msvc2022_64\bin\windeployqt.exe" --release --no-compiler-runtime build\Windows_MSVC-x64-Release-Installer\install\bin\OpenVegasEffects.exe
+copy "%VCToolsRedistDir%x64\Microsoft.VC143.CRT\*.dll" build\Windows_MSVC-x64-Release-Installer\install\bin\
+"C:\Program Files (x86)\NSIS\makensis.exe" /DBUILD_DIR=build\Windows_MSVC-x64-Release-Installer\install /DOUTPUT_FILE=build\Windows_MSVC-x64-Release-Installer\OpenVegasEffects_Setup.exe tools\nsis_installer.nsi
 ```
 
 NSIS には、アプリと `platforms\qwindows.dll` を含む準備済みの `bin` が必要です。

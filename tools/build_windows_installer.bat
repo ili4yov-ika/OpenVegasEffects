@@ -31,7 +31,7 @@ REM cache and force a full rebuild every time you switch.
 set "BUILD_DIR=%PROJECT_ROOT%\build\Windows_MSVC-x64-Release-Installer"
 set "INSTALL_DIR=%BUILD_DIR%\install"
 set "NSIS_SCRIPT=%SCRIPT_DIR%nsis_installer.nsi"
-set "OUTPUT_FILE=%SCRIPT_DIR%OpenVegasEffects_Setup.exe"
+set "OUTPUT_FILE=%BUILD_DIR%\OpenVegasEffects_Setup.exe"
 
 echo ========================================
 echo OpenVegas Effects - Windows Installer Builder

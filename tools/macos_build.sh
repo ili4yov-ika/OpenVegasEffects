@@ -4,8 +4,12 @@
 # Usage:
 #   bash tools/macos_build.sh              # Debug
 #   bash tools/macos_build.sh release      # Release
-#   bash tools/macos_build.sh debug test   # Debug + ctest (when there are tests)
+#   bash tools/macos_build.sh debug test   # Debug + the regression tests
 #   bash tools/macos_build.sh release deploy  # Release + macdeployqt
+#
+# Build trees are build/<OS>_<compiler>-<arch>-<configuration>: here
+# build/macOS_LLVM-arm64-Debug (Apple silicon) or build/macOS_LLVM-x64-Debug
+# (Intel), the tests beside it in ...-Tests.
 
 set -euo pipefail
 
@@ -41,9 +45,11 @@ done
 if [[ "$(uname -m)" == "arm64" ]]; then
     PRESET="macos-${BUILD_TYPE}"
     ARCH_NAME="arm64"
+    OSX_ARCH="arm64"
 else
     PRESET="macos-x64-${BUILD_TYPE}"
     ARCH_NAME="x64"
+    OSX_ARCH="x86_64"
 fi
 if [[ "$BUILD_TYPE" == "release" ]]; then CONFIG_NAME="Release"; else CONFIG_NAME="Debug"; fi
 BUILD_DIR="${PROJECT_ROOT}/build/macOS_LLVM-${ARCH_NAME}-${CONFIG_NAME}"
@@ -67,8 +73,19 @@ fi
 echo "Built: $APP_BIN"
 
 if [[ "$RUN_TEST" -eq 1 ]]; then
-    echo "=== CTest (QT_QPA_PLATFORM=offscreen) ==="
-    QT_QPA_PLATFORM=offscreen ctest --test-dir "$BUILD_DIR" --output-on-failure || true
+    # The regression tests are a project of their own (tests/CMakeLists.txt),
+    # so the application's tree has none: they are built beside it.
+    TESTS_DIR="${BUILD_DIR}-Tests"
+    echo "=== Regression tests in ${TESTS_DIR} (offscreen, no sound) ==="
+    TEST_ARGS=(-S "${PROJECT_ROOT}/tests" -B "$TESTS_DIR" -G Ninja
+               "-DCMAKE_BUILD_TYPE=${CONFIG_NAME}" "-DCMAKE_OSX_ARCHITECTURES=${OSX_ARCH}")
+    if [[ -n "${CMAKE_PREFIX_PATH:-}" ]]; then
+        TEST_ARGS+=("-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}")
+    fi
+    cmake "${TEST_ARGS[@]}"
+    cmake --build "$TESTS_DIR" --parallel
+    QT_QPA_PLATFORM=offscreen OPENVEGAS_VLC_AUDIO_OUTPUT=dummy \
+        ctest --test-dir "$TESTS_DIR" --output-on-failure --timeout 900
 fi
 
 if [[ "$DEPLOY" -eq 1 ]]; then

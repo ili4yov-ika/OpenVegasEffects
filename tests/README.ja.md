@@ -26,8 +26,12 @@
 ```powershell
 cmake -S tests -B build/Windows_MSVC-x64-Release-Tests -DCMAKE_PREFIX_PATH=C:/Qt/6.9.3/msvc2022_64
 cmake --build build/Windows_MSVC-x64-Release-Tests --config Release --parallel
-ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 120
+ctest --test-dir build/Windows_MSVC-x64-Release-Tests -C Release --output-on-failure --timeout 900
 ```
+
+Visual Studio の環境を読み込み、音を出さずに 3 つをまとめて実行するには
+`tools\msvc_build.cmd tests` を使います。ツリーはすべてのビルドと同じく
+`build/<OS>_<コンパイラー>-<アーキテクチャ>-<構成>-Tests` です。
 
 CTest はスイートを `offscreen` プラットフォームで実行します。CTest の下では
 `timeline_regression` がビルドの隣の `timeline_ctest.txt` にもログを書きます。標準出力は
