@@ -1,6 +1,18 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
     <qresource prefix="/icons">
+        <file alias="media/file-video-preview.png">icons/media/file-video-preview.png</file>
+        <file alias="media/file-video-preview@2x.png">icons/media/file-video-preview@2x.png</file>
+        <file alias="media/file-audio-preview.png">icons/media/file-audio-preview.png</file>
+        <file alias="media/file-audio-preview@2x.png">icons/media/file-audio-preview@2x.png</file>
+        <file alias="media/file-3d-preview.png">icons/media/file-3d-preview.png</file>
+        <file alias="media/file-3d-preview@2x.png">icons/media/file-3d-preview@2x.png</file>
+        <file alias="media/file-3d-animation-preview.png">icons/media/file-3d-animation-preview.png</file>
+        <file alias="media/file-3d-animation-preview@2x.png">icons/media/file-3d-animation-preview@2x.png</file>
+        <file alias="media/file-comp-preview.png">icons/media/file-comp-preview.png</file>
+        <file alias="media/file-comp-preview@2x.png">icons/media/file-comp-preview@2x.png</file>
+        <file alias="media/file-offline-preview.png">icons/media/file-offline-preview.png</file>
+        <file alias="media/file-offline-preview@2x.png">icons/media/file-offline-preview@2x.png</file>
     <file alias="viewer/light.png">icons/viewer/light.png</file>
     <file alias="viewer/light@2x.png">icons/viewer/light@2x.png</file>
     <file alias="viewer/light-hover.png">icons/viewer/light-hover.png</file>

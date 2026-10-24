@@ -12,7 +12,7 @@
 | Путь | Что в нём |
 |------|-----------|
 | [`icons.qrc`](icons.qrc) | Файл ресурсов Qt со всеми иконками, встроенными как `:/icons/...` |
-| [`icons/`](icons/) | Иконки: собственные SVG программы (`toolbar/`, `text/`, `timeline/`), PNG эталона без изменений (`layout/` - см. его README - и `viewer/`), логотип приложения (`logo.svg`, `logo.png`, `logo.ico`), иконка файлов `.vegfx` (`iconfile.svg`, `iconfile.ico`) и заставка (`splash.svg`) |
+| [`icons/`](icons/) | Иконки: собственные SVG программы (`toolbar/`, `text/`, `timeline/`), PNG эталона без изменений (`layout/` и `media/` - см. их README - и `viewer/`), логотип приложения (`logo.svg`, `logo.png`, `logo.ico`), иконка файлов `.vegfx` (`iconfile.svg`, `iconfile.ico`) и заставка (`splash.svg`) |
 | [`OpenVegasEffects.rc`](OpenVegasEffects.rc) | Скрипт ресурсов Windows: иконка исполняемого файла (индекс 0) и иконка файлов `.vegfx` (индекс 1, её использует ассоциация файлов) |
 | [`macos/Info.plist`](macos/Info.plist) | Описание бандла для сборки под macOS |
 

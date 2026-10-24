@@ -429,14 +429,23 @@ Photoshop 文档：`photoshopDocumentReadsLayers` 按文件格式规范写出文
 合并图像。`photoshopDocumentImportsAsCompositeShot` 将其导入为合成镜头（图层自上而下、组的
 不透明度、Grade 图层、图层样式中的外发光与投影、按四角放置的源图作为智能对象，以及转为
 Exposure Pro 的 Camera Raw）并进行绘制。`photoshopSamplesImportByLayers` 导入
-`SAMPLES/vegfx_projects/project_*` 中的 PSD（由 Photoshop 制作，不在 git 中；project_4 的是
-Camera Raw 超出色调控件的智能对象），并与 Photoshop 自身的合并图像比较（`psd-<名称>.png`、
-`psd-<名称>-photoshop.png`）。`photoshopFlattenedImageTransparency` 检查合并图像的额外通道仅在图层数
+`SAMPLES/vegfx_projects/project_*` 中的 PSD（由 Photoshop 制作，不在 git 中），并按 8 x 8 块与
+Photoshop 自身的合并图像比较，使胶片颗粒按平均值计入（`psd-<名称>.png`、`psd-<名称>-photoshop.png`）。
+project_4 的文档是一个智能对象，其源是一个带完整 Camera Raw 调色的 29 层文档：该文档成为独立的镜头，
+所有图层均被锁定，Camera Raw 成为按 Photoshop 结果拟合的 LUT（具备参考插件和 OpenGL 时比较该镜头；
+否则只比较不含效果的文档）。`photoshopFlattenedImageTransparency` 检查合并图像的额外通道仅在图层数
 为负时才是其透明度（否则是存储的选区），`photoshopCameraRawBeyondToneKeepsPixels` 检查超出色调控件的
 Camera Raw 会保留 Photoshop 滤镜处理后的像素并列出这些设置，而中性值不计入。
 `photoshopLayersSurviveSave` 以绝对路径和相对路径保存并重新打开。具备 OpenGL 和参考插件时，
 `psdDropShadowFallsAwayFromTheLight` 检查光源角度到 Drop Shadow 角度的换算，
-`psdCameraRawRendersWithExposurePro` 检查 +0.5 EV 会提亮智能对象的源图。
+`psdCameraRawRendersWithExposurePro` 检查 +0.5 EV 会提亮智能对象的源图。`nativeLutReadsCubeFiles`
+用反相和交换通道的 `.cube` 在渐变上运行参考程序的 LUT 效果（它在每次渲染时调用宿主的
+ClearPersistentMessage，API +0x2a0）。
+
+`mediaPanelShowsPreviewsAsTheReference` 检查媒体面板的缩略图视图：带名称和详细行
+（“320 x 180 pixels”“00:00:05:00 @ 30fps”）的带框预览、在工作线程中读取的视频帧（SAMPLES 中的
+`project_1.mp4`）、文件缺失时参考程序的占位图，以及作为合成镜头并显示文档图片的已导入 Photoshop 文档，
+其图层的媒体既不列出也不计数（`media-previews.png`）。
 
 `mediaOverridesReinterpretFrames` 检查 Media Properties 的其余部分：把 30 fps 文件覆盖为 15 fps
 （源时间和长度）、NTSC 帧率、把白色压缩到 235 的 Computer（Full）、对 HD 强制使用 Rec. 601 矩阵、

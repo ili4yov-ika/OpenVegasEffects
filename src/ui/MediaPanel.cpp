@@ -23,6 +23,10 @@
 #include <QUndoStack>
 #include <QUndoCommand>
 #include <QPainter>
+#include <QStyledItemDelegate>
+#include <QThreadPool>
+#include "media/VideoProbe.h"
+#include <cmath>
 #include "media/PsdDocument.h"
 #include "ui/Theme.h"
 #include "ui/EffectPlacement.h"
@@ -57,6 +61,111 @@ namespace ui {
 namespace {
 // Item data: a composite shot's id, on rows that list a shot.
 constexpr int kShotIdRole = Qt::UserRole + 3;
+
+// Item data for the thumbnail view: the name alone, the lines under it, the
+// preview (a QPixmap) and, when there is none, the placeholder drawn instead.
+constexpr int kNameRole = Qt::UserRole + 4;
+constexpr int kDetailRole = Qt::UserRole + 5;
+constexpr int kPreviewRole = Qt::UserRole + 6;
+constexpr int kPlaceholderRole = Qt::UserRole + 7;
+
+// The framed preview of the reference's Media rows: 106 x 60 pixels, the
+// placeholders (resources/icons/media) drawn at that size with their frame.
+constexpr QSize kPreviewSize(106, 60);
+
+// A row of the thumbnail view as the reference draws it: the preview on the
+// left, the name and the detail lines beside it. Headings and the list view
+// draw as plain rows.
+class MediaRowDelegate : public QStyledItemDelegate
+{
+public:
+    MediaRowDelegate(const bool* thumbnails, QObject* parent)
+        : QStyledItemDelegate(parent), m_thumbnails(thumbnails) {}
+
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        QSize size = QStyledItemDelegate::sizeHint(option, index);
+        if (*m_thumbnails && index.data(kNameRole).isValid()) size.setHeight(kPreviewSize.height() + 6);
+        return size;
+    }
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        if (!*m_thumbnails || !index.data(kNameRole).isValid()) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        const QWidget* widget = opt.widget;
+        QStyle* style = widget ? widget->style() : QApplication::style();
+        // Background and selection only: the text and icon are drawn here.
+        opt.text.clear();
+        opt.icon = QIcon();
+        style->drawPrimitive(QStyle::PE_PanelItemViewItem, &opt, painter, widget);
+
+        painter->save();
+        const QRect box(QPoint(opt.rect.left() + 4, opt.rect.top() + 3), kPreviewSize);
+        const QPixmap preview = index.data(kPreviewRole).value<QPixmap>();
+        if (!preview.isNull()) {
+            QSize shown = preview.deviceIndependentSize().toSize().scaled(box.size(), Qt::KeepAspectRatio);
+            const QRect target(box.center() - QPoint(shown.width() / 2, shown.height() / 2) + QPoint(1, 1), shown);
+            painter->drawPixmap(target, preview);
+        } else {
+            const QIcon placeholder(index.data(kPlaceholderRole).toString());
+            painter->drawPixmap(box, placeholder.pixmap(kPreviewSize));
+        }
+        // The label color, as a stripe down the preview's left edge.
+        const QColor label = index.data(Qt::UserRole + 2).value<QColor>();
+        if (label.isValid()) painter->fillRect(QRect(box.left(), box.top(), 4, box.height()), label);
+
+        const int textLeft = box.right() + 10;
+        QRect text(textLeft, box.top() + 1, opt.rect.right() - textLeft - 4, box.height());
+        const bool selected = opt.state & QStyle::State_Selected;
+        const QVariant foreground = index.data(Qt::ForegroundRole);
+        QColor nameColour = foreground.isValid() ? foreground.value<QBrush>().color()
+                          : opt.palette.color(selected ? QPalette::HighlightedText : QPalette::Text);
+        QFont nameFont = opt.font;
+        painter->setFont(nameFont);
+        painter->setPen(nameColour);
+        const QFontMetrics nameMetrics(nameFont);
+        const QString name = nameMetrics.elidedText(index.data(kNameRole).toString(), Qt::ElideMiddle, text.width());
+        painter->drawText(text, Qt::AlignLeft | Qt::AlignTop, name);
+        QFont detailFont = opt.font;
+        if (opt.font.pointSizeF() > 0) detailFont.setPointSizeF(qMax(6.0, opt.font.pointSizeF() * 0.85));
+        else if (opt.font.pixelSize() > 0) detailFont.setPixelSize(qMax(8, int(opt.font.pixelSize() * 0.85)));
+        painter->setFont(detailFont);
+        QColor detailColour = opt.palette.color(selected ? QPalette::HighlightedText : QPalette::Text);
+        detailColour.setAlphaF(0.75);
+        painter->setPen(detailColour);
+        const QFontMetrics detailMetrics(detailFont);
+        int y = text.top() + nameMetrics.height() + 2;
+        for (const QString& line : index.data(kDetailRole).toStringList()) {
+            if (y + detailMetrics.height() > opt.rect.bottom()) break;
+            painter->drawText(QRect(text.left(), y, text.width(), detailMetrics.height()), Qt::AlignLeft | Qt::AlignTop,
+                              detailMetrics.elidedText(line, Qt::ElideRight, text.width()));
+            y += detailMetrics.height();
+        }
+        painter->restore();
+    }
+
+private:
+    const bool* m_thumbnails;
+};
+
+// A timecode as the reference writes it in Media: hours, minutes, seconds
+// and frames at the media's rate.
+QString formatTimecode(double seconds, double frameRate)
+{
+    const int rate = qMax(1, int(std::lround(frameRate > 0.0 ? frameRate : 30.0)));
+    const qint64 frames = qint64(std::llround(qMax(0.0, seconds) * rate));
+    const qint64 totalSeconds = frames / rate;
+    return QStringLiteral("%1:%2:%3:%4")
+        .arg(totalSeconds / 3600, 2, 10, QLatin1Char('0'))
+        .arg((totalSeconds / 60) % 60, 2, 10, QLatin1Char('0'))
+        .arg(totalSeconds % 60, 2, 10, QLatin1Char('0'))
+        .arg(frames % rate, 2, 10, QLatin1Char('0'));
+}
 
 // Undo of a label color change.
 class MediaLabelCommand : public QUndoCommand
@@ -227,7 +336,13 @@ MediaPanel::MediaPanel(QWidget* parent)
             this, &MediaPanel::newCompositeShotRequested);
     connect(m_removeButton, &QToolButton::clicked, this, &MediaPanel::removeSelected);
 
-    // List or thumbnail view, and the Arrange By and Group By menus.
+    // List or thumbnail view, and the Arrange By and Group By menus. The
+    // thumbnail view is the reference's rows (MediaRowDelegate); the list
+    // view one compact line each.
+    m_previewPool = new QThreadPool(this);
+    m_previewPool->setMaxThreadCount(2);
+    m_list->setItemDelegate(new MediaRowDelegate(&m_thumbnailMode, m_list));
+    form.toolButtonMediaThumbnails->setChecked(true);
     auto* viewModes = new QButtonGroup(this);
     m_list->setIconSize(QSize(12, 16));
     viewModes->setExclusive(true);
@@ -241,9 +356,8 @@ MediaPanel::MediaPanel(QWidget* parent)
     });
     connect(form.toolButtonMediaThumbnails, &QToolButton::clicked, this, [this] {
         m_thumbnailMode = true;
-        m_list->setViewMode(QListView::IconMode);
-        m_list->setIconSize(QSize(96, 54));
-        m_list->setResizeMode(QListView::Adjust);
+        m_list->setViewMode(QListView::ListMode);
+        m_list->setIconSize(QSize(12, 16));
         rebuildList();
     });
 
@@ -312,6 +426,13 @@ MediaPanel::MediaPanel(QWidget* parent)
             emit mediaActivated(assets.at(index).filePath());
         }
     });
+}
+
+MediaPanel::~MediaPanel()
+{
+    // Frames being read finish first; their results then go nowhere.
+    m_previewPool->clear();
+    m_previewPool->waitForDone();
 }
 
 // A new manager (another project) starts a new epoch: undo records of the
@@ -522,6 +643,120 @@ QString MediaPanel::metadataText(const media::MediaAsset& asset) const
     return meta;
 }
 
+QStringList MediaPanel::detailLines(const media::MediaAsset& asset) const
+{
+    QStringList lines;
+    const QSize size = asset.frameSize();
+    const bool picture = asset.kind() == media::MediaKind::Video || asset.kind() == media::MediaKind::Image;
+    if (picture && size.isValid() && !size.isEmpty())
+        lines << tr("%1 x %2 pixels").arg(size.width()).arg(size.height());
+    QString timing;
+    if (asset.kind() == media::MediaKind::Video || asset.isImageSequence()) {
+        timing = tr("%1 @ %2fps").arg(formatTimecode(asset.durationSeconds(), asset.frameRate()))
+                     .arg(QString::number(asset.frameRate(), 'g', 4));
+    } else if (asset.kind() == media::MediaKind::Audio || asset.kind() == media::MediaKind::Model3DAnimation) {
+        timing = formatTimecode(asset.durationSeconds(), asset.frameRate());
+    }
+    // Its sound: the stream the asset plays (the first one by default).
+    const QVector<media::AudioStreamInfo>& audio = asset.fileStreams().audio;
+    if (!audio.isEmpty()) {
+        const media::AudioStreamInfo& stream = audio.at(qBound(0, asset.audioStreamIndex(), int(audio.size()) - 1));
+        const QString channels = stream.channels == 1 ? tr("mono")
+                               : stream.channels == 2 ? tr("stereo")
+                               : tr("%1 channels").arg(stream.channels);
+        const QString sound = stream.sampleRate > 0 ? tr("%1 @ %2Hz").arg(channels).arg(stream.sampleRate) : channels;
+        timing = timing.isEmpty() ? sound : timing + QStringLiteral(", ") + sound;
+    }
+    if (!timing.isEmpty()) lines << timing;
+    if (asset.kind() == media::MediaKind::Model3D || asset.kind() == media::MediaKind::Model3DAnimation)
+        lines.prepend(kindText(asset.kind()));
+    QStringList flags;
+    if (asset.pixelAspectValue() != 1.0) flags << QStringLiteral("PAR %1").arg(asset.pixelAspectValue(), 0, 'f', 2);
+    if (asset.proxyMode() == media::ProxyMode::Performance) flags << tr("[Proxy: Performance]");
+    if (asset.proxyMode() == media::ProxyMode::Quality) flags << tr("[Proxy: Quality]");
+    if (!flags.isEmpty()) lines << flags.join(QStringLiteral("  "));
+    return lines;
+}
+
+QStringList MediaPanel::detailLines(const CompositeShotEntry& shot) const
+{
+    QStringList lines;
+    if (shot.size.isValid()) lines << tr("%1 x %2 pixels").arg(shot.size.width()).arg(shot.size.height());
+    lines << tr("%1 @ %2fps").arg(formatTimecode(shot.durationSeconds, shot.frameRate))
+                 .arg(QString::number(shot.frameRate, 'g', 4));
+    if (shot.primary) lines << tr("[Primary]");
+    return lines;
+}
+
+QPixmap MediaPanel::stillPreview(const QString& path, const QString& readPath) const
+{
+    const QFileInfo info(media::psdFileOfPath(readPath));
+    const qreal ratio = m_list ? m_list->devicePixelRatioF() : 1.0;
+    const QSize pixels = (QSizeF(kPreviewSize) * ratio).toSize();
+    const QString key = QStringLiteral("media-preview:%1:%2:%3:%4")
+                            .arg(path).arg(info.lastModified().toMSecsSinceEpoch()).arg(info.size()).arg(ratio);
+    QPixmap preview;
+    if (QPixmapCache::find(key, &preview)) return preview;
+    QImage image;
+    if (media::isPsdFile(info.filePath())) {
+        // Photoshop layers and documents are not something QImageReader reads.
+        image = media::readStillImage(readPath);
+        if (!image.isNull()) image = image.scaled(pixels, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    } else {
+        QImageReader reader(readPath);
+        reader.setAutoTransform(true);
+        const QSize size = reader.size();
+        if (size.isValid()) reader.setScaledSize(size.scaled(pixels, Qt::KeepAspectRatio));
+        image = reader.read();
+    }
+    if (image.isNull()) return {};
+    preview = QPixmap::fromImage(image);
+    preview.setDevicePixelRatio(ratio);
+    QPixmapCache::insert(key, preview);
+    return preview;
+}
+
+QPixmap MediaPanel::videoPreview(const media::MediaAsset& asset)
+{
+    const QFileInfo info(asset.sourcePath());
+    const qreal ratio = m_list ? m_list->devicePixelRatioF() : 1.0;
+    const QString key = QStringLiteral("media-preview:%1:%2:%3:%4")
+                            .arg(asset.filePath()).arg(info.lastModified().toMSecsSinceEpoch()).arg(info.size()).arg(ratio);
+    QPixmap preview;
+    if (QPixmapCache::find(key, &preview)) return preview;
+    if (m_pendingPreviews.contains(key) || !info.exists()) return {};
+    m_pendingPreviews.insert(key);
+    // A frame a tenth of the way in (at most five seconds): past a fade from
+    // black, still the shot's opening.
+    const double seconds = qMin(5.0, qMax(0.0, asset.durationSeconds() * 0.1));
+    const QString path = asset.sourcePath();
+    const bool hardware = asset.hardwareDecoding();
+    const QSize pixels = (QSizeF(kPreviewSize) * ratio).toSize();
+    QPointer<MediaPanel> self(this);
+    m_previewPool->start([self, key, path, seconds, hardware, pixels] {
+        QImage frame;
+        {
+            media::VideoDecoder decoder(path, 4000, hardware);
+            if (decoder.isValid()) frame = decoder.frameAt(seconds);
+        }
+        if (!frame.isNull()) frame = frame.scaled(pixels, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        QMetaObject::invokeMethod(qApp, [self, key, frame] {
+            if (self) self->videoPreviewReady(key, frame);
+        }, Qt::QueuedConnection);
+    });
+    return {};
+}
+
+void MediaPanel::videoPreviewReady(const QString& key, const QImage& image)
+{
+    m_pendingPreviews.remove(key);
+    if (image.isNull()) return;          // the placeholder stays
+    QPixmap preview = QPixmap::fromImage(image);
+    preview.setDevicePixelRatio(m_list ? m_list->devicePixelRatioF() : 1.0);
+    QPixmapCache::insert(key, preview);
+    rebuildList();
+}
+
 // Lists the shots and the media matching the search, keeping the selection.
 // Missing files are shown in red; thumbnails of stills are cached by file.
 void MediaPanel::rebuildList()
@@ -555,6 +790,11 @@ void MediaPanel::rebuildList()
         auto* item = new QListWidgetItem(QIcon(QStringLiteral(":/icons/render-timeline.svg")),
                                          shot.name + QStringLiteral("  ") + meta, m_list);
         item->setData(kShotIdRole, shot.id);
+        item->setData(kNameRole, shot.name);
+        item->setData(kDetailRole, detailLines(shot));
+        item->setData(kPlaceholderRole, QStringLiteral(":/icons/media/file-comp-preview.png"));
+        if (m_thumbnailMode && !shot.previewPath.isEmpty())
+            item->setData(kPreviewRole, stillPreview(shot.previewPath, shot.previewPath));
         item->setToolTip(shot.primary ? tr("%1 (primary composite shot for VEGAS integration)").arg(shot.name)
                                       : shot.name);
         if (shot.primary) {
@@ -572,6 +812,9 @@ void MediaPanel::rebuildList()
         if (!filter.isEmpty() && !asset.fileName().toLower().contains(filter)) {
             continue;
         }
+        // The layers and smart object sources of an imported Photoshop
+        // document belong to its composite shot, which lists them.
+        if (media::isPsdMarkerPath(asset.filePath())) continue;
         indices.append(i);
     }
     std::sort(indices.begin(), indices.end(), [&](int a, int b) {
@@ -613,36 +856,36 @@ void MediaPanel::rebuildList()
         item->setToolTip(asset.filePath());
         item->setData(Qt::UserRole + 1, asset.filePath()); // MIME payload on drag
         item->setData(Qt::UserRole + 2, asset.labelColor());
-        if (!QFileInfo::exists(asset.sourcePath())) item->setForeground(QColor(210, 80, 70));
-        if (m_thumbnailMode
-            && (asset.kind() == media::MediaKind::Image || asset.isImageSequence())) {
-            const QFileInfo info(asset.sourcePath());
-            const QString key = QStringLiteral("media-thumb:%1:%2:%3")
-                .arg(asset.isImageSequence() ? info.absoluteFilePath() : asset.filePath())
-                .arg(info.lastModified().toMSecsSinceEpoch()).arg(info.size());
-            QPixmap thumbnail;
-            if (!QPixmapCache::find(key, &thumbnail) && media::isPsdFile(asset.sourcePath())) {
-                // Photoshop layers and documents are not something QImageReader reads.
-                const QImage image = media::readStillImage(asset.filePath());
-                if (!image.isNull())
-                    thumbnail = QPixmap::fromImage(image.scaled(QSize(72, 48), Qt::KeepAspectRatio,
-                                                                Qt::SmoothTransformation));
-                if (!thumbnail.isNull()) QPixmapCache::insert(key, thumbnail);
-            } else if (thumbnail.isNull()) {
-                QImageReader reader(asset.sourcePath());
-                reader.setAutoTransform(true);
-                const QSize size = reader.size();
-                if (size.isValid()) reader.setScaledSize(size.scaled(QSize(72, 48), Qt::KeepAspectRatio));
-                thumbnail = QPixmap::fromImage(reader.read());
-                if (!thumbnail.isNull()) QPixmapCache::insert(key, thumbnail);
-            }
-            if (!thumbnail.isNull()) item->setIcon(QIcon(thumbnail));
+        const bool present = QFileInfo::exists(asset.sourcePath());
+        if (!present) item->setForeground(QColor(210, 80, 70));
+        item->setData(kNameRole, asset.fileName());
+        item->setData(kDetailRole, detailLines(asset));
+        // The picture: a still's or a sequence's first frame at once, a
+        // video's frame when a worker has read it; the reference's framed
+        // placeholder for the rest.
+        QString placeholder = QStringLiteral(":/icons/media/file-video-preview.png");
+        switch (asset.kind()) {
+        case media::MediaKind::Audio: placeholder = QStringLiteral(":/icons/media/file-audio-preview.png"); break;
+        case media::MediaKind::Model3D: placeholder = QStringLiteral(":/icons/media/file-3d-preview.png"); break;
+        case media::MediaKind::Model3DAnimation:
+            placeholder = QStringLiteral(":/icons/media/file-3d-animation-preview.png");
+            break;
+        case media::MediaKind::Composition: placeholder = QStringLiteral(":/icons/media/file-comp-preview.png"); break;
+        default: break;
         }
-        if (asset.labelColor().isValid()) {
-            const QSize iconSize = m_thumbnailMode ? QSize(72, 48) : QSize(12, 16);
-            QPixmap icon(iconSize); icon.fill(Qt::transparent);
+        if (!present) placeholder = QStringLiteral(":/icons/media/file-offline-preview.png");
+        item->setData(kPlaceholderRole, placeholder);
+        if (m_thumbnailMode && present) {
+            if (asset.kind() == media::MediaKind::Image || asset.isImageSequence()) {
+                const QString readPath = asset.isImageSequence() ? asset.sourcePath() : asset.filePath();
+                item->setData(kPreviewRole, stillPreview(readPath, readPath));
+            } else if (asset.kind() == media::MediaKind::Video) {
+                item->setData(kPreviewRole, videoPreview(asset));
+            }
+        }
+        if (asset.labelColor().isValid() && !m_thumbnailMode) {
+            QPixmap icon(QSize(12, 16)); icon.fill(Qt::transparent);
             QPainter painter(&icon);
-            if (!item->icon().isNull()) painter.drawPixmap(0, 0, item->icon().pixmap(72, 48));
             painter.fillRect(QRect(0, 0, 4, icon.height()), asset.labelColor());
             painter.end(); item->setIcon(QIcon(icon));
         }
@@ -799,8 +1042,12 @@ void MediaPanel::updateCount()
     if (!m_countLabel || !m_manager) {
         return;
     }
-    m_countLabel->setText(
-        tr("%1 item(s)").arg(m_manager->assets().size() + m_shots.size()));
+    // The media a Photoshop document's shot is made of is not listed, so it
+    // is not counted either.
+    qsizetype assets = 0;
+    for (const media::MediaAsset& asset : m_manager->assets())
+        if (!media::isPsdMarkerPath(asset.filePath())) ++assets;
+    m_countLabel->setText(tr("%1 item(s)").arg(assets + m_shots.size()));
 }
 
 // A row's drag data: a shot's ID, or a media item's path (and its file URL,

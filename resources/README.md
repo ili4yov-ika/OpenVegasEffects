@@ -12,7 +12,7 @@ What the application embeds or installs besides its code.
 | Path | What it holds |
 |------|---------------|
 | [`icons.qrc`](icons.qrc) | The Qt resource file of all icons, embedded as `:/icons/...` |
-| [`icons/`](icons/) | The icons: the program's own SVGs (`toolbar/`, `text/`, `timeline/`), the reference's PNGs copied unchanged (`layout/` - see its README - and `viewer/`), the application logo (`logo.svg`, `logo.png`, `logo.ico`), the `.vegfx` file icon (`iconfile.svg`, `iconfile.ico`) and the splash screen (`splash.svg`) |
+| [`icons/`](icons/) | The icons: the program's own SVGs (`toolbar/`, `text/`, `timeline/`), the reference's PNGs copied unchanged (`layout/` and `media/` - see their READMEs - and `viewer/`), the application logo (`logo.svg`, `logo.png`, `logo.ico`), the `.vegfx` file icon (`iconfile.svg`, `iconfile.ico`) and the splash screen (`splash.svg`) |
 | [`OpenVegasEffects.rc`](OpenVegasEffects.rc) | The Windows resource script: the executable's icon (icon index 0) and the `.vegfx` file icon (icon index 1, used by the file association) |
 | [`macos/Info.plist`](macos/Info.plist) | The bundle description for a macOS build |
 

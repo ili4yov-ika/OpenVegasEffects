@@ -12,7 +12,7 @@
 | パス | 内容 |
 |------|------|
 | [`icons.qrc`](icons.qrc) | すべてのアイコンを `:/icons/...` として埋め込む Qt リソースファイル |
-| [`icons/`](icons/) | アイコン: プログラム独自の SVG (`toolbar/`、`text/`、`timeline/`)、リファレンスの PNG をそのままコピーしたもの (`layout/` - その README を参照 - と `viewer/`)、アプリケーションのロゴ (`logo.svg`、`logo.png`、`logo.ico`)、`.vegfx` ファイルのアイコン (`iconfile.svg`、`iconfile.ico`)、スプラッシュ画面 (`splash.svg`) |
+| [`icons/`](icons/) | アイコン: プログラム独自の SVG (`toolbar/`、`text/`、`timeline/`)、リファレンスの PNG をそのままコピーしたもの (`layout/` と `media/` - それぞれの README を参照 - と `viewer/`)、アプリケーションのロゴ (`logo.svg`、`logo.png`、`logo.ico`)、`.vegfx` ファイルのアイコン (`iconfile.svg`、`iconfile.ico`)、スプラッシュ画面 (`splash.svg`) |
 | [`OpenVegasEffects.rc`](OpenVegasEffects.rc) | Windows のリソーススクリプト: 実行ファイルのアイコン (インデックス 0) と `.vegfx` ファイルのアイコン (インデックス 1、ファイルの関連付けで使用) |
 | [`macos/Info.plist`](macos/Info.plist) | macOS ビルド用のバンドル定義 |
 

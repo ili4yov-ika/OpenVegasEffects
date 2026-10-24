@@ -999,6 +999,13 @@ QByteArray PsdDocument::linkedFileData(const QString& uniqueId) const
     return it == m_linked.cend() ? QByteArray() : m_data.mid(it->offset, it->length);
 }
 
+QByteArray PsdDocument::linkedFileView(const QString& uniqueId) const
+{
+    const auto it = m_linked.constFind(uniqueId);
+    if (it == m_linked.cend() || it->offset < 0 || it->offset + it->length > m_data.size()) return {};
+    return QByteArray::fromRawData(m_data.constData() + it->offset, it->length);
+}
+
 QVector<bool> psdLayersShown(const PsdDocument& document)
 {
     // Groups enclose the records below their folder record, down to their
@@ -1031,11 +1038,19 @@ bool isPsdMarkerPath(const QString& path)
 
 QString psdFileOfPath(const QString& path)
 {
+    // The first marker ends the file's part (a nested path has several).
+    qsizetype first = -1;
     for (const char* marker : {kPsdLayerMarker, kPsdSourceMarker}) {
-        const int at = int(path.lastIndexOf(QLatin1String(marker)));
-        if (at >= 0) return path.left(at);
+        const qsizetype at = path.indexOf(QLatin1String(marker));
+        if (at >= 0 && (first < 0 || at < first)) first = at;
     }
-    return path;
+    return first >= 0 ? path.left(first) : path;
+}
+
+QString psdDocumentOfPath(const QString& path)
+{
+    const qsizetype layerAt = path.indexOf(QLatin1String(kPsdLayerMarker));
+    return layerAt >= 0 ? path.left(layerAt) : path;
 }
 
 bool isPsdFile(const QString& path)
@@ -1090,32 +1105,42 @@ struct MarkerTarget
     QString sourceId;
 };
 
+// A layer path: its document and layer. A source path: the document the
+// source is embedded in and the source's id.
 MarkerTarget resolveMarker(const QString& path)
 {
     MarkerTarget target;
-    target.document = cachedDocument(psdFileOfPath(path));
-    if (!target.document) return target;
-    const int layerAt = int(path.lastIndexOf(QLatin1String(kPsdLayerMarker)));
+    const qsizetype layerAt = path.indexOf(QLatin1String(kPsdLayerMarker));
     if (layerAt >= 0) {
-        const QStringList parts = path.mid(layerAt + int(qstrlen(kPsdLayerMarker))).split(QLatin1Char(':'));
+        target.document = openPsdDocument(path.left(layerAt));
+        if (!target.document) return target;
+        const QStringList parts = path.mid(layerAt + qsizetype(qstrlen(kPsdLayerMarker))).split(QLatin1Char(':'));
         target.layer = target.document->indexOfLayerId(parts.value(0).toUInt());
         if (parts.size() >= 3 && parts.at(1) == QLatin1String("clip"))
             target.clipBase = target.document->indexOfLayerId(parts.at(2).toUInt());
         return target;
     }
-    const int sourceAt = int(path.lastIndexOf(QLatin1String(kPsdSourceMarker)));
-    if (sourceAt >= 0) target.sourceId = path.mid(sourceAt + int(qstrlen(kPsdSourceMarker)));
+    const qsizetype sourceAt = path.lastIndexOf(QLatin1String(kPsdSourceMarker));
+    if (sourceAt < 0) return target;
+    target.document = openPsdDocument(path.left(sourceAt));
+    target.sourceId = path.mid(sourceAt + qsizetype(qstrlen(kPsdSourceMarker)));
     return target;
 }
 
-QImage sourceImage(const PsdDocument& document, const QString& uniqueId)
+// A document without a flattened image, drawn from its visible pixel layers.
+QImage flattenLayers(const PsdDocument& document);
+
+// A smart object's source: an embedded document's flattened image, or the
+// image file it embeds.
+QImage sourceImage(const QString& path, const PsdDocument& document, const QString& uniqueId)
 {
-    const QByteArray data = document.linkedFileData(uniqueId);
+    const QByteArray data = document.linkedFileView(uniqueId);
     if (data.isEmpty()) return {};
     if (data.startsWith("8BPS")) {
-        PsdDocument inner;
-        if (!inner.loadData(data)) return {};
-        return inner.compositeImage();
+        const auto inner = openPsdDocument(path);
+        if (!inner) return {};
+        const QImage composite = inner->compositeImage();
+        return composite.isNull() ? flattenLayers(*inner) : composite;
     }
     QImage image = QImage::fromData(data);
     return image.isNull() ? QImage() : image.convertToFormat(QImage::Format_RGBA8888);
@@ -1148,7 +1173,7 @@ QImage readStillImage(const QString& path)
     if (isPsdMarkerPath(path)) {
         const MarkerTarget target = resolveMarker(path);
         if (!target.document) return {};
-        if (!target.sourceId.isEmpty()) return sourceImage(*target.document, target.sourceId);
+        if (!target.sourceId.isEmpty()) return sourceImage(path, *target.document, target.sourceId);
         QImage image = target.document->layerImage(target.layer);
         if (image.isNull() || target.clipBase < 0) return image;
         // Clipped: only where the base layer is.
@@ -1180,10 +1205,10 @@ QSize stillImageSize(const QString& path)
         const MarkerTarget target = resolveMarker(path);
         if (!target.document) return {};
         if (!target.sourceId.isEmpty()) {
-            QByteArray data = target.document->linkedFileData(target.sourceId);
+            QByteArray data = target.document->linkedFileView(target.sourceId);
             if (data.startsWith("8BPS")) {
-                PsdDocument inner;
-                return inner.loadData(data) ? inner.size() : QSize();
+                const auto inner = openPsdDocument(path);
+                return inner ? inner->size() : QSize();
             }
             QBuffer buffer(&data);
             return QImageReader(&buffer).size();
@@ -1199,6 +1224,47 @@ QSize stillImageSize(const QString& path)
                      int(qFromBigEndian<quint32>(header.constData() + 14)));
     }
     return QImageReader(path).size();
+}
+
+std::shared_ptr<const PsdDocument> openPsdDocument(const QString& path)
+{
+    const qsizetype sourceAt = path.lastIndexOf(QLatin1String(kPsdSourceMarker));
+    if (sourceAt < 0) return cachedDocument(path);
+    const auto parent = openPsdDocument(path.left(sourceAt));
+    if (!parent) return nullptr;
+    const QString uniqueId = path.mid(sourceAt + qsizetype(qstrlen(kPsdSourceMarker)));
+    // Embedded documents, by their path; one whose parent was read again
+    // (its file changed) is read again too.
+    struct Entry
+    {
+        QString path;
+        const PsdDocument* parent = nullptr;
+        std::shared_ptr<const PsdDocument> document;
+    };
+    static QMutex mutex;
+    static QList<Entry> entries;
+    QMutexLocker lock(&mutex);
+    for (int i = 0; i < entries.size(); ++i) {
+        if (entries.at(i).path != path) continue;
+        if (entries.at(i).parent == parent.get()) {
+            entries.move(i, 0);
+            return entries.first().document;
+        }
+        entries.removeAt(i);
+        break;
+    }
+    const QByteArray data = parent->linkedFileView(uniqueId);
+    if (!data.startsWith("8BPS")) return nullptr;
+    auto* inner = new PsdDocument;
+    if (!inner->loadData(data)) {
+        delete inner;
+        return nullptr;
+    }
+    // The bytes are the parent's: it lives as long as the embedded one.
+    std::shared_ptr<const PsdDocument> document(inner, [parent](const PsdDocument* d) { delete d; });
+    entries.prepend({path, parent.get(), document});
+    while (entries.size() > 4) entries.removeLast();
+    return document;
 }
 
 QString psdLayerName(const QString& path)

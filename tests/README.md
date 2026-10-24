@@ -534,9 +534,13 @@ the flattened image. `photoshopDocumentImportsAsCompositeShot` imports it as a c
 shot (layers top first, the group's opacity, a Grade layer, Outer Glow and Drop Shadow from
 the layer style, the smart object as its source placed by its corners with Camera Raw as
 Exposure Pro) and draws it. `photoshopSamplesImportByLayers` imports the PSDs in
-`SAMPLES/vegfx_projects/project_*` (made by Photoshop, kept out of git; project_4's is a
-smart object whose Camera Raw goes beyond the tone controls) and compares the shot with
-Photoshop's own flattened image (`psd-<name>.png`, `psd-<name>-photoshop.png`).
+`SAMPLES/vegfx_projects/project_*` (made by Photoshop, kept out of git) and compares the shot
+with Photoshop's own flattened image by 8 x 8 blocks, so that film grain counts by its average
+(`psd-<name>.png`, `psd-<name>-photoshop.png`). project_4's document is one smart object whose
+source is a 29-layer document under a full Camera Raw look: that document becomes a shot of
+its own with every layer locked, Camera Raw a LUT fitted to Photoshop's result (with the
+reference plug-ins and OpenGL the shot is compared; without them only documents without
+effects are).
 `photoshopFlattenedImageTransparency` checks that the flattened image's extra channel is its
 transparency only when the layer count is negative (otherwise a saved selection), and
 `photoshopCameraRawBeyondToneKeepsPixels` that Camera Raw beyond the tone controls keeps
@@ -544,7 +548,15 @@ Photoshop's filtered pixels, naming the settings, while neutral values do not co
 `photoshopLayersSurviveSave` saves and reopens the shot with absolute and relative paths.
 With OpenGL and the reference plug-ins, `psdDropShadowFallsAwayFromTheLight` checks the
 light angle against Drop Shadow's own and `psdCameraRawRendersWithExposurePro` that +0.5 EV
-brightens the smart object's source.
+brightens the smart object's source. `nativeLutReadsCubeFiles` runs the reference LUT effect
+on a ramp with an inverting and a channel-swapping `.cube` (it calls the host's
+ClearPersistentMessage, API +0x2a0, on every render).
+
+`mediaPanelShowsPreviewsAsTheReference` checks the Media panel's thumbnail view: framed
+previews with the name and detail lines ("320 x 180 pixels", "00:00:05:00 @ 30fps"), a video's
+frame read on a worker thread (`project_1.mp4` from SAMPLES), the reference's placeholders for
+missing files, an imported Photoshop document as its composite shot with the document's
+picture and its layers' media not listed or counted (`media-previews.png`).
 
 `mediaOverridesReinterpretFrames` checks the rest of Media Properties: a 15 fps override of
 a 30 fps file (source time and length), NTSC rates, Computer (Full) squeezing white to 235,

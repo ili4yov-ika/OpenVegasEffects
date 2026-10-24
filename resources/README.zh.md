@@ -12,7 +12,7 @@
 | 路径 | 内容 |
 |------|------|
 | [`icons.qrc`](icons.qrc) | 包含所有图标的 Qt 资源文件，以 `:/icons/...` 嵌入 |
-| [`icons/`](icons/) | 图标：程序自己的 SVG (`toolbar/`、`text/`、`timeline/`)、原样复制的参考程序 PNG (`layout/` - 见其 README - 以及 `viewer/`)、应用程序标志 (`logo.svg`、`logo.png`、`logo.ico`)、`.vegfx` 文件图标 (`iconfile.svg`、`iconfile.ico`) 和启动画面 (`splash.svg`) |
+| [`icons/`](icons/) | 图标：程序自己的 SVG (`toolbar/`、`text/`、`timeline/`)、原样复制的参考程序 PNG (`layout/` 和 `media/` - 见各自的 README - 以及 `viewer/`)、应用程序标志 (`logo.svg`、`logo.png`、`logo.ico`)、`.vegfx` 文件图标 (`iconfile.svg`、`iconfile.ico`) 和启动画面 (`splash.svg`) |
 | [`OpenVegasEffects.rc`](OpenVegasEffects.rc) | Windows 资源脚本：可执行文件的图标 (索引 0) 和 `.vegfx` 文件图标 (索引 1，供文件关联使用) |
 | [`macos/Info.plist`](macos/Info.plist) | macOS 构建的程序包描述 |
 

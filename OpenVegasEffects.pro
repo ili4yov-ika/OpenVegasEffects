@@ -368,6 +368,7 @@ DISTFILES += \
     docs/README.md docs/README.ru.md docs/README.ja.md docs/README.zh.md \
     resources/README.md resources/README.ru.md resources/README.ja.md resources/README.zh.md \
     resources/icons/layout/README.md resources/icons/layout/README.ru.md resources/icons/layout/README.ja.md resources/icons/layout/README.zh.md \
+    resources/icons/media/README.md resources/icons/media/README.ru.md resources/icons/media/README.ja.md resources/icons/media/README.zh.md \
     src/README.md src/README.ru.md src/README.ja.md src/README.zh.md \
     thirdparty/README.md thirdparty/README.ru.md thirdparty/README.ja.md thirdparty/README.zh.md \
     tools/README.md tools/README.ru.md tools/README.ja.md tools/README.zh.md \

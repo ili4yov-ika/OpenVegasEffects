@@ -543,15 +543,27 @@ RLE、ZIP、予測付き ZIP のチャンネル、描画モードのキー、不
 レイヤー、レイヤースタイルの光彩（外側）とドロップシャドウ、四隅で配置されたソースとしての
 スマートオブジェクトと Exposure Pro としての Camera Raw）、描画します。
 `photoshopSamplesImportByLayers` は `SAMPLES/vegfx_projects/project_*` の PSD（Photoshop で
-作成、git 外。project_4 のものはトーン以外の Camera Raw 設定を持つスマートオブジェクト）を読み込み、
-Photoshop 自身の統合画像と比較します（`psd-<名前>.png`、`psd-<名前>-photoshop.png`）。
+作成、git 外）を読み込み、粒子を平均で比べられるよう 8 x 8 ブロック単位で Photoshop 自身の統合画像と
+比較します（`psd-<名前>.png`、`psd-<名前>-photoshop.png`）。project_4 のドキュメントは、完全な Camera Raw
+の仕上げがかかった 29 レイヤーのドキュメントをソースとする 1 つのスマートオブジェクトです。そのドキュメントは
+すべてのレイヤーがロックされた独立したショットになり、Camera Raw は Photoshop の結果に合わせた LUT に
+なります（リファレンスのプラグインと OpenGL があればショットを比較し、なければエフェクトのないドキュメント
+だけを比較します）。
 `photoshopFlattenedImageTransparency` は統合画像の追加チャンネルがレイヤー数が負のときだけ透明度で
 あること（それ以外は保存された選択範囲）を、`photoshopCameraRawBeyondToneKeepsPixels` はトーン以外の
 Camera Raw 設定があると Photoshop がフィルターを適用したピクセルを保ち、その設定名を示すこと、
 ニュートラルな値は数えないことを確認します。`photoshopLayersSurviveSave` は絶対パスと相対パスで保存して
 開き直します。OpenGL とリファレンスのプラグインがあれば、`psdDropShadowFallsAwayFromTheLight`
 が光源の角度と Drop Shadow の角度の対応を、`psdCameraRawRendersWithExposurePro` が +0.5 EV で
-スマートオブジェクトのソースが明るくなることを確認します。
+スマートオブジェクトのソースが明るくなることを確認します。`nativeLutReadsCubeFiles` はリファレンスの LUT
+エフェクトを、反転とチャンネル入れ替えの `.cube` でグラデーションに適用します（レンダーのたびにホストの
+ClearPersistentMessage、API +0x2a0 を呼びます）。
+
+`mediaPanelShowsPreviewsAsTheReference` はメディアパネルのサムネイル表示を確認します：名前と詳細行
+（「320 x 180 pixels」「00:00:05:00 @ 30fps」）付きの枠付きプレビュー、ワーカースレッドで読んだビデオの
+フレーム（SAMPLES の `project_1.mp4`）、見つからないファイルのリファレンスのプレースホルダー、ドキュメントの
+画像を持つコンポジットショットとして読み込まれた Photoshop ドキュメント。そのレイヤーのメディアは一覧にも
+件数にも含まれません（`media-previews.png`）。
 
 `mediaOverridesReinterpretFrames` は Media Properties の残りを確認します：30 fps のファイルの
 15 fps への上書き（ソースの時刻と長さ）、NTSC のレート、白を 235 に圧縮する Computer

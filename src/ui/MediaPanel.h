@@ -3,7 +3,9 @@
 #include <QDockWidget>
 
 #include <QVector>
+#include <QPixmap>
 #include <QPointer>
+#include <QSet>
 #include <QStringList>
 
 #include "media/MediaManager.h"
@@ -15,6 +17,7 @@ class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 class QToolButton;
+class QThreadPool;
 class QUndoStack;
 
 namespace openvegas {
@@ -39,9 +42,13 @@ public:
         double durationSeconds = 0.0;
         bool primary = false;
         bool open = false;
+        // A still its row shows as its picture: a Photoshop document's path
+        // for a shot imported from one (its layers are the shot's).
+        QString previewPath;
     };
 
     explicit MediaPanel(QWidget* parent = nullptr);
+    ~MediaPanel() override;
 
     void setMediaManager(media::MediaManager* manager);
     void setCompositeShots(const QVector<CompositeShotEntry>& shots);
@@ -97,6 +104,17 @@ private:
     QString metadataText(const media::MediaAsset& asset) const;
     void createFolder();
     void showContextMenu(const QPoint& position);
+    // The lines under a row's name in the thumbnail view, as the reference
+    // writes them ("630 x 476 pixels", "00:03:12:16 @ 60fps, stereo @
+    // 48000Hz").
+    QStringList detailLines(const media::MediaAsset& asset) const;
+    QStringList detailLines(const CompositeShotEntry& shot) const;
+    // A still's preview, scaled to the thumbnail; cached by file and time.
+    QPixmap stillPreview(const QString& path, const QString& readPath) const;
+    // A video's frame, read on a worker thread; the row shows the video
+    // placeholder until it arrives.
+    QPixmap videoPreview(const media::MediaAsset& asset);
+    void videoPreviewReady(const QString& key, const QImage& image);
 
     enum class GroupMode { None, Folder, Media };
     enum class ArrangeMode { Name, Type };
@@ -114,7 +132,11 @@ private:
     int m_dragRow = -1;
     GroupMode m_groupMode = GroupMode::Folder;
     ArrangeMode m_arrangeMode = ArrangeMode::Name;
-    bool m_thumbnailMode = false;
+    // The thumbnail view (rows with a framed preview and detail lines, the
+    // reference's) is the default; the list view is one compact line each.
+    bool m_thumbnailMode = true;
+    QSet<QString> m_pendingPreviews;
+    QThreadPool* m_previewPool = nullptr;
 };
 
 } // namespace ui

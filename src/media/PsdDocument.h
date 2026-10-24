@@ -12,6 +12,8 @@
 #include <QVariant>
 #include <QVector>
 
+#include <memory>
+
 // Photoshop documents (.psd, and .psb, the large document format): what the
 // file says about its layers - names, bounds, blend modes, opacity,
 // visibility, groups, clipping, raster and vector masks, layer styles,
@@ -29,6 +31,9 @@ namespace media {
 // layer id>" when the layer is clipped to the one below it (its alpha is
 // then multiplied by the base layer's). A smart object's own embedded
 // source, before its smart filters, is "<document>#psdsource:<unique id>".
+// An embedded source that is a Photoshop document is a document itself:
+// "<document>#psdsource:<id>#psdlayer:<layer id>" is one of its layers, and
+// sources nest the same way to any depth.
 inline constexpr char kPsdLayerMarker[] = "#psdlayer:";
 inline constexpr char kPsdSourceMarker[] = "#psdsource:";
 inline constexpr char kPsdClipMarker[] = ":clip:";
@@ -37,6 +42,10 @@ inline constexpr char kPsdClipMarker[] = ":clip:";
 bool isPsdMarkerPath(const QString& path);
 // The document file of such a path (the path itself for any other).
 QString psdFileOfPath(const QString& path);
+// The document a path's layer is in: the file, or the embedded document
+// its last source marker names ("<document>#psdsource:<id>"); the path of
+// a whole document for any other.
+QString psdDocumentOfPath(const QString& path);
 // Whether a file is a Photoshop document, by its extension.
 bool isPsdFile(const QString& path);
 
@@ -128,6 +137,8 @@ public:
     // The flattened document as Photoshop saved it ("maximize compatibility").
     QImage compositeImage() const;
     QByteArray linkedFileData(const QString& uniqueId) const;
+    // The same bytes without a copy, valid while this document lives.
+    QByteArray linkedFileView(const QString& uniqueId) const;
 
 private:
     bool parse();
@@ -158,6 +169,13 @@ private:
 
 // Whether each layer shows, its groups' visibility included.
 QVector<bool> psdLayersShown(const PsdDocument& document);
+
+// A document by its path - a file, or a document embedded in one as a
+// smart object's source ("<file>#psdsource:<id>", nested to any depth) -
+// read once and shared: the layers of one document share one parse, and an
+// embedded document reads its parent's bytes in place. Null when it cannot
+// be read or the source is not a Photoshop document.
+std::shared_ptr<const PsdDocument> openPsdDocument(const QString& path);
 
 // Action descriptors as the format stores them, read into variants: an
 // object is a QVariantMap with its class under "_class"; unit values are

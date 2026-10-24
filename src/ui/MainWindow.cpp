@@ -3198,6 +3198,12 @@ bool MainWindow::importPhotoshopLayers(const QString& file, double& cursor, QStr
     options.fpsDenominator = qMax(1, m_composition->fpsDenominator());
     options.durationSeconds = app::Settings::compositeShotDefaultDurationSeconds();
     options.audioSampleRate = m_composition->audioSampleRate();
+    // A Camera Raw look is fitted to the embedded document as this renderer
+    // draws it.
+    const std::shared_ptr<media::MediaManager> media = m_mediaManager;
+    options.renderShot = [media](const std::shared_ptr<composition::Composition>& shot) {
+        return render::renderCompositionFrame(shot, media, 0.0);
+    };
     plugin::PluginManager* plugins = m_owner ? m_owner->pluginManager() : nullptr;
     const project::EffectSpecLookup specOf = [plugins](const QString& identifier) {
         return plugins ? plugins->spec(plugin::PluginId(identifier)) : plugin::EffectSpec();
@@ -3208,12 +3214,18 @@ bool MainWindow::importPhotoshopLayers(const QString& file, double& cursor, QStr
         OV_LOG_WARN(QStringLiteral("Photoshop import failed for %1: %2").arg(file, result.error));
     if (!result.shot || result.layerCount == 0) return false;
     const std::shared_ptr<composition::Composition> shot = result.shot;
-    // A name of its own among the project's shots.
+    // Names of their own among the project's shots: the documents embedded
+    // in it (split into their layers) first, then the document's.
     QStringList names;
     for (const auto& existing : allProjectShots()) names.append(existing->name());
-    const QString base = shot->name();
-    for (int n = 2; names.contains(shot->name()); ++n) shot->setName(QStringLiteral("%1 %2").arg(base).arg(n));
-    m_rootComposition->addCompositeShot(shot);
+    QVector<std::shared_ptr<composition::Composition>> added = result.nestedShots;
+    added.append(shot);
+    for (const auto& each : added) {
+        const QString base = each->name();
+        for (int n = 2; names.contains(each->name()); ++n) each->setName(QStringLiteral("%1 %2").arg(base).arg(n));
+        names.append(each->name());
+        m_rootComposition->addCompositeShot(each);
+    }
 
     composition::Clip clip;
     clip.mediaId = core::Identifier(QStringLiteral("composition:") + shot->id().value());
@@ -4640,6 +4652,39 @@ QVector<std::shared_ptr<composition::Composition>> MainWindow::allProjectShots()
     return shots;
 }
 
+namespace {
+// The Photoshop document a shot was imported from: the one every picture of
+// its layers comes from - for a shot whose layer nests an embedded
+// document's shot, that document's parent. Empty for any other shot.
+QString photoshopDocumentOf(const composition::Composition& shot, const media::MediaManager& media, int depth = 0)
+{
+    if (depth > 8) return {};
+    QString document;
+    for (const composition::Layer& layer : shot.layers()) {
+        for (const composition::Clip& clip : layer.clips) {
+            QString part;
+            if (clip.nestedComposition) {
+                const QString inner = photoshopDocumentOf(*clip.nestedComposition, media, depth + 1);
+                const qsizetype at = inner.lastIndexOf(QLatin1String(media::kPsdSourceMarker));
+                if (at < 0) return {};
+                part = inner.left(at);
+            } else if (clip.mediaId.isValid()) {
+                const QString path = media.assetById(clip.mediaId).filePath();
+                if (!media::isPsdMarkerPath(path)) return {};
+                part = path.contains(QLatin1String(media::kPsdLayerMarker))
+                    ? media::psdDocumentOfPath(path)
+                    : path.left(path.lastIndexOf(QLatin1String(media::kPsdSourceMarker)));
+            } else {
+                continue;                               // a Grade layer
+            }
+            if (document.isEmpty()) document = part;
+            else if (document != part) return {};
+        }
+    }
+    return document;
+}
+} // namespace
+
 void MainWindow::refreshCompositeShotList()
 {
     if (!m_mediaPanel) return;
@@ -4653,6 +4698,9 @@ void MainWindow::refreshCompositeShotList()
         entry.durationSeconds = shot->durationSeconds();
         entry.primary = shot->isPrimary();
         entry.open = m_openCompositions.contains(shot);
+        // A shot of a Photoshop document shows the document's picture.
+        if (m_mediaManager && shot != m_rootComposition)
+            entry.previewPath = photoshopDocumentOf(*shot, *m_mediaManager);
         entries.append(entry);
     }
     m_mediaPanel->setCompositeShots(entries);

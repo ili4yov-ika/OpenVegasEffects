@@ -550,7 +550,18 @@ int createBehaviorLayerPicker(quint64, const wchar_t*, const char*, qint32)
     return 0;
 }
 
-void clearBehaviorPersistentMessage(quint64)
+// PluginHostAPI::SetPersistentMessage (+0x298, BiffHost*, int kind, const
+// wchar_t*) and ClearPersistentMessage (+0x2a0, BiffHost*): the message a
+// module keeps under its controls ("LUT file could not be read"). Every kind
+// of module may call them - LUT clears its message on each render -, so they
+// are part of the common services; the message goes to the log.
+void setPersistentMessage(quint64, qint32 kind, const wchar_t* text)
+{
+    if (!text) return;
+    qInfo().noquote() << QStringLiteral("Native plug-in message (%1): %2").arg(kind).arg(QString::fromWCharArray(text));
+}
+
+void clearPersistentMessage(quint64)
 {
 }
 
@@ -1824,6 +1835,8 @@ void installCpuServices(NativePluginRuntime& runtime)
     putService(runtime.apiBlock(), 0x268, reinterpret_cast<void*>(&stringParameterLength));
     putService(runtime.apiBlock(), 0x270, reinterpret_cast<void*>(&stringParameter));
     putService(runtime.apiBlock(), 0x278, reinterpret_cast<void*>(&setStringParameter));
+    putService(runtime.apiBlock(), 0x298, reinterpret_cast<void*>(&setPersistentMessage));
+    putService(runtime.apiBlock(), 0x2a0, reinterpret_cast<void*>(&clearPersistentMessage));
     putService(runtime.apiBlock(), 0x2b0, reinterpret_cast<void*>(&audioSamplesV2));
     putService(runtime.apiBlock(), 0x2b8, reinterpret_cast<void*>(&notifySourceSamples));
     putService(runtime.apiBlock(), 0x340, reinterpret_cast<void*>(&point3dParameter));
@@ -1844,7 +1857,7 @@ void installBehaviorServices(NativePluginRuntime& runtime)
     putService(runtime.apiBlock(), 0x98,
                reinterpret_cast<void*>(&createBehaviorLayerPicker));
     putService(runtime.apiBlock(), 0x2a0,
-               reinterpret_cast<void*>(&clearBehaviorPersistentMessage));
+               reinterpret_cast<void*>(&clearPersistentMessage));
     // PluginHostAPI::GetPreBehaviorEffectTransformation. Transformation
     // behaviors use this as their base matrix before writing the matrix passed
     // through tagBiffBehaviorMC+0x18.
@@ -3917,6 +3930,8 @@ private:
         }
         putService(runtime->apiBlock(), 0x4a8,
                    reinterpret_cast<void*>(&createVertexArray));
+        putService(runtime->apiBlock(), 0x298, reinterpret_cast<void*>(&setPersistentMessage));
+        putService(runtime->apiBlock(), 0x2a0, reinterpret_cast<void*>(&clearPersistentMessage));
         putService(runtime->apiBlock(), 0x4b0,
                    reinterpret_cast<void*>(&getScratchVbo));
         putService(runtime->apiBlock(), 0x4b8,

@@ -155,6 +155,18 @@ static plugin::EffectSpec psdTestSpec(const QString& identifier)
         {"com.FXHOME.HitFilm.Exposure", {"exposure=0", "offset=0", "gamma=1"}},
         {"com.FXHOME.HitFilm.Dehaze", {"amount=0", "offset=0"}},
         {"com.FXHOME.HitFilm.Blur", {"radius=5", "radius_f=5", "iterations=2"}},
+        {"com.FXHOME.HitFilm.LUT", {"lutFilePath=", "strength=100"}},
+        {"com.FXHOME.HitFilm.VignetteExposure", {"amount=0", "midpoint=50", "centerPoint=0,0",
+                                                 "centerPointUseLayer=00000000-0000-0000-0000-000000000000",
+                                                 "globalStretch=1", "horizontalStretch=1", "verticalStretch=1",
+                                                 "stretchRotation=0"}},
+        {"com.FXHOME.HitFilm.BrightnessContrast", {"brightness=0", "contrast=0"}},
+        {"com.FXHOME.HitFilm.Levels", {"channels=RGB", "inputBlack=0", "inputWhite=1", "gamma=1", "outputBlack=0",
+                                       "outputWhite=1", "redInputBlack=0", "redInputWhite=1", "redGamma=1",
+                                       "redOutputBlack=0", "redOutputWhite=1", "greenInputBlack=0",
+                                       "greenInputWhite=1", "greenGamma=1", "greenOutputBlack=0",
+                                       "greenOutputWhite=1", "blueInputBlack=0", "blueInputWhite=1", "blueGamma=1",
+                                       "blueOutputBlack=0", "blueOutputWhite=1"}},
     };
     plugin::EffectSpec spec;
     if (!parameters.contains(identifier)) return spec;
@@ -1795,50 +1807,137 @@ private slots:
 
     // The sample documents Photoshop made (SAMPLES/vegfx_projects/project_*,
     // kept out of git): every layer decodes, and the imported shot looks
-    // like Photoshop's own flattened image.
+    // like Photoshop's own flattened image. project_4's is one smart object
+    // whose source is a 29-layer document under Camera Raw: that document
+    // becomes a shot of its own, its layers locked, and Camera Raw a LUT.
+    // With the reference plug-ins and OpenGL the effects draw; without them
+    // only documents without effects are compared.
     void photoshopSamplesImportByLayers() {
         const QString root = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects";
         QStringList files;
         QDirIterator it(root, {"*.psd"}, QDir::Files, QDirIterator::Subdirectories);
         while (it.hasNext()) files << it.next();
         if (files.isEmpty()) QSKIP("No sample PSD in SAMPLES/vegfx_projects");
-        for (const QString& path : files) {
-            media::PsdDocument document;
-            QVERIFY2(document.load(path), qPrintable(path + ": " + document.errorString()));
-            for (int i = 0; i < document.layers().size(); ++i) {
-                const media::PsdLayer& layer = document.layers().at(i);
-                if (layer.rect.isEmpty() || layer.kind == media::PsdLayer::Kind::Adjustment) continue;
-                QVERIFY2(!document.layerImage(i).isNull(), qPrintable(path + ": " + layer.name));
+        // The reference plug-ins' own specs when they are there.
+        const QString pluginDir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects/Plugins";
+        std::shared_ptr<plugin::PluginManager> manager;
+        bool nativeRuns = false;
+        if (QFileInfo::exists(pluginDir)) {
+            manager = plugin::createPluginManager();
+            manager->setPluginDirs({pluginDir});
+            QVERIFY(manager->scan().isSuccess());
+            QImage probe(8, 8, QImage::Format_RGBA8888);
+            probe.fill(Qt::gray);
+            const plugin::PluginId levels("com.FXHOME.HitFilm.BrightnessContrast");
+            nativeRuns = plugin::applyEffectToImage(probe, levels, {"10", "0"}, plugin::NativeFrameTime());
+        }
+        auto cleanup = qScopeGuard([] {
+            plugin::releaseNativeEffectThreadRenderer();
+            plugin::clearNativeEffectModules();
+        });
+        const project::EffectSpecLookup specOf = [&manager](const QString& identifier) {
+            if (manager) {
+                const plugin::EffectSpec spec = manager->spec(plugin::PluginId(identifier));
+                if (spec.id.isValid()) return spec;
             }
-            const QImage flat = document.compositeImage();
-            QVERIFY2(!flat.isNull(), qPrintable(path));
+            return psdTestSpec(identifier);
+        };
+        QTemporaryDir looks;
+        QVERIFY(looks.isValid());
+        project::PsdImportOptions options;
+        options.lookDirectory = looks.path();
+        for (const QString& path : files) {
             auto media = std::make_shared<media::MediaManager>();
-            const project::PsdImportResult result = project::importPsdComposition(path, *media, psdTestSpec, {});
+            options.renderShot = [media](const std::shared_ptr<composition::Composition>& shot) {
+                return render::renderCompositionFrame(shot, media, 0.0);
+            };
+            const auto document = media::openPsdDocument(path);
+            QVERIFY2(document, qPrintable(path));
+            for (int i = 0; i < document->layers().size(); ++i) {
+                const media::PsdLayer& layer = document->layers().at(i);
+                if (layer.rect.isEmpty() || layer.kind == media::PsdLayer::Kind::Adjustment) continue;
+                QVERIFY2(!document->layerImage(i).isNull(), qPrintable(path + ": " + layer.name));
+            }
+            const QImage flat = document->compositeImage();
+            QVERIFY2(!flat.isNull(), qPrintable(path));
+            const project::PsdImportResult result = project::importPsdComposition(path, *media, specOf, options);
             QVERIFY2(result.shot && result.layerCount > 0, qPrintable(path + ": " + result.error));
+            // Embedded documents: shots of their own, every layer locked;
+            // the document's own layers are not.
+            for (const composition::Layer& layer : result.shot->layers()) QVERIFY(!layer.locked);
+            for (const auto& nested : result.nestedShots) {
+                QVERIFY(!nested->layers().isEmpty());
+                for (const composition::Layer& layer : nested->layers()) QVERIFY2(layer.locked, qPrintable(layer.name));
+            }
+            bool usesEffects = false;
+            const auto scan = [&usesEffects](const composition::Composition& shot) {
+                for (const composition::Layer& layer : shot.layers())
+                    for (const composition::Clip& clip : layer.clips)
+                        if (!clip.effects.isEmpty()) usesEffects = true;
+            };
+            scan(*result.shot);
+            for (const auto& nested : result.nestedShots) scan(*nested);
+            if (QFileInfo(path).fileName().startsWith(QLatin1String("Slowed"))) {
+                QCOMPARE(result.nestedShots.size(), 1);
+                // Camera Raw's vignette on top, the smart object below it.
+                QCOMPARE(result.shot->layers().size(), 2);
+                const composition::Layer& vignette = result.shot->layers().first();
+                QCOMPARE(vignette.kind, composition::LayerKind::Grade);
+                QCOMPARE(vignette.clips.first().effects.first().pluginId.value(),
+                         QString("com.FXHOME.HitFilm.VignetteExposure"));
+                const composition::Layer& smart = result.shot->layers().last();
+                QVERIFY(smart.clips.first().nestedComposition == result.nestedShots.first());
+                QCOMPARE(result.nestedShots.first()->name(), QString::fromUtf8("Кривые 1"));
+                QCOMPARE(result.nestedShots.first()->displaySize(), QSize(6942, 6054));
+                QCOMPARE(smart.clips.first().effects.size(), 1);
+                QCOMPARE(smart.clips.first().effects.first().pluginId.value(), QString("com.FXHOME.HitFilm.LUT"));
+                QVERIFY(QFileInfo::exists(smart.clips.first().effects.first().parameterValues.value(0)));
+            }
+            if (usesEffects && !nativeRuns) {
+                qInfo().noquote() << QFileInfo(path).fileName() << "layers" << result.layerCount
+                                  << "not compared: its effects need the reference plug-ins and OpenGL";
+                continue;
+            }
             const QImage frame = render::renderCompositionFrame(result.shot, media, 0.5);
             QCOMPARE(frame.size(), flat.size());
             frame.save(testArtifactPath(QStringLiteral("psd-%1.png").arg(QFileInfo(path).completeBaseName())));
             flat.save(testArtifactPath(QStringLiteral("psd-%1-photoshop.png").arg(QFileInfo(path).completeBaseName())));
-            // The mean difference over the colour channels, on what
-            // Photoshop shows over white (its flattened image has no alpha
-            // where the document has a background).
+            // The mean difference over the colour channels of 8 x 8 blocks'
+            // averages, on what Photoshop shows over white (its flattened
+            // image has no alpha where the document has a background): film
+            // grain - random, and Camera Raw's in project_4 is strong - is
+            // compared by its average, not grain by grain.
+            const auto over = [](const QImage& image) {
+                QImage white(image.size(), QImage::Format_RGBA8888);
+                white.fill(Qt::white);
+                QPainter painter(&white);
+                painter.drawImage(0, 0, image);
+                painter.end();
+                return white;
+            };
+            const QImage a = over(flat), b = over(frame);
             double total = 0.0;
             qint64 samples = 0;
-            for (int y = 0; y < flat.height(); y += 4) {
-                for (int x = 0; x < flat.width(); x += 4) {
-                    const QColor a = flat.pixelColor(x, y), b = frame.pixelColor(x, y);
-                    const auto over = [](const QColor& c, int channel) {
-                        return c.alphaF() * channel + (1.0 - c.alphaF()) * 255.0;
-                    };
-                    total += qAbs(over(a, a.red()) - over(b, b.red())) + qAbs(over(a, a.green()) - over(b, b.green()))
-                             + qAbs(over(a, a.blue()) - over(b, b.blue()));
+            for (int by = 0; by + 8 <= a.height(); by += 8) {
+                for (int bx = 0; bx + 8 <= a.width(); bx += 8) {
+                    double sa[3] = {0, 0, 0}, sb[3] = {0, 0, 0};
+                    for (int y = by; y < by + 8; ++y) {
+                        const uchar* pa = a.constScanLine(y) + bx * 4;
+                        const uchar* pb = b.constScanLine(y) + bx * 4;
+                        for (int x = 0; x < 8; ++x)
+                            for (int c = 0; c < 3; ++c) { sa[c] += pa[x * 4 + c]; sb[c] += pb[x * 4 + c]; }
+                    }
+                    for (int c = 0; c < 3; ++c) total += qAbs(sa[c] - sb[c]) / 64.0;
                     samples += 3;
                 }
             }
             const double mean = total / qMax<qint64>(1, samples);
+            // A Camera Raw look fitted as a table, with a vignette layer
+            // whose strength is an estimate, comes close, not exactly.
+            const bool fitted = result.notes.join('\n').contains("look-up table fitted");
             qInfo().noquote() << QFileInfo(path).fileName() << "layers" << result.layerCount << "mean difference"
                               << mean << "notes" << result.notes;
-            QVERIFY2(mean < 6.0, qPrintable(QStringLiteral("%1: mean difference %2").arg(path).arg(mean)));
+            QVERIFY2(mean < (fitted ? 9.0 : 6.0), qPrintable(QStringLiteral("%1: mean difference %2").arg(path).arg(mean)));
         }
     }
 
@@ -1881,6 +1980,59 @@ private slots:
             QCOMPARE(after.pixelColor(175, 15), before.pixelColor(175, 15));
             QCOMPARE(after.pixelColor(30, 20), before.pixelColor(30, 20));
         }
+    }
+
+    // The reference LUT effect reads a .cube file through the host (it
+    // clears its persistent message, PluginHostAPI +0x2a0, on every render)
+    // and maps the frame's 8-bit values through the table as they are:
+    // an inverting table inverts, one that swaps red and blue swaps them.
+    void nativeLutReadsCubeFiles() {
+        const QString dir = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/VEGAS_Effects";
+        const QString module = dir + "/Plugins/2D/LUT.hfpl";
+        if (!QFileInfo::exists(module)) QSKIP("The reference LUT.hfpl is not in SAMPLES");
+        const auto metadata = plugin::loadNativePluginMetadata(module, dir);
+        const core::Identifier id("com.FXHOME.HitFilm.LUT");
+        plugin::registerNativeEffectModule(id, module, dir, true, metadata.parameters);
+        auto cleanup = qScopeGuard([] { plugin::releaseNativeEffectThreadRenderer(); plugin::clearNativeEffectModules(); });
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const auto cube = [&temp](const QString& name, const std::function<QVector3D(QVector3D)>& map) {
+            const int n = 17;
+            QByteArray text = "LUT_3D_SIZE 17\n";
+            for (int b = 0; b < n; ++b)
+                for (int g = 0; g < n; ++g)
+                    for (int r = 0; r < n; ++r) {
+                        const QVector3D out = map(QVector3D(r, g, b) / float(n - 1));
+                        text += QByteArray::number(out.x(), 'f', 6) + ' ' + QByteArray::number(out.y(), 'f', 6) + ' '
+                                + QByteArray::number(out.z(), 'f', 6) + '\n';
+                    }
+            const QString path = temp.filePath(name);
+            QFile file(path);
+            file.open(QIODevice::WriteOnly);
+            file.write(text);
+            return path;
+        };
+        const QString invert = cube("invert.cube", [](QVector3D c) { return QVector3D(1, 1, 1) - c; });
+        const QString swap = cube("swap.cube", [](QVector3D c) { return QVector3D(c.z(), c.y(), c.x()); });
+        QImage ramp(256, 4, QImage::Format_RGBA8888);
+        for (int x = 0; x < 256; ++x)
+            for (int y = 0; y < 4; ++y) ramp.setPixelColor(x, y, QColor(x, (x * 3) % 256, 255 - x));
+        QImage inverted = ramp;
+        if (!plugin::applyEffectToImage(inverted, id, {invert, "100"}, plugin::NativeFrameTime()))
+            QSKIP("No OpenGL 4.1 context for native modules on this platform");
+        QImage swapped = ramp;
+        QVERIFY(plugin::applyEffectToImage(swapped, id, {swap, "100"}, plugin::NativeFrameTime()));
+        int worst = 0;
+        for (int x = 0; x < 256; x += 5) {
+            const QColor in = ramp.pixelColor(x, 1), inv = inverted.pixelColor(x, 1), sw = swapped.pixelColor(x, 1);
+            worst = qMax(worst, qAbs(inv.red() - (255 - in.red())));
+            worst = qMax(worst, qAbs(inv.blue() - (255 - in.blue())));
+            worst = qMax(worst, qAbs(sw.red() - in.blue()));
+            worst = qMax(worst, qAbs(sw.blue() - in.red()));
+            if (x % 50 == 0)
+                qInfo().noquote() << x << in.name() << "inverted" << inv.name() << "swapped" << sw.name();
+        }
+        QVERIFY2(worst <= 8, qPrintable(QString::number(worst)));
     }
 
     // Camera Raw's settings work through the reference Exposure Pro on the
@@ -2199,6 +2351,85 @@ private slots:
         const QVector<plugin::OfxPluginRecord> guarded = plugin::describeOfxBinary(crash);
         QCOMPARE(guarded.size(), 1);
         QVERIFY(guarded.first().error.contains("faulted"));
+    }
+
+    // The Media panel's thumbnail view, as the reference's: each row a
+    // framed preview with the name and the detail lines beside it - a still
+    // at once, a video's frame once a worker has read it (its placeholder
+    // until then), the reference's placeholders for sound and missing files.
+    // An imported Photoshop document is its composite shot, shown with the
+    // document's picture; its layers' own media items are not listed.
+    void mediaPanelShowsPreviewsAsTheReference() {
+        // Item data of the thumbnail view (MediaPanel.cpp).
+        const int nameRole = Qt::UserRole + 4, detailRole = Qt::UserRole + 5;
+        const int previewRole = Qt::UserRole + 6, placeholderRole = Qt::UserRole + 7;
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QImage still(320, 180, QImage::Format_RGBA8888);
+        still.fill(QColor(30, 160, 90));
+        QVERIFY(still.save(dir.filePath("still.png")));
+        const QString psd = dir.filePath("layers.psd");
+        { QFile file(psd); QVERIFY(file.open(QIODevice::WriteOnly)); file.write(psdTestDocument()); }
+        media::MediaManager media;
+        QVERIFY(media.importFile(dir.filePath("still.png")).isSuccess());
+        const project::PsdImportResult imported = project::importPsdComposition(psd, media, psdTestSpec, {});
+        QVERIFY(imported.shot);
+        const QString video = QStringLiteral(OPENVEGAS_SOURCE_DIR) + "/SAMPLES/vegfx_projects/project_1.mp4";
+        const bool withVideo = QFileInfo::exists(video) && media.importFile(video).isSuccess();
+        media.registerMissingFile(dir.filePath("gone.wav"));
+
+        ui::MediaPanel panel;
+        panel.setMediaManager(&media);
+        ui::MediaPanel::CompositeShotEntry shot;
+        shot.id = imported.shot->id().value();
+        shot.name = imported.shot->name();
+        shot.size = QSize(200, 100);
+        shot.durationSeconds = 5;
+        shot.previewPath = psd;
+        panel.setCompositeShots({shot});
+        auto* list = panel.findChild<QListWidget*>("listView");
+        QVERIFY(list);
+        const auto row = [list](const QString& name) -> QListWidgetItem* {
+            for (int i = 0; i < list->count(); ++i)
+                if (list->item(i)->data(Qt::UserRole + 4).toString() == name) return list->item(i);
+            return nullptr;
+        };
+        // The document's layers are its shot's, not rows of their own, and
+        // not counted: the shot, the still, the missing sound (the video).
+        for (int i = 0; i < list->count(); ++i)
+            QVERIFY2(!list->item(i)->text().contains("#psd"), qPrintable(list->item(i)->text()));
+        QCOMPARE(panel.findChild<QLabel*>("media-panel-count")->text(),
+                 QStringLiteral("%1 item(s)").arg(withVideo ? 4 : 3));
+        QListWidgetItem* shotRow = row(imported.shot->name());
+        QVERIFY(shotRow);
+        QVERIFY(!shotRow->data(previewRole).value<QPixmap>().isNull());
+        QCOMPARE(shotRow->data(detailRole).toStringList().value(0), QString("200 x 100 pixels"));
+        QCOMPARE(shotRow->data(detailRole).toStringList().value(1), QString("00:00:05:00 @ 30fps"));
+        QListWidgetItem* stillRow = row("still.png");
+        QVERIFY(stillRow);
+        const QImage preview = stillRow->data(previewRole).value<QPixmap>().toImage();
+        QVERIFY(!preview.isNull());
+        QCOMPARE(preview.pixelColor(preview.width() / 2, preview.height() / 2), QColor(30, 160, 90));
+        QCOMPARE(stillRow->data(detailRole).toStringList().value(0), QString("320 x 180 pixels"));
+        QListWidgetItem* gone = row("gone.wav");
+        QVERIFY(gone);
+        QCOMPARE(gone->data(placeholderRole).toString(), QString(":/icons/media/file-offline-preview.png"));
+        QVERIFY(!QIcon(gone->data(placeholderRole).toString()).pixmap(QSize(106, 60)).isNull());
+        QCOMPARE(list->visualItemRect(stillRow).height(), 66);
+        if (withVideo) {
+            QListWidgetItem* videoRow = row("project_1.mp4");
+            QVERIFY(videoRow);
+            QCOMPARE(videoRow->data(placeholderRole).toString(), QString(":/icons/media/file-video-preview.png"));
+            QVERIFY(videoRow->data(detailRole).toStringList().value(1).contains("fps"));
+            // Rows are made again when the frame arrives.
+            QTRY_VERIFY_WITH_TIMEOUT(row("project_1.mp4")
+                                         && !row("project_1.mp4")->data(previewRole).value<QPixmap>().isNull(),
+                                     20000);
+        }
+        panel.resize(340, 420);
+        panel.show();
+        QTest::qWait(50);
+        QVERIFY(panel.grab().save(testArtifactPath(QStringLiteral("media-previews.png"))));
     }
 
     // Sound files are audio by their extension - FLAC, Ogg, Opus, M4A and

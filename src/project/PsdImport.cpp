@@ -4,11 +4,16 @@
 #include "media/PsdDocument.h"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QLineF>
 #include <QRegularExpression>
 #include <QSet>
+#include <QStandardPaths>
+#include <QTransform>
 #include <QtEndian>
 
 #include <algorithm>
@@ -644,25 +649,343 @@ bool smartObjectPlacement(const QVariantMap& smart, const QSize& sourceSize, con
     return true;
 }
 
+// ------------------------------------------------------- look-up tables
+
+// A 3D look-up table of size^3 RGB entries in 0..1, red fastest - the order
+// .cube files keep, which the LUT effect reads.
+struct CubeLut
+{
+    int size = 33;
+    QVector<float> rgb;
+};
+
+// Writes a table as a .cube file named after what it stands for and its
+// content, so that one table is one file however often it is imported.
+// Returns its path; empty when it cannot be written.
+QString writeCubeLut(const CubeLut& lut, const QString& directory, const QString& title)
+{
+    QByteArray text = "TITLE \"" + title.toUtf8().replace('"', '\'') + "\"\nLUT_3D_SIZE "
+                      + QByteArray::number(lut.size) + "\n";
+    for (int i = 0; i + 2 < lut.rgb.size(); i += 3) {
+        text += QByteArray::number(lut.rgb.at(i), 'f', 6) + ' ' + QByteArray::number(lut.rgb.at(i + 1), 'f', 6) + ' '
+                + QByteArray::number(lut.rgb.at(i + 2), 'f', 6) + '\n';
+    }
+    const QString hash = QString::fromLatin1(QCryptographicHash::hash(text, QCryptographicHash::Sha1).toHex().left(10));
+    QString base = title;
+    base.replace(QRegularExpression(QStringLiteral("[\\\\/:*?\"<>|\\x00-\\x1f]")), QStringLiteral("_"));
+    if (!QDir().mkpath(directory)) return {};
+    const QString path = QDir(directory).filePath(base.left(80) + QLatin1Char(' ') + hash + QStringLiteral(".cube"));
+    if (!QFile::exists(path)) {
+        QFile file(path);
+        if (!file.open(QIODevice::WriteOnly) || file.write(text) != text.size()) return {};
+    }
+    return QFileInfo(path).absoluteFilePath();
+}
+
+// A curve through its points as Photoshop draws it - a natural cubic spline,
+// flat beyond the end points and clamped to 0..255 - as 256 values.
+QVector<double> curveTable(QVector<QPointF> points)
+{
+    std::sort(points.begin(), points.end(), [](const QPointF& a, const QPointF& b) { return a.x() < b.x(); });
+    for (int i = int(points.size()) - 1; i > 0; --i)
+        if (points.at(i).x() <= points.at(i - 1).x()) points.removeAt(i);
+    QVector<double> table(256);
+    if (points.size() < 2) {
+        for (int v = 0; v < 256; ++v) table[v] = v;
+        return table;
+    }
+    const int n = int(points.size());
+    // Second derivatives, zero at the ends.
+    QVector<double> second(n, 0.0), u(n, 0.0);
+    for (int i = 1; i < n - 1; ++i) {
+        const double sig = (points[i].x() - points[i - 1].x()) / (points[i + 1].x() - points[i - 1].x());
+        const double pp = sig * second[i - 1] + 2.0;
+        second[i] = (sig - 1.0) / pp;
+        const double d = (points[i + 1].y() - points[i].y()) / (points[i + 1].x() - points[i].x())
+                         - (points[i].y() - points[i - 1].y()) / (points[i].x() - points[i - 1].x());
+        u[i] = (6.0 * d / (points[i + 1].x() - points[i - 1].x()) - sig * u[i - 1]) / pp;
+    }
+    for (int k = n - 2; k >= 0; --k) second[k] = second[k] * second[k + 1] + u[k];
+    for (int v = 0; v < 256; ++v) {
+        double y = 0.0;
+        if (v <= points.first().x()) {
+            y = points.first().y();
+        } else if (v >= points.last().x()) {
+            y = points.last().y();
+        } else {
+            int k = 0;
+            while (k + 1 < n - 1 && points[k + 1].x() < v) ++k;
+            const double h = points[k + 1].x() - points[k].x();
+            const double a = (points[k + 1].x() - v) / h, b = (v - points[k].x()) / h;
+            y = a * points[k].y() + b * points[k + 1].y()
+                + ((a * a * a - a) * second[k] + (b * b * b - b) * second[k + 1]) * h * h / 6.0;
+        }
+        table[v] = qBound(0.0, y, 255.0);
+    }
+    return table;
+}
+
+// The Curves adjustment ('curv'): a pad byte, the version, a bitmap of the
+// curves present (composite, red, green, blue, ...) and each curve's points
+// as (output, input) pairs. The composite curve goes first, then each
+// channel's.
+std::optional<CubeLut> curvesLut(const QByteArray& d)
+{
+    const auto u16 = [&d](int at) { return at + 2 <= d.size() ? int(qFromBigEndian<quint16>(d.constData() + at)) : -1; };
+    if (d.size() < 9) return std::nullopt;
+    int at = 3;
+    const quint32 bitmap = qFromBigEndian<quint32>(d.constData() + at);
+    at += 4;
+    QVector<QVector<double>> tables(4);
+    bool any = false;
+    for (int curve = 0; curve < 32; ++curve) {
+        if (!(bitmap & (1u << curve))) continue;
+        const int count = u16(at);
+        at += 2;
+        if (count < 2 || count > 64 || at + count * 4 > d.size()) return std::nullopt;
+        QVector<QPointF> points;
+        for (int i = 0; i < count; ++i, at += 4) points.append(QPointF(u16(at + 2), u16(at)));
+        if (curve < 4) {
+            tables[curve] = curveTable(points);
+            any = true;
+        }
+    }
+    if (!any) return std::nullopt;
+    const auto apply = [&tables](int table, double v) {
+        if (tables.at(table).isEmpty()) return v;
+        const int i = qBound(0, int(v), 254);
+        const double f = qBound(0.0, v - i, 1.0);
+        return tables.at(table).at(i) * (1.0 - f) + tables.at(table).at(i + 1) * f;
+    };
+    CubeLut lut;
+    const int n = lut.size;
+    lut.rgb.reserve(n * n * n * 3);
+    for (int b = 0; b < n; ++b)
+        for (int g = 0; g < n; ++g)
+            for (int r = 0; r < n; ++r) {
+                const int in[3] = {r, g, b};
+                for (int c = 0; c < 3; ++c)
+                    lut.rgb.append(float(apply(1 + c, apply(0, in[c] * 255.0 / (n - 1))) / 255.0));
+            }
+    return lut;
+}
+
+// A table that takes a smart object's source to what Photoshop's filters
+// made of it, learned from the two pictures: `source` - the source's own
+// flattened image - placed in the document by `toDocument`, and `filtered`
+// - the layer's pixels, at `origin` in the document. Each pair adds to the
+// eight entries around the source colour; entries no colour reached take
+// their neighbours' mean, those still empty stay as they are. With
+// `maxRadius`, only pixels within that elliptical radius of `frame`'s centre
+// count (1 at the middle of its edges): what a vignette leaves alone.
+std::optional<CubeLut> fittedLut(const QImage& sourceImage, const QTransform& toDocument, const QImage& filteredImage,
+                                 const QPoint& origin, const QRectF& frame = {}, double maxRadius = 0.0)
+{
+    bool invertible = false;
+    const QTransform toSource = toDocument.inverted(&invertible);
+    if (!invertible || sourceImage.isNull() || filteredImage.isNull()) return std::nullopt;
+    const QImage source = sourceImage.convertToFormat(QImage::Format_RGBA8888);
+    const QImage filtered = filteredImage.convertToFormat(QImage::Format_RGBA8888);
+    const int n = 33;
+    QVector<double> weight(n * n * n, 0.0), sum(n * n * n * 3, 0.0);
+    qint64 pairs = 0;
+    for (int y = 0; y < filtered.height(); ++y) {
+        const uchar* row = filtered.constScanLine(y);
+        for (int x = 0; x < filtered.width(); ++x) {
+            if (row[x * 4 + 3] < 255) continue;
+            if (maxRadius > 0.0) {
+                const double dx = (origin.x() + x + 0.5 - frame.center().x()) / (frame.width() / 2.0);
+                const double dy = (origin.y() + y + 0.5 - frame.center().y()) / (frame.height() / 2.0);
+                if (dx * dx + dy * dy > maxRadius * maxRadius) continue;
+            }
+            const QPointF at = toSource.map(QPointF(origin.x() + x + 0.5, origin.y() + y + 0.5));
+            const int sx = int(std::floor(at.x())), sy = int(std::floor(at.y()));
+            if (sx < 0 || sy < 0 || sx >= source.width() || sy >= source.height()) continue;
+            const uchar* s = source.constScanLine(sy) + sx * 4;
+            if (s[3] < 255) continue;
+            double cell[3], frac[3];
+            int base[3];
+            for (int c = 0; c < 3; ++c) {
+                cell[c] = s[c] * (n - 1) / 255.0;
+                base[c] = qMin(n - 2, int(cell[c]));
+                frac[c] = cell[c] - base[c];
+            }
+            for (int corner = 0; corner < 8; ++corner) {
+                double w = 1.0;
+                int index = 0, stride = 1;
+                for (int c = 0; c < 3; ++c) {
+                    const bool up = corner & (1 << c);
+                    w *= up ? frac[c] : 1.0 - frac[c];
+                    index += (base[c] + (up ? 1 : 0)) * stride;
+                    stride *= n;
+                }
+                if (w <= 0.0) continue;
+                weight[index] += w;
+                for (int c = 0; c < 3; ++c) sum[index * 3 + c] += w * row[x * 4 + c] / 255.0;
+            }
+            ++pairs;
+        }
+    }
+    if (pairs < 1000) return std::nullopt;
+    CubeLut lut;
+    lut.size = n;
+    lut.rgb.resize(n * n * n * 3);
+    QVector<bool> known(n * n * n, false);
+    for (int i = 0; i < n * n * n; ++i) {
+        if (weight.at(i) < 1e-3) continue;
+        for (int c = 0; c < 3; ++c) lut.rgb[i * 3 + c] = float(sum.at(i * 3 + c) / weight.at(i));
+        known[i] = true;
+    }
+    for (int pass = 0; pass < 3 * n; ++pass) {
+        QVector<bool> next = known;
+        bool changed = false;
+        for (int b = 0; b < n; ++b)
+            for (int g = 0; g < n; ++g)
+                for (int r = 0; r < n; ++r) {
+                    const int i = r + g * n + b * n * n;
+                    if (known.at(i)) continue;
+                    double acc[3] = {0, 0, 0};
+                    int count = 0;
+                    const int neighbours[6][3] = {{-1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}};
+                    for (const auto& d : neighbours) {
+                        const int rr = r + d[0], gg = g + d[1], bb = b + d[2];
+                        if (rr < 0 || gg < 0 || bb < 0 || rr >= n || gg >= n || bb >= n) continue;
+                        const int j = rr + gg * n + bb * n * n;
+                        if (!known.at(j)) continue;
+                        // A neighbour's output, moved by the step between the
+                        // two inputs, keeps the table's slope.
+                        const double step[3] = {-d[0] / double(n - 1), -d[1] / double(n - 1), -d[2] / double(n - 1)};
+                        for (int c = 0; c < 3; ++c) acc[c] += lut.rgb.at(j * 3 + c) + step[c];
+                        ++count;
+                    }
+                    if (count == 0) continue;
+                    for (int c = 0; c < 3; ++c) lut.rgb[i * 3 + c] = float(qBound(0.0, acc[c] / count, 1.0));
+                    next[i] = true;
+                    changed = true;
+                }
+        known = next;
+        if (!changed) break;
+    }
+    for (int b = 0; b < n; ++b)
+        for (int g = 0; g < n; ++g)
+            for (int r = 0; r < n; ++r) {
+                const int i = r + g * n + b * n * n;
+                if (known.at(i)) continue;
+                const int in[3] = {r, g, b};
+                for (int c = 0; c < 3; ++c) lut.rgb[i * 3 + c] = float(in[c] / double(n - 1));
+            }
+    return lut;
+}
+
+// Brightness/Contrast as Photoshop draws it since CS3 (not "Use Legacy"): a
+// curve that keeps black and white where they are - brightness moves the
+// middle, contrast bends the quarter tones around it - where the legacy
+// mode, like the reference's Brightness & Contrast, scales linearly around
+// the middle and clips. The shape is an estimate (Photoshop's own formula is
+// not published): the quarter tones move by a fifth of the contrast, the
+// middle by 0.45 of the brightness. Null for the legacy mode.
+std::optional<CubeLut> modernBrightnessContrastLut(const QByteArray& data)
+{
+    QVariantMap values;
+    for (const qint64 offset : {qint64(4), qint64(0), qint64(8)}) {
+        bool ok = false;
+        values = media::readPsdDescriptor(data, offset, &ok);
+        if (ok && values.contains(QStringLiteral("Cntr"))) break;
+        values.clear();
+    }
+    if (values.isEmpty() || flag(values, "useLegacy", false)) return std::nullopt;
+    const double brightness = valueOf(values, "Brgh"), contrast = valueOf(values, "Cntr");
+    const QVector<double> bright = curveTable({QPointF(0, 0), QPointF(128, qBound(16.0, 128 + 0.45 * brightness, 239.0)),
+                                               QPointF(255, 255)});
+    const double d = contrast * 0.2;
+    const QVector<double> contrasted = curveTable({QPointF(0, 0), QPointF(64, qBound(1.0, 64 - d, 127.0)),
+                                                   QPointF(128, 128), QPointF(192, qBound(129.0, 192 + d, 254.0)),
+                                                   QPointF(255, 255)});
+    const auto at = [](const QVector<double>& table, double v) {
+        const int i = qBound(0, int(v), 254);
+        const double f = qBound(0.0, v - i, 1.0);
+        return table.at(i) * (1.0 - f) + table.at(i + 1) * f;
+    };
+    CubeLut lut;
+    const int n = lut.size;
+    lut.rgb.reserve(n * n * n * 3);
+    for (int b = 0; b < n; ++b)
+        for (int g = 0; g < n; ++g)
+            for (int r = 0; r < n; ++r) {
+                const int in[3] = {r, g, b};
+                for (int c = 0; c < 3; ++c)
+                    lut.rgb.append(float(at(contrasted, at(bright, in[c] * 255.0 / (n - 1))) / 255.0));
+            }
+    return lut;
+}
+
+// Where a smart object's source lies in the document: its corners (Trnf)
+// as a transform from the source's pixels.
+std::optional<QTransform> smartObjectTransform(const QVariantMap& smart, const QSize& sourceSize)
+{
+    QVector<double> c;
+    for (const QVariant& v : smart.value(QStringLiteral("Trnf")).toList()) c.append(media::psdNumber(v));
+    if (c.size() != 8 || sourceSize.isEmpty()) return std::nullopt;
+    const double w = sourceSize.width(), h = sourceSize.height();
+    return QTransform((c[2] - c[0]) / w, (c[3] - c[1]) / w, (c[6] - c[0]) / h, (c[7] - c[1]) / h, c[0], c[1]);
+}
+
+// Whether every smart filter that is on is Camera Raw.
+bool onlyCameraRaw(const QVariantMap& smartObject)
+{
+    const QVariantMap filterFX = smartObject.value(QStringLiteral("filterFX")).toMap();
+    bool any = false;
+    for (const QVariant& entry : filterFX.value(QStringLiteral("filterFXList")).toList()) {
+        const QVariantMap item = entry.toMap();
+        if (!flag(item, "enab", true)) continue;
+        if (!isCameraRawFilter(item, item.value(QStringLiteral("Fltr")).toMap())) return false;
+        any = true;
+    }
+    return any;
+}
+
 } // namespace
 
-PsdImportResult importPsdComposition(const QString& path, media::MediaManager& media,
-                                     const EffectSpecLookup& specOf, const PsdImportOptions& options)
+namespace {
+
+// What one document's import needs besides the document.
+struct ImportContext
 {
-    PsdImportResult result;
-    media::PsdDocument document;
-    if (!document.load(path)) {
-        result.error = document.errorString();
-        return result;
-    }
-    const QString file = QFileInfo(path).absoluteFilePath();
+    media::MediaManager& media;
+    const EffectSpecLookup& specOf;
+    const PsdImportOptions& options;
+    QString lookDirectory;
+    PsdImportResult* result;
+};
+
+QString defaultLookDirectory()
+{
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return (base.isEmpty() ? QDir::tempPath() : base) + QStringLiteral("/Photoshop Looks");
+}
+
+// Embedded documents go this deep into each other at most.
+constexpr int kMaxNesting = 4;
+
+// One document as a composite shot: `documentPath` is the file, or the path
+// of a document embedded in one (media::openPsdDocument). The layers of an
+// embedded one are locked: they are the source of a smart object, edited
+// through it.
+std::shared_ptr<composition::Composition> importDocument(const media::PsdDocument& document,
+                                                         const QString& documentPath, const QString& name, int depth,
+                                                         ImportContext& context)
+{
+    const PsdImportOptions& options = context.options;
+    const EffectSpecLookup& specOf = context.specOf;
+    media::MediaManager& media = context.media;
+    QStringList* notes = &context.result->notes;
     auto shot = std::make_shared<composition::Composition>();
-    shot->setName(QFileInfo(path).completeBaseName());
+    shot->setName(name);
     shot->setSize(document.size().width(), document.size().height());
     shot->setFrameRate(options.fpsNumerator, qMax(1, options.fpsDenominator));
     shot->setDurationSeconds(options.durationSeconds);
     shot->setAudioSampleRate(options.audioSampleRate);
-    QStringList* notes = &result.notes;
+    const bool locked = depth > 0;
 
     const QVector<media::PsdLayer>& records = document.layers();
     const QVector<bool> shown = media::psdLayersShown(document);
@@ -697,8 +1020,24 @@ PsdImportResult importPsdComposition(const QString& path, media::MediaManager& m
             clip.mediaId = media.assetByFilePath(assetPath).id();
         return clip;
     };
+    // The unclipped pixel layer a clipped one is clipped to: the nearest
+    // below it in its group, past the other clipped ones.
+    const auto baseOf = [&records](int i) {
+        for (int b = i - 1; b >= 0; --b) {
+            const media::PsdLayer& below = records.at(b);
+            if (below.kind == media::PsdLayer::Kind::GroupStart || below.kind == media::PsdLayer::Kind::GroupEnd)
+                return -1;
+            if (below.clipping) continue;
+            return below.kind != media::PsdLayer::Kind::Adjustment && !below.rect.isEmpty() ? b : -1;
+        }
+        return -1;
+    };
 
     QVector<composition::Layer> layers;
+    // Layer styles go on after everything that changes the layer's own
+    // pixels (its filters, the adjustments clipped to it).
+    QVector<QVector<composition::Effect>> styles;
+    QHash<int, int> layerOfRecord;
     for (int i = 0; i < records.size(); ++i) {
         const media::PsdLayer& record = records.at(i);
         if (record.kind == media::PsdLayer::Kind::GroupStart || record.kind == media::PsdLayer::Kind::GroupEnd)
@@ -706,6 +1045,7 @@ PsdImportResult importPsdComposition(const QString& path, media::MediaManager& m
         composition::Layer layer;
         layer.name = record.name;
         layer.visible = shown.at(i);
+        layer.locked = locked;
         layer.opacity = record.opacity / 255.0 * groupOpacity.at(i);
         bool exact = true;
         layer.blendMode = psdBlendModeName(record.blendKey, &exact);
@@ -715,79 +1055,205 @@ PsdImportResult importPsdComposition(const QString& path, media::MediaManager& m
                                     composition::blendModeDisplayName(layer.blendMode)));
 
         if (record.kind == media::PsdLayer::Kind::Adjustment) {
-            layer.kind = composition::LayerKind::Grade;
-            composition::Clip clip = clipOf(QString());
-            if (const auto effect = adjustmentEffect(record, specOf, notes)) clip.effects.append(*effect);
-            if (clip.effects.isEmpty()) continue;
-            if (record.clipping)
-                addNote(notes, PsdImportText::tr("%1: a clipped adjustment applies to everything below it.").arg(record.name));
+            std::optional<composition::Effect> effect;
+            const auto modern = record.adjustmentKey == QLatin1String("CgEd")
+                ? modernBrightnessContrastLut(record.adjustmentData) : std::nullopt;
+            if (modern) {
+                const QString path = writeCubeLut(*modern, context.lookDirectory,
+                                                  QStringLiteral("%1 - %2").arg(name, record.name));
+                if (!path.isEmpty())
+                    effect = makeEffect(specOf, QStringLiteral("com.FXHOME.HitFilm.LUT"),
+                                        PsdImportText::tr("Brightness/Contrast"),
+                                        {{QStringLiteral("lutFilePath"), path}, {QStringLiteral("strength"), QStringLiteral("100")}},
+                                        notes);
+            }
+            if (!effect && record.adjustmentKey == QLatin1String("curv")) {
+                // Curves, exactly, as a look-up table.
+                if (const auto lut = curvesLut(record.adjustmentData)) {
+                    const QString path = writeCubeLut(*lut, context.lookDirectory,
+                                                      QStringLiteral("%1 - %2").arg(name, record.name));
+                    if (!path.isEmpty())
+                        effect = makeEffect(specOf, QStringLiteral("com.FXHOME.HitFilm.LUT"), PsdImportText::tr("Curves"),
+                                            {{QStringLiteral("lutFilePath"), path}, {QStringLiteral("strength"), QStringLiteral("100")}},
+                                            notes);
+                }
+                if (!effect)
+                    addNote(notes, PsdImportText::tr("%1: the adjustment \"%2\" is not converted.")
+                                       .arg(record.name, PsdImportText::tr("Curves")));
+            } else if (!effect) {
+                effect = adjustmentEffect(record, specOf, notes);
+            }
+            if (!effect) continue;
             if (record.hasRasterMask || record.hasVectorMask)
                 addNote(notes, PsdImportText::tr("%1: the adjustment's mask is not kept.").arg(record.name));
+            if (record.clipping) {
+                // Clipped to a pixel layer with only adjustments between: an
+                // effect of that layer.
+                const int base = baseOf(i);
+                bool onlyAdjustments = base >= 0 && layerOfRecord.contains(base);
+                for (int b = base + 1; onlyAdjustments && b < i; ++b)
+                    onlyAdjustments = records.at(b).kind == media::PsdLayer::Kind::Adjustment;
+                if (onlyAdjustments) {
+                    layers[layerOfRecord.value(base)].clips.first().effects.append(*effect);
+                    continue;
+                }
+                addNote(notes, PsdImportText::tr("%1: a clipped adjustment applies to everything below it.").arg(record.name));
+            }
+            layer.kind = composition::LayerKind::Grade;
+            composition::Clip clip = clipOf(QString());
+            clip.effects.append(*effect);
             layer.clips.append(clip);
             layers.append(layer);
-            ++result.layerCount;
+            styles.append(QVector<composition::Effect>());
+            ++context.result->layerCount;
             continue;
         }
         if (record.rect.isEmpty()) continue;       // an empty layer
 
-        // The base a clipped layer is clipped to: the nearest unclipped
-        // layer below it in its group.
-        int base = -1;
-        if (record.clipping) {
-            for (int b = i - 1; b >= 0; --b) {
-                const media::PsdLayer& below = records.at(b);
-                if (below.kind == media::PsdLayer::Kind::GroupStart || below.kind == media::PsdLayer::Kind::GroupEnd)
-                    break;
-                if (below.clipping) continue;
-                if (below.kind != media::PsdLayer::Kind::Adjustment && !below.rect.isEmpty()) base = b;
-                break;
-            }
-        }
+        const int base = record.clipping ? baseOf(i) : -1;
         layer.kind = composition::LayerKind::Media;
         QVector<composition::Effect> effects;
+        // A Grade layer to go right above this one (Camera Raw's vignette).
+        std::optional<composition::Effect> pendingVignette;
 
-        // A smart object with smart filters that all have an equivalent here,
-        // whose source is embedded and readable, placed without warp or
-        // masks: the unfiltered source with the filters as effects, editable.
+        // A smart object whose source is a Photoshop document, placed
+        // without warp or masks: that document's own shot, its layers
+        // locked, with the smart filters as effects. One with another
+        // embedded source and filters that all have an equivalent here: the
+        // unfiltered source with the filters as effects. Either way
+        // editable; otherwise the layer keeps Photoshop's pixels.
         bool fromSource = false;
-        if (record.kind == media::PsdLayer::Kind::SmartObject
-            && !record.smartObject.value(QStringLiteral("filterFX")).toMap().isEmpty()) {
-            bool complete = false;
-            QStringList filterNotes;
-            const QVector<composition::Effect> filters =
-                psdSmartFilterEffects(record.smartObject, specOf, record.name, &complete, &filterNotes);
-            const QString uid = record.smartObject.value(QStringLiteral("Idnt")).toString();
-            const QString sourcePath = file + QLatin1String(media::kPsdSourceMarker) + uid;
-            const QSize sourceSize = document.linkedFiles().contains(uid) ? media::stillImageSize(sourcePath) : QSize();
-            composition::LayerTransform placement;
-            const bool placed = sourceSize.isValid()
-                && smartObjectPlacement(record.smartObject, sourceSize, document.size(), &placement);
-            for (const QString& note : filterNotes) addNote(notes, note);
-            if (complete && placed && !record.hasRasterMask && !record.hasVectorMask && base < 0) {
-                fromSource = true;
-                layer.transform.position = placement.position;
-                layer.transform.scalePercent = placement.scalePercent;
-                layer.transform.rotationDegrees = placement.rotationDegrees;
-                layer.clips.append(clipOf(sourcePath));
-                effects = filters;
-            } else {
-                QString reason;
-                if (!document.linkedFiles().contains(uid))
-                    reason = PsdImportText::tr("its source is not embedded in the document");
-                else if (!sourceSize.isValid())
-                    reason = PsdImportText::tr("its source (%1) cannot be read here")
-                                 .arg(document.linkedFiles().value(uid).name);
-                else if (!placed)
-                    reason = PsdImportText::tr("it is warped or in perspective");
-                else if (record.hasRasterMask || record.hasVectorMask || base >= 0)
-                    reason = PsdImportText::tr("it is masked or clipped");
-                else
-                    reason = PsdImportText::tr("not every filter could be converted");
-                addNote(notes, PsdImportText::tr("%1: its smart filters stay applied to its pixels (%2).").arg(record.name, reason));
+        const QVariantMap& smart = record.smartObject;
+        const bool hasFilters = !smart.value(QStringLiteral("filterFX")).toMap().isEmpty();
+        if (record.kind == media::PsdLayer::Kind::SmartObject) {
+            const QString uid = smart.value(QStringLiteral("Idnt")).toString();
+            const QString sourcePath = documentPath + QLatin1String(media::kPsdSourceMarker) + uid;
+            const bool embedded = document.linkedFiles().contains(uid);
+            const auto inner = embedded && depth + 1 <= kMaxNesting ? media::openPsdDocument(sourcePath) : nullptr;
+            if (inner || hasFilters) {
+                bool complete = true;
+                QStringList filterNotes;
+                QVector<composition::Effect> filters;
+                if (hasFilters) filters = psdSmartFilterEffects(smart, specOf, record.name, &complete, &filterNotes);
+                const QSize sourceSize = inner ? inner->size() : embedded ? media::stillImageSize(sourcePath) : QSize();
+                composition::LayerTransform placement;
+                const bool placed = sourceSize.isValid()
+                    && smartObjectPlacement(smart, sourceSize, document.size(), &placement);
+                // Masks of its own or of its groups only apply to pixels.
+                bool groupMasked = false;
+                for (int group : document.enclosingGroups(i))
+                    if (records.at(group).hasRasterMask || records.at(group).hasVectorMask) groupMasked = true;
+                const bool plain = !record.hasRasterMask && !record.hasVectorMask && !groupMasked && base < 0;
+                // An embedded document is split into its own shot first: its
+                // picture is what the filters work on here.
+                std::shared_ptr<composition::Composition> nested;
+                if (inner && placed && plain && (complete || onlyCameraRaw(smart))) {
+                    const QString innerName =
+                        QFileInfo(document.linkedFiles().value(uid).name.remove(QChar(0))).completeBaseName();
+                    nested = importDocument(*inner, sourcePath, innerName.isEmpty() ? record.name : innerName,
+                                            depth + 1, context);
+                }
+                // Camera Raw beyond what converts: a table fitted to what
+                // Photoshop made of the source - of the source as this port
+                // draws it when it can, so that the table also takes up what
+                // the split document draws differently.
+                std::optional<composition::Effect> vignette;
+                if (!complete && placed && plain && onlyCameraRaw(smart)) {
+                    // Its post-crop vignette, on a layer of the document's
+                    // frame: when nothing is below the smart object and it
+                    // covers the frame, a Grade layer right above it darkens
+                    // only it, as Photoshop does. Vignette Exposure works the
+                    // way Camera Raw does, centre untouched and midpoint
+                    // alike; its amount runs about twice as strong (fitted on
+                    // project_4's document).
+                    double amount = 0.0, midpoint = 50.0;
+                    for (const QVariant& entry : smart.value(QStringLiteral("filterFX")).toMap()
+                                                     .value(QStringLiteral("filterFXList")).toList()) {
+                        const QVariantMap filter = entry.toMap().value(QStringLiteral("Fltr")).toMap();
+                        amount += valueOf(filter, "PCVA");
+                        if (filter.contains(QStringLiteral("PCVM"))) midpoint = valueOf(filter, "PCVM", 50.0);
+                    }
+                    bool bottom = layers.isEmpty();
+                    const QRect frameRect(QPoint(0, 0), document.size());
+                    if (!qFuzzyIsNull(amount) && bottom && record.rect.contains(frameRect)) {
+                        vignette = makeEffect(specOf, QStringLiteral("com.FXHOME.HitFilm.VignetteExposure"),
+                                              PsdImportText::tr("Camera Raw Vignette"),
+                                              {{QStringLiteral("amount"), number(amount * 0.55)},
+                                               {QStringLiteral("midpoint"), number(midpoint)}}, notes);
+                    }
+                    QImage sourceImage;
+                    if (nested && options.renderShot) sourceImage = options.renderShot(nested);
+                    if (sourceImage.size() != sourceSize) sourceImage = media::readStillImage(sourcePath);
+                    const auto toDocument = smartObjectTransform(smart, sourceSize);
+                    // With the vignette apart, the table learns from the
+                    // middle of the frame, which the vignette leaves alone.
+                    const auto lut = toDocument ? fittedLut(sourceImage, *toDocument, document.layerImage(i),
+                                                            record.rect.topLeft(), QRectF(frameRect),
+                                                            vignette ? 0.8 : 0.0)
+                                                : std::nullopt;
+                    const QString path = lut ? writeCubeLut(*lut, context.lookDirectory,
+                                                            QStringLiteral("%1 - %2 - Camera Raw").arg(name, record.name))
+                                             : QString();
+                    const auto made = path.isEmpty() ? std::nullopt
+                        : makeEffect(specOf, QStringLiteral("com.FXHOME.HitFilm.LUT"), PsdImportText::tr("Camera Raw"),
+                                     {{QStringLiteral("lutFilePath"), path}, {QStringLiteral("strength"), QStringLiteral("100")}},
+                                     notes);
+                    if (made) {
+                        filters = {*made};
+                        complete = true;
+                        filterNotes.clear();
+                        addNote(notes, vignette
+                            ? PsdImportText::tr("%1: Camera Raw is carried over as a look-up table fitted to Photoshop's "
+                                                "result and its vignette as a Grade layer above it; its grain and local "
+                                                "contrast are averaged into the table.").arg(record.name)
+                            : PsdImportText::tr("%1: Camera Raw is carried over as a look-up table fitted to "
+                                                "Photoshop's result; its grain, vignette and local contrast are "
+                                                "averaged into it.").arg(record.name));
+                    } else {
+                        vignette.reset();
+                    }
+                }
+                for (const QString& note : filterNotes) addNote(notes, note);
+                if (complete && placed && plain) {
+                    fromSource = true;
+                    pendingVignette = vignette;
+                    layer.transform.position = placement.position;
+                    layer.transform.scalePercent = placement.scalePercent;
+                    layer.transform.rotationDegrees = placement.rotationDegrees;
+                    if (nested) {
+                        context.result->nestedShots.append(nested);
+                        composition::Clip clip;
+                        clip.startSeconds = 0.0;
+                        clip.durationSeconds = options.durationSeconds;
+                        clip.mediaId = core::Identifier(QStringLiteral("composition:") + nested->id().value());
+                        clip.nestedCompositionId = nested->id();
+                        clip.nestedComposition = nested;
+                        layer.clips.append(clip);
+                    } else {
+                        layer.clips.append(clipOf(sourcePath));
+                    }
+                    effects = filters;
+                } else if (hasFilters || inner) {
+                    QString reason;
+                    if (!embedded)
+                        reason = PsdImportText::tr("its source is not embedded in the document");
+                    else if (!sourceSize.isValid())
+                        reason = PsdImportText::tr("its source (%1) cannot be read here")
+                                     .arg(document.linkedFiles().value(uid).name);
+                    else if (!placed)
+                        reason = PsdImportText::tr("it is warped or in perspective");
+                    else if (!plain)
+                        reason = PsdImportText::tr("it is masked or clipped");
+                    else
+                        reason = PsdImportText::tr("not every filter could be converted");
+                    addNote(notes, hasFilters
+                        ? PsdImportText::tr("%1: its smart filters stay applied to its pixels (%2).").arg(record.name, reason)
+                        : PsdImportText::tr("%1: its source document is not split into layers (%2).").arg(record.name, reason));
+                }
             }
         }
         if (!fromSource) {
-            QString assetPath = file + QLatin1String(media::kPsdLayerMarker) + QString::number(record.id);
+            QString assetPath = documentPath + QLatin1String(media::kPsdLayerMarker) + QString::number(record.id);
             if (base >= 0)
                 assetPath += QLatin1String(media::kPsdClipMarker) + QString::number(records.at(base).id);
             else if (record.clipping)
@@ -800,24 +1266,58 @@ PsdImportResult importPsdComposition(const QString& path, media::MediaManager& m
             addNote(notes, PsdImportText::tr("%1: its pixels could not be read.").arg(record.name));
             continue;
         }
-        effects += psdLayerStyleEffects(record.effects, document.globalLightAngle(), QSizeF(record.rect.size()),
-                                        specOf, record.name, notes);
+        const QVector<composition::Effect> style = psdLayerStyleEffects(
+            record.effects, document.globalLightAngle(), QSizeF(record.rect.size()), specOf, record.name, notes);
         // Fill opacity fades the pixels but not the effects in Photoshop;
         // here the layer's opacity fades both.
         if (record.fillOpacity < 255) {
             layer.opacity *= record.fillOpacity / 255.0;
-            if (!effects.isEmpty())
+            if (!style.isEmpty() || !effects.isEmpty())
                 addNote(notes, PsdImportText::tr("%1: its fill opacity applies to its effects too.").arg(record.name));
         }
         layer.clips.first().effects = effects;
+        layerOfRecord.insert(i, int(layers.size()));
         layers.append(layer);
-        ++result.layerCount;
+        styles.append(style);
+        ++context.result->layerCount;
+        if (pendingVignette) {
+            composition::Layer grade;
+            grade.name = PsdImportText::tr("%1 - Vignette").arg(record.name);
+            grade.kind = composition::LayerKind::Grade;
+            grade.locked = locked;
+            composition::Clip clip = clipOf(QString());
+            clip.effects.append(*pendingVignette);
+            grade.clips.append(clip);
+            layers.append(grade);
+            styles.append(QVector<composition::Effect>());
+            pendingVignette.reset();
+        }
     }
+    for (int k = 0; k < layers.size(); ++k) layers[k].clips.first().effects += styles.at(k);
     std::reverse(layers.begin(), layers.end());
     shot->setLayers(layers);
-    result.shot = shot;
-    return result;
+    return shot;
 }
 
+} // namespace
+
+PsdImportResult importPsdComposition(const QString& path, media::MediaManager& media,
+                                     const EffectSpecLookup& specOf, const PsdImportOptions& options)
+{
+    PsdImportResult result;
+    const QString file = QFileInfo(path).absoluteFilePath();
+    const auto document = media::openPsdDocument(file);
+    if (!document) {
+        media::PsdDocument probe;
+        probe.load(file);
+        result.error = probe.errorString().isEmpty() ? QStringLiteral("The Photoshop document cannot be read.")
+                                                     : probe.errorString();
+        return result;
+    }
+    ImportContext context{media, specOf, options,
+                          options.lookDirectory.isEmpty() ? defaultLookDirectory() : options.lookDirectory, &result};
+    result.shot = importDocument(*document, file, QFileInfo(path).completeBaseName(), 0, context);
+    return result;
+}
 } // namespace project
 } // namespace openvegas

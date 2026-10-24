@@ -636,6 +636,8 @@ API_Commit(ctx, …);                                   // FUN_180010c40
 | `+0x178` | `NotifyProgress(BiffHost*, long, long)` | возвращает признак отмены; без callback отмены — `0` |
 | `+0x1e8` | `GetNumberOfKeyframes` | image-only путь получает уже вычисленное значение кадра и сообщает 0 сырых keyframes |
 | `+0x278` | `SetStringValue` | обновляет строковое значение внутри текущего render-вызова |
+| `+0x298` | `SetPersistentMessage(BiffHost*, int, const wchar_t*)` | сообщение под контролами модуля; порт пишет его в лог |
+| `+0x2a0` | `ClearPersistentMessage(BiffHost*)` | `LUT` вызывает при каждом рендере (без него `Notify(10)` падал по нулевому адресу); точная карта `PluginFile::CreateAPI` |
 | `+0x2c8` | `RedrawCustomUI` | подтверждает запрос инвалидации custom control; фактическая перерисовка остаётся в Qt GUI-thread |
 | `+0x2d0..+0x2e0` | mask collection | обычный медиаслой сообщает 0 масок |
 | `+0x2e8/+0x2f0` | text outline collection | обычный медиаслой сообщает пустой контур текста |
