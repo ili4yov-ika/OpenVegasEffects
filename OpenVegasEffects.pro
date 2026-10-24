@@ -355,6 +355,16 @@ DISTFILES += \
     ui/panels/README.md ui/panels/README.ru.md \
     ui/panels/README.ja.md ui/panels/README.zh.md \
     tests/README.md tests/README.ru.md tests/README.ja.md tests/README.zh.md \
+    MARKDOWN/README.md MARKDOWN/README.ru.md MARKDOWN/README.ja.md MARKDOWN/README.zh.md \
+    SAMPLES/README.md SAMPLES/README.ru.md SAMPLES/README.ja.md SAMPLES/README.zh.md \
+    cmake/README.md cmake/README.ru.md cmake/README.ja.md cmake/README.zh.md \
+    docs/README.md docs/README.ru.md docs/README.ja.md docs/README.zh.md \
+    resources/README.md resources/README.ru.md resources/README.ja.md resources/README.zh.md \
+    resources/icons/layout/README.md resources/icons/layout/README.ru.md resources/icons/layout/README.ja.md resources/icons/layout/README.zh.md \
+    src/README.md src/README.ru.md src/README.ja.md src/README.zh.md \
+    thirdparty/README.md thirdparty/README.ru.md thirdparty/README.ja.md thirdparty/README.zh.md \
+    tools/README.md tools/README.ru.md tools/README.ja.md tools/README.zh.md \
+    ui/README.md ui/README.ru.md ui/README.ja.md ui/README.zh.md \
     tools/validate_translations.py
 
 # Desktop deployment hints
